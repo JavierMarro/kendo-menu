@@ -90,38 +90,15 @@ fi
 mkdir -p "$repo_root/docs/work-sessions"
 
 {
-  printf '# Work session: %s\n\n' "${slug//-/ }"
-  printf -- '- Date: %s\n' "$session_date"
-  printf -- '- Duration: %s\n' "$duration"
-  printf '\n'
+  printf -- '- Session: %s\n' "${slug//-/ }"
+  printf -- '- Date/duration: %s; %s\n' "$session_date" "$duration"
   cat <<'TEMPLATE'
-## Scope
-
-<!-- What was this session intended to accomplish? -->
-
-## Starting state
-
-<!-- What was true before work began? -->
-
-## Main changes
-
--
-
-## Decisions
-
--
-
-## Failures and roadblocks
-
-- None encountered, or list each failure with its resolution.
-
-## Verification
-
--
-
-## Follow-up context
-
-<!-- What should the next agent know or do next? -->
+- Scope/start: Replace with the goal and relevant starting state.
+- Changes: Replace with the most important completed changes.
+- Decisions: Replace with durable decisions or scope exclusions.
+- Roadblocks: Replace with reusable blockers or "None."
+- Verification: Replace with commands and outcomes, or "Not run."
+- Follow-up: Replace with the next actionable context, or "None."
 TEMPLATE
 } > "$output_path"
 

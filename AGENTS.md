@@ -93,6 +93,7 @@ pnpm dev
 pnpm typecheck
 pnpm lint
 pnpm format:check
+pnpm session:check
 pnpm test
 pnpm build
 pnpm check
@@ -110,6 +111,7 @@ files, or secrets.
 3. Implement the smallest coherent slice with types and accessible UI states.
 4. Verify typecheck, lint, formatting, build, and tests as applicable.
 5. Record every working session with `pnpm session:new -- --slug <slug> --duration "<duration>"`,
-   then fill the generated entry in `docs/work-sessions/`. Use the project-local
+   then fill the generated entry in `docs/work-sessions/`. Keep each dated entry to at most eight
+   physical lines and run `pnpm session:check`. Use the project-local
    `tools/skills/work-session-history/SKILL.md` workflow when available.
 6. Report what changed, what was verified, and any remaining deliberate follow-up.

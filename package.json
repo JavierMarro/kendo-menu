@@ -9,13 +9,14 @@
   "scripts": {
     "dev": "pnpm --filter @kendo-menu/web dev",
     "session:new": "bash scripts/new-work-session.sh",
+    "session:check": "bash scripts/check-work-sessions.sh",
     "build": "pnpm --filter @kendo-menu/web build",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "pnpm -r --if-present test",
-    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build"
+    "check": "pnpm session:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

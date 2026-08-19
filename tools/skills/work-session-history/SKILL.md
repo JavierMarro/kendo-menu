@@ -1,51 +1,43 @@
 ---
 name: work-session-history
-description: Record completed coding work sessions in a repository's docs/work-sessions history, including changes, decisions, failures or roadblocks, verification, and follow-up context. Use when a session ends or when asked to create, update, or backfill a work-session record.
+description: Record completed work sessions as evidence-based handoffs with a strict eight-line maximum. Use when a session ends or when asked to create, compact, update, or backfill repository work-session history.
 ---
 
 # Work Session History
 
-Create a concise, factual Markdown record for every completed work session. Treat the record as
-onboarding history for future agents, not as a diary or a replacement for code documentation.
+Create a factual Markdown record for every completed work session. Treat it as a tiny handoff for
+future agents, not a diary or a replacement for code documentation. Every dated entry has a hard
+maximum of eight physical lines.
 
 ## Workflow
 
-1. Read the repository's `AGENTS.md`, `docs/work-sessions/README.md`, and the newest existing
-   session entry before writing. Follow repository-specific naming and formatting rules.
-2. Establish the session date and duration. Use the duration supplied by the user or runtime; do
-   not invent precision. If the date is uncertain, use the repository's current date and state the
-   assumption in the entry.
-3. Gather evidence from the worktree: changed files, important commands, test/build output, and
-   tool failures. Separate resolved roadblocks from remaining blockers.
-4. From the repository root, run the generator when available:
+1. Read `AGENTS.md`, `docs/work-sessions/README.md`, and the newest dated entry.
+2. Gather the date, duration, durable outcomes, architectural decisions, reusable roadblocks,
+   verification evidence, and actionable follow-up. Omit transient command or patch noise.
+3. Run the generator when available:
 
    ```bash
    pnpm session:new -- --slug <short-slug> --duration "<duration>" [--date YYYY-MM-DD]
    ```
 
-   If the generator is unavailable, create `docs/work-sessions/YYYY-MM-DD-<short-slug>.md`
-   directly. Never overwrite an existing session entry.
+   If unavailable, create `docs/work-sessions/YYYY-MM-DD-<short-slug>.md` directly. Never overwrite
+   an entry.
 
-5. Fill every required section with concise facts:
-   - scope, duration, and starting state
-   - main changes and architectural decisions
-   - failures, roadblocks, and their resolutions
-   - verification actually performed
-   - follow-up context for the next agent
-6. Update `docs/work-sessions/README.md` when the repository's index requires a new entry. Run the
-   narrowest relevant formatting or documentation check before handing off.
+4. Fill the fixed lines: title; date/duration; scope/start; changes; decisions; roadblocks;
+   verification; follow-up. Do not add blank lines, headings, or wrapped continuation lines. Use
+   semicolons when one line needs multiple facts.
+5. Update the history index when adding an entry. Run `pnpm session:check` and the narrowest
+   formatting or documentation check.
 
 ## Evidence and writing rules
 
-- Prefer observed facts over narrative. Name the relevant files, commands, and outcomes.
-- Record failed commands even when resolved; include the cause and the next successful approach.
-- Say `not run` when a check was not performed. Never imply that a build or test passed without
-  evidence.
-- Mention deliberate scope exclusions so future agents do not mistake placeholders for completed
-  features.
-- Keep entries short enough to scan during onboarding. Avoid secrets, credentials, and private data.
+- Prefer observed facts over narrative. Keep only information that changes future work.
+- Record a failure only when it leaves a blocker or a reusable lesson.
+- Say `not run` when a check was not performed. Never imply that a check passed without evidence.
+- Mention only material scope exclusions. Avoid secrets, credentials, and private data.
+- Never exceed eight physical lines, even when the session was large.
 
 ## Project helper
 
-For KendoMenu, `scripts/new-work-session.sh` is exposed as `pnpm session:new`. It creates the dated
-template and refuses duplicate paths; the agent remains responsible for supplying accurate content.
+For KendoMenu, `pnpm session:new` creates the fixed template and refuses duplicate paths;
+`pnpm session:check` enforces the cap. The agent remains responsible for accurate prioritization.

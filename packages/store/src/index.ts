@@ -10,7 +10,7 @@ import {
 } from '@kendo-menu/domain';
 
 import {
-  createTrainingPersistStorage,
+  createTrainingJSONStorage,
   migratePersistedTrainingState,
   parsePersistedTrainingState,
   TRAINING_STORE_PERSISTENCE_VERSION,
@@ -100,7 +100,7 @@ export function createTrainingStore({ storage, storageKey = 'kendo-menu' }: Trai
       }),
       {
         name: storageKey,
-        storage: createTrainingPersistStorage(storage),
+        storage: createTrainingJSONStorage(storage),
         version: TRAINING_STORE_PERSISTENCE_VERSION,
         migrate: migratePersistedTrainingState,
         merge: (persistedState, currentState) => {

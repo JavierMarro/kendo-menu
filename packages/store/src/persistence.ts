@@ -6,20 +6,18 @@ import {
   type TrainingSet,
   type TrainingStep,
 } from '@kendo-menu/domain';
-import type { PersistStorage, StateStorage, StorageValue } from 'zustand/middleware';
+import {
+  createJSONStorage,
+  type PersistStorage,
+  type StateStorage,
+  type StorageValue,
+} from 'zustand/middleware';
 
 export const TRAINING_STORE_PERSISTENCE_VERSION = 1;
 
 export interface PersistedTrainingState {
   readonly dashboardEntries: readonly DashboardEntry[];
   readonly customTrainingSets: readonly TrainingSet[];
-}
-
-type WritePolicy = 'allowed' | 'pending' | 'protected';
-
-interface ParsedStorageValue {
-  readonly value: StorageValue<PersistedTrainingState> | null;
-  readonly writePolicy: Exclude<WritePolicy, 'pending'>;
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -219,250 +217,47 @@ export function migratePersistedTrainingState(
   return parsedState;
 }
 
-function emptyPersistedTrainingState(): PersistedTrainingState {
-  return { dashboardEntries: [], customTrainingSets: [] };
-}
-
-function serializeStorageValue(value: StorageValue<PersistedTrainingState>): string {
-  const serializedValue = JSON.stringify(value);
-
-  if (serializedValue === undefined) {
-    throw new Error('Training-store persistence data could not be serialized.');
+function parseStorageValue(value: unknown): StorageValue<PersistedTrainingState> | null {
+  if (value === null) {
+    return null;
   }
 
-  return serializedValue;
-}
-
-function hasFuturePersistenceVersion(serializedValue: string | null): boolean {
-  if (serializedValue === null) {
-    return false;
+  if (
+    !isRecord(value) ||
+    !Object.hasOwn(value, 'state') ||
+    typeof value['version'] !== 'number' ||
+    !Number.isInteger(value['version']) ||
+    value['version'] < 0
+  ) {
+    throw new Error('Training-store persistence envelope is invalid.');
   }
 
-  let value: unknown;
+  const state = parsePersistedTrainingState(value['state']);
 
-  try {
-    value = JSON.parse(serializedValue) as unknown;
-  } catch {
-    return false;
+  if (state === null) {
+    throw new Error('Training-store persistence data is invalid.');
   }
 
-  return (
-    isRecord(value) &&
-    typeof value['version'] === 'number' &&
-    Number.isInteger(value['version']) &&
-    value['version'] > TRAINING_STORE_PERSISTENCE_VERSION
-  );
+  return { state, version: value['version'] };
 }
 
-export function createTrainingPersistStorage(
+export function createTrainingJSONStorage(
   storage: StateStorage,
 ): PersistStorage<PersistedTrainingState> {
-  let writePolicy: WritePolicy = 'allowed';
-  let readBarrier: Promise<void> | null = null;
-  let readGeneration = 0;
-  let usesAsyncStorage = false;
-  let asyncWriteQueue = Promise.resolve();
-  let operationGeneration = 0;
+  const jsonStorage = createJSONStorage<unknown>(() => storage);
 
-  const deserializeStorageValue = (serializedValue: string | null): ParsedStorageValue => {
-    if (serializedValue === null) {
-      return { value: null, writePolicy: 'allowed' };
-    }
-
-    const value = JSON.parse(serializedValue) as unknown;
-
-    if (
-      !isRecord(value) ||
-      !Object.hasOwn(value, 'state') ||
-      typeof value['version'] !== 'number' ||
-      !Number.isInteger(value['version']) ||
-      value['version'] < 0
-    ) {
-      throw new Error('Training-store persistence envelope is invalid.');
-    }
-
-    const version = value['version'];
-
-    if (version > TRAINING_STORE_PERSISTENCE_VERSION) {
-      // An older client may read newer data, but it must not silently downgrade or erase it.
-      return {
-        value: { state: emptyPersistedTrainingState(), version },
-        writePolicy: 'protected',
-      };
-    }
-
-    const state = parsePersistedTrainingState(value['state']);
-
-    if (state === null) {
-      throw new Error('Training-store persistence data is invalid.');
-    }
-
-    return { value: { state, version }, writePolicy: 'allowed' };
-  };
-
-  const writeStorageValue = (
-    name: string,
-    value: StorageValue<PersistedTrainingState>,
-    generation: number,
-  ): unknown => {
-    if (generation !== operationGeneration || writePolicy === 'protected') {
-      return undefined;
-    }
-
-    const serializedValue = serializeStorageValue(value);
-    const persistIfCompatible = (currentValue: string | null): unknown => {
-      if (generation !== operationGeneration) {
-        return undefined;
-      }
-
-      if (hasFuturePersistenceVersion(currentValue)) {
-        writePolicy = 'protected';
-        return undefined;
-      }
-
-      return writePolicy === 'protected' ? undefined : storage.setItem(name, serializedValue);
-    };
-
-    if (usesAsyncStorage) {
-      const queuedWrite = asyncWriteQueue.then(async () => {
-        if (generation !== operationGeneration || writePolicy === 'protected') {
-          return;
-        }
-
-        const currentValue = await storage.getItem(name);
-        await persistIfCompatible(currentValue);
-      });
-      asyncWriteQueue = queuedWrite.then(
-        () => undefined,
-        () => undefined,
-      );
-      return queuedWrite;
-    }
-
-    const currentValue = storage.getItem(name);
-
-    if (currentValue instanceof Promise) {
-      usesAsyncStorage = true;
-      const queuedWrite = asyncWriteQueue.then(async () => {
-        await persistIfCompatible(await currentValue);
-      });
-      asyncWriteQueue = queuedWrite.then(
-        () => undefined,
-        () => undefined,
-      );
-      return queuedWrite;
-    }
-
-    return persistIfCompatible(currentValue);
-  };
-
-  const writeAfterActiveRead = (
-    name: string,
-    value: StorageValue<PersistedTrainingState>,
-    generation: number,
-  ): Promise<unknown> => {
-    if (generation !== operationGeneration) {
-      return Promise.resolve(undefined);
-    }
-
-    const activeBarrier = readBarrier;
-
-    if (writePolicy !== 'pending' || activeBarrier === null) {
-      return Promise.resolve(writeStorageValue(name, value, generation));
-    }
-
-    return activeBarrier.then(() =>
-      generation !== operationGeneration
-        ? undefined
-        : activeBarrier === readBarrier && writePolicy !== 'pending'
-          ? writeStorageValue(name, value, generation)
-          : writeAfterActiveRead(name, value, generation),
-    );
-  };
+  if (jsonStorage === undefined) {
+    throw new Error('Training-store storage is unavailable.');
+  }
 
   return {
     getItem: (name) => {
-      const generation = ++readGeneration;
-      let storedValue: string | null | Promise<string | null>;
-
-      try {
-        storedValue = storage.getItem(name);
-      } catch (error) {
-        writePolicy = 'allowed';
-        readBarrier = null;
-        throw error;
-      }
-
-      if (storedValue instanceof Promise) {
-        usesAsyncStorage = true;
-        writePolicy = 'pending';
-        const parsedValue = storedValue.then(deserializeStorageValue).then(
-          (parsed) => {
-            if (generation !== readGeneration) {
-              return null;
-            }
-
-            writePolicy = parsed.writePolicy;
-            return parsed.value;
-          },
-          (error: unknown) => {
-            if (generation === readGeneration) {
-              writePolicy = 'allowed';
-            }
-
-            throw error;
-          },
-        );
-        const currentBarrier = parsedValue.then(
-          () => undefined,
-          () => undefined,
-        );
-        readBarrier = currentBarrier;
-        return parsedValue;
-      }
-
-      readBarrier = null;
-
-      try {
-        const parsedValue = deserializeStorageValue(storedValue);
-        writePolicy = parsedValue.writePolicy;
-        return parsedValue.value;
-      } catch (error) {
-        writePolicy = 'allowed';
-        throw error;
-      }
+      const storedValue = jsonStorage.getItem(name);
+      return storedValue instanceof Promise
+        ? storedValue.then(parseStorageValue)
+        : parseStorageValue(storedValue);
     },
-    setItem: (name, value) => {
-      const generation = operationGeneration;
-
-      return writePolicy === 'pending'
-        ? writeAfterActiveRead(name, value, generation)
-        : writeStorageValue(name, value, generation);
-    },
-    removeItem: (name) => {
-      const generation = ++operationGeneration;
-      readGeneration += 1;
-      readBarrier = null;
-
-      if (usesAsyncStorage) {
-        writePolicy = 'allowed';
-        const queuedRemoval = asyncWriteQueue.then(async () => {
-          await storage.removeItem(name);
-
-          if (generation === operationGeneration) {
-            writePolicy = 'allowed';
-          }
-        });
-        asyncWriteQueue = queuedRemoval.then(
-          () => undefined,
-          () => undefined,
-        );
-        return queuedRemoval;
-      }
-
-      const removalResult = storage.removeItem(name);
-      writePolicy = 'allowed';
-      return removalResult;
-    },
+    setItem: (name, value) => jsonStorage.setItem(name, value),
+    removeItem: (name) => jsonStorage.removeItem(name),
   };
 }
