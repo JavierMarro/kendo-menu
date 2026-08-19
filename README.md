@@ -48,3 +48,6 @@ See [AGENTS.md](./AGENTS.md) for the working contract used by people and coding 
 
 Development history is recorded in [`docs/work-sessions`](./docs/work-sessions/), with one concise
 entry per working session.
+
+Project-local Codex workflows are indexed in [`tools/skills`](./tools/skills/). Read the applicable
+`SKILL.md` before heavy implementation, fuzz testing, verification, or semantic review.

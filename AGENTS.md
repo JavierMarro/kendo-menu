@@ -16,6 +16,13 @@ decisions, not current requirements.
 - `packages/store`: platform-neutral Zustand store factory with an injected storage adapter.
 - `packages/ui`: reserved for genuinely shared tokens/components; keep it empty until needed.
 - `docs`: architecture and product notes when a decision needs more context than code comments.
+- `tools/skills`: project-local Codex skills; read the index and applicable `SKILL.md` before heavy
+  coding, fuzzing, verification, or review.
+
+Before substantial implementation, read [`tools/skills/README.md`](tools/skills/README.md). The
+project skills are Codex-native adaptations of the supplied workflows; do not assume Claude slash
+commands such as `/antirez` or `/code-review`, or shell variables such as `$BUILD`, exist. Use the
+named skill workflow and the repository's actual commands instead.
 
 Use pnpm for every workspace operation. Keep one `pnpm-lock.yaml`. Do not add a second lockfile or
 mix Bun/npm/Yarn commands into the repository. Bun is available for a possible future Elysia API,
