@@ -91,6 +91,7 @@ files, or secrets.
 2. Keep changes scoped to the request; preserve unrelated user work.
 3. Implement the smallest coherent slice with types and accessible UI states.
 4. Verify typecheck, lint, formatting, build, and tests as applicable.
-5. Record every working session in `docs/work-sessions/YYYY-MM-DD-<slug>.md`, including changes,
-   failures/roadblocks, resolutions, verification, and follow-up context.
+5. Record every working session with `pnpm session:new -- --slug <slug> --duration "<duration>"`,
+   then fill the generated entry in `docs/work-sessions/`. Use the project-local
+   `tools/skills/work-session-history/SKILL.md` workflow when available.
 6. Report what changed, what was verified, and any remaining deliberate follow-up.

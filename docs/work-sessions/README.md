@@ -18,6 +18,19 @@ Use `YYYY-MM-DD-short-slug.md`. Keep entries factual and concise. Every entry sh
 The newest entry should be the first place to look when onboarding to recent work. This history is
 complementary to the repository code, README, and `AGENTS.md`; it does not replace them.
 
+## Automation
+
+Create a correctly named, non-overwriting template from the repository root:
+
+```bash
+pnpm session:new -- --slug <short-slug> --duration "<duration>"
+```
+
+Add `--date YYYY-MM-DD` when recording a previous session. The generator creates every required
+section, but the agent must still replace the placeholders with evidence-based content. The
+project-local skill at `tools/skills/work-session-history/SKILL.md` defines the workflow.
+
 ## Sessions
 
+- [2026-08-19 — session history automation](./2026-08-19-session-history-automation.md)
 - [2026-08-18 — project initialization](./2026-08-18-project-initialization.md)

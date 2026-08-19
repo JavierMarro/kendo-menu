@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @kendo-menu/web dev",
+    "session:new": "bash scripts/new-work-session.sh",
     "build": "pnpm --filter @kendo-menu/web build",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint .",
