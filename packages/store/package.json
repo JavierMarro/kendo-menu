@@ -1,0 +1,17 @@
+{
+  "name": "@kendo-menu/store",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@kendo-menu/domain": "workspace:*",
+    "zustand": "^5.0.15"
+  }
+}
