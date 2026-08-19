@@ -32,6 +32,7 @@ project-local skill at `tools/skills/work-session-history/SKILL.md` defines the 
 
 ## Sessions
 
+- [2026-08-19 — Impeccable init](./2026-08-19-impeccable-init.md)
 - [2026-08-19 — Codex project skills](./2026-08-19-codex-project-skills.md)
 - [2026-08-19 — session history automation](./2026-08-19-session-history-automation.md)
 - [2026-08-18 — project initialization](./2026-08-18-project-initialization.md)
