@@ -1,0 +1,8 @@
+- Session: project local architecture skills
+- Date/duration: 2026-08-19; not recorded.
+- Scope/start: Versioned three skills already present in the user-global Codex installation.
+- Changes: Added and indexed local architecture, deep-module, and domain-modeling copies.
+- Decisions: A later audit reversed the duplication after proving global equivalence.
+- Roadblocks: Vendor formatting warnings and a mismatched README patch were isolated or corrected.
+- Verification: Source diffs, targeted formatting, and git diff checks passed; gates were not run.
+- Follow-up: Superseded—use global copies and keep tools/skills project-specific.

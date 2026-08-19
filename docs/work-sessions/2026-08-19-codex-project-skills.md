@@ -1,0 +1,8 @@
+- Session: codex project skills
+- Date/duration: 2026-08-19; not recorded.
+- Scope/start: Adapted missing Claude-style testing, verification, and review workflows for Codex.
+- Changes: Added three adapted skills, their metadata, and the project skill index.
+- Decisions: Versioned KendoMenu adaptations; replaced slash commands; required explicit evidence.
+- Roadblocks: Patch syntax and initial formatting failures were corrected; no blocker remained.
+- Verification: Skill validation, pnpm format:check, and pnpm check passed.
+- Follow-up: Select workflows through tools/skills/README.md and keep future adaptations scoped.

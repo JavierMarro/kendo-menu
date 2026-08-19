@@ -16,6 +16,23 @@ decisions, not current requirements.
 - `packages/store`: platform-neutral Zustand store factory with an injected storage adapter.
 - `packages/ui`: reserved for genuinely shared tokens/components; keep it empty until needed.
 - `docs`: architecture and product notes when a decision needs more context than code comments.
+- `tools/skills`: project-local Codex skills; read the index and applicable `SKILL.md` before heavy
+  coding, fuzzing, verification, or review.
+
+Before substantial implementation, read [`tools/skills/README.md`](tools/skills/README.md). The
+project skills are Codex-native adaptations of the supplied workflows; do not assume Claude slash
+commands such as `/antirez` or `/code-review`, or shell variables such as `$BUILD`, exist. Use the
+named skill workflow and the repository's actual commands instead.
+
+When instructions conflict, use this order: the current user request; this guide and `PRODUCT.md`;
+established architecture and deliberate project conventions; applicable skills; generic best
+practices. Skills do not authorize dependency, public-contract, visual-direction, or package-manager
+changes. Translate generic commands to pnpm, and require repository evidence before adopting stack
+assumptions such as Tailwind, shadcn/ui, or routing. Impeccable's categorical visual rules are
+advisory when they conflict with KendoMenu's product brief or established interface. Codebase-design
+vocabulary applies during architecture analysis and does not replace ordinary React component or
+project-boundary terminology. The TypeScript-only rule applies to product and package source, not
+vetted or vendored skill tooling.
 
 Use pnpm for every workspace operation. Keep one `pnpm-lock.yaml`. Do not add a second lockfile or
 mix Bun/npm/Yarn commands into the repository. Bun is available for a possible future Elysia API,
@@ -76,6 +93,8 @@ pnpm dev
 pnpm typecheck
 pnpm lint
 pnpm format:check
+pnpm session:check
+pnpm test
 pnpm build
 pnpm check
 ```
@@ -91,6 +110,8 @@ files, or secrets.
 2. Keep changes scoped to the request; preserve unrelated user work.
 3. Implement the smallest coherent slice with types and accessible UI states.
 4. Verify typecheck, lint, formatting, build, and tests as applicable.
-5. Record every working session in `docs/work-sessions/YYYY-MM-DD-<slug>.md`, including changes,
-   failures/roadblocks, resolutions, verification, and follow-up context.
+5. Record every working session with `pnpm session:new -- --slug <slug> --duration "<duration>"`,
+   then fill the generated entry in `docs/work-sessions/`. Keep each dated entry to at most eight
+   physical lines and run `pnpm session:check`. Use the project-local
+   `tools/skills/work-session-history/SKILL.md` workflow when available.
 6. Report what changed, what was verified, and any remaining deliberate follow-up.

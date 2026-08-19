@@ -1,0 +1,8 @@
+- Session: persistence test readiness
+- Date/duration: 2026-08-19; about 35 minutes.
+- Scope/start: Store hydration trusted JSON, used v0/shallow merge, and lacked migration tests.
+- Changes: Added Vitest plus validated v1 migration; later simplified from 24 to 18 tests.
+- Decisions: Kept validation in store and browser APIs in web; added no schema or sync dependencies.
+- Roadblocks: Install isolation and vendor diagnostics were resolved; browser testing unavailable.
+- Verification: Store checks, pnpm check, targeted scans, and an HTTP smoke test passed.
+- Follow-up: Browser-test responsive/reload flows; revisit version-skew recovery when required.

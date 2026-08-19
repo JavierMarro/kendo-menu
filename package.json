@@ -8,12 +8,15 @@
   },
   "scripts": {
     "dev": "pnpm --filter @kendo-menu/web dev",
+    "session:new": "bash scripts/new-work-session.sh",
+    "session:check": "bash scripts/check-work-sessions.sh",
     "build": "pnpm --filter @kendo-menu/web build",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm build"
+    "test": "pnpm -r --if-present test",
+    "check": "pnpm session:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -24,6 +27,7 @@
     "globals": "^17.11.0",
     "prettier": "^3.9.6",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.67.0"
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^4.1.11"
   }
 }

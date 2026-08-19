@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Testing fuzz stress'
+  short_description: 'Destroy modules with seeded state-space tests'
+  default_prompt: 'Use $testing-fuzz-stress to attack the specified public API with seeded fuzzing and stress tests.'

@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Pre-commit verification'
+  short_description: 'Run layered build, quality, and safety checks'
+  default_prompt: 'Use $pre-commit-verification to run the appropriate verification mode and report a PASS/FAIL readiness table.'

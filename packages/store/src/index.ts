@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
+import { persist, type StateStorage } from 'zustand/middleware';
 
 import {
   asTrainingSetId,
@@ -8,6 +8,14 @@ import {
   type TrainingSetId,
   type TrainingSetInput,
 } from '@kendo-menu/domain';
+
+import {
+  createTrainingJSONStorage,
+  migratePersistedTrainingState,
+  parsePersistedTrainingState,
+  TRAINING_STORE_PERSISTENCE_VERSION,
+  type PersistedTrainingState,
+} from './persistence';
 
 export type { StateStorage } from 'zustand/middleware';
 
@@ -92,8 +100,21 @@ export function createTrainingStore({ storage, storageKey = 'kendo-menu' }: Trai
       }),
       {
         name: storageKey,
-        storage: createJSONStorage(() => storage),
-        partialize: (state) => ({
+        storage: createTrainingJSONStorage(storage),
+        version: TRAINING_STORE_PERSISTENCE_VERSION,
+        migrate: migratePersistedTrainingState,
+        merge: (persistedState, currentState) => {
+          const parsedState = parsePersistedTrainingState(persistedState);
+
+          return parsedState === null
+            ? currentState
+            : {
+                ...currentState,
+                dashboardEntries: parsedState.dashboardEntries,
+                customTrainingSets: parsedState.customTrainingSets,
+              };
+        },
+        partialize: (state): PersistedTrainingState => ({
           dashboardEntries: state.dashboardEntries,
           customTrainingSets: state.customTrainingSets,
         }),

@@ -3,3 +3,5 @@ dist
 coverage
 .pnpm-store
 .git
+.agents/skills
+.impeccable

@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Code reviewer pre-commit'
+  short_description: 'Trace changed code and challenge its behavior'
+  default_prompt: 'Use $code-reviewer-pre-commit to review the changed files for logic, data flow, security, and counter-examples before commit.'

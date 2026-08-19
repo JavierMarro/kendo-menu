@@ -1,0 +1,8 @@
+- Session: impeccable init
+- Date/duration: 2026-08-19; about 8 minutes.
+- Scope/start: Captured product context when no PRODUCT.md existed.
+- Changes: Added PRODUCT.md with users, purpose, constraints, principles, and accessibility needs.
+- Decisions: Preserved local-first web/domain/store boundaries; deferred visual and server scope.
+- Roadblocks: None.
+- Verification: PRODUCT.md existed; targeted Prettier and git diff --check passed.
+- Follow-up: Use scoped design workflows for future surfaces; no build-path preference was set.

@@ -8,6 +8,17 @@ coverage/
 *.log
 .DS_Store
 
+# User-global or plugin-managed third-party skills
+.agents/skills/
+.codex/hooks.json
+
+# Local Impeccable runtime state
+.impeccable/config.local.json
+.impeccable/hook.cache.json
+.impeccable/hook.pending.json
+.impeccable/live/
+.impeccable/review/
+
 .env
 .env.*
 !.env.example

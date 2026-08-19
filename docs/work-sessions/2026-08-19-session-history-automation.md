@@ -1,0 +1,8 @@
+- Session: session history automation
+- Date/duration: 2026-08-19; not recorded.
+- Scope/start: Automated a previously manual work-session convention.
+- Changes: Added the history skill, generator, pnpm command, repository guidance, and index.
+- Decisions: Used an agent-filled record; a later policy capped dated entries at eight lines.
+- Roadblocks: Quoting, patch, validator, and pnpm forwarding issues were resolved without blockers.
+- Verification: Skill validation, script checks, duplicate protection, and pnpm check passed.
+- Follow-up: Run session:new, keep eight durable lines, update the index, and pass session:check.

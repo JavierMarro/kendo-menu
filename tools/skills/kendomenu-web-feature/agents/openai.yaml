@@ -1,0 +1,4 @@
+interface:
+  display_name: 'KendoMenu Web Feature'
+  short_description: 'Implement safe KendoMenu web feature slices'
+  default_prompt: 'Use $kendomenu-web-feature to implement this KendoMenu web feature as the smallest verified vertical slice.'

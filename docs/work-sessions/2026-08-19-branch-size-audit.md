@@ -1,0 +1,8 @@
+- Session: branch size audit
+- Date/duration: 2026-08-19; about 2 hours.
+- Scope/start: Audited a 164,541-line branch dominated by third-party skill snapshots.
+- Changes: Removed eight third-party skills and three global copies; simplified persistence.
+- Decisions: Kept five project workflows; ignored local installs; documented historical licenses.
+- Roadblocks: The registry differed from reported installs; explicit removal resolved the scope.
+- Verification: Session, store, formatting, diff, and full pnpm checks passed.
+- Follow-up: Rewrite the already-pushed branch history to eliminate vendor blobs, then drop notices.

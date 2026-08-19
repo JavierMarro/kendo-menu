@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Work-session history'
+  short_description: 'Record concise project work-session history'
+  default_prompt: "Use $work-session-history to record this project's completed work session."

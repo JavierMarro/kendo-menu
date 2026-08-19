@@ -8,6 +8,7 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   {
     ignores: [
+      '.agents/skills/**',
       '**/node_modules/**',
       '**/dist/**',
       '**/coverage/**',
