@@ -31,8 +31,8 @@ reproducibility, not ritual TDD or line-coverage numbers.
    ordering guarantees, resource limits, and invariants that must always hold.
 3. Use existing test conventions. If no runner exists, report that limitation and propose the
    smallest appropriate setup; do not silently invent a command that cannot run.
-4. For this repository, prefer the workspace's eventual Vitest or equivalent configuration and run
-   it through pnpm from the repository root.
+4. For this repository, use the workspace's Vitest configuration through pnpm from the repository
+   root.
 
 ## Seeded generation
 

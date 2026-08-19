@@ -35,6 +35,7 @@ packages/
 ```bash
 pnpm install
 pnpm dev
+pnpm test
 pnpm check
 pnpm format
 ```

@@ -24,6 +24,16 @@ project skills are Codex-native adaptations of the supplied workflows; do not as
 commands such as `/antirez` or `/code-review`, or shell variables such as `$BUILD`, exist. Use the
 named skill workflow and the repository's actual commands instead.
 
+When instructions conflict, use this order: the current user request; this guide and `PRODUCT.md`;
+established architecture and deliberate project conventions; applicable skills; generic best
+practices. Skills do not authorize dependency, public-contract, visual-direction, or package-manager
+changes. Translate generic commands to pnpm, and require repository evidence before adopting stack
+assumptions such as Tailwind, shadcn/ui, or routing. Impeccable's categorical visual rules are
+advisory when they conflict with KendoMenu's product brief or established interface. Codebase-design
+vocabulary applies during architecture analysis and does not replace ordinary React component or
+project-boundary terminology. The TypeScript-only rule applies to product and package source, not
+vetted or vendored skill tooling.
+
 Use pnpm for every workspace operation. Keep one `pnpm-lock.yaml`. Do not add a second lockfile or
 mix Bun/npm/Yarn commands into the repository. Bun is available for a possible future Elysia API,
 but this LocalStorage-only milestone has no API package, database, or Elysia runtime.
@@ -83,6 +93,7 @@ pnpm dev
 pnpm typecheck
 pnpm lint
 pnpm format:check
+pnpm test
 pnpm build
 pnpm check
 ```

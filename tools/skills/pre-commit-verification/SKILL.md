@@ -48,8 +48,8 @@ to repository policy, rather than claiming full confidence.
   suppress errors to make a commit green.
 - Run the configured test command, including integration tests when the repository defines them.
 - Run the formatter in check mode. Do not rewrite files during a read-only verification mode.
-- For KendoMenu, `pnpm check` covers typecheck, ESLint, Prettier, and the production web build; a
-  future test script must be added to the full pipeline rather than forgotten.
+- For KendoMenu, `pnpm check` covers typecheck, ESLint, Prettier, Vitest, and the production web
+  build.
 
 ### Debug-log scan
 
