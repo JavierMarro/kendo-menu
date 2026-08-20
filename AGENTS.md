@@ -38,6 +38,23 @@ Use pnpm for every workspace operation. Keep one `pnpm-lock.yaml`. Do not add a 
 mix Bun/npm/Yarn commands into the repository. Bun is available for a possible future Elysia API,
 but this LocalStorage-only milestone has no API package, database, or Elysia runtime.
 
+## Model and delegation policy
+
+Use `gpt-5.6-sol` with `ultra` reasoning effort only for planning and orchestration. It must not implement code directly.
+
+Delegate implementation tasks to `gpt-5.6-luna`, except when the overhead of launching a subagent would be greater than completing a very small fix directly.
+
+For Luna implementation tasks:
+
+- Use `max` reasoning effort for complex feature development.
+- Use `xhigh` reasoning effort for layout work, HTML/CSS, and minor visual refinements.
+
+After the Luna subagents complete their work, use `gpt-5.6-sol` with `xhigh` reasoning effort to review the resulting code.
+
+If the review identifies changes, delegate those changes back to Luna. Once the changes are complete, have Sol review them again before delivering the final response.
+
+The coordinating Sol agent remains responsible for planning, delegation, validation, and the final response.
+
 ## Non-negotiable code standards
 
 - TypeScript everywhere; do not add JavaScript source files.
@@ -103,23 +120,6 @@ Before handing off a change, run the narrowest relevant checks, then `pnpm check
 changes. Add or update tests for behavior and persistence migrations; do not treat a successful
 build as proof that user flows work. Never commit `node_modules`, build output, local environment
 files, or secrets.
-
-## Model and delegation policy
-
-Use `gpt-5.6-sol` with `ultra` reasoning effort only for planning and orchestration. It must not implement code directly.
-
-Delegate implementation tasks to `gpt-5.6-luna`, except when the overhead of launching a subagent would be greater than completing a very small fix directly.
-
-For Luna implementation tasks:
-
-- Use `max` reasoning effort for complex feature development.
-- Use `xhigh` reasoning effort for layout work, HTML/CSS, and minor visual refinements.
-
-After the Luna subagents complete their work, use `gpt-5.6-sol` with `xhigh` reasoning effort to review the resulting code.
-
-If the review identifies changes, delegate those changes back to Luna. Once the changes are complete, have Sol review them again before delivering the final response.
-
-The coordinating Sol agent remains responsible for planning, delegation, validation, and the final response.
 
 ## Change workflow
 

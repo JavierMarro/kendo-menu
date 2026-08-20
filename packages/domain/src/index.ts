@@ -1,11 +1,33 @@
 export { DEFAULT_TRAINING_SETS } from './default-training-sets';
-export { asTrainingSetId } from './types';
+export {
+  MAX_REPETITIONS,
+  MIN_REPETITIONS,
+  TrainingValidationError,
+  asTrainingSetId,
+  assertValidRepetitionCount,
+  assertValidTrainingSet,
+  assertValidTrainingSetInput,
+  isValidRepetitionCount,
+  isValidReps,
+  validateRepetitionCount,
+  validateReps,
+  validateTrainingSet,
+  validateTrainingSetInput,
+} from './types';
 export type {
   DashboardEntry,
+  CustomTrainingSectionInput,
+  CustomTrainingSetInput,
+  CustomTrainingStepInput,
   DrillCategory,
   RepUnit,
+  TrainingSection,
+  TrainingSectionInput,
   TrainingSet,
   TrainingSetId,
   TrainingSetInput,
   TrainingStep,
+  TrainingStepInput,
+  ValidationIssue,
+  ValidationResult,
 } from './types';

@@ -1,0 +1,8 @@
+- Session: routed training planner
+- Date/duration: 2026-08-20; about 3 hours
+- Scope/start: Completed nested domain/store foundation and routed local-first SPA work.
+- Changes: Added variable-length sections, exact High School Kendo Club built-in, 0..500 reps, fail-closed persistence/recovery, routed accessible dashboard/library/detail/custom builder, dirty-history protection, responsive aizome/ochre UI.
+- Decisions: Included only the user-supplied built-in; remaining nine drills require product content.
+- Roadblocks: React Router POP confirmation arrives after interim history traversal; E2E must await the dialog event.
+- Verification: Added Vitest/RTL/jsdom and Playwright/axe coverage; pnpm check passed with 55 unit tests and build; Playwright passed 20/20 desktop/mobile.
+- Follow-up: Keep the remaining drill catalogue blocked on product-supplied content.
