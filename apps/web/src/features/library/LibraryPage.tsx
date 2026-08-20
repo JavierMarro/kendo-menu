@@ -1,56 +1,84 @@
-import { DEFAULT_TRAINING_SETS } from '@kendo-menu/domain';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
-import { useTrainingStore } from '../../lib/training-store';
+import {
+  findTrainingSet,
+  formatCategory,
+  getAllTrainingSets,
+  getTrainingSetStepCount,
+} from '../../lib/training-data';
+import { useTrainingStore } from '../../lib/training-store-context';
 
 export function LibraryPage() {
   const customTrainingSets = useTrainingStore((state) => state.customTrainingSets);
   const addToDashboard = useTrainingStore((state) => state.addToDashboard);
-  const trainingSets = [...DEFAULT_TRAINING_SETS, ...customTrainingSets];
+  const [statusMessage, setStatusMessage] = useState('');
+  const trainingSets = getAllTrainingSets(customTrainingSets);
+
+  const addTrainingSet = (trainingSetId: string) => {
+    const trainingSet = findTrainingSet(trainingSets, trainingSetId);
+
+    if (trainingSet === undefined) {
+      return;
+    }
+
+    addToDashboard(trainingSet.id);
+    setStatusMessage(`${trainingSet.name} added to your dashboard.`);
+  };
 
   return (
     <>
       <header className="page-header">
         <div>
           <p className="eyebrow">Your practice catalogue</p>
-          <h2>Drill library</h2>
+          <h1>Drill library</h1>
           <p className="page-intro">
-            Curated defaults will live here alongside the training sets you create yourself.
+            Browse curated keiko drills and the training sets you create for yourself.
           </p>
         </div>
-        <button className="primary-button" type="button" disabled>
-          + Create training set
-        </button>
+        <Link className="primary-button" to="/app/drills/new">
+          Create drill
+        </Link>
       </header>
+
+      <p className="sr-only" role="status" aria-live="polite">
+        {statusMessage}
+      </p>
 
       {trainingSets.length === 0 ? (
         <section className="empty-state empty-state--library" aria-labelledby="empty-library-title">
-          <div className="empty-icon" aria-hidden="true">
-            稽
-          </div>
-          <p className="eyebrow">Ready for your curriculum</p>
-          <h3 id="empty-library-title">No drills have been added yet.</h3>
-          <p>
-            Add the first curated sets to <code>packages/domain/src/default-training-sets.ts</code>.
-            The library and dashboard are already wired to the shared model and local store.
-          </p>
+          <p className="eyebrow">Build your catalogue</p>
+          <h2 id="empty-library-title">No drills are available yet.</h2>
+          <p>Create the first training set for your own practice.</p>
+          <Link className="primary-button" to="/app/drills/new">
+            Create a drill
+          </Link>
         </section>
       ) : (
-        <section className="library-grid" aria-label="Training set library">
+        <section className="library-grid" aria-labelledby="library-list-title">
+          <h2 id="library-list-title" className="sr-only">
+            Available training sets
+          </h2>
           {trainingSets.map((trainingSet) => (
             <article className="library-card" key={trainingSet.id}>
               <div className="library-card-topline">
-                <span className="category-pill">{trainingSet.category}</span>
-                <span className="step-count">{trainingSet.steps.length} steps</span>
+                <span className="category-pill">{formatCategory(trainingSet.category)}</span>
+                <span className="step-count">{getTrainingSetStepCount(trainingSet)} exercises</span>
               </div>
-              <h3>{trainingSet.name}</h3>
+              <h2>{trainingSet.name}</h2>
               <p>{trainingSet.description}</p>
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() => addToDashboard(trainingSet.id)}
-              >
-                Add to dashboard
-              </button>
+              <div className="library-card-actions">
+                <Link className="text-button" to={`/app/library/${trainingSet.id}`}>
+                  View details
+                </Link>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => addTrainingSet(trainingSet.id)}
+                >
+                  Add to dashboard
+                </button>
+              </div>
             </article>
           ))}
         </section>

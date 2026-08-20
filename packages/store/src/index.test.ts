@@ -1,17 +1,50 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_TRAINING_SETS,
   asTrainingSetId,
   type DashboardEntry,
-  type TrainingSet,
   type TrainingSetInput,
 } from '@kendo-menu/domain';
 
-import { createTrainingStore, type StateStorage } from './index';
+import {
+  classifyTrainingStorageValue,
+  createTrainingStore,
+  createTrainingStoreAsync,
+  inspectTrainingStorage,
+  TrainingStoreBootstrapError,
+  type StateStorage,
+} from './index';
 
 const STORAGE_KEY = 'test-kendo-menu';
 
 const CUSTOM_SET_INPUT = {
+  name: 'Footwork basics',
+  description: 'A short solo sequence.',
+  category: 'custom',
+  sections: [
+    {
+      label: 'Preparation',
+      steps: [
+        {
+          label: 'Okuri-ashi',
+          defaultReps: 0,
+          description: 'Keep the feet quiet.',
+        },
+      ],
+    },
+    {
+      label: 'Closing',
+      steps: [
+        { label: 'Men', defaultReps: 500 },
+        { label: 'Kote-men', defaultReps: 24 },
+      ],
+    },
+  ],
+} satisfies TrainingSetInput;
+
+const LEGACY_CUSTOM_SET = {
+  id: asTrainingSetId('custom-legacy'),
   name: 'Footwork basics',
   description: 'A short solo sequence.',
   category: 'custom',
@@ -24,29 +57,20 @@ const CUSTOM_SET_INPUT = {
       description: 'Keep the feet quiet.',
     },
   ],
-} satisfies TrainingSetInput;
-
-const LEGACY_CUSTOM_SET = {
-  ...CUSTOM_SET_INPUT,
-  id: asTrainingSetId('custom-legacy'),
   isBuiltIn: false,
-} satisfies TrainingSet;
+} as const;
 
 const LEGACY_DASHBOARD_ENTRY = {
   id: 'entry-legacy',
   trainingSetId: LEGACY_CUSTOM_SET.id,
-  repOverrides: { 'okuri-ashi': 30 },
+  repOverrides: { 'okuri-ashi': 0 },
   notes: 'Stay relaxed.',
   createdAt: '2026-08-19T10:00:00.000Z',
 } satisfies DashboardEntry;
 
-interface PersistedCollections {
-  readonly dashboardEntries: readonly DashboardEntry[];
-  readonly customTrainingSets: readonly TrainingSet[];
-}
-
 class MemoryStorage implements StateStorage {
   readonly #values = new Map<string, string>();
+  writes = 0;
 
   constructor(initialValue?: string) {
     if (initialValue !== undefined) {
@@ -59,11 +83,30 @@ class MemoryStorage implements StateStorage {
   }
 
   setItem(name: string, value: string): void {
+    this.writes += 1;
     this.#values.set(name, value);
   }
 
   removeItem(name: string): void {
     this.#values.delete(name);
+  }
+}
+
+class AsyncMemoryStorage implements StateStorage {
+  readonly #values = new Map<string, string>();
+
+  getItem(name: string): Promise<string | null> {
+    return Promise.resolve(this.#values.get(name) ?? null);
+  }
+
+  setItem(name: string, value: string): Promise<void> {
+    this.#values.set(name, value);
+    return Promise.resolve();
+  }
+
+  removeItem(name: string): Promise<void> {
+    this.#values.delete(name);
+    return Promise.resolve();
   }
 }
 
@@ -77,15 +120,16 @@ function parseJson(value: string): unknown {
 
 function requireStoredValue(storage: StateStorage): string {
   const value = storage.getItem(STORAGE_KEY);
-
   if (typeof value !== 'string') {
     throw new Error('Expected synchronous persisted test state.');
   }
-
   return value;
 }
 
-function validPersistedCollections(): PersistedCollections {
+function legacyState(): {
+  readonly dashboardEntries: readonly DashboardEntry[];
+  readonly customTrainingSets: readonly unknown[];
+} {
   return {
     dashboardEntries: [LEGACY_DASHBOARD_ENTRY],
     customTrainingSets: [LEGACY_CUSTOM_SET],
@@ -93,237 +137,415 @@ function validPersistedCollections(): PersistedCollections {
 }
 
 describe('createTrainingStore', () => {
-  it('creates custom sets and immutably adds, updates, and removes dashboard entries', () => {
+  it('creates nested custom sets with generated unique ids and repetitions', () => {
     const store = createTrainingStore({ storage: new MemoryStorage(), storageKey: STORAGE_KEY });
-    const customSetId = store.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
+    const id = store.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
+    const trainingSet = store.getState().customTrainingSets[0];
 
-    expect(customSetId).toMatch(/^custom-/);
-    expect(store.getState().customTrainingSets).toEqual([
-      { ...CUSTOM_SET_INPUT, id: customSetId, isBuiltIn: false },
+    expect(id).toBe(trainingSet?.id);
+    expect(trainingSet?.sections.map((section) => section.label)).toEqual([
+      'Preparation',
+      'Closing',
+    ]);
+    expect(trainingSet?.sections[0]?.steps[0]?.defaultReps).toBe(0);
+    expect(trainingSet?.sections[1]?.steps[0]?.defaultReps).toBe(500);
+    expect(trainingSet?.sections.flatMap((section) => section.steps)).toEqual([
+      expect.objectContaining({ label: 'Okuri-ashi', repUnit: 'repetitions' }),
+      expect.objectContaining({ label: 'Men', repUnit: 'repetitions' }),
+      expect.objectContaining({ label: 'Kote-men', repUnit: 'repetitions' }),
     ]);
 
-    store.getState().addToDashboard(customSetId);
-    store.getState().addToDashboard(customSetId);
-
-    const entriesBeforeUpdate = store.getState().dashboardEntries;
-    const firstEntry = entriesBeforeUpdate[0];
-    const secondEntry = entriesBeforeUpdate[1];
-
-    expect(firstEntry).toBeDefined();
-    expect(secondEntry).toBeDefined();
-    expect(firstEntry?.id).not.toBe(secondEntry?.id);
-
-    if (firstEntry === undefined || secondEntry === undefined) {
-      throw new Error('Expected two dashboard entries.');
-    }
-
-    store.getState().updateDashboardEntry(firstEntry.id, { notes: 'Light shoulders.' });
-
-    const entriesAfterNotes = store.getState().dashboardEntries;
-    expect(entriesAfterNotes[0]).not.toBe(firstEntry);
-    expect(entriesAfterNotes[0]?.notes).toBe('Light shoulders.');
-    expect(entriesAfterNotes[0]?.repOverrides).toEqual({});
-    expect(entriesAfterNotes[1]).toBe(secondEntry);
-
-    store.getState().updateDashboardEntry(firstEntry.id, { repOverrides: { 'okuri-ashi': 24 } });
-
-    expect(store.getState().dashboardEntries[0]).toMatchObject({
-      notes: 'Light shoulders.',
-      repOverrides: { 'okuri-ashi': 24 },
-    });
-
-    store.getState().removeFromDashboard(firstEntry.id);
-    expect(store.getState().dashboardEntries).toEqual([secondEntry]);
+    const allIds = [
+      trainingSet?.id,
+      ...(trainingSet?.sections.flatMap((section) => [
+        section.id,
+        ...section.steps.map((step) => step.id),
+      ]) ?? []),
+    ];
+    expect(new Set(allIds).size).toBe(allIds.length);
   });
 
-  it('round-trips only the persisted collections in version 1', () => {
+  it('rejects invalid custom input before changing state or storage', () => {
+    const storage = new MemoryStorage();
+    const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+    const before = store.getState();
+    const invalidInput = {
+      ...CUSTOM_SET_INPUT,
+      sections: [{ label: ' ', steps: [{ label: 'Men', defaultReps: 501 }] }],
+    } satisfies TrainingSetInput;
+
+    expect(() => store.getState().createCustomTrainingSetAndAddToDashboard(invalidInput)).toThrow();
+    expect(store.getState().customTrainingSets).toEqual(before.customTrainingSets);
+    expect(store.getState().dashboardEntries).toEqual(before.dashboardEntries);
+    expect(storage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it('saves a custom set and linked dashboard entry atomically', () => {
+    const storage = new MemoryStorage();
+    const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+    const result = store.getState().createCustomTrainingSetAndAddToDashboard(CUSTOM_SET_INPUT);
+
+    expect(storage.writes).toBe(1);
+    expect(result.trainingSetId).toBe(result.trainingSet.id);
+    expect(result.dashboardEntryId).toBe(result.dashboardEntry.id);
+    expect(result.dashboardEntry.trainingSetId).toBe(result.trainingSet.id);
+    expect(store.getState().customTrainingSets).toEqual([result.trainingSet]);
+    expect(store.getState().dashboardEntries).toEqual([result.dashboardEntry]);
+  });
+
+  it('allows duplicate dashboard entries that remain independently editable', () => {
+    const store = createTrainingStore({ storage: new MemoryStorage(), storageKey: STORAGE_KEY });
+    const setId = store.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
+    const firstId = store.getState().addToDashboard(setId);
+    const secondId = store.getState().addToDashboard(setId);
+
+    expect(firstId).not.toBe(secondId);
+    store.getState().updateDashboardEntry(firstId, { notes: 'Short session.' });
+    expect(store.getState().dashboardEntries[0]?.notes).toBe('Short session.');
+    expect(store.getState().dashboardEntries[1]?.notes).toBe('');
+  });
+
+  it('preserves sparse override keys and distinguishes zero from missing', () => {
+    const store = createTrainingStore({ storage: new MemoryStorage(), storageKey: STORAGE_KEY });
+    const setId = store.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
+    const entryId = store.getState().addToDashboard(setId);
+    const overrides = Object.fromEntries([
+      ['__proto__', 0],
+      ['', 500],
+    ]);
+
+    store.getState().updateDashboardEntry(entryId, { repOverrides: overrides });
+    const storedOverrides = store.getState().dashboardEntries[0]?.repOverrides;
+
+    expect(Object.hasOwn(storedOverrides ?? {}, '__proto__')).toBe(true);
+    expect(Object.hasOwn(storedOverrides ?? {}, '')).toBe(true);
+    expect(storedOverrides?.['__proto__']).toBe(0);
+    expect(storedOverrides?.['']).toBe(500);
+    expect(Object.hasOwn(storedOverrides ?? {}, 'missing-step')).toBe(false);
+  });
+
+  it('accepts zero and 500 overrides and rejects non-boundary values', () => {
+    const store = createTrainingStore({ storage: new MemoryStorage(), storageKey: STORAGE_KEY });
+    const setId = store.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
+    const entryId = store.getState().addToDashboard(setId);
+
+    store.getState().updateDashboardEntry(entryId, { repOverrides: { step: 0 } });
+    expect(store.getState().dashboardEntries[0]?.repOverrides).toEqual({ step: 0 });
+    store.getState().updateDashboardEntry(entryId, { repOverrides: { step: 500 } });
+    expect(store.getState().dashboardEntries[0]?.repOverrides).toEqual({ step: 500 });
+    expect(() =>
+      store.getState().updateDashboardEntry(entryId, { repOverrides: { step: 501 } }),
+    ).toThrow();
+    expect(store.getState().dashboardEntries[0]?.repOverrides).toEqual({ step: 500 });
+  });
+
+  it('removes and restores an entry with exact position and data', () => {
+    const store = createTrainingStore({ storage: new MemoryStorage(), storageKey: STORAGE_KEY });
+    const setId = store.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
+    const firstId = store.getState().addToDashboard(setId);
+    store.getState().addToDashboard(setId);
+    store.getState().updateDashboardEntry(firstId, {
+      notes: 'Keep this note.',
+      repOverrides: { 'generated-step': 0 },
+    });
+    const before = [...store.getState().dashboardEntries];
+    const removed = store.getState().removeFromDashboard(firstId);
+
+    expect(removed).toEqual({ entry: before[0], index: 0 });
+    if (removed === null) {
+      throw new Error('Expected an entry to be removed.');
+    }
+    store.getState().restoreDashboardEntry(removed);
+    expect(store.getState().dashboardEntries).toEqual(before);
+  });
+
+  it('round-trips the nested state as version 2', () => {
     const storage = new MemoryStorage();
     const firstStore = createTrainingStore({ storage, storageKey: STORAGE_KEY });
-    const customSetId = firstStore.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
-    firstStore.getState().addToDashboard(customSetId);
-
-    const persistedCollections = {
+    firstStore.getState().createCustomTrainingSetAndAddToDashboard(CUSTOM_SET_INPUT);
+    const persisted = {
       dashboardEntries: firstStore.getState().dashboardEntries,
       customTrainingSets: firstStore.getState().customTrainingSets,
     };
 
-    expect(parseJson(requireStoredValue(storage))).toEqual({
-      state: persistedCollections,
-      version: 1,
-    });
-
+    expect(parseJson(requireStoredValue(storage))).toEqual({ state: persisted, version: 2 });
     const restoredStore = createTrainingStore({ storage, storageKey: STORAGE_KEY });
-    expect(restoredStore.getState().dashboardEntries).toEqual(
-      persistedCollections.dashboardEntries,
-    );
-    expect(restoredStore.getState().customTrainingSets).toEqual(
-      persistedCollections.customTrainingSets,
-    );
-    expect(restoredStore.getState().addToDashboard).toEqual(expect.any(Function));
+    expect(restoredStore.getState().dashboardEntries).toEqual(persisted.dashboardEntries);
+    expect(restoredStore.getState().customTrainingSets).toEqual(persisted.customTrainingSets);
   });
 
-  it('migrates a valid version 0 payload and rewrites it as version 1', () => {
-    const persistedCollections = validPersistedCollections();
-    const storage = new MemoryStorage(serializeState(persistedCollections, 0));
-    const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+  it('copies only recognized nested fields while hydrating', () => {
+    const raw = serializeState(
+      {
+        dashboardEntries: [{ ...LEGACY_DASHBOARD_ENTRY, unexpectedEntryField: 'ignored' }],
+        customTrainingSets: [
+          {
+            id: LEGACY_CUSTOM_SET.id,
+            name: LEGACY_CUSTOM_SET.name,
+            description: LEGACY_CUSTOM_SET.description,
+            category: LEGACY_CUSTOM_SET.category,
+            isBuiltIn: false,
+            unexpectedSetField: 'ignored',
+            sections: [
+              {
+                id: 'section',
+                label: 'Section',
+                unexpectedSectionField: 'ignored',
+                steps: [
+                  {
+                    id: 'step',
+                    label: 'Step',
+                    defaultReps: 0,
+                    repUnit: 'repetitions',
+                    unexpectedStepField: 'ignored',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      2,
+    );
+    const store = createTrainingStore({
+      storage: new MemoryStorage(raw),
+      storageKey: STORAGE_KEY,
+    });
+    const entry = store.getState().dashboardEntries[0];
+    const trainingSet = store.getState().customTrainingSets[0];
 
-    expect(store.getState().dashboardEntries).toEqual(persistedCollections.dashboardEntries);
-    expect(store.getState().customTrainingSets).toEqual(persistedCollections.customTrainingSets);
-    expect(parseJson(requireStoredValue(storage))).toEqual({
-      state: persistedCollections,
-      version: 1,
+    expect(entry).toEqual(LEGACY_DASHBOARD_ENTRY);
+    expect(trainingSet).toEqual({
+      id: LEGACY_CUSTOM_SET.id,
+      name: LEGACY_CUSTOM_SET.name,
+      description: LEGACY_CUSTOM_SET.description,
+      category: LEGACY_CUSTOM_SET.category,
+      isBuiltIn: false,
+      sections: [
+        {
+          id: 'section',
+          label: 'Section',
+          steps: [{ id: 'step', label: 'Step', defaultReps: 0, repUnit: 'repetitions' }],
+        },
+      ],
     });
   });
 
-  it('rejects invalid version 0 data without overwriting it during hydration', () => {
-    const rawLegacyState = serializeState(
-      { dashboardEntries: 'invalid', customTrainingSets: [] },
-      0,
-    );
-    const storage = new MemoryStorage(rawLegacyState);
+  it.each([0, 1])('migrates valid flat version %s data to an Exercises section', (version) => {
+    const storage = new MemoryStorage(serializeState(legacyState(), version));
     const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+    const migratedSet = store.getState().customTrainingSets[0];
 
-    expect(store.getState().dashboardEntries).toEqual([]);
-    expect(store.getState().customTrainingSets).toEqual([]);
-    expect(store.getState().addToDashboard).toEqual(expect.any(Function));
-    expect(requireStoredValue(storage)).toBe(rawLegacyState);
+    expect(migratedSet?.sections).toEqual([
+      {
+        id: 'custom-legacy-exercises',
+        label: 'Exercises',
+        steps: LEGACY_CUSTOM_SET.steps,
+      },
+    ]);
+    expect(store.getState().dashboardEntries).toEqual([LEGACY_DASHBOARD_ENTRY]);
+    expect(parseJson(requireStoredValue(storage))).toMatchObject({ version: 2 });
   });
 
-  it.each([
-    ['a non-array dashboard collection', { dashboardEntries: {}, customTrainingSets: [] }],
-    [
-      'an incomplete dashboard entry',
-      { dashboardEntries: [{ id: 'entry' }], customTrainingSets: [] },
-    ],
-    [
-      'a non-numeric repetition override',
-      {
-        dashboardEntries: [{ ...LEGACY_DASHBOARD_ENTRY, repOverrides: { 'okuri-ashi': null } }],
-        customTrainingSets: [LEGACY_CUSTOM_SET],
-      },
-    ],
-    [
-      'an unknown category',
+  it('normalizes a legacy authored category to custom during migration', () => {
+    const storage = new MemoryStorage(
+      serializeState(
+        {
+          ...legacyState(),
+          customTrainingSets: [{ ...LEGACY_CUSTOM_SET, category: 'kihon' }],
+        },
+        1,
+      ),
+    );
+    const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+
+    expect(store.getState().customTrainingSets[0]?.category).toBe('custom');
+  });
+
+  it('rejects a current custom set whose id collides with a curated set', () => {
+    const curatedSet = DEFAULT_TRAINING_SETS[0];
+    if (curatedSet === undefined) {
+      throw new Error('Expected a curated training set.');
+    }
+    const raw = serializeState(
       {
         dashboardEntries: [],
-        customTrainingSets: [{ ...LEGACY_CUSTOM_SET, category: 'unknown' }],
+        customTrainingSets: [
+          {
+            id: curatedSet.id,
+            name: 'Collision',
+            description: '',
+            category: 'custom',
+            isBuiltIn: false,
+            sections: [
+              {
+                id: 'collision-section',
+                label: 'Section',
+                steps: [
+                  {
+                    id: 'collision-step',
+                    label: 'Step',
+                    defaultReps: 0,
+                    repUnit: 'repetitions',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
       },
-    ],
-    [
-      'an invalid training step',
+      2,
+    );
+    const storage = new MemoryStorage(raw);
+
+    expect(classifyTrainingStorageValue(raw)).toEqual({
+      status: 'corrupt',
+      kind: 'corrupt',
+      reason: 'invalid-domain',
+    });
+    expect(() => createTrainingStore({ storage, storageKey: STORAGE_KEY })).toThrow(
+      TrainingStoreBootstrapError,
+    );
+    expect(requireStoredValue(storage)).toBe(raw);
+  });
+
+  it('rejects a legacy migration whose custom set id collides with a curated set', () => {
+    const curatedSet = DEFAULT_TRAINING_SETS[0];
+    if (curatedSet === undefined) {
+      throw new Error('Expected a curated training set.');
+    }
+    const raw = serializeState(
+      {
+        dashboardEntries: [{ ...LEGACY_DASHBOARD_ENTRY, trainingSetId: curatedSet.id }],
+        customTrainingSets: [{ ...LEGACY_CUSTOM_SET, id: curatedSet.id }],
+      },
+      1,
+    );
+    const storage = new MemoryStorage(raw);
+
+    expect(classifyTrainingStorageValue(raw)).toEqual({
+      status: 'corrupt',
+      kind: 'corrupt',
+      reason: 'invalid-domain',
+    });
+    expect(() => createTrainingStore({ storage, storageKey: STORAGE_KEY })).toThrow(
+      TrainingStoreBootstrapError,
+    );
+    expect(requireStoredValue(storage)).toBe(raw);
+  });
+
+  it('classifies empty, current, and legacy storage without writing', () => {
+    const empty = new MemoryStorage();
+    expect(classifyTrainingStorageValue(empty.getItem(STORAGE_KEY))).toEqual({
+      status: 'empty',
+      kind: 'empty',
+    });
+
+    const legacyRaw = serializeState(legacyState(), 1);
+    expect(classifyTrainingStorageValue(legacyRaw)).toMatchObject({
+      status: 'migrated',
+      kind: 'migrated',
+      fromVersion: 1,
+      version: 2,
+    });
+
+    const currentRaw = serializeState({ dashboardEntries: [], customTrainingSets: [] }, 2);
+    expect(classifyTrainingStorageValue(currentRaw)).toMatchObject({
+      status: 'ready',
+      kind: 'ready',
+      version: 2,
+    });
+  });
+
+  it('supports asynchronous adapters through inspection and async bootstrap', async () => {
+    const storage = new AsyncMemoryStorage();
+    const inspection = await inspectTrainingStorage(storage, STORAGE_KEY);
+    expect(inspection.status).toBe('empty');
+
+    const store = await createTrainingStoreAsync({ storage, storageKey: STORAGE_KEY });
+    const id = store.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
+    expect(store.getState().customTrainingSets[0]?.id).toBe(id);
+  });
+
+  it('rejects invalid legacy repetitions instead of clamping them', () => {
+    const invalidState = {
+      ...legacyState(),
+      customTrainingSets: [
+        { ...LEGACY_CUSTOM_SET, steps: [{ ...LEGACY_CUSTOM_SET.steps[0], defaultReps: 501 }] },
+      ],
+    };
+    const raw = serializeState(invalidState, 1);
+    const storage = new MemoryStorage(raw);
+
+    expect(() => createTrainingStore({ storage, storageKey: STORAGE_KEY })).toThrow(
+      TrainingStoreBootstrapError,
+    );
+    expect(requireStoredValue(storage)).toBe(raw);
+  });
+
+  it('rejects a missing defaultReps field rather than treating it as zero or null', () => {
+    const raw = serializeState(
       {
         dashboardEntries: [],
         customTrainingSets: [
           {
             ...LEGACY_CUSTOM_SET,
-            steps: [{ ...LEGACY_CUSTOM_SET.steps[0], repUnit: 'unknown' }],
+            sections: [
+              {
+                id: 'section',
+                label: 'Section',
+                steps: [{ id: 'step', label: 'Step', repUnit: 'repetitions' }],
+              },
+            ],
           },
         ],
       },
-    ],
-    [
-      'a built-in set in custom storage',
-      {
-        dashboardEntries: [],
-        customTrainingSets: [{ ...LEGACY_CUSTOM_SET, isBuiltIn: true }],
-      },
-    ],
-  ])('ignores current-version state with %s', (_label, persistedState) => {
-    const storage = new MemoryStorage(serializeState(persistedState, 1));
-    const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
-
-    expect(store.getState().dashboardEntries).toEqual([]);
-    expect(store.getState().customTrainingSets).toEqual([]);
-    expect(store.getState().addToDashboard).toEqual(expect.any(Function));
-  });
-
-  it('copies only recognized persisted fields and preserves live actions', () => {
-    const injectedState = {
-      dashboardEntries: [{ ...LEGACY_DASHBOARD_ENTRY, unexpectedEntryField: 'value' }],
-      customTrainingSets: [
-        {
-          ...LEGACY_CUSTOM_SET,
-          unexpectedSetField: 'value',
-          steps: [
-            {
-              ...LEGACY_CUSTOM_SET.steps[0],
-              unexpectedStepField: 'value',
-            },
-          ],
-        },
-      ],
-      addToDashboard: 'replaced',
-      unexpected: 'value',
-    };
-    const store = createTrainingStore({
-      storage: new MemoryStorage(serializeState(injectedState, 1)),
-      storageKey: STORAGE_KEY,
-    });
-
-    expect(store.getState().dashboardEntries).toEqual([LEGACY_DASHBOARD_ENTRY]);
-    expect(store.getState().customTrainingSets).toEqual([LEGACY_CUSTOM_SET]);
-    expect(store.getState().addToDashboard).toEqual(expect.any(Function));
-    expect(store.getState()).not.toHaveProperty('unexpected');
-    expect(store.getState().dashboardEntries[0]).not.toHaveProperty('unexpectedEntryField');
-    expect(store.getState().customTrainingSets[0]).not.toHaveProperty('unexpectedSetField');
-    expect(store.getState().customTrainingSets[0]?.steps[0]).not.toHaveProperty(
-      'unexpectedStepField',
+      2,
     );
+    const storage = new MemoryStorage(raw);
+
+    expect(() => createTrainingStore({ storage, storageKey: STORAGE_KEY })).toThrow(
+      TrainingStoreBootstrapError,
+    );
+    expect(requireStoredValue(storage)).toBe(raw);
   });
 
-  it.each(['__proto__', ''])('preserves a %j step id as repetition-override data', (stepId) => {
-    const repOverrides = Object.fromEntries([[stepId, 24]]);
-    const persistedState = {
-      dashboardEntries: [{ ...LEGACY_DASHBOARD_ENTRY, repOverrides }],
-      customTrainingSets: [LEGACY_CUSTOM_SET],
-    };
-    const store = createTrainingStore({
-      storage: new MemoryStorage(serializeState(persistedState, 1)),
-      storageKey: STORAGE_KEY,
+  it.each([
+    ['malformed JSON', '{"state":'],
+    ['malformed envelope', JSON.stringify({ state: legacyState() })],
+    [
+      'invalid domain',
+      serializeState(
+        {
+          dashboardEntries: [],
+          customTrainingSets: [{ ...LEGACY_CUSTOM_SET, isBuiltIn: true }],
+        },
+        2,
+      ),
+    ],
+  ])('classifies %s as corrupt and preserves raw bytes', (_label, raw) => {
+    const storage = new MemoryStorage(raw);
+    const inspection = classifyTrainingStorageValue(raw);
+
+    expect(inspection.status).toBe('corrupt');
+    expect(() => createTrainingStore({ storage, storageKey: STORAGE_KEY })).toThrow(
+      TrainingStoreBootstrapError,
+    );
+    expect(requireStoredValue(storage)).toBe(raw);
+  });
+
+  it('rejects unsupported future versions without creating a writable store', () => {
+    const raw = serializeState(legacyState(), 99);
+    const storage = new MemoryStorage(raw);
+
+    expect(classifyTrainingStorageValue(raw)).toEqual({
+      status: 'unsupported-future',
+      kind: 'unsupported-future',
+      version: 99,
     });
-    const restoredOverrides = store.getState().dashboardEntries[0]?.repOverrides;
-
-    expect(restoredOverrides).toBeDefined();
-    expect(Object.hasOwn(restoredOverrides ?? {}, stepId)).toBe(true);
-    expect(restoredOverrides?.[stepId]).toBe(24);
-  });
-
-  it.each([undefined, '99', null])('rejects a persistence envelope with version %s', (version) => {
-    const rawState = JSON.stringify({ state: validPersistedCollections(), version });
-    const storage = new MemoryStorage(rawState);
-    const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
-
-    expect(store.getState().dashboardEntries).toEqual([]);
-    expect(store.getState().customTrainingSets).toEqual([]);
-    expect(requireStoredValue(storage)).toBe(rawState);
-  });
-
-  it('keeps working after malformed JSON and overwrites it on the next action', () => {
-    const storage = new MemoryStorage('{"state":');
-    const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
-
-    expect(store.getState().dashboardEntries).toEqual([]);
-    expect(store.getState().customTrainingSets).toEqual([]);
-
-    store.getState().addToDashboard(asTrainingSetId('set-after-corruption'));
-
-    expect(parseJson(requireStoredValue(storage))).toEqual({
-      state: {
-        dashboardEntries: store.getState().dashboardEntries,
-        customTrainingSets: [],
-      },
-      version: 1,
-    });
-  });
-
-  it('rejects an unsupported future persistence version', () => {
-    const rawFutureState = serializeState(validPersistedCollections(), 99);
-    const storage = new MemoryStorage(rawFutureState);
-    const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
-
-    expect(store.getState().dashboardEntries).toEqual([]);
-    expect(store.getState().customTrainingSets).toEqual([]);
-    expect(store.getState().addToDashboard).toEqual(expect.any(Function));
-    expect(requireStoredValue(storage)).toBe(rawFutureState);
+    expect(() => createTrainingStore({ storage, storageKey: STORAGE_KEY })).toThrow(
+      TrainingStoreBootstrapError,
+    );
+    expect(requireStoredValue(storage)).toBe(raw);
   });
 });

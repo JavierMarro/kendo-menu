@@ -26,6 +26,7 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-08-20 — routed training planner](./2026-08-20-routed-training-planner.md)
 - [2026-08-19 — branch size audit](./2026-08-19-branch-size-audit.md)
 - [2026-08-19 — persistence test readiness](./2026-08-19-persistence-test-readiness.md)
 - [2026-08-19 — project-local architecture skills](./2026-08-19-project-local-architecture-skills.md)
