@@ -8,15 +8,76 @@ async function startFresh(page: Page): Promise<void> {
   await page.reload();
 }
 
+async function openNavigationIfNeeded(page: Page): Promise<void> {
+  const menuToggle = page.getByRole('button', { name: 'Open navigation' });
+  if (await menuToggle.isVisible()) {
+    await menuToggle.click();
+  }
+}
+
 test.describe('routed training flows', () => {
   test.beforeEach(async ({ page }) => {
     await startFresh(page);
+  });
+
+  test('opens the landing page, starts with the drill library, and returns home from the logo', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(
+      page.getByRole('heading', { name: 'Plan the keiko you need today.', exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('.landing-page')).toBeVisible();
+    const viewport = page.viewportSize();
+    if (viewport !== null && viewport.width <= 760) {
+      await expect(page.locator('.brand-name')).toBeHidden();
+
+      const menuToggle = page.getByRole('button', { name: 'Open navigation' });
+      const primaryNavigation = page.getByRole('navigation', { name: 'Primary navigation' });
+      await expect(menuToggle).toBeVisible();
+      await expect(primaryNavigation).toBeHidden();
+      await expect(page.locator('.session-status-label')).toBeHidden();
+
+      await menuToggle.click();
+      await expect(page.getByRole('button', { name: 'Close navigation' })).toBeVisible();
+      await expect(primaryNavigation).toBeVisible();
+
+      const openMenuScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      expect(openMenuScrollWidth).toBeLessThanOrEqual(viewport.width);
+
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('button', { name: 'Open navigation' })).toBeFocused();
+      await expect(primaryNavigation).toBeHidden();
+
+      await menuToggle.click();
+      await primaryNavigation.getByRole('link', { name: 'Dashboard', exact: true }).click();
+      await expect(page).toHaveURL(/\/app\/dashboard$/);
+      await expect(page.getByRole('button', { name: 'Open navigation' })).toBeVisible();
+      await page.goto('/app');
+    } else {
+      await expect(page.locator('.brand-name')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Open navigation' })).toBeHidden();
+      await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
+      await expect(page.locator('.session-status-label')).toBeVisible();
+    }
+
+    const backgroundImage = await page
+      .locator('.landing-page')
+      .evaluate((element) => getComputedStyle(element).backgroundImage);
+    expect(backgroundImage).toContain('kendo-menu-hero.jpeg');
+
+    await page.getByRole('link', { name: 'Browse drill library' }).click();
+    await expect(page).toHaveURL(/\/app\/library$/);
+    await page.getByRole('link', { name: 'KendoMenu home' }).click();
+    await expect(page).toHaveURL(/\/app$/);
   });
 
   test('supports direct URLs, navigation, browser history, and reload', async ({ page }) => {
     await expect(page).toHaveURL(/\/app\/dashboard$/);
     await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
 
+    await openNavigationIfNeeded(page);
     await page.getByRole('link', { name: /Drill library/ }).click();
     await expect(page).toHaveURL(/\/app\/library$/);
     await expect(page.getByRole('heading', { name: 'Drill library' })).toBeVisible();
@@ -36,6 +97,7 @@ test.describe('routed training flows', () => {
   test('persists repetitions, notes, and an Undo restoration across reload', async ({ page }) => {
     await page.goto('/app/library');
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
+    await openNavigationIfNeeded(page);
     await page
       .getByRole('navigation', { name: 'Primary navigation' })
       .getByRole('link', { name: 'Dashboard', exact: true })
@@ -66,6 +128,7 @@ test.describe('routed training flows', () => {
   test('prompts before browser Back discards a dirty draft, but dismiss keeps the draft', async ({
     page,
   }) => {
+    await openNavigationIfNeeded(page);
     await page.getByRole('link', { name: 'Create a drill', exact: true }).click();
     await expect(page).toHaveURL(/\/app\/drills\/new$/);
     const name = page.getByLabel('Drill name');

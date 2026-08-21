@@ -40,20 +40,31 @@ but this LocalStorage-only milestone has no API package, database, or Elysia run
 
 ## Model and delegation policy
 
-Use `gpt-5.6-sol` with `ultra` reasoning effort only for planning and orchestration. It must not implement code directly.
+Choose the workflow according to the account’s available model access.
+
+### Sol-account
+
+Use `gpt-5.6-sol` with `max` reasoning effort only for planning and orchestration. It must not implement code directly.
 
 Delegate implementation tasks to `gpt-5.6-luna`, except when the overhead of launching a subagent would be greater than completing a very small fix directly.
 
 For Luna implementation tasks:
 
-- Use `max` reasoning effort for complex feature development.
-- Use `xhigh` reasoning effort for layout work, HTML/CSS, and minor visual refinements.
+- Use `max` reasoning effort for all types of tasks and feature development.
 
 After the Luna subagents complete their work, use `gpt-5.6-sol` with `xhigh` reasoning effort to review the resulting code.
 
 If the review identifies changes, delegate those changes back to Luna. Once the changes are complete, have Sol review them again before delivering the final response.
 
 The coordinating Sol agent remains responsible for planning, delegation, validation, and the final response.
+
+### Luna-account
+
+When Sol is unavailable and the account only has access to `gpt-5.6-luna` with `max` reasoning effort:
+
+- Use Luna with `max` reasoning effort for all work, including planning, implementation, code review, validation, and the final response.
+- Tasks can be delegated to subagents which will only use Luna with `max` reasoning effort.
+- Do not apply the Sol-specific planning, orchestration, or review workflow.
 
 ## Non-negotiable code standards
 

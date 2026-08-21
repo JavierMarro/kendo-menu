@@ -1,14 +1,21 @@
 import { readFile } from 'node:fs/promises';
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const STORAGE_KEY = 'kendo-menu';
+
+async function openNavigationIfNeeded(page: Page): Promise<void> {
+  const menuToggle = page.getByRole('button', { name: 'Open navigation' });
+  if (await menuToggle.isVisible()) {
+    await menuToggle.click();
+  }
+}
 
 test.describe('local persistence recovery', () => {
   test('downloads the exact corrupt payload, preserves it on cancel, and resets only KendoMenu data', async ({
     page,
   }) => {
-    await page.goto('/');
+    await page.goto('/app/dashboard');
     const raw = '{not valid json';
     await page.evaluate(
       ({ key, value }) => {
@@ -60,7 +67,7 @@ test.describe('local persistence recovery', () => {
   test('does not treat a future persistence version as corrupt or overwrite it', async ({
     page,
   }) => {
-    await page.goto('/');
+    await page.goto('/app/dashboard');
     const raw = JSON.stringify({ version: 999, state: { untouched: true } });
     await page.evaluate(({ key, value }) => window.localStorage.setItem(key, value), {
       key: STORAGE_KEY,
@@ -89,14 +96,16 @@ test.describe('local persistence recovery', () => {
         },
       });
     });
-    await page.goto('/');
+    await page.goto('/app/dashboard');
 
     await expect(
       page.getByRole('heading', { name: 'KendoMenu cannot access local data.' }),
     ).toBeVisible();
     await page.getByRole('button', { name: 'Continue without saving' }).click();
     await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
-    await expect(page.getByRole('banner').getByText('Session only')).toBeVisible();
+    await expect(
+      page.getByRole('banner').getByRole('status', { name: 'Session only' }),
+    ).toBeVisible();
   });
 
   test('shows a warning when a local write fails', async ({ page }) => {
@@ -115,7 +124,8 @@ test.describe('local persistence recovery', () => {
     });
     await page.goto('/app/library');
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
-    await expect(page.getByText('Changes are not being saved')).toBeVisible();
+    await expect(page.getByRole('status', { name: 'Changes are not being saved' })).toBeVisible();
+    await openNavigationIfNeeded(page);
     await page
       .getByRole('navigation', { name: 'Primary navigation' })
       .getByRole('link', { name: 'Dashboard', exact: true })
@@ -125,10 +135,10 @@ test.describe('local persistence recovery', () => {
     await repetitions.fill('12');
     await repetitions.blur();
     await expect(page.getByText('Not saved to this device.')).toBeVisible();
-    const appBanner = page
-      .getByRole('navigation', { name: 'Primary navigation' })
-      .locator('xpath=ancestor::header');
-    await expect(appBanner.getByText('Changes are not being saved', { exact: true })).toBeVisible();
+    const appBanner = page.getByRole('banner');
+    await expect(
+      appBanner.getByRole('status', { name: 'Changes are not being saved' }),
+    ).toBeVisible();
     const dashboardHeader = page
       .getByRole('heading', { name: 'Your dashboard', exact: true })
       .locator('xpath=ancestor::header');

@@ -9,6 +9,97 @@ import { renderApp, createTestStore } from './test-utils';
 const HIGH_SCHOOL_DRILL_ID = asTrainingSetId('high-school-kendo-club-drill');
 
 describe('KendoMenu application flows', () => {
+  it('renders the landing page at /app and links into the drill library', async () => {
+    const user = userEvent.setup();
+    const store = createTestStore();
+
+    renderApp(store, { initialEntries: ['/app'] });
+
+    expect(
+      screen.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'KendoMenu home' })).toHaveAttribute('href', '/app');
+    expect(
+      screen
+        .getByRole('link', { name: 'KendoMenu home' })
+        .querySelector('img')
+        ?.getAttribute('src'),
+    ).toBe('/assets/kendo-menu-logo.jpeg');
+    expect(
+      screen.getByText(
+        'Build a focused kendo session, adjust it to your day, and keep your practice moving.',
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Browse drill library' }));
+    expect(screen.getByRole('heading', { name: 'Drill library' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'KendoMenu home' }));
+    expect(
+      screen.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the primary navigation in library, dashboard, and builder order', () => {
+    renderApp(createTestStore(), { initialEntries: ['/app'] });
+
+    const navigationLinks = within(
+      screen.getByRole('navigation', { name: 'Primary navigation' }),
+    ).getAllByRole('link');
+    expect(navigationLinks.map((link) => link.getAttribute('href'))).toEqual([
+      '/app/library',
+      '/app/dashboard',
+      '/app/drills/new',
+    ]);
+  });
+
+  it('opens and closes the responsive navigation accessibly', async () => {
+    const user = userEvent.setup();
+
+    renderApp(createTestStore(), { initialEntries: ['/app'] });
+
+    const menuToggle = screen.getByRole('button', { name: 'Open navigation' });
+    expect(menuToggle).toHaveAttribute('aria-controls', 'primary-navigation');
+    expect(menuToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('status', { name: 'Saved on this device' })).toBeInTheDocument();
+
+    await user.click(menuToggle);
+    expect(screen.getByRole('button', { name: 'Close navigation' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveFocus();
+
+    await user.click(screen.getByRole('button', { name: 'Open navigation' }));
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
+        name: 'Dashboard',
+      }),
+    );
+
+    expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
+  it('redirects the bare route to the landing page', () => {
+    const store = createTestStore();
+
+    renderApp(store, { initialEntries: ['/'] });
+
+    expect(
+      screen.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+    ).toBeInTheDocument();
+  });
+
   it('navigates between the dashboard, library, and direct builder route', async () => {
     const user = userEvent.setup();
     const store = createTestStore();

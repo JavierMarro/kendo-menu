@@ -122,7 +122,7 @@ describe('browser persistence recovery', () => {
     await user.click(screen.getByRole('button', { name: 'Add to dashboard' }));
     await waitFor(() => {
       expect(
-        within(appBanner).getByText('Changes are not being saved', { exact: true }),
+        within(appBanner).getByRole('status', { name: 'Changes are not being saved' }),
       ).toBeVisible();
     });
 
@@ -137,8 +137,8 @@ describe('browser persistence recovery', () => {
     expect(screen.getByText('Not saved to this device.')).toBeInTheDocument();
     expect(screen.queryByText('Updated.')).not.toBeInTheDocument();
     expect(screen.queryByText('Saved locally.')).not.toBeInTheDocument();
-    const bannerStatus = within(appBanner).getByText('Changes are not being saved', {
-      exact: true,
+    const bannerStatus = within(appBanner).getByRole('status', {
+      name: 'Changes are not being saved',
     });
     expect(bannerStatus).toBeVisible();
     expect(bannerStatus).toHaveClass('is-error');
