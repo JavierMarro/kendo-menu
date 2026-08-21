@@ -73,6 +73,39 @@ test.describe('routed training flows', () => {
     await expect(page).toHaveURL(/\/app$/);
   });
 
+  test('shows the session-only cookie notice, links to its policy, and returns after reload', async ({
+    page,
+  }) => {
+    const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+    await expect(notice).toContainText(
+      'KendoMenu currently uses no cookies or third-party tracking. We may add privacy-friendly analytics in the future.',
+    );
+    await expect(notice.getByRole('link', { name: 'More information' })).toHaveAttribute(
+      'href',
+      '/cookies',
+    );
+
+    await notice.getByRole('link', { name: 'More information' }).click();
+    await expect(page).toHaveURL(/\/cookies$/);
+    await expect(page.getByRole('heading', { name: 'Cookie Policy', exact: true })).toBeVisible();
+    await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Got it' }).click();
+    await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toHaveCount(0);
+
+    await openNavigationIfNeeded(page);
+    await page
+      .getByRole('navigation', { name: 'Primary navigation' })
+      .getByRole('link', { name: 'Dashboard', exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/app\/dashboard$/);
+    await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toHaveCount(0);
+    expect(await page.evaluate(() => Object.keys(window.localStorage))).toEqual([]);
+
+    await page.reload();
+    await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toBeVisible();
+  });
+
   test('supports direct URLs, navigation, browser history, and reload', async ({ page }) => {
     await expect(page).toHaveURL(/\/app\/dashboard$/);
     await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();

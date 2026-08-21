@@ -9,6 +9,56 @@ import { renderApp, createTestStore } from './test-utils';
 const HIGH_SCHOOL_DRILL_ID = asTrainingSetId('high-school-kendo-club-drill');
 
 describe('KendoMenu application flows', () => {
+  it('shows a session-only cookie notice with policy details and dismisses without storage', async () => {
+    const user = userEvent.setup();
+
+    renderApp(createTestStore(), { initialEntries: ['/app'] });
+
+    const notice = screen.getByRole('complementary', { name: 'Cookie notice' });
+    expect(notice).toHaveTextContent(
+      'KendoMenu currently uses no cookies or third-party tracking. We may add privacy-friendly analytics in the future.',
+    );
+    expect(screen.getByRole('link', { name: 'More information' })).toHaveAttribute(
+      'href',
+      '/cookies',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Got it' }));
+
+    expect(screen.queryByRole('complementary', { name: 'Cookie notice' })).not.toBeInTheDocument();
+    expect(window.localStorage.length).toBe(0);
+  });
+
+  it('keeps the cookie notice dismissal across navigation but resets it for a fresh render', async () => {
+    const user = userEvent.setup();
+    const view = renderApp(createTestStore(), { initialEntries: ['/app'] });
+
+    await user.click(screen.getByRole('button', { name: 'Got it' }));
+    await user.click(screen.getByRole('link', { name: /Drill library/ }));
+
+    expect(screen.getByRole('heading', { name: 'Drill library' })).toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: 'Cookie notice' })).not.toBeInTheDocument();
+
+    view.unmount();
+    renderApp(createTestStore(), { initialEntries: ['/app/dashboard'] });
+
+    expect(screen.getByRole('complementary', { name: 'Cookie notice' })).toBeInTheDocument();
+  });
+
+  it('renders the cookie policy at /cookies inside the existing application shell', () => {
+    renderApp(createTestStore(), { initialEntries: ['/cookies'] });
+
+    expect(screen.getByRole('heading', { name: 'Cookie Policy', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'What are cookies?' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'How KendoMenu uses cookies' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Local storage' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Future analytics' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Your choices' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Contact' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument();
+    expect(screen.getByText(/privacy-friendly Plausible Analytics/)).toBeInTheDocument();
+  });
+
   it('renders the landing page at /app and links into the drill library', async () => {
     const user = userEvent.setup();
     const store = createTestStore();

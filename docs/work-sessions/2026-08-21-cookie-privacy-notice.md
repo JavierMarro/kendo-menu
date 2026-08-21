@@ -1,0 +1,8 @@
+- Session: cookie privacy notice
+- Date/duration: 2026-08-21; about 45 minutes
+- Scope/start: Added the requested session-only cookie notice and privacy route to the existing React Router SPA.
+- Changes: Added RouteRoot CookieNotice, /cookies policy page, responsive non-blocking styling, integration/Playwright/axe coverage.
+- Decisions: Kept dismissal in React memory only; added no cookies, analytics, storage keys, dependencies, or server behavior.
+- Roadblocks: Sandbox blocked Playwright port binding; elevated local browser run passed; fixed mobile notice pointer interception.
+- Verification: pnpm check passed; web Playwright passed 24/24 on Chromium and mobile Chrome; session:check passed.
+- Follow-up: None.

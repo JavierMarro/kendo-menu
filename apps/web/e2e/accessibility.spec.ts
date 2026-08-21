@@ -35,6 +35,14 @@ test.describe('accessibility and responsive layout', () => {
       ({ impact }) => impact === 'critical' || impact === 'serious',
     );
     expect(builderBlockingViolations).toEqual([]);
+
+    await page.goto('/cookies');
+    await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toBeVisible();
+    const cookiePolicyResults = await new AxeBuilder({ page }).analyze();
+    const cookiePolicyBlockingViolations = cookiePolicyResults.violations.filter(
+      ({ impact }) => impact === 'critical' || impact === 'serious',
+    );
+    expect(cookiePolicyBlockingViolations).toEqual([]);
   });
 
   test('does not overflow horizontally at 320px or desktop width', async ({ page }) => {
