@@ -4,6 +4,7 @@ import { Navigate, Outlet, useLocation, useRoutes, type RouteObject } from 'reac
 import { AppShell } from '../components/AppShell';
 import { CreateDrillPage } from '../features/custom-sets/CreateDrillPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
+import { LandingPage } from '../features/landing/LandingPage';
 import { LibraryPage } from '../features/library/LibraryPage';
 import { TrainingSetDetailPage } from '../features/library/TrainingSetDetailPage';
 import { NotFoundPage } from '../features/not-found/NotFoundPage';
@@ -11,6 +12,7 @@ import { useTrainingStore } from '../lib/training-store-context';
 import { getAllTrainingSets } from '../lib/training-data';
 
 const routeTitles: Readonly<Record<string, string>> = {
+  '/app': 'Plan your keiko',
   '/app/dashboard': 'Dashboard',
   '/app/library': 'Drill library',
   '/app/drills/new': 'Create drill',
@@ -61,12 +63,12 @@ export const appRoutes: RouteObject[] = [
   {
     element: <RouteRoot />,
     children: [
-      { path: '/', element: <Navigate replace to="/app/dashboard" /> },
+      { path: '/', element: <Navigate replace to="/app" /> },
       {
         path: '/app',
         element: <AppLayout />,
         children: [
-          { index: true, element: <Navigate replace to="/app/dashboard" /> },
+          { index: true, element: <LandingPage /> },
           { path: 'dashboard', element: <DashboardPage /> },
           { path: 'library', element: <LibraryPage /> },
           { path: 'library/:trainingSetId', element: <TrainingSetDetailPage /> },

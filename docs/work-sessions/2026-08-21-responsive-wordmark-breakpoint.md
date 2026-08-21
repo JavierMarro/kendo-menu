@@ -1,0 +1,8 @@
+- Session: responsive wordmark breakpoint
+- Date/duration: 2026-08-21; about 25 minutes
+- Scope/start: Implemented the approved earlier KendoMenu wordmark collapse to protect desktop navigation labels during resize.
+- Changes: Hid the wordmark at 840px, kept nav labels on one line, and added an 800px responsive browser assertion.
+- Decisions: Preserved the 760px burger breakpoint, routes, nav order, persistence status, and all existing desktop/mobile behavior.
+- Roadblocks: Replaced a strict multi-link CSS assertion with computed-style inspection; no product blockers.
+- Verification: `pnpm check` passed; full Playwright passed 22/22 across Chromium and mobile Chrome; two pre-existing Fast Refresh lint warnings remain.
+- Follow-up: None.

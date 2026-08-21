@@ -26,6 +26,10 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-08-21 — responsive wordmark breakpoint](./2026-08-21-responsive-wordmark-breakpoint.md)
+- [2026-08-21 — responsive burger navigation](./2026-08-21-responsive-burger-navigation.md)
+- [2026-08-21 — landing page polish](./2026-08-21-landing-page-polish.md)
+- [2026-08-21 — landing page logo hero](./2026-08-21-landing-page-logo-hero.md)
 - [2026-08-20 — routed training planner](./2026-08-20-routed-training-planner.md)
 - [2026-08-19 — branch size audit](./2026-08-19-branch-size-audit.md)
 - [2026-08-19 — persistence test readiness](./2026-08-19-persistence-test-readiness.md)

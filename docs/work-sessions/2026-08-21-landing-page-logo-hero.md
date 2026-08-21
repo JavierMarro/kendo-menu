@@ -1,0 +1,8 @@
+- Session: landing page logo hero
+- Date/duration: 2026-08-21; about 45 minutes
+- Scope/start: Added the approved `/app` landing route to the existing routed local-first web SPA.
+- Changes: Added full-bleed hero, supplied logo home link, landing CTA, route tests, axe coverage, and responsive browser checks.
+- Decisions: `/` redirects to `/app`; existing dashboard/library/create routes and persistence remain unchanged.
+- Roadblocks: Initial sandbox browser bind failed; elevated local Playwright run passed after persistence fixtures were updated for the new root route.
+- Verification: Web typecheck, Vitest 14/14, lint, Prettier, Playwright 22/22, axe, responsive overflow, and build checks passed.
+- Follow-up: None.

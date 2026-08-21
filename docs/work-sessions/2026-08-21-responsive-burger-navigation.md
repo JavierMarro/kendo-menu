@@ -1,0 +1,8 @@
+- Session: responsive burger navigation
+- Date/duration: 2026-08-21; about 1 hour 40 minutes
+- Scope/start: Implemented the approved small-screen navigation follow-up on the existing `/app` landing shell.
+- Changes: Added an inline accessible burger menu, Escape/focus return, route-close behavior, pulse-only mobile persistence status, and larger medium/desktop hero title.
+- Decisions: Kept the inline header panel at the existing 760px breakpoint; status text remains available through the labelled status landmark; no domain/store/dependency changes.
+- Roadblocks: Existing mobile browser flows needed menu-opening helpers and status-landmark assertions after responsive disclosure; resolved.
+- Verification: `pnpm check` passed; Playwright passed 22/22 across Chromium and mobile Chrome; two pre-existing Fast Refresh lint warnings remain.
+- Follow-up: None.
