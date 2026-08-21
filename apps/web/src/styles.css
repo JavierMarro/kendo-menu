@@ -12,6 +12,7 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   --canvas: #0b1b33;
+  --surface-nav: #09172b;
   --surface: #122743;
   --surface-raised: #193451;
   --surface-soft: #10233d;
@@ -211,7 +212,7 @@ a {
   gap: var(--space-6);
   padding: var(--space-3) clamp(var(--space-4), 4vw, var(--space-16));
   border-bottom: 1px solid var(--line);
-  background: var(--canvas);
+  background: var(--surface-nav);
 }
 
 .brand-lockup {
@@ -439,19 +440,21 @@ a {
 .cookie-notice {
   position: fixed;
   z-index: 30;
-  right: clamp(var(--space-4), 4vw, var(--space-16));
+  right: auto;
   bottom: var(--space-4);
-  left: clamp(var(--space-4), 4vw, var(--space-16));
+  left: 50%;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-4);
   align-items: center;
   padding: var(--space-4) var(--space-5);
+  width: 60vw;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
   color: var(--muted-strong);
   background: var(--surface-raised);
   box-shadow: var(--shadow);
+  transform: translateX(-50%);
   pointer-events: none;
 }
 
@@ -552,7 +555,9 @@ a {
 }
 
 .policy-page {
-  max-width: 52rem;
+  width: min(50vw, 100%);
+  max-width: none;
+  margin-inline: auto;
 }
 
 .policy-header {
@@ -1215,8 +1220,19 @@ textarea[aria-invalid='true'] {
 }
 
 @media (max-width: 840px) {
+  .cookie-notice {
+    right: var(--space-4);
+    left: var(--space-4);
+    width: auto;
+    transform: none;
+  }
+
   .brand-name {
     display: none;
+  }
+
+  .policy-page {
+    width: 100%;
   }
 }
 

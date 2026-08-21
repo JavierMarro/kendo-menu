@@ -1,0 +1,8 @@
+- Session: cookie layout refinement
+- Date/duration: 2026-08-21; about 25 minutes
+- Scope/start: Refined the existing cookie notice, policy layout, and navbar surface without changing behavior or copy.
+- Changes: Added 60% centered desktop notice width, 50% centered desktop policy width, responsive gutters, and a darker semantic navbar token.
+- Decisions: Reused the existing 840px/760px breakpoints; kept mobile content padded and preserved all navigation/focus behavior.
+- Roadblocks: Updated stale integration heading assertions to match the existing policy copy; no product text changed.
+- Verification: Playwright passed 26/26 on Chromium/mobile; pnpm check passed with two pre-existing Fast Refresh warnings.
+- Follow-up: None.

@@ -52,8 +52,8 @@ describe('KendoMenu application flows', () => {
     expect(screen.getByRole('heading', { name: 'What are cookies?' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'How KendoMenu uses cookies' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Local storage' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Future analytics' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Your choices' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Analytics' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'How to disable cookies?' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Contact' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument();
     expect(screen.getByText(/privacy-friendly Plausible Analytics/)).toBeInTheDocument();
