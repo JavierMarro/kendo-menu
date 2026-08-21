@@ -2,12 +2,14 @@ import { useEffect, useMemo } from 'react';
 import { Navigate, Outlet, useLocation, useRoutes, type RouteObject } from 'react-router-dom';
 
 import { AppShell } from '../components/AppShell';
+import { CookieNotice } from '../components/CookieNotice';
 import { CreateDrillPage } from '../features/custom-sets/CreateDrillPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { LandingPage } from '../features/landing/LandingPage';
 import { LibraryPage } from '../features/library/LibraryPage';
 import { TrainingSetDetailPage } from '../features/library/TrainingSetDetailPage';
 import { NotFoundPage } from '../features/not-found/NotFoundPage';
+import { CookiePolicyPage } from '../features/privacy/CookiePolicyPage';
 import { useTrainingStore } from '../lib/training-store-context';
 import { getAllTrainingSets } from '../lib/training-data';
 
@@ -16,6 +18,7 @@ const routeTitles: Readonly<Record<string, string>> = {
   '/app/dashboard': 'Dashboard',
   '/app/library': 'Drill library',
   '/app/drills/new': 'Create drill',
+  '/cookies': 'Cookie Policy',
 };
 
 function AppLayout() {
@@ -47,6 +50,7 @@ function RouteRoot() {
     <>
       <RouteFocusAndTitle />
       <Outlet />
+      <CookieNotice />
     </>
   );
 }
@@ -75,6 +79,11 @@ export const appRoutes: RouteObject[] = [
           { path: 'drills/new', element: <CreateDrillPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
+      },
+      {
+        path: '/cookies',
+        element: <AppLayout />,
+        children: [{ index: true, element: <CookiePolicyPage /> }],
       },
       { path: '*', element: <StandaloneNotFoundPage /> },
     ],
