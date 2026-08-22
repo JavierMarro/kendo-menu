@@ -118,7 +118,7 @@ describe('browser persistence recovery', () => {
       throw new Error('The primary navigation is not inside the application banner.');
     }
 
-    await user.click(screen.getByRole('link', { name: /Drill library/ }));
+    await user.click(within(appBanner).getByRole('link', { name: /Drill library/ }));
     await user.click(screen.getByRole('button', { name: 'Add to dashboard' }));
     await waitFor(() => {
       expect(

@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 
 import {
   getPersistenceStatusLabel,
   usePersistenceStatus,
 } from '../features/persistence/persistence-context';
+import { BrandLockup } from './BrandLockup';
+import { PrimaryNavigationLinks } from './PrimaryNavigation';
+import { SiteFooter } from './SiteFooter';
 
 interface AppShellProps {
   readonly libraryCount: number;
@@ -46,19 +49,7 @@ export function AppShell({ libraryCount }: AppShellProps) {
         Skip to content
       </a>
       <header className="top-bar">
-        <Link className="brand-lockup" to="/app" aria-label="KendoMenu home" onClick={closeMenu}>
-          <span className="brand-logo-frame" aria-hidden="true">
-            <img
-              className="brand-logo"
-              src="/assets/kendo-menu-logo.jpeg"
-              alt=""
-              width="88"
-              height="48"
-              fetchPriority="high"
-            />
-          </span>
-          <span className="brand-name">KendoMenu</span>
-        </Link>
+        <BrandLockup fetchPriority="high" onClick={closeMenu} />
         <div
           className={writeFailed ? 'session-status is-error' : 'session-status'}
           aria-label={persistenceStatusLabel}
@@ -87,27 +78,11 @@ export function AppShell({ libraryCount }: AppShellProps) {
           className={isMenuOpen ? 'primary-nav is-open' : 'primary-nav'}
           aria-label="Primary navigation"
         >
-          <NavLink
-            className={({ isActive }) => (isActive ? 'nav-item is-active' : 'nav-item')}
-            to="/app/library"
-            onClick={closeMenu}
-          >
-            Drill library <span className="nav-count">{libraryCount}</span>
-          </NavLink>
-          <NavLink
-            className={({ isActive }) => (isActive ? 'nav-item is-active' : 'nav-item')}
-            to="/app/dashboard"
-            onClick={closeMenu}
-          >
-            Dashboard
-          </NavLink>
-          <NavLink
-            className={({ isActive }) => (isActive ? 'nav-item is-active' : 'nav-item')}
-            to="/app/drills/new"
-            onClick={closeMenu}
-          >
-            Create drill
-          </NavLink>
+          <PrimaryNavigationLinks
+            libraryCount={libraryCount}
+            linkClassName="nav-item"
+            onNavigate={closeMenu}
+          />
         </nav>
       </header>
 
@@ -118,6 +93,7 @@ export function AppShell({ libraryCount }: AppShellProps) {
       >
         <Outlet />
       </main>
+      <SiteFooter libraryCount={libraryCount} onNavigate={closeMenu} />
     </div>
   );
 }

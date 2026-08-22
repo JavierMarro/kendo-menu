@@ -34,7 +34,11 @@ describe('KendoMenu application flows', () => {
     const view = renderApp(createTestStore(), { initialEntries: ['/app'] });
 
     await user.click(screen.getByRole('button', { name: 'Got it' }));
-    await user.click(screen.getByRole('link', { name: /Drill library/ }));
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
+        name: /Drill library/,
+      }),
+    );
 
     expect(screen.getByRole('heading', { name: 'Drill library' })).toBeInTheDocument();
     expect(screen.queryByRole('complementary', { name: 'Cookie notice' })).not.toBeInTheDocument();
@@ -52,11 +56,38 @@ describe('KendoMenu application flows', () => {
     expect(screen.getByRole('heading', { name: 'What are cookies?' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'How KendoMenu uses cookies' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Local storage' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Future analytics' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Your choices' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Analytics' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'How to disable cookies?' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Contact' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument();
     expect(screen.getByText(/privacy-friendly Plausible Analytics/)).toBeInTheDocument();
+  });
+
+  it('renders a named footer with shared navigation and placeholder social destinations', () => {
+    renderApp(createTestStore(), { initialEntries: ['/app'] });
+
+    const footer = screen.getByRole('contentinfo', { name: 'Site footer' });
+    expect(within(footer).getByText('KendoMenu')).toBeVisible();
+    expect(within(footer).getByRole('link', { name: 'KendoMenu home' })).toHaveAttribute(
+      'href',
+      '/app',
+    );
+    expect(within(footer).getByRole('heading', { name: 'Navigation', level: 2 })).toBeVisible();
+
+    const footerNavigation = within(footer).getByRole('navigation', { name: 'Navigation' });
+    expect(
+      within(footerNavigation)
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('href')),
+    ).toEqual(['/app/library', '/app/dashboard', '/app/drills/new']);
+
+    const socialNavigation = within(footer).getByRole('navigation', { name: 'Social' });
+    expect(
+      within(socialNavigation).getByRole('link', { name: 'GitHub (placeholder)' }),
+    ).toHaveAttribute('href', 'https://github.com/');
+    expect(
+      within(socialNavigation).getByRole('link', { name: 'LinkedIn (placeholder)' }),
+    ).toHaveAttribute('href', 'https://www.linkedin.com/');
   });
 
   it('renders the landing page at /app and links into the drill library', async () => {
@@ -68,9 +99,13 @@ describe('KendoMenu application flows', () => {
     expect(
       screen.getByRole('heading', { name: 'Plan the keiko you need today.' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'KendoMenu home' })).toHaveAttribute('href', '/app');
+    const header = screen.getByRole('banner');
+    expect(within(header).getByRole('link', { name: 'KendoMenu home' })).toHaveAttribute(
+      'href',
+      '/app',
+    );
     expect(
-      screen
+      within(header)
         .getByRole('link', { name: 'KendoMenu home' })
         .querySelector('img')
         ?.getAttribute('src'),
@@ -84,7 +119,7 @@ describe('KendoMenu application flows', () => {
     await user.click(screen.getByRole('link', { name: 'Browse drill library' }));
     expect(screen.getByRole('heading', { name: 'Drill library' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('link', { name: 'KendoMenu home' }));
+    await user.click(within(header).getByRole('link', { name: 'KendoMenu home' }));
     expect(
       screen.getByRole('heading', { name: 'Plan the keiko you need today.' }),
     ).toBeInTheDocument();
@@ -157,7 +192,11 @@ describe('KendoMenu application flows', () => {
     const view = renderApp(store);
     expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('link', { name: /Drill library/ }));
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
+        name: /Drill library/,
+      }),
+    );
     expect(screen.getByRole('heading', { name: 'Drill library' })).toBeInTheDocument();
 
     await user.click(
