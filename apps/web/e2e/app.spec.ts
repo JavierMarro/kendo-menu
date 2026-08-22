@@ -69,7 +69,7 @@ test.describe('routed training flows', () => {
 
     await page.getByRole('link', { name: 'Browse drill library' }).click();
     await expect(page).toHaveURL(/\/app\/library$/);
-    await page.getByRole('link', { name: 'KendoMenu home' }).click();
+    await page.locator('.top-bar').getByRole('link', { name: 'KendoMenu home' }).click();
     await expect(page).toHaveURL(/\/app$/);
   });
 
@@ -111,7 +111,10 @@ test.describe('routed training flows', () => {
     await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
 
     await openNavigationIfNeeded(page);
-    await page.getByRole('link', { name: /Drill library/ }).click();
+    await page
+      .getByRole('navigation', { name: 'Primary navigation' })
+      .getByRole('link', { name: /Drill library/ })
+      .click();
     await expect(page).toHaveURL(/\/app\/library$/);
     await expect(page.getByRole('heading', { name: 'Drill library' })).toBeVisible();
 
