@@ -438,7 +438,7 @@ a {
 }
 
 .site-footer {
-  padding: var(--space-12) clamp(var(--space-4), 4vw, var(--space-16)) var(--space-10);
+  padding: var(--space-8) clamp(var(--space-4), 4vw, var(--space-16)) var(--space-8);
   color: var(--muted);
   background: var(--surface-nav);
 }
@@ -446,7 +446,7 @@ a {
 .site-footer-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) repeat(2, minmax(0, 1fr));
-  gap: var(--space-10);
+  gap: var(--space-6);
   width: min(100%, var(--content-width));
   margin-inline: auto;
 }
@@ -463,27 +463,35 @@ a {
 .footer-brand-lockup {
   width: fit-content;
   max-width: 100%;
+  min-height: 1.375rem;
+  gap: var(--space-1);
+}
+
+.footer-brand-lockup .brand-logo-frame {
+  width: 2.75rem;
+  height: 1.375rem;
+  flex-basis: 2.75rem;
 }
 
 .footer-brand-name {
   color: var(--text);
-  font-size: var(--type-18);
+  font-size: var(--type-14);
   font-weight: 750;
   letter-spacing: -0.035em;
   line-height: 1.15;
 }
 
 .site-footer h2 {
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-2);
   color: var(--text);
-  font-size: var(--type-16);
+  font-size: var(--type-14);
   letter-spacing: 0;
 }
 
 .footer-nav,
 .footer-social-links {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
 
 .footer-nav-item,
@@ -491,13 +499,13 @@ a {
   display: inline-flex;
   width: fit-content;
   max-width: 100%;
-  min-height: 2.75rem;
+  min-height: 2.25rem;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   color: var(--muted);
-  font-size: var(--type-14);
+  font-size: var(--type-12);
   font-weight: 600;
   line-height: 1.2;
   text-decoration: none;
@@ -1766,12 +1774,12 @@ textarea[aria-invalid='true'] {
   }
 
   .site-footer {
-    padding: var(--space-10) var(--space-4) var(--space-12);
+    padding: var(--space-8) var(--space-4);
   }
 
   .site-footer-grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-8);
+    gap: var(--space-6);
   }
 
   .cookie-notice {

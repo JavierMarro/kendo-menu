@@ -1,0 +1,8 @@
+- Session: compact footer
+- Date/duration: 2026-08-23; about 20 minutes
+- Scope/start: Refined footer density without changing the footer structure, navigation, or route behavior.
+- Changes: Reduced footer padding/gaps and typography; set the footer logo frame to 44×22px; preserved focus styling.
+- Decisions: Scoped the logo override to the footer so header branding remains unchanged; kept semantic links and the existing responsive layout.
+- Roadblocks: `pnpm session:new` and `pnpm session:check` are not configured in root scripts; used the documented manual fallback.
+- Verification: Web typecheck, 20 Vitest tests, lint, Prettier, UI detector, and footer Playwright 4/4 passed; desktop/mobile footer rendered and reviewed.
+- Follow-up: None.
