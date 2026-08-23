@@ -1,0 +1,8 @@
+- Session: landing page content sections
+- Date/duration: 2026-08-23; about 45 minutes
+- Scope/start: Extended the existing `/app` landing page below its preserved hero with product education, workflow, planned catalogue context, FAQ, and CTA.
+- Changes: Added token-based responsive sections and native button accordion; CTA uses `/app/library`; added landing integration assertions.
+- Decisions: Kept the current hero, routing, data model, local-device copy, and existing visual language; provisional catalogue figures are labelled as planning targets.
+- Roadblocks: `pnpm session:new` and `pnpm session:check` are not configured in the root scripts; created this entry manually per the work-session fallback.
+- Verification: `pnpm check` passed; web Playwright passed 30/30 across Chromium and mobile Chrome; detector returned no findings; desktop/mobile screenshots reviewed.
+- Follow-up: None.

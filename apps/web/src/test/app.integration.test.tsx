@@ -115,6 +115,36 @@ describe('KendoMenu application flows', () => {
         'Build a focused kendo session, adjust it to your day, and keep your practice moving.',
       ),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', {
+        name: 'A keiko menu for the day in front of you.',
+        level: 2,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'How it works', level: 2 })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /These figures are a working target for a compact, carefully sourced starting point/,
+      ),
+    ).toBeInTheDocument();
+
+    const faqButton = screen.getByRole('button', { name: 'What is KendoMenu?' });
+    expect(faqButton).toHaveAttribute('aria-expanded', 'true');
+    expect(faqButton).toHaveAttribute('aria-controls', 'what-is-kendomenu-answer');
+    expect(document.getElementById('what-is-kendomenu-answer')).not.toHaveAttribute('hidden');
+
+    await user.click(faqButton);
+    expect(faqButton).toHaveAttribute('aria-expanded', 'false');
+    expect(document.getElementById('what-is-kendomenu-answer')).toHaveAttribute('hidden');
+
+    await user.keyboard('{Enter}');
+    expect(faqButton).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getAllByRole('button', { name: /\?$/ })).toHaveLength(6);
+
+    expect(screen.getByRole('link', { name: 'Record your first keiko' })).toHaveAttribute(
+      'href',
+      '/app/library',
+    );
 
     await user.click(screen.getByRole('link', { name: 'Browse drill library' }));
     expect(screen.getByRole('heading', { name: 'Drill library' })).toBeInTheDocument();
