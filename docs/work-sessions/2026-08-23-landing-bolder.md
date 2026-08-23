@@ -1,0 +1,8 @@
+- Session: Landing page bolder refinement
+- Date/duration: 2026-08-23; about 1 hour.
+- Scope/start: Audited and refined apps/web/src/features/landing/LandingPage.tsx only; hero and styles untouched.
+- Changes: Added bold lead-ins and tighter benefit phrasing to sharpen scan hierarchy while preserving routes, claims, palette, and section order.
+- Decisions: Reused native strong emphasis and existing layout classes; wrapped benefit content to preserve the existing grid at mobile widths.
+- Roadblocks: pnpm session:new unavailable; repository-wide lint has a pre-existing DashboardPage unused import error; full Vitest has one unrelated persistence failure.
+- Verification: Desktop/mobile screenshots; focused Playwright 6/6 with axe and overflow checks; focused landing Vitest pass; typecheck, build, Prettier, file ESLint, diff check pass.
+- Follow-up: Resolve unrelated DashboardPage lint/persistence test issues separately; no further LandingPage issue found.

@@ -73,21 +73,37 @@ export function LandingPage(): ReactElement {
 
             <div className="landing-section-copy">
               <p>
-                KendoMenu is for senpai looking for a fresh keiko menu, sensei and dojo leaders who
-                want to create and share a training session, and practitioners who need to adapt
-                exercises by changing repetitions or duration.
+                <strong>KendoMenu meets you where your keiko is.</strong> It is for senpai looking
+                for fresh inspiration, sensei and dojo leaders who want to create and share a
+                training session, and practitioners who need to adapt exercises by changing
+                repetitions or duration.
               </p>
               <p>
-                Start with a curated keiko menu or create your own training session from scratch,
-                then shape it around the people, time, and goals in front of you.
+                <strong>Start with a curated menu or build from scratch.</strong> Shape it around
+                the people, time, and goals in front of you.
               </p>
 
               <div className="landing-benefits">
-                <h3>Keep your planning focused</h3>
+                <h3>Make the plan yours</h3>
                 <ul className="landing-benefits-list">
-                  <li>Prepare a structured keiko session quickly.</li>
-                  <li>Draw on curated training ideas gathered from real kendo resources.</li>
-                  <li>Keep the sessions you create on this device for future reference.</li>
+                  <li>
+                    <span>
+                      <strong>Structure it quickly.</strong> Prepare a focused keiko session without
+                      starting from zero.
+                    </span>
+                  </li>
+                  <li>
+                    <span>
+                      <strong>Use real context.</strong> Draw on curated training ideas gathered
+                      from real kendo resources.
+                    </span>
+                  </li>
+                  <li>
+                    <span>
+                      <strong>Keep it close.</strong> Your created sessions stay available on this
+                      device for future reference.
+                    </span>
+                  </li>
                 </ul>
               </div>
             </div>
@@ -99,7 +115,8 @@ export function LandingPage(): ReactElement {
             <div className="landing-section-heading">
               <h2 id="how-it-works-title">How it works</h2>
               <p>
-                Move from a useful starting point to a repeatable session in three simple steps.
+                <strong>Choose. Adjust. Reuse.</strong> Move from a useful starting point to a
+                repeatable session in three simple steps.
               </p>
             </div>
 
@@ -138,9 +155,9 @@ export function LandingPage(): ReactElement {
                 <h2 id="library-story-title">A curated library with real training context.</h2>
               </div>
               <p>
-                The catalogue is still being assembled. These figures are a working target for a
-                compact, carefully sourced starting point—not a live count of what is currently in
-                the app.
+                <strong>Planned, carefully sourced, and easy to expand.</strong> The catalogue is
+                still being assembled. These figures are a working target for a compact, carefully
+                sourced starting point—not a live count of what is currently in the app.
               </p>
             </div>
 
@@ -180,8 +197,8 @@ export function LandingPage(): ReactElement {
               <div>
                 <h3>Menu contexts we may include</h3>
                 <p>
-                  Examples include an Osaka police keiko menu, a high school menu, and a Kokushikan
-                  University menu.
+                  <strong>Examples include</strong> an Osaka police keiko menu, a high school menu,
+                  and a Kokushikan University menu.
                 </p>
               </div>
             </div>
@@ -192,7 +209,10 @@ export function LandingPage(): ReactElement {
           <div className="landing-section-inner">
             <div className="landing-section-heading">
               <h2 id="faq-title">Questions, answered.</h2>
-              <p>Everything you need to know before you plan your first session.</p>
+              <p>
+                <strong>Clear answers before you plan.</strong> Everything you need to know before
+                your first session.
+              </p>
             </div>
 
             <div className="landing-faq-grid">
@@ -240,8 +260,8 @@ export function LandingPage(): ReactElement {
               <div>
                 <h2 id="final-cta-title">Your next keiko can be ready in two minutes.</h2>
                 <p>
-                  Start with a menu from the library, adjust it to your day, and make the plan
-                  yours.
+                  <strong>Make today’s plan real.</strong> Start with a menu from the library,
+                  adjust it to your day, and make the plan yours.
                 </p>
               </div>
               <Link className="primary-button" to="/app/library">

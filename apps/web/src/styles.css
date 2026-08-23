@@ -68,6 +68,7 @@ html {
   min-width: 320px;
   background: var(--canvas);
   scroll-padding-top: calc(var(--header-height) + var(--space-4));
+  scroll-padding-bottom: var(--space-20);
 }
 
 body {
@@ -280,7 +281,9 @@ a {
   background: transparent;
   font-size: var(--type-14);
   font-weight: 600;
+  letter-spacing: 0.06em;
   line-height: 1.2;
+  text-transform: uppercase;
   white-space: nowrap;
   text-align: center;
   text-decoration: none;
@@ -526,8 +529,16 @@ a {
 }
 
 .site-footer a:focus-visible {
+  position: relative;
+  z-index: 31;
   outline: 3px solid var(--focus);
   outline-offset: 3px;
+  background-color: var(--surface-nav);
+}
+
+.footer-nav-item,
+.footer-social-link {
+  scroll-margin-block-end: calc(var(--space-20) + var(--space-4));
 }
 
 .cookie-notice {
@@ -758,20 +769,20 @@ a {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: clamp(var(--space-8), 8vw, var(--space-16));
-  align-items: end;
+  align-items: start;
 }
 
 .landing-library-heading > p {
   max-width: 58ch;
   margin: 0;
-  color: var(--muted);
-  line-height: 1.7;
+  color: var(--muted-strong);
+  line-height: 1.6;
 }
 
 .landing-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: var(--space-10) 0 0;
+  margin: var(--space-8) 0 0;
   border-top: 1px solid var(--line-strong);
   border-bottom: 1px solid var(--line-strong);
 }
@@ -805,12 +816,12 @@ a {
   display: flex;
   margin: var(--space-3) 0 0;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .landing-stat-value {
   color: var(--accent-hover);
-  font-size: clamp(2rem, 4vw, 3.25rem);
+  font-size: clamp(1.875rem, 3.5vw, 2.75rem);
   font-variant-numeric: tabular-nums;
   font-weight: 750;
   letter-spacing: -0.03em;
@@ -827,8 +838,8 @@ a {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: clamp(var(--space-8), 8vw, var(--space-16));
-  margin-top: var(--space-10);
-  padding-top: var(--space-6);
+  margin-top: var(--space-8);
+  padding-top: var(--space-5);
   border-top: 1px solid var(--line);
 }
 
@@ -847,7 +858,7 @@ a {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: clamp(var(--space-8), 8vw, var(--space-16));
-  row-gap: 0;
+  row-gap: var(--space-2);
   margin-top: var(--space-10);
 }
 
@@ -888,6 +899,10 @@ a {
   color: var(--accent-hover);
 }
 
+.landing-faq-question:focus-visible {
+  background-color: var(--accent-soft);
+}
+
 .landing-faq-indicator {
   position: relative;
   width: 1rem;
@@ -923,7 +938,7 @@ a {
 
 .landing-faq-answer {
   max-width: 58ch;
-  padding: 0 var(--space-8) var(--space-6) 0;
+  padding: 0 var(--space-8) var(--space-5) 0;
   color: var(--muted);
   line-height: 1.65;
 }
@@ -964,6 +979,18 @@ a {
 .landing-final-cta .primary-button {
   justify-self: end;
   white-space: nowrap;
+}
+
+.landing-page h1,
+.landing-sections h2 {
+  text-transform: uppercase;
+  letter-spacing: -0.015em;
+}
+
+.landing-sections h3,
+.landing-sections h3 button {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .page-header {
@@ -1698,6 +1725,10 @@ textarea[aria-invalid='true'] {
     --header-height: 4.5rem;
   }
 
+  html {
+    scroll-padding-bottom: calc(var(--space-20) + var(--space-12));
+  }
+
   .app-shell:has(.primary-nav.is-open) {
     --header-height: 7.75rem;
   }
@@ -1737,8 +1768,10 @@ textarea[aria-invalid='true'] {
 
   .nav-item {
     flex: 1 1 0;
+    min-width: 0;
     padding-inline: var(--space-1);
     font-size: var(--type-12);
+    letter-spacing: 0.03em;
   }
 
   .session-status {
@@ -1777,6 +1810,11 @@ textarea[aria-invalid='true'] {
     padding: var(--space-8) var(--space-4);
   }
 
+  .footer-nav-item,
+  .footer-social-link {
+    scroll-margin-block-end: calc(var(--space-20) + var(--space-16) + var(--space-4));
+  }
+
   .site-footer-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-6);
@@ -1797,16 +1835,18 @@ textarea[aria-invalid='true'] {
 
   .landing-page {
     align-items: flex-start;
+    min-height: 525px;
     padding: clamp(var(--space-10), 14vh, var(--space-20)) var(--space-4) var(--space-12);
     background-image:
       linear-gradient(
         180deg,
         rgba(11, 27, 51, 0.98) 0%,
         rgba(11, 27, 51, 0.82) 46%,
-        rgba(11, 27, 51, 0.35) 100%
+        rgba(11, 27, 51, 0.35) 80%
       ),
       url('/assets/kendo-menu-hero.jpeg');
     background-position: 68% center;
+    background-size: 200% auto;
   }
 
   .landing-page h1 {
@@ -1845,7 +1885,7 @@ textarea[aria-invalid='true'] {
   .landing-stat,
   .landing-stat:first-child,
   .landing-stat:last-child {
-    padding: var(--space-5) 0;
+    padding: var(--space-4) 0;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }

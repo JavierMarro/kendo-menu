@@ -1,0 +1,8 @@
+- Session: final landing page UX audit
+- Date/duration: 2026-08-23; about 1 hour
+- Scope/start: Audited the existing landing page at 320px through desktop, preserving hero, content, routes, palette, and claims.
+- Changes: Added scroll-safe focus behavior for compact footer links around the fixed cookie notice; reserved scroll padding with existing spacing tokens.
+- Decisions: Kept LandingPage.tsx and the visual system unchanged; used a focused z-layer plus scroll margins rather than enlarging the footer.
+- Roadblocks: `pnpm session:new` and `pnpm session:check` are unavailable; used the documented manual fallback.
+- Verification: Chromium responsive/keyboard/FAQ/reduced-motion audit, screenshots, axe/overflow Playwright 6/6; typecheck, lint, 20 tests, format, build passed; 2 pre-existing lint warnings.
+- Follow-up: CTA label/route mismatch and compact footer density remain deliberate content/layout scope considerations.
