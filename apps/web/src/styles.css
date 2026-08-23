@@ -1835,16 +1835,18 @@ textarea[aria-invalid='true'] {
 
   .landing-page {
     align-items: flex-start;
+    min-height: 525px;
     padding: clamp(var(--space-10), 14vh, var(--space-20)) var(--space-4) var(--space-12);
     background-image:
       linear-gradient(
         180deg,
         rgba(11, 27, 51, 0.98) 0%,
         rgba(11, 27, 51, 0.82) 46%,
-        rgba(11, 27, 51, 0.35) 100%
+        rgba(11, 27, 51, 0.35) 80%
       ),
       url('/assets/kendo-menu-hero.jpeg');
     background-position: 68% center;
+    background-size: 200% auto;
   }
 
   .landing-page h1 {
