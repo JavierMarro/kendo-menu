@@ -26,6 +26,7 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-08-23 — landing page bolder refinement](./2026-08-23-landing-bolder.md)
 - [2026-08-23 — final landing page UX audit](./2026-08-23-ui-ux-final-audit.md)
 - [2026-08-23 — landing page polish hierarchy](./2026-08-23-landing-polish-hierarchy.md)
 - [2026-08-23 — compact footer](./2026-08-23-compact-footer.md)
