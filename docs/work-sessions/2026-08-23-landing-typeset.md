@@ -1,0 +1,8 @@
+- Session: Landing typography
+- Date/duration: 2026-08-23; about 45 minutes.
+- Scope/start: Reviewed LandingPage.tsx, PrimaryNavigation.tsx, SiteFooter.tsx, and styles.css; preserved the existing system-sans family and palette.
+- Changes: Added uppercase display treatment for primary nav labels and LandingPage H1–H3 headings; tightened mobile nav tracking and minimum width.
+- Decisions: Kept footer links sentence case and accessible text unchanged; used CSS text-transform rather than a new font or dependency.
+- Roadblocks: First uppercase pass caused 354px scroll width at 320px; corrected with mobile nav shrink/tracking rules; pnpm session helpers unavailable.
+- Verification: Visual desktop/mobile/320px pass; focused Playwright 6/6 with axe and overflow; landing Vitest pass; typecheck/build/Prettier/diff check pass.
+- Follow-up: Existing repository lint remains blocked by the unrelated DashboardPage unused import error.

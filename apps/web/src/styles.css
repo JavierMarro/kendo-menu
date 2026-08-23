@@ -281,7 +281,9 @@ a {
   background: transparent;
   font-size: var(--type-14);
   font-weight: 600;
+  letter-spacing: 0.06em;
   line-height: 1.2;
+  text-transform: uppercase;
   white-space: nowrap;
   text-align: center;
   text-decoration: none;
@@ -977,6 +979,18 @@ a {
 .landing-final-cta .primary-button {
   justify-self: end;
   white-space: nowrap;
+}
+
+.landing-page h1,
+.landing-sections h2 {
+  text-transform: uppercase;
+  letter-spacing: -0.015em;
+}
+
+.landing-sections h3,
+.landing-sections h3 button {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .page-header {
@@ -1754,8 +1768,10 @@ textarea[aria-invalid='true'] {
 
   .nav-item {
     flex: 1 1 0;
+    min-width: 0;
     padding-inline: var(--space-1);
     font-size: var(--type-12);
+    letter-spacing: 0.03em;
   }
 
   .session-status {
