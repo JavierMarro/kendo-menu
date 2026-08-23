@@ -1,8 +1,0 @@
-- Session: responsive site footer
-- Date/duration: 2026-08-22; about 40 minutes
-- Scope/start: Added a responsive footer to the existing AppShell without changing navbar behavior or page routes.
-- Changes: Shared the brand lockup and primary navigation data; added semantic footer columns, social placeholders, scoped integration queries, and 1440px/375px Playwright coverage.
-- Decisions: Footer remains on AppShell routes including /cookies; social placeholders use same-tab official home URLs; the standalone outer 404 remains unchanged.
-- Roadblocks: Initial sandbox Playwright server binding returned EPERM; the approved local-server run passed.
-- Verification: `pnpm check` passed session validation, typecheck, lint, format, 63 tests, and build; `pnpm test:e2e` passed 30 tests; lint has two pre-existing Fast Refresh warnings.
-- Follow-up: None.

@@ -1,8 +1,0 @@
-- Session: landing page polish
-- Date/duration: 2026-08-21; about 20 minutes
-- Scope/start: Polished the approved `/app` landing page and persistent navigation based on follow-up product feedback.
-- Changes: Added desktop-only KendoMenu wordmark, smaller mobile heading, purpose paragraph, and library-first nav order.
-- Decisions: Kept the logo image decorative within the labelled home link; existing route targets and persistence behavior are unchanged.
-- Roadblocks: None.
-- Verification: Web typecheck, Vitest 15/15, lint, Prettier, and Playwright 22/22 desktop/mobile passed.
-- Follow-up: None.
