@@ -1,0 +1,8 @@
+- Session: landing page polish
+- Date/duration: 2026-08-23; about 30 minutes
+- Scope/start: Polished the existing landing layout without changing the hero, copy, section order, routes, or palette.
+- Changes: Rebalanced planned-library hierarchy; tightened stats/details spacing; added FAQ row separation and focus surface; tightened mobile stat rows.
+- Decisions: Kept CTA copy/routes and provisional catalogue claims unchanged; CSS-only implementation in styles.css.
+- Roadblocks: `pnpm session:new` and `pnpm session:check` are unavailable; used the documented manual fallback.
+- Verification: Playwright desktop/mobile/intermediate/narrow render, keyboard FAQ/menu, reduced motion, axe/overflow 6/6; typecheck, lint, 20 tests, format, build passed; 2 pre-existing lint warnings.
+- Follow-up: CTA label/route mismatch and missing concrete product proof remain content-scope issues from critique.

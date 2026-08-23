@@ -758,20 +758,20 @@ a {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: clamp(var(--space-8), 8vw, var(--space-16));
-  align-items: end;
+  align-items: start;
 }
 
 .landing-library-heading > p {
   max-width: 58ch;
   margin: 0;
-  color: var(--muted);
-  line-height: 1.7;
+  color: var(--muted-strong);
+  line-height: 1.6;
 }
 
 .landing-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: var(--space-10) 0 0;
+  margin: var(--space-8) 0 0;
   border-top: 1px solid var(--line-strong);
   border-bottom: 1px solid var(--line-strong);
 }
@@ -805,12 +805,12 @@ a {
   display: flex;
   margin: var(--space-3) 0 0;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .landing-stat-value {
   color: var(--accent-hover);
-  font-size: clamp(2rem, 4vw, 3.25rem);
+  font-size: clamp(1.875rem, 3.5vw, 2.75rem);
   font-variant-numeric: tabular-nums;
   font-weight: 750;
   letter-spacing: -0.03em;
@@ -827,8 +827,8 @@ a {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: clamp(var(--space-8), 8vw, var(--space-16));
-  margin-top: var(--space-10);
-  padding-top: var(--space-6);
+  margin-top: var(--space-8);
+  padding-top: var(--space-5);
   border-top: 1px solid var(--line);
 }
 
@@ -847,7 +847,7 @@ a {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: clamp(var(--space-8), 8vw, var(--space-16));
-  row-gap: 0;
+  row-gap: var(--space-2);
   margin-top: var(--space-10);
 }
 
@@ -888,6 +888,10 @@ a {
   color: var(--accent-hover);
 }
 
+.landing-faq-question:focus-visible {
+  background-color: var(--accent-soft);
+}
+
 .landing-faq-indicator {
   position: relative;
   width: 1rem;
@@ -923,7 +927,7 @@ a {
 
 .landing-faq-answer {
   max-width: 58ch;
-  padding: 0 var(--space-8) var(--space-6) 0;
+  padding: 0 var(--space-8) var(--space-5) 0;
   color: var(--muted);
   line-height: 1.65;
 }
@@ -1845,7 +1849,7 @@ textarea[aria-invalid='true'] {
   .landing-stat,
   .landing-stat:first-child,
   .landing-stat:last-child {
-    padding: var(--space-5) 0;
+    padding: var(--space-4) 0;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
