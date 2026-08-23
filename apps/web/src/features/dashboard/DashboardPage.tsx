@@ -94,14 +94,14 @@ export function DashboardPage() {
             Shape a focused session, then adjust the work to match the practice in front of you.
           </p>
         </div>
-        <div
+        {/* <div
           className={persistenceStatus.writeFailed ? 'session-status is-error' : 'session-status'}
           aria-label={getPersistenceStatusLabel(persistenceStatus)}
           role="status"
         >
           <span className="status-pulse" aria-hidden="true" />
           <span>{getPersistenceStatusLabel(persistenceStatus)}</span>
-        </div>
+        </div> */}
       </header>
 
       <p className="sr-only" role="status" aria-live="polite">
