@@ -20,7 +20,7 @@ export function SiteFooter({ libraryCount, onNavigate }: SiteFooterProps): React
           />
         </div>
 
-        <div className="site-footer-column">
+        <section className="site-footer-column" aria-labelledby="footer-navigation-title">
           <h2 id="footer-navigation-title">Navigation</h2>
           <nav className="footer-nav" aria-labelledby="footer-navigation-title">
             <PrimaryNavigationLinks
@@ -29,9 +29,9 @@ export function SiteFooter({ libraryCount, onNavigate }: SiteFooterProps): React
               onNavigate={onNavigate}
             />
           </nav>
-        </div>
+        </section>
 
-        <div className="site-footer-column">
+        <section className="site-footer-column" aria-labelledby="footer-social-title">
           <h2 id="footer-social-title">Social</h2>
           <nav className="footer-social-links" aria-labelledby="footer-social-title">
             <a className="footer-social-link" href="https://github.com/">
@@ -41,7 +41,7 @@ export function SiteFooter({ libraryCount, onNavigate }: SiteFooterProps): React
               LinkedIn (placeholder)
             </a>
           </nav>
-        </div>
+        </section>
       </div>
     </footer>
   );
