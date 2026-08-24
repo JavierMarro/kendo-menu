@@ -1723,6 +1723,12 @@ textarea[aria-invalid='true'] {
   }
 }
 
+@media (max-width: 1024px) {
+  .brand-name {
+    display: none;
+  }
+}
+
 @media (max-width: 840px) {
   .cookie-notice {
     right: var(--space-4);
@@ -1740,7 +1746,7 @@ textarea[aria-invalid='true'] {
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 960px) {
   :root {
     --header-height: 4.5rem;
   }
