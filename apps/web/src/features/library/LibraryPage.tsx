@@ -36,9 +36,9 @@ export function LibraryPage() {
             Browse curated keiko drills and the training sets you create for yourself.
           </p>
         </div>
-        <Link className="primary-button" to="/app/drills/new">
+        {/* <Link className="primary-button" to="/app/drills/new">
           Create drill
-        </Link>
+        </Link> */}
       </header>
 
       <p className="sr-only" role="status" aria-live="polite">

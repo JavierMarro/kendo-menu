@@ -94,6 +94,9 @@ export function DashboardPage() {
             Shape a focused session, then adjust the work to match the practice in front of you.
           </p>
         </div>
+        <Link className="primary-button" to="/app/drills/new">
+          Create drill
+        </Link>
         {/* <div
           className={persistenceStatus.writeFailed ? 'session-status is-error' : 'session-status'}
           aria-label={getPersistenceStatusLabel(persistenceStatus)}

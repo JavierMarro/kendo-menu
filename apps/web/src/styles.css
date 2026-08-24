@@ -261,14 +261,18 @@ a {
 
 .primary-nav {
   display: flex;
+  flex: 1 1 0;
   order: 2;
   min-width: 0;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
   gap: var(--space-1);
-  margin-inline: auto;
+  margin-inline: 0;
 }
 
 .nav-item {
+  position: relative;
   display: inline-flex;
   min-height: 2.75rem;
   align-items: center;
@@ -277,7 +281,7 @@ a {
   padding: var(--space-2) var(--space-3);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  color: var(--muted);
+  color: #fff;
   background: transparent;
   font-size: var(--type-14);
   font-weight: 600;
@@ -289,20 +293,33 @@ a {
   text-decoration: none;
   transition:
     color 160ms ease-out,
-    background-color 160ms ease-out,
-    border-color 160ms ease-out;
+    font-weight 160ms ease-out;
 }
 
-.nav-item:hover {
-  border-color: var(--line);
-  color: var(--text);
-  background: var(--surface-soft);
+.nav-item::after {
+  position: absolute;
+  right: var(--space-2);
+  bottom: var(--space-1);
+  left: var(--space-2);
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent-hover);
+  content: '';
+  pointer-events: none;
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 160ms ease-out;
 }
 
-.nav-item.is-active {
-  border-color: rgba(200, 155, 60, 0.58);
-  color: var(--accent-hover);
-  background: var(--accent-soft);
+.nav-item:hover,
+.nav-item:focus-visible {
+  font-weight: 700;
+  color: #fff;
+}
+
+.nav-item:hover::after,
+.nav-item:focus-visible::after {
+  transform: scaleX(1);
 }
 
 .nav-count {
@@ -1759,6 +1776,7 @@ textarea[aria-invalid='true'] {
     display: none;
     grid-area: nav;
     width: 100%;
+    flex: none;
     justify-content: stretch;
     margin: 0;
     padding-top: var(--space-1);
@@ -1775,6 +1793,7 @@ textarea[aria-invalid='true'] {
     padding-inline: var(--space-1);
     font-size: var(--type-12);
     letter-spacing: 0.03em;
+    white-space: normal;
   }
 
   .session-status {
