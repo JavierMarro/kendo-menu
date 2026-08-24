@@ -81,4 +81,15 @@ and persistence migrations; a successful build does not prove user flows work.
 5. Treat current code, tests, git diff, and runtime behavior as the source of truth. Document only
    durable architectural decisions or unresolved blockers.
 
+## Focused-change mode
+
+For small, localized requests:
+
+- Inspect only the named files and direct dependencies.
+- Make one focused implementation pass.
+- Run one bounded, relevant verification.
+- Skip broad audits, redesigns, and unrelated refactors unless requested.
+- Keep commentary and final output concise.
+- Preserve unrelated user changes.
+
 Never commit `node_modules`, build output, local environment files, secrets, or credentials.
