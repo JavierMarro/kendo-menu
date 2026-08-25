@@ -1,13 +1,32 @@
 import { Link, useParams } from 'react-router-dom';
 import { useState } from 'react';
 
+import type { TrainingStep } from '@kendo-menu/domain';
+
 import { useTrainingStore } from '../../lib/training-store-context';
 import {
   findTrainingSet,
   formatCategory,
+  formatTrainingQuantity,
   getAllTrainingSets,
+  getSpecifiedTrainingQuantities,
+  getTrainingSetDescription,
   getTrainingSetStepCount,
 } from '../../lib/training-data';
+
+function TrainingStepQuantities({ step }: { readonly step: TrainingStep }) {
+  const quantities = getSpecifiedTrainingQuantities(step);
+
+  return quantities.length === 0 ? (
+    <span className="quantity-not-specified">Quantity not specified</span>
+  ) : (
+    <ul className="quantity-list" aria-label={`Quantities for ${step.label}`}>
+      {quantities.map((quantity) => (
+        <li key={quantity.unit}>{formatTrainingQuantity(quantity)}</li>
+      ))}
+    </ul>
+  );
+}
 
 export function TrainingSetDetailPage() {
   const { trainingSetId } = useParams();
@@ -40,7 +59,7 @@ export function TrainingSetDetailPage() {
         <div>
           <p className="eyebrow">{formatCategory(trainingSet.category)}</p>
           <h1>{trainingSet.name}</h1>
-          <p className="page-intro">{trainingSet.description}</p>
+          <p className="page-intro">{getTrainingSetDescription(trainingSet)}</p>
         </div>
         <button
           className="primary-button"
@@ -66,17 +85,18 @@ export function TrainingSetDetailPage() {
 
       <div className="detail-sections">
         {trainingSet.sections.map((section, sectionIndex) => (
-          <section
-            className="detail-section"
-            key={section.id}
-            aria-labelledby={`detail-${section.id}`}
-          >
-            <div className="training-section-heading">
-              <span className="section-number" aria-hidden="true">
-                {sectionIndex + 1}
+          <details className="detail-section" key={section.id}>
+            <summary className="detail-section-summary">
+              <span className="detail-section-summary-content">
+                <span className="section-number" aria-hidden="true">
+                  {sectionIndex + 1}
+                </span>
+                <span className="detail-section-label">{section.label}</span>
+                <span className="detail-section-count">
+                  {section.steps.length} {section.steps.length === 1 ? 'exercise' : 'exercises'}
+                </span>
               </span>
-              <h2 id={`detail-${section.id}`}>{section.label}</h2>
-            </div>
+            </summary>
             <ol className="training-step-list">
               {section.steps.map((step, stepIndex) => (
                 <li className="training-step" key={step.id}>
@@ -89,13 +109,11 @@ export function TrainingSetDetailPage() {
                       <span className="step-description">{step.description}</span>
                     ) : null}
                   </div>
-                  <span className="detail-reps">
-                    {step.defaultReps === null ? 'Set reps' : `${step.defaultReps} reps`}
-                  </span>
+                  <TrainingStepQuantities step={step} />
                 </li>
               ))}
             </ol>
-          </section>
+          </details>
         ))}
       </div>
     </>

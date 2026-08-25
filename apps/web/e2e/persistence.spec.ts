@@ -123,6 +123,10 @@ test.describe('local persistence recovery', () => {
       });
     });
     await page.goto('/app/library');
+    const seniorHighSchoolCard = page
+      .getByRole('heading', { name: 'Senior High School kendo club' })
+      .locator('xpath=ancestor::article');
+    await seniorHighSchoolCard.getByRole('link', { name: 'View drill' }).click();
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await expect(page.getByRole('status', { name: 'Changes are not being saved' })).toBeVisible();
     await openNavigationIfNeeded(page);
@@ -139,13 +143,6 @@ test.describe('local persistence recovery', () => {
     await expect(
       appBanner.getByRole('status', { name: 'Changes are not being saved' }),
     ).toBeVisible();
-    const dashboardHeader = page
-      .getByRole('heading', { name: 'Your dashboard', exact: true })
-      .locator('xpath=ancestor::header');
-    await expect(
-      dashboardHeader.getByRole('status', { name: 'Changes are not being saved' }),
-    ).toBeVisible();
-
     const notes = page.getByLabel('Practice notes');
     await notes.fill('Quota test note.');
     await notes.blur();

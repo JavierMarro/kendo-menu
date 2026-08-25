@@ -8,6 +8,8 @@ import { renderApp, createTestStore } from './test-utils';
 
 const SENIOR_HIGH_SCHOOL_DRILL_ID = asTrainingSetId('senior-high-school-kendo-club');
 const SENIOR_HIGH_SCHOOL_STRETCH_ID = 'senior-high-school-kendo-club-warm-up-stretch';
+const JUNIOR_HIGH_DRILL_ID = asTrainingSetId('junior-high-kendo-club');
+const JUNIOR_HIGH_HAYA_ID = 'junior-high-kendo-club-suburi-haya';
 
 describe('KendoMenu application flows', () => {
   it('shows a session-only cookie notice with policy details and dismisses without storage', async () => {
@@ -80,7 +82,12 @@ describe('KendoMenu application flows', () => {
       within(footerNavigation)
         .getAllByRole('link')
         .map((link) => link.getAttribute('href')),
-    ).toEqual(['/app/library', '/app/dashboard', '/app/drills/new']);
+    ).toEqual([
+      '/app#how-it-works-title',
+      '/app/library',
+      '/app/dashboard',
+      '/app#faq-title',
+    ]);
 
     const socialNavigation = within(footer).getByRole('navigation', { name: 'Social' });
     expect(
@@ -156,16 +163,17 @@ describe('KendoMenu application flows', () => {
     ).toBeInTheDocument();
   });
 
-  it('keeps the primary navigation in library, dashboard, and builder order', () => {
+  it('keeps the current primary navigation order', () => {
     renderApp(createTestStore(), { initialEntries: ['/app'] });
 
     const navigationLinks = within(
       screen.getByRole('navigation', { name: 'Primary navigation' }),
     ).getAllByRole('link');
     expect(navigationLinks.map((link) => link.getAttribute('href'))).toEqual([
+      '/app#how-it-works-title',
       '/app/library',
       '/app/dashboard',
-      '/app/drills/new',
+      '/app#faq-title',
     ]);
   });
 
@@ -230,17 +238,121 @@ describe('KendoMenu application flows', () => {
     );
     expect(screen.getByRole('heading', { name: 'Drill library' })).toBeInTheDocument();
 
-    await user.click(
-      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
-        name: 'Create drill',
-      }),
-    );
+    view.unmount();
+    const builderView = renderApp(createTestStore(), { initialEntries: ['/app/drills/new'] });
     expect(screen.getByRole('heading', { name: 'Create a drill' })).toBeInTheDocument();
 
-    view.unmount();
-    const directStore = createTestStore();
-    renderApp(directStore, { initialEntries: ['/app/library'] });
+    builderView.unmount();
+    renderApp(createTestStore(), { initialEntries: ['/app/library'] });
     expect(screen.getByRole('heading', { name: 'Drill library' })).toBeInTheDocument();
+  });
+
+  it('renders exactly 11 compact drill cards with stable detail links', () => {
+    renderApp(createTestStore(), { initialEntries: ['/app/library'] });
+
+    const library = screen.getByRole('region', { name: 'Available training sets' });
+    const cards = within(library).getAllByRole('article');
+    expect(cards).toHaveLength(11);
+
+    const heading = within(library).getByRole('heading', {
+      name: 'International dojo (2 hour session)',
+    });
+    const card = heading.closest('article');
+    if (card === null) {
+      throw new Error('Expected the international-dojo heading inside a drill card.');
+    }
+
+    expect(within(card).getByText('Category not specified')).toBeVisible();
+    expect(within(card).getByText('Description not provided.')).toBeVisible();
+    expect(within(card).getByText('23 exercises')).toBeVisible();
+    expect(within(card).getByRole('link', { name: 'View drill' })).toHaveAttribute(
+      'href',
+      '/app/library/international-dojo-2-hour-session',
+    );
+    expect(within(card).queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('opens full drill details and toggles collapsed native section disclosures', async () => {
+    const user = userEvent.setup();
+    const view = renderApp(createTestStore(), { initialEntries: ['/app/library'] });
+    const cardHeading = screen.getByRole('heading', {
+      name: 'International dojo (2 hour session)',
+    });
+    const card = cardHeading.closest('article');
+    if (card === null) {
+      throw new Error('Expected the international-dojo heading inside a drill card.');
+    }
+
+    await user.click(within(card).getByRole('link', { name: 'View drill' }));
+    expect(
+      screen.getByRole('heading', { name: 'International dojo (2 hour session)', level: 1 }),
+    ).toBeVisible();
+    const sections = view.container.querySelectorAll<HTMLDetailsElement>('.detail-section');
+    expect(sections).toHaveLength(12);
+    expect([...sections].every((section) => !section.open)).toBe(true);
+
+    const firstSection = sections[0];
+    const firstSummary = firstSection?.querySelector('summary');
+    if (firstSection === undefined || firstSummary === null || firstSummary === undefined) {
+      throw new Error('Expected the first drill section to have a summary.');
+    }
+    expect(firstSummary).toHaveTextContent('Warm-up');
+    expect(firstSummary).toHaveTextContent('1 exercise');
+
+    await user.click(firstSummary);
+    expect(firstSection).toHaveAttribute('open');
+    expect(within(firstSection).getByText('10 minutes')).toBeVisible();
+
+    await user.click(firstSummary);
+    expect(firstSection).not.toHaveAttribute('open');
+  });
+
+  it('renders simultaneous units, missing quantities, and explicit zero distinctly', async () => {
+    const user = userEvent.setup();
+    const juniorView = renderApp(createTestStore(), {
+      initialEntries: ['/app/library/junior-high-kendo-club'],
+    });
+    const suburiSection = [...juniorView.container.querySelectorAll<HTMLDetailsElement>('details')][0];
+    const suburiSummary = suburiSection?.querySelector('summary');
+    if (suburiSection === undefined || suburiSummary === null || suburiSummary === undefined) {
+      throw new Error('Expected the junior-high Suburi disclosure.');
+    }
+    await user.click(suburiSummary);
+    const hayaQuantities = within(suburiSection).getByRole('list', { name: 'Quantities for haya' });
+    expect(within(hayaQuantities).getByText('100 repetitions')).toBeVisible();
+    expect(within(hayaQuantities).getByText('2 sets')).toBeVisible();
+    juniorView.unmount();
+
+    const missingView = renderApp(createTestStore(), {
+      initialEntries: ['/app/library/japanese-school-club'],
+    });
+    const missingSection = missingView.container.querySelector<HTMLDetailsElement>('details');
+    const missingSummary = missingSection?.querySelector('summary');
+    if (missingSection === null || missingSummary === null || missingSummary === undefined) {
+      throw new Error('Expected the Japanese school club Warm-up disclosure.');
+    }
+    await user.click(missingSummary);
+    expect(within(missingSection).getByText('Quantity not specified')).toBeVisible();
+    missingView.unmount();
+
+    const zeroStore = createTestStore();
+    const zeroSetId = zeroStore.getState().addCustomTrainingSet({
+      name: 'Zero quantity example',
+      description: '',
+      category: 'custom',
+      sections: [{ label: 'Example', steps: [{ label: 'Still explicit', defaultReps: 0 }] }],
+    });
+    const zeroView = renderApp(zeroStore, {
+      initialEntries: [`/app/library/${zeroSetId}`],
+    });
+    const zeroSection = zeroView.container.querySelector<HTMLDetailsElement>('details');
+    const zeroSummary = zeroSection?.querySelector('summary');
+    if (zeroSection === null || zeroSummary === null || zeroSummary === undefined) {
+      throw new Error('Expected the custom zero-quantity disclosure.');
+    }
+    await user.click(zeroSummary);
+    expect(within(zeroSection).getByText('0 repetitions')).toBeVisible();
+    expect(within(zeroSection).queryByText('Quantity not specified')).not.toBeInTheDocument();
   });
 
   it('keeps a blank repetition distinct from an explicit zero and enforces 0–500', async () => {
@@ -255,26 +367,49 @@ describe('KendoMenu application flows', () => {
     await user.type(repetitions, '0');
     await user.tab();
     expect(repetitions).toHaveValue(0);
-    expect(store.getState().dashboardEntries[0]?.repOverrides).toEqual({
-      [SENIOR_HIGH_SCHOOL_STRETCH_ID]: 0,
+    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+      [SENIOR_HIGH_SCHOOL_STRETCH_ID]: { repetitions: 0 },
     });
 
     await user.clear(repetitions);
     await user.tab();
     expect(repetitions).toHaveValue(null);
-    expect(store.getState().dashboardEntries[0]?.repOverrides).toEqual({});
+    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
 
     await user.type(repetitions, '501');
     await user.tab();
     expect(screen.getByText('Enter a whole number from 0 to 500.')).toBeInTheDocument();
-    expect(store.getState().dashboardEntries[0]?.repOverrides).toEqual({});
+    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
 
     await user.clear(repetitions);
     await user.type(repetitions, '500');
     await user.tab();
     expect(repetitions).toHaveValue(500);
-    expect(store.getState().dashboardEntries[0]?.repOverrides).toEqual({
-      [SENIOR_HIGH_SCHOOL_STRETCH_ID]: 500,
+    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+      [SENIOR_HIGH_SCHOOL_STRETCH_ID]: { repetitions: 500 },
+    });
+  });
+
+  it('edits simultaneous repetitions and sets as independent dashboard overrides', async () => {
+    const user = userEvent.setup();
+    const store = createTestStore();
+    store.getState().addToDashboard(JUNIOR_HIGH_DRILL_ID);
+    renderApp(store);
+
+    const repetitions = screen.getByLabelText('Repetitions for haya');
+    const sets = screen.getByLabelText('Sets for haya');
+    expect(repetitions).toHaveValue(100);
+    expect(sets).toHaveValue(2);
+
+    await user.clear(sets);
+    await user.type(sets, '0');
+    await user.tab();
+    await user.clear(repetitions);
+    await user.type(repetitions, '80');
+    await user.tab();
+
+    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+      [JUNIOR_HIGH_HAYA_ID]: { repetitions: 80, sets: 0 },
     });
   });
 

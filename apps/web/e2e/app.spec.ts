@@ -130,8 +130,53 @@ test.describe('routed training flows', () => {
     await expect(page.getByRole('heading', { name: 'Create a drill' })).toBeVisible();
   });
 
-  test('persists repetitions, notes, and an Undo restoration across reload', async ({ page }) => {
+  test('opens a compact drill card and operates collapsed sections by keyboard', async ({
+    page,
+  }) => {
     await page.goto('/app/library');
+    await expect(page.locator('.library-card')).toHaveCount(11);
+
+    const card = page
+      .getByRole('heading', { name: 'International dojo (2 hour session)' })
+      .locator('xpath=ancestor::article');
+    await expect(card).toContainText('Category not specified');
+    await expect(card).toContainText('Description not provided.');
+    await expect(card).toContainText('23 exercises');
+    const viewDrill = card.getByRole('link', { name: 'View drill' });
+    await expect(viewDrill).toHaveAttribute(
+      'href',
+      '/app/library/international-dojo-2-hour-session',
+    );
+
+    await viewDrill.focus();
+    await expect(viewDrill).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/app\/library\/international-dojo-2-hour-session$/);
+
+    const sections = page.locator('details.detail-section');
+    await expect(sections).toHaveCount(12);
+    const firstSection = sections.first();
+    await expect(firstSection).not.toHaveAttribute('open', '');
+    const firstSummary = firstSection.locator('summary');
+    await expect(firstSummary).toContainText('Warm-up');
+    await expect(firstSummary).toContainText('1 exercise');
+
+    await firstSummary.focus();
+    await page.keyboard.press('Enter');
+    await expect(firstSection).toHaveAttribute('open', '');
+    await expect(firstSection.getByText('10 minutes')).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(firstSection).not.toHaveAttribute('open', '');
+  });
+
+  test('persists multi-unit quantities, notes, and an Undo restoration across reload', async ({
+    page,
+  }) => {
+    await page.goto('/app/library');
+    const card = page
+      .getByRole('heading', { name: 'Junior-high kendo club' })
+      .locator('xpath=ancestor::article');
+    await card.getByRole('link', { name: 'View drill' }).click();
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await openNavigationIfNeeded(page);
     await page
@@ -139,33 +184,39 @@ test.describe('routed training flows', () => {
       .getByRole('link', { name: 'Dashboard', exact: true })
       .click();
 
-    const repetitions = page.getByLabel(/repetitions for stretch/i);
-    await expect(repetitions).toHaveValue('');
-    await repetitions.fill('0');
+    const repetitions = page.getByLabel('Repetitions for haya');
+    const sets = page.getByLabel('Sets for haya');
+    await expect(repetitions).toHaveValue('100');
+    await expect(sets).toHaveValue('2');
+    await repetitions.fill('80');
     await repetitions.blur();
-    await expect(repetitions).toHaveValue('0');
+    await sets.fill('0');
+    await sets.blur();
+    await expect(repetitions).toHaveValue('80');
+    await expect(sets).toHaveValue('0');
 
     const notes = page.getByLabel('Practice notes');
     await notes.fill('Keep the shoulders relaxed.');
     await notes.blur();
 
     await page.reload();
-    await expect(page.getByLabel(/repetitions for stretch/i)).toHaveValue('0');
+    await expect(page.getByLabel('Repetitions for haya')).toHaveValue('80');
+    await expect(page.getByLabel('Sets for haya')).toHaveValue('0');
     await expect(page.getByLabel('Practice notes')).toHaveValue('Keep the shoulders relaxed.');
 
     await page.getByRole('button', { name: 'Remove' }).click();
-    await expect(page.getByRole('heading', { name: 'High School Kendo Club Drill' })).toHaveCount(
-      0,
-    );
+    await expect(page.getByRole('heading', { name: 'Junior-high kendo club' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Undo' }).click();
-    await expect(page.getByRole('heading', { name: 'High School Kendo Club Drill' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Junior-high kendo club' })).toBeVisible();
   });
 
   test('prompts before browser Back discards a dirty draft, but dismiss keeps the draft', async ({
     page,
   }) => {
-    await openNavigationIfNeeded(page);
-    await page.getByRole('link', { name: 'Create a drill', exact: true }).click();
+    const dashboardHeader = page
+      .getByRole('heading', { name: 'Your dashboard', exact: true })
+      .locator('xpath=ancestor::header');
+    await dashboardHeader.getByRole('link', { name: 'Create drill', exact: true }).click();
     await expect(page).toHaveURL(/\/app\/drills\/new$/);
     const name = page.getByLabel('Drill name');
     await name.fill('Unfinished draft');

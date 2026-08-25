@@ -1,30 +1,16 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import {
-  findTrainingSet,
   formatCategory,
   getAllTrainingSets,
+  getTrainingSetDescription,
   getTrainingSetStepCount,
 } from '../../lib/training-data';
 import { useTrainingStore } from '../../lib/training-store-context';
 
 export function LibraryPage() {
   const customTrainingSets = useTrainingStore((state) => state.customTrainingSets);
-  const addToDashboard = useTrainingStore((state) => state.addToDashboard);
-  const [statusMessage, setStatusMessage] = useState('');
   const trainingSets = getAllTrainingSets(customTrainingSets);
-
-  const addTrainingSet = (trainingSetId: string) => {
-    const trainingSet = findTrainingSet(trainingSets, trainingSetId);
-
-    if (trainingSet === undefined) {
-      return;
-    }
-
-    addToDashboard(trainingSet.id);
-    setStatusMessage(`${trainingSet.name} added to your dashboard.`);
-  };
 
   return (
     <>
@@ -40,10 +26,6 @@ export function LibraryPage() {
           Create drill
         </Link> */}
       </header>
-
-      <p className="sr-only" role="status" aria-live="polite">
-        {statusMessage}
-      </p>
 
       {trainingSets.length === 0 ? (
         <section className="empty-state empty-state--library" aria-labelledby="empty-library-title">
@@ -66,18 +48,11 @@ export function LibraryPage() {
                 <span className="step-count">{getTrainingSetStepCount(trainingSet)} exercises</span>
               </div>
               <h2>{trainingSet.name}</h2>
-              <p>{trainingSet.description}</p>
+              <p>{getTrainingSetDescription(trainingSet)}</p>
               <div className="library-card-actions">
-                <Link className="text-button" to={`/app/library/${trainingSet.id}`}>
-                  View details
+                <Link className="secondary-button" to={`/app/library/${trainingSet.id}`}>
+                  View drill
                 </Link>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => addTrainingSet(trainingSet.id)}
-                >
-                  Add to dashboard
-                </button>
               </div>
             </article>
           ))}

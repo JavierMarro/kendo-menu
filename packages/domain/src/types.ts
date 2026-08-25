@@ -25,6 +25,14 @@ export type TrainingQuantityValues = Readonly<Record<TrainingQuantityUnit, numbe
 
 export type TrainingQuantities = readonly TrainingQuantity[];
 
+export type TrainingQuantityOverrides = Readonly<
+  Partial<Record<TrainingQuantityUnit, number>>
+>;
+
+export type DashboardQuantityOverrides = Readonly<
+  Record<string, TrainingQuantityOverrides>
+>;
+
 export interface TrainingStep {
   readonly id: string;
   readonly label: string;
@@ -78,7 +86,7 @@ export type CustomTrainingSetInput = TrainingSetInput;
 export interface DashboardEntry {
   readonly id: string;
   readonly trainingSetId: TrainingSetId;
-  readonly repOverrides: Readonly<Record<string, number>>;
+  readonly quantityOverrides: DashboardQuantityOverrides;
   readonly notes: string;
   readonly createdAt: string;
 }

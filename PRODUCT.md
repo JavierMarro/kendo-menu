@@ -15,7 +15,8 @@ their practice routine.
 ## Product Purpose
 
 KendoMenu is a local-first kendo training planner. It lets practitioners browse curated training
-sets, add them to a dashboard, adjust repetitions, attach notes, and create custom training sets.
+sets, add them to a dashboard, adjust exercise quantities, attach notes, and create custom training
+sets.
 Success means a practitioner can assemble and adapt a useful session quickly, with the session data
 available on the same device without account or server overhead.
 
@@ -30,16 +31,16 @@ product decisions.
 
 Practitioners use the web SPA to prepare a day's keiko, select drills from the library, and shape
 the work for the current practice. A dashboard entry represents a selected training set for a
-session; its step repetitions can be overridden and notes can be attached. Browser storage is the
-free-tier persistence boundary for the first milestone.
+session; its step quantities can be overridden by unit and notes can be attached. Browser storage
+is the free-tier persistence boundary for the first milestone.
 
 ## Capabilities and Constraints
 
 - The library contains curated built-in training sets and user-created training sets.
-- Practitioners can add training sets to a dashboard, adjust per-step repetitions, attach notes,
-  and remove dashboard entries.
+- Practitioners can add training sets to a dashboard, adjust per-step quantities, attach notes, and
+  remove dashboard entries.
 - Built-in training data is immutable, marked `isBuiltIn: true`, and uses stable ids for sets and
-  steps. Dashboard repetition overrides are keyed by step id.
+  steps. Dashboard quantity overrides are keyed first by step id and then by unit.
 - User-created data uses the same domain model and is marked `isBuiltIn: false`.
 - The first milestone is a React + Vite + TypeScript web SPA in a pnpm workspace. Domain contracts
   live in `packages/domain`; the platform-neutral Zustand store lives in `packages/store` and

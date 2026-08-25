@@ -1,46 +1,64 @@
 import { useState, type ChangeEvent, type FocusEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
-import type { DashboardEntry, TrainingSet, TrainingStep } from '@kendo-menu/domain';
+import type {
+  DashboardEntry,
+  DashboardQuantityOverrides,
+  TrainingQuantityOverrides,
+  TrainingQuantityUnit,
+  TrainingSet,
+  TrainingStep,
+} from '@kendo-menu/domain';
 import type { RemovedDashboardEntry } from '@kendo-menu/store';
 
 import {
   findTrainingSet,
   formatCategory,
-  formatRepUnit,
+  formatQuantityUnit,
   getAllTrainingSets,
+  getEditableTrainingQuantityUnits,
+  getEffectiveTrainingQuantity,
+  getQuantityValidationMessage,
+  getTrainingQuantityValue,
   getTrainingSetSections,
-  isValidRepValue,
+  isValidQuantityValue,
 } from '../../lib/training-data';
 import { useTrainingStore, useTrainingStoreApi } from '../../lib/training-store-context';
-import {
-  getPersistenceStatusLabel,
-  getPersistenceUpdateLabel,
-  usePersistenceStatus,
-} from '../persistence/persistence-context';
+import { getPersistenceUpdateLabel, usePersistenceStatus } from '../persistence/persistence-context';
 
-function updateRepOverrides(
+function updateQuantityOverrides(
   entry: DashboardEntry,
   stepId: string,
+  unit: TrainingQuantityUnit,
   value: number | null,
-): Readonly<Record<string, number>> {
-  const next = { ...entry.repOverrides };
+): DashboardQuantityOverrides {
+  const next: Record<string, TrainingQuantityOverrides> = { ...entry.quantityOverrides };
+  const stepOverrides: Partial<Record<TrainingQuantityUnit, number>> = {
+    ...entry.quantityOverrides[stepId],
+  };
 
   if (value === null) {
+    delete stepOverrides[unit];
+  } else {
+    stepOverrides[unit] = value;
+  }
+
+  if (Object.keys(stepOverrides).length === 0) {
     delete next[stepId];
   } else {
-    next[stepId] = value;
+    next[stepId] = stepOverrides;
   }
 
   return next;
 }
 
-function getRepDraftValue(entry: DashboardEntry, step: TrainingStep): string {
-  return Object.hasOwn(entry.repOverrides, step.id)
-    ? String(entry.repOverrides[step.id] ?? '')
-    : step.defaultReps === null
-      ? ''
-      : String(step.defaultReps);
+function getQuantityDraftValue(
+  entry: DashboardEntry,
+  step: TrainingStep,
+  unit: TrainingQuantityUnit,
+): string {
+  const value = getEffectiveTrainingQuantity(entry, step, unit);
+  return value === null ? '' : String(value);
 }
 
 export function DashboardPage() {
@@ -97,14 +115,6 @@ export function DashboardPage() {
         <Link className="primary-button" to="/app/drills/new">
           Create drill
         </Link>
-        {/* <div
-          className={persistenceStatus.writeFailed ? 'session-status is-error' : 'session-status'}
-          aria-label={getPersistenceStatusLabel(persistenceStatus)}
-          role="status"
-        >
-          <span className="status-pulse" aria-hidden="true" />
-          <span>{getPersistenceStatusLabel(persistenceStatus)}</span>
-        </div> */}
       </header>
 
       <p className="sr-only" role="status" aria-live="polite">
@@ -124,8 +134,8 @@ export function DashboardPage() {
           <p className="eyebrow">A clean starting line</p>
           <h2 id="empty-dashboard-title">Your dashboard is ready.</h2>
           <p>
-            Add a drill from the library and shape it for today&apos;s practice. Reps and notes stay
-            on this device as you refine the set.
+            Add a drill from the library and shape it for today&apos;s practice. Quantities and notes
+            stay on this device as you refine the set.
           </p>
           <div className="empty-actions">
             <Link className="primary-button" to="/app/library">
@@ -196,7 +206,7 @@ interface DashboardTrainingSetProps {
   readonly trainingSet: TrainingSet;
   readonly onRemove: () => void;
   readonly onUpdate: (patch: {
-    readonly repOverrides?: Readonly<Record<string, number>>;
+    readonly quantityOverrides?: DashboardQuantityOverrides;
     readonly notes?: string;
   }) => void;
 }
@@ -271,10 +281,10 @@ function DashboardTrainingSet({
                       <span className="step-description">{step.description}</span>
                     ) : null}
                   </div>
-                  <RepEditor
+                  <QuantityEditors
                     entry={entry}
                     step={step}
-                    onUpdate={(repOverrides) => onUpdate({ repOverrides })}
+                    onUpdate={(quantityOverrides) => onUpdate({ quantityOverrides })}
                   />
                 </li>
               ))}
@@ -301,64 +311,93 @@ function DashboardTrainingSet({
   );
 }
 
-interface RepEditorProps {
+interface QuantityEditorsProps {
   readonly entry: DashboardEntry;
   readonly step: TrainingStep;
-  readonly onUpdate: (repOverrides: Readonly<Record<string, number>>) => void;
+  readonly onUpdate: (quantityOverrides: DashboardQuantityOverrides) => void;
 }
 
-function RepEditor({ entry, step, onUpdate }: RepEditorProps) {
-  const [draft, setDraft] = useState(() => getRepDraftValue(entry, step));
+function QuantityEditors({ entry, step, onUpdate }: QuantityEditorsProps) {
+  const units = getEditableTrainingQuantityUnits(entry, step);
+
+  return (
+    <div className="quantity-editor-group">
+      {units.map((unit) => (
+        <QuantityEditor key={unit} entry={entry} step={step} unit={unit} onUpdate={onUpdate} />
+      ))}
+    </div>
+  );
+}
+
+interface QuantityEditorProps extends QuantityEditorsProps {
+  readonly unit: TrainingQuantityUnit;
+}
+
+function QuantityEditor({ entry, step, unit, onUpdate }: QuantityEditorProps) {
+  const [draft, setDraft] = useState(() => getQuantityDraftValue(entry, step, unit));
   const [feedback, setFeedback] = useState<'idle' | 'updated' | 'invalid'>('idle');
   const persistenceStatus = usePersistenceStatus();
-  const inputId = `reps-${entry.id}-${step.id}`;
-  const errorId = `${inputId}-error`;
+  const inputId = `quantity-${unit}-${entry.id}-${step.id}`;
+  const messageId = `${inputId}-message`;
+  const unitLabel = formatQuantityUnit(unit, 2);
+  const accessibleUnitLabel = `${unitLabel.charAt(0).toUpperCase()}${unitLabel.slice(1)}`;
   const feedbackMessage =
     feedback === 'invalid'
-      ? 'Enter a whole number from 0 to 500.'
+      ? getQuantityValidationMessage(unit)
       : feedback === 'updated'
         ? getPersistenceUpdateLabel(persistenceStatus)
         : '';
 
   const commit = (event: FocusEvent<HTMLInputElement>) => {
     const rawValue = event.currentTarget.value.trim();
+    const stepOverrides = entry.quantityOverrides[step.id];
+    const hasOverride = stepOverrides !== undefined && Object.hasOwn(stepOverrides, unit);
 
     if (rawValue === '') {
-      onUpdate(updateRepOverrides(entry, step.id, null));
-      setDraft(step.defaultReps === null ? '' : String(step.defaultReps));
+      if (!hasOverride && getTrainingQuantityValue(step, unit) === null) {
+        setFeedback('idle');
+        return;
+      }
+      onUpdate(updateQuantityOverrides(entry, step.id, unit, null));
+      const defaultValue = getTrainingQuantityValue(step, unit);
+      setDraft(defaultValue === null ? '' : String(defaultValue));
       setFeedback('updated');
       return;
     }
 
-    if (!/^\d+$/.test(rawValue)) {
-      setFeedback('invalid');
-      return;
-    }
-
     const value = Number(rawValue);
-    if (!isValidRepValue(value)) {
+    if (!isValidQuantityValue(unit, value)) {
       setFeedback('invalid');
       return;
     }
 
-    onUpdate(updateRepOverrides(entry, step.id, value));
+    if (value === getEffectiveTrainingQuantity(entry, step, unit)) {
+      setDraft(String(value));
+      setFeedback('idle');
+      return;
+    }
+
+    onUpdate(updateQuantityOverrides(entry, step.id, unit, value));
     setDraft(String(value));
     setFeedback('updated');
   };
 
   return (
-    <div className="rep-editor">
-      <label htmlFor={inputId}>Repetitions for {step.label}</label>
-      <div className="rep-input-wrap">
+    <div className="quantity-editor">
+      <label htmlFor={inputId}>
+        {accessibleUnitLabel} for {step.label}
+      </label>
+      <div className="quantity-input-wrap">
         <input
           id={inputId}
           type="number"
           min={0}
-          max={500}
-          step={1}
-          inputMode="numeric"
+          max={unit === 'repetitions' ? 500 : undefined}
+          step={unit === 'minutes' ? 'any' : 1}
+          inputMode={unit === 'minutes' ? 'decimal' : 'numeric'}
           value={draft}
-          aria-describedby={feedbackMessage.length > 0 ? errorId : undefined}
+          placeholder="Not specified"
+          aria-describedby={feedbackMessage.length > 0 ? messageId : undefined}
           aria-invalid={feedback === 'invalid'}
           onChange={(event) => {
             setDraft(event.target.value);
@@ -371,10 +410,14 @@ function RepEditor({ entry, step, onUpdate }: RepEditorProps) {
           }}
           onBlur={commit}
         />
-        <span aria-hidden="true">{formatRepUnit(step)}</span>
+        <span aria-hidden="true">{unitLabel}</span>
       </div>
       {feedbackMessage.length > 0 ? (
-        <span id={errorId} className={feedback === 'invalid' ? 'form-error' : 'field-status'}>
+        <span
+          id={messageId}
+          className={feedback === 'invalid' ? 'form-error' : 'field-status'}
+          role="status"
+        >
           {feedbackMessage}
         </span>
       ) : null}

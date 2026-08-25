@@ -4,15 +4,19 @@ import { persist, type StateStorage } from 'zustand/middleware';
 import {
   asTrainingSetId,
   createTrainingQuantities,
-  isValidRepetitionCount,
+  isValidTrainingQuantityValue,
+  TRAINING_QUANTITY_UNITS,
   TrainingValidationError,
   validateTrainingSetInput,
   type DashboardEntry,
+  type DashboardQuantityOverrides,
   type TrainingSection,
   type TrainingSet,
   type TrainingSetId,
   type TrainingSetInput,
   type TrainingStep,
+  type TrainingQuantityOverrides,
+  type TrainingQuantityUnit,
 } from '@kendo-menu/domain';
 
 import {
@@ -39,18 +43,23 @@ export {
   migratePersistedTrainingStateV0ToV1,
   migratePersistedTrainingStateV1ToV2,
   migratePersistedTrainingStateV2ToV3,
+  migratePersistedTrainingStateV3ToV4,
   migrateV0ToV1,
   migrateV1ToV2,
   migrateV2ToV3,
+  migrateV3ToV4,
   parsePersistedTrainingState,
   parsePersistedTrainingStateV0,
   parsePersistedTrainingStateV1,
   parsePersistedTrainingStateV2,
+  parsePersistedTrainingStateV3,
   TRAINING_STORE_PERSISTENCE_VERSION,
 } from './persistence';
 export type {
   LegacyPersistedTrainingState,
   LegacyPersistedTrainingStateV2,
+  LegacyPersistedTrainingStateV3,
+  LegacyDashboardEntry,
   LegacyTrainingSectionV2,
   LegacyTrainingSet,
   LegacyTrainingSetV2,
@@ -61,7 +70,7 @@ export type {
 } from './persistence';
 
 export interface DashboardEntryPatch {
-  readonly repOverrides?: Readonly<Record<string, number>>;
+  readonly quantityOverrides?: DashboardQuantityOverrides;
   readonly notes?: string;
 }
 
@@ -171,17 +180,39 @@ function createUniqueId(prefix: string, usedIds: Set<string>): string {
   return id;
 }
 
-function normalizeRepOverrides(value: unknown): Readonly<Record<string, number>> {
+function isTrainingQuantityUnit(value: string): value is TrainingQuantityUnit {
+  return TRAINING_QUANTITY_UNITS.some((unit) => unit === value);
+}
+
+function normalizeQuantityOverrides(value: unknown): DashboardQuantityOverrides {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new Error('Dashboard repetition overrides must be an object.');
+    throw new Error('Dashboard quantity overrides must be an object.');
   }
 
-  const entries: [string, number][] = [];
-  for (const [stepId, reps] of Object.entries(value)) {
-    if (!isValidRepetitionCount(reps)) {
-      throw new Error(`Dashboard repetition override for ${stepId} is invalid.`);
+  const entries: [string, TrainingQuantityOverrides][] = [];
+  for (const [stepId, stepValue] of Object.entries(value)) {
+    if (stepId.trim().length === 0) {
+      throw new Error('Dashboard quantity override step ids must not be blank.');
     }
-    entries.push([stepId, reps]);
+    if (typeof stepValue !== 'object' || stepValue === null || Array.isArray(stepValue)) {
+      throw new Error(`Dashboard quantity overrides for ${stepId} must be an object.`);
+    }
+
+    const unitEntries: [TrainingQuantityUnit, number][] = [];
+    for (const [unit, quantityValue] of Object.entries(stepValue)) {
+      if (
+        !isTrainingQuantityUnit(unit) ||
+        quantityValue === null ||
+        !isValidTrainingQuantityValue(unit, quantityValue)
+      ) {
+        throw new Error(`Dashboard ${unit} override for ${stepId} is invalid.`);
+      }
+      unitEntries.push([unit, quantityValue]);
+    }
+    if (unitEntries.length === 0) {
+      throw new Error(`Dashboard quantity overrides for ${stepId} must not be empty.`);
+    }
+    entries.push([stepId, Object.fromEntries(unitEntries)]);
   }
   return Object.fromEntries(entries);
 }
@@ -231,7 +262,7 @@ function createDashboardEntry(trainingSetId: TrainingSetId, usedIds: Set<string>
   return {
     id: createUniqueId('dashboard-entry', usedIds),
     trainingSetId,
-    repOverrides: {},
+    quantityOverrides: {},
     notes: '',
     createdAt: new Date().toISOString(),
   };
@@ -257,10 +288,10 @@ function createValidatedTrainingStore(
           return entryId;
         },
         updateDashboardEntry: (entryId, patch) => {
-          const repOverrides =
-            patch.repOverrides === undefined
+          const quantityOverrides =
+            patch.quantityOverrides === undefined
               ? undefined
-              : normalizeRepOverrides(patch.repOverrides);
+              : normalizeQuantityOverrides(patch.quantityOverrides);
           if (patch.notes !== undefined && typeof patch.notes !== 'string') {
             throw new Error('Dashboard notes must be a string.');
           }
@@ -270,7 +301,7 @@ function createValidatedTrainingStore(
               entry.id === entryId
                 ? {
                     ...entry,
-                    ...(repOverrides === undefined ? {} : { repOverrides }),
+                    ...(quantityOverrides === undefined ? {} : { quantityOverrides }),
                     ...(patch.notes === undefined ? {} : { notes: patch.notes }),
                   }
                 : entry,

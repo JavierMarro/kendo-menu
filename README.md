@@ -42,8 +42,8 @@ pnpm format
 
 Add the initial curated drills in
 `packages/domain/src/default-training-sets.ts`. Every step needs a stable id because dashboard
-rep overrides are keyed by step id. The custom-set builder has a reserved feature boundary at
-`apps/web/src/features/custom-sets`.
+quantity overrides are keyed first by step id and then by unit. The custom-set builder has a
+reserved feature boundary at `apps/web/src/features/custom-sets`.
 
 See [AGENTS.md](./AGENTS.md) for the working contract used by people and coding agents.
 

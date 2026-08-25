@@ -14,7 +14,9 @@ import {
   createTrainingStoreAsync,
   inspectTrainingStorage,
   migratePersistedTrainingStateV2ToV3,
+  migratePersistedTrainingStateV3ToV4,
   TrainingStoreBootstrapError,
+  type LegacyDashboardEntry,
   type StateStorage,
 } from './index';
 
@@ -68,6 +70,14 @@ const LEGACY_DASHBOARD_ENTRY = {
   repOverrides: { 'okuri-ashi': 0 },
   notes: 'Stay relaxed.',
   createdAt: '2026-08-19T10:00:00.000Z',
+} satisfies LegacyDashboardEntry;
+
+const MIGRATED_DASHBOARD_ENTRY = {
+  id: LEGACY_DASHBOARD_ENTRY.id,
+  trainingSetId: LEGACY_DASHBOARD_ENTRY.trainingSetId,
+  quantityOverrides: { 'okuri-ashi': { repetitions: 0 } },
+  notes: LEGACY_DASHBOARD_ENTRY.notes,
+  createdAt: LEGACY_DASHBOARD_ENTRY.createdAt,
 } satisfies DashboardEntry;
 
 class MemoryStorage implements StateStorage {
@@ -141,7 +151,7 @@ function requireStoredValue(storage: StateStorage): string {
 }
 
 function legacyState(): {
-  readonly dashboardEntries: readonly DashboardEntry[];
+  readonly dashboardEntries: readonly LegacyDashboardEntry[];
   readonly customTrainingSets: readonly unknown[];
 } {
   return {
@@ -151,7 +161,7 @@ function legacyState(): {
 }
 
 function nestedVersion2State(): {
-  readonly dashboardEntries: readonly DashboardEntry[];
+  readonly dashboardEntries: readonly LegacyDashboardEntry[];
   readonly customTrainingSets: readonly unknown[];
 } {
   return {
@@ -245,38 +255,57 @@ describe('createTrainingStore', () => {
     expect(store.getState().dashboardEntries[1]?.notes).toBe('');
   });
 
-  it('preserves sparse override keys and distinguishes zero from missing', () => {
+  it('preserves sparse quantity override keys and distinguishes zero from missing', () => {
     const store = createTrainingStore({ storage: new MemoryStorage(), storageKey: STORAGE_KEY });
     const setId = store.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
     const entryId = store.getState().addToDashboard(setId);
     const overrides = Object.fromEntries([
-      ['__proto__', 0],
-      ['', 500],
+      ['__proto__', { repetitions: 0 }],
+      ['step-500', { repetitions: 500 }],
     ]);
 
-    store.getState().updateDashboardEntry(entryId, { repOverrides: overrides });
-    const storedOverrides = store.getState().dashboardEntries[0]?.repOverrides;
+    store.getState().updateDashboardEntry(entryId, { quantityOverrides: overrides });
+    const storedOverrides = store.getState().dashboardEntries[0]?.quantityOverrides;
 
     expect(Object.hasOwn(storedOverrides ?? {}, '__proto__')).toBe(true);
-    expect(Object.hasOwn(storedOverrides ?? {}, '')).toBe(true);
-    expect(storedOverrides?.['__proto__']).toBe(0);
-    expect(storedOverrides?.['']).toBe(500);
+    expect(Object.hasOwn(storedOverrides ?? {}, 'step-500')).toBe(true);
+    expect(storedOverrides?.['__proto__']).toEqual({ repetitions: 0 });
+    expect(storedOverrides?.['step-500']).toEqual({ repetitions: 500 });
     expect(Object.hasOwn(storedOverrides ?? {}, 'missing-step')).toBe(false);
   });
 
-  it('accepts zero and 500 overrides and rejects non-boundary values', () => {
+  it('accepts supported quantity overrides and rejects malformed values', () => {
     const store = createTrainingStore({ storage: new MemoryStorage(), storageKey: STORAGE_KEY });
     const setId = store.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
     const entryId = store.getState().addToDashboard(setId);
 
-    store.getState().updateDashboardEntry(entryId, { repOverrides: { step: 0 } });
-    expect(store.getState().dashboardEntries[0]?.repOverrides).toEqual({ step: 0 });
-    store.getState().updateDashboardEntry(entryId, { repOverrides: { step: 500 } });
-    expect(store.getState().dashboardEntries[0]?.repOverrides).toEqual({ step: 500 });
+    const validOverrides = {
+      step: { repetitions: 0, sets: 2, minutes: 0.5, rounds: 3 },
+    } as const;
+    store.getState().updateDashboardEntry(entryId, { quantityOverrides: validOverrides });
+    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual(validOverrides);
+    store.getState().updateDashboardEntry(entryId, {
+      quantityOverrides: { step: { repetitions: 500 } },
+    });
+    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+      step: { repetitions: 500 },
+    });
     expect(() =>
-      store.getState().updateDashboardEntry(entryId, { repOverrides: { step: 501 } }),
+      store
+        .getState()
+        .updateDashboardEntry(entryId, { quantityOverrides: { step: { repetitions: 501 } } }),
     ).toThrow();
-    expect(store.getState().dashboardEntries[0]?.repOverrides).toEqual({ step: 500 });
+    expect(() =>
+      store
+        .getState()
+        .updateDashboardEntry(entryId, { quantityOverrides: { step: { sets: 1.5 } } }),
+    ).toThrow();
+    expect(() =>
+      store.getState().updateDashboardEntry(entryId, { quantityOverrides: { step: {} } }),
+    ).toThrow();
+    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+      step: { repetitions: 500 },
+    });
   });
 
   it('removes and restores an entry with exact position and data', () => {
@@ -286,7 +315,7 @@ describe('createTrainingStore', () => {
     store.getState().addToDashboard(setId);
     store.getState().updateDashboardEntry(firstId, {
       notes: 'Keep this note.',
-      repOverrides: { 'generated-step': 0 },
+      quantityOverrides: { 'generated-step': { repetitions: 0 } },
     });
     const before = [...store.getState().dashboardEntries];
     const removed = store.getState().removeFromDashboard(firstId);
@@ -299,7 +328,7 @@ describe('createTrainingStore', () => {
     expect(store.getState().dashboardEntries).toEqual(before);
   });
 
-  it('round-trips the quantity-aware nested state as version 3', () => {
+  it('round-trips the quantity-aware nested state as version 4', () => {
     const storage = new MemoryStorage();
     const firstStore = createTrainingStore({ storage, storageKey: STORAGE_KEY });
     firstStore.getState().createCustomTrainingSetAndAddToDashboard(CUSTOM_SET_INPUT);
@@ -308,7 +337,7 @@ describe('createTrainingStore', () => {
       customTrainingSets: firstStore.getState().customTrainingSets,
     };
 
-    expect(parseJson(requireStoredValue(storage))).toEqual({ state: persisted, version: 3 });
+    expect(parseJson(requireStoredValue(storage))).toEqual({ state: persisted, version: 4 });
     const restoredStore = createTrainingStore({ storage, storageKey: STORAGE_KEY });
     expect(restoredStore.getState().dashboardEntries).toEqual(persisted.dashboardEntries);
     expect(restoredStore.getState().customTrainingSets).toEqual(persisted.customTrainingSets);
@@ -354,7 +383,7 @@ describe('createTrainingStore', () => {
     const entry = store.getState().dashboardEntries[0];
     const trainingSet = store.getState().customTrainingSets[0];
 
-    expect(entry).toEqual(LEGACY_DASHBOARD_ENTRY);
+    expect(entry).toEqual(MIGRATED_DASHBOARD_ENTRY);
     expect(trainingSet).toEqual({
       id: LEGACY_CUSTOM_SET.id,
       name: LEGACY_CUSTOM_SET.name,
@@ -394,8 +423,8 @@ describe('createTrainingStore', () => {
         })),
       },
     ]);
-    expect(store.getState().dashboardEntries).toEqual([LEGACY_DASHBOARD_ENTRY]);
-    expect(parseJson(requireStoredValue(storage))).toMatchObject({ version: 3 });
+    expect(store.getState().dashboardEntries).toEqual([MIGRATED_DASHBOARD_ENTRY]);
+    expect(parseJson(requireStoredValue(storage))).toMatchObject({ version: 4 });
   });
 
   it('migrates version 2 nested exercises to explicit quantity units', () => {
@@ -406,7 +435,7 @@ describe('createTrainingStore', () => {
       status: 'migrated',
       kind: 'migrated',
       fromVersion: 2,
-      version: 3,
+      version: 4,
     });
 
     const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
@@ -414,7 +443,8 @@ describe('createTrainingStore', () => {
       ...LEGACY_CUSTOM_SET.steps[0],
       quantities: repetitionQuantities(20),
     });
-    expect(parseJson(requireStoredValue(storage))).toMatchObject({ version: 3 });
+    expect(store.getState().dashboardEntries).toEqual([MIGRATED_DASHBOARD_ENTRY]);
+    expect(parseJson(requireStoredValue(storage))).toMatchObject({ version: 4 });
   });
 
   it.each(['repetitions', 'sets', 'minutes', 'rounds'] as const)(
@@ -452,6 +482,51 @@ describe('createTrainingStore', () => {
       expect(quantities?.filter((quantity) => quantity.value !== null)).toHaveLength(1);
     },
   );
+
+  it('migrates version 3 overrides into each exercise declared unit', () => {
+    const version3State = migratePersistedTrainingStateV2ToV3({
+      dashboardEntries: [
+        {
+          ...LEGACY_DASHBOARD_ENTRY,
+          repOverrides: { 'unit-step': 0, 'missing-step': 5 },
+        },
+      ],
+      customTrainingSets: [
+        {
+          id: LEGACY_CUSTOM_SET.id,
+          name: LEGACY_CUSTOM_SET.name,
+          description: LEGACY_CUSTOM_SET.description,
+          category: 'custom',
+          sections: [
+            {
+              id: 'unit-section',
+              label: 'Unit section',
+              steps: [
+                {
+                  id: 'unit-step',
+                  label: 'Unit step',
+                  defaultReps: 2,
+                  repUnit: 'minutes',
+                },
+              ],
+            },
+          ],
+          isBuiltIn: false,
+        },
+      ],
+    });
+
+    expect(migratePersistedTrainingStateV3ToV4(version3State).dashboardEntries[0]).toEqual({
+      id: LEGACY_DASHBOARD_ENTRY.id,
+      trainingSetId: LEGACY_DASHBOARD_ENTRY.trainingSetId,
+      quantityOverrides: {
+        'unit-step': { minutes: 0 },
+        'missing-step': { repetitions: 5 },
+      },
+      notes: LEGACY_DASHBOARD_ENTRY.notes,
+      createdAt: LEGACY_DASHBOARD_ENTRY.createdAt,
+    });
+  });
 
   it('normalizes a legacy authored category to custom during migration', () => {
     const storage = new MemoryStorage(
@@ -501,7 +576,7 @@ describe('createTrainingStore', () => {
           },
         ],
       },
-      3,
+      4,
     );
     const storage = new MemoryStorage(raw);
 
@@ -553,14 +628,14 @@ describe('createTrainingStore', () => {
       status: 'migrated',
       kind: 'migrated',
       fromVersion: 1,
-      version: 3,
+      version: 4,
     });
 
-    const currentRaw = serializeState({ dashboardEntries: [], customTrainingSets: [] }, 3);
+    const currentRaw = serializeState({ dashboardEntries: [], customTrainingSets: [] }, 4);
     expect(classifyTrainingStorageValue(currentRaw)).toMatchObject({
       status: 'ready',
       kind: 'ready',
-      version: 3,
+      version: 4,
     });
   });
 
@@ -618,7 +693,36 @@ describe('createTrainingStore', () => {
   });
 
   it('rejects current persisted exercises that omit explicit quantities', () => {
-    const raw = serializeState(nestedVersion2State(), 3);
+    const raw = serializeState(
+      { ...nestedVersion2State(), dashboardEntries: [] },
+      4,
+    );
+    const storage = new MemoryStorage(raw);
+
+    expect(classifyTrainingStorageValue(raw)).toEqual({
+      status: 'corrupt',
+      kind: 'corrupt',
+      reason: 'invalid-domain',
+    });
+    expect(() => createTrainingStore({ storage, storageKey: STORAGE_KEY })).toThrow(
+      TrainingStoreBootstrapError,
+    );
+    expect(requireStoredValue(storage)).toBe(raw);
+  });
+
+  it('rejects malformed persisted quantity overrides', () => {
+    const raw = serializeState(
+      {
+        dashboardEntries: [
+          {
+            ...MIGRATED_DASHBOARD_ENTRY,
+            quantityOverrides: { 'okuri-ashi': { seconds: 10 } },
+          },
+        ],
+        customTrainingSets: [],
+      },
+      4,
+    );
     const storage = new MemoryStorage(raw);
 
     expect(classifyTrainingStorageValue(raw)).toEqual({

@@ -19,6 +19,7 @@ export {
 } from './types';
 export type {
   DashboardEntry,
+  DashboardQuantityOverrides,
   CustomTrainingSectionInput,
   CustomTrainingSetInput,
   CustomTrainingStepInput,
@@ -26,6 +27,7 @@ export type {
   RepUnit,
   TrainingQuantities,
   TrainingQuantity,
+  TrainingQuantityOverrides,
   TrainingQuantityUnit,
   TrainingQuantityValues,
   TrainingSection,

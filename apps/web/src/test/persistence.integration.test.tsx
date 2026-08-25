@@ -125,9 +125,8 @@ describe('browser persistence recovery', () => {
     if (seniorHighSchoolCard === null) {
       throw new Error('Expected the senior-high researched drill to render in a library card.');
     }
-    await user.click(
-      within(seniorHighSchoolCard).getByRole('button', { name: 'Add to dashboard' }),
-    );
+    await user.click(within(seniorHighSchoolCard).getByRole('link', { name: 'View drill' }));
+    await user.click(screen.getByRole('button', { name: 'Add to dashboard' }));
     await waitFor(() => {
       expect(
         within(appBanner).getByRole('status', { name: 'Changes are not being saved' }),
@@ -150,18 +149,6 @@ describe('browser persistence recovery', () => {
     });
     expect(bannerStatus).toBeVisible();
     expect(bannerStatus).toHaveClass('is-error');
-    const dashboardHeader = screen
-      .getByRole('heading', { name: 'Your dashboard' })
-      .closest('header');
-    if (dashboardHeader === null) {
-      throw new Error('The dashboard heading is not inside its page header.');
-    }
-    const dashboardStatus = within(dashboardHeader).getByRole('status', {
-      name: 'Changes are not being saved',
-    });
-    expect(dashboardStatus).toBeVisible();
-    expect(dashboardStatus).toHaveClass('is-error');
-
     const notes = screen.getByLabelText('Practice notes');
     await user.type(notes, 'Quota test note.');
     await user.tab();

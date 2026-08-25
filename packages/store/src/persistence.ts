@@ -6,10 +6,12 @@ import {
   isValidTrainingQuantityValue,
   TRAINING_QUANTITY_UNITS,
   type DashboardEntry,
+  type DashboardQuantityOverrides,
   type DrillCategory,
   type RepUnit,
   type TrainingQuantities,
   type TrainingQuantity,
+  type TrainingQuantityOverrides,
   type TrainingQuantityUnit,
   type TrainingSection,
   type TrainingSet,
@@ -22,11 +24,19 @@ import {
   type StorageValue,
 } from 'zustand/middleware';
 
-export const TRAINING_STORE_PERSISTENCE_VERSION = 3;
+export const TRAINING_STORE_PERSISTENCE_VERSION = 4;
 
 export interface PersistedTrainingState {
   readonly dashboardEntries: readonly DashboardEntry[];
   readonly customTrainingSets: readonly TrainingSet[];
+}
+
+export interface LegacyDashboardEntry {
+  readonly id: string;
+  readonly trainingSetId: TrainingSet['id'];
+  readonly repOverrides: Readonly<Record<string, number>>;
+  readonly notes: string;
+  readonly createdAt: string;
 }
 
 export interface LegacyTrainingSet {
@@ -62,17 +72,25 @@ export interface LegacyTrainingSetV2 {
 }
 
 export interface LegacyPersistedTrainingStateV2 {
-  readonly dashboardEntries: readonly DashboardEntry[];
+  readonly dashboardEntries: readonly LegacyDashboardEntry[];
   readonly customTrainingSets: readonly LegacyTrainingSetV2[];
 }
 
 export interface LegacyPersistedTrainingState {
-  readonly dashboardEntries: readonly DashboardEntry[];
+  readonly dashboardEntries: readonly LegacyDashboardEntry[];
   readonly customTrainingSets: readonly LegacyTrainingSet[];
 }
 
+export interface LegacyPersistedTrainingStateV3 {
+  readonly dashboardEntries: readonly LegacyDashboardEntry[];
+  readonly customTrainingSets: readonly TrainingSet[];
+}
+
 export type PersistedStorageState =
-  PersistedTrainingState | LegacyPersistedTrainingStateV2 | LegacyPersistedTrainingState;
+  | PersistedTrainingState
+  | LegacyPersistedTrainingStateV3
+  | LegacyPersistedTrainingStateV2
+  | LegacyPersistedTrainingState;
 
 export type TrainingStorageInspection =
   | {
@@ -88,7 +106,7 @@ export type TrainingStorageInspection =
   | {
       readonly status: 'migrated';
       readonly kind: 'migrated';
-      readonly fromVersion: 0 | 1 | 2;
+      readonly fromVersion: 0 | 1 | 2 | 3;
       readonly version: typeof TRAINING_STORE_PERSISTENCE_VERSION;
       readonly state: PersistedTrainingState;
     }
@@ -320,7 +338,7 @@ function parseRepOverrides(value: unknown): Readonly<Record<string, number>> | n
   return Object.fromEntries(repOverrides);
 }
 
-function parseDashboardEntry(value: unknown): DashboardEntry | null {
+function parseLegacyDashboardEntry(value: unknown): LegacyDashboardEntry | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -345,6 +363,71 @@ function parseDashboardEntry(value: unknown): DashboardEntry | null {
     id,
     trainingSetId: asTrainingSetId(trainingSetId),
     repOverrides,
+    notes,
+    createdAt,
+  };
+}
+
+function parseTrainingQuantityOverrides(value: unknown): TrainingQuantityOverrides | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const entries: [TrainingQuantityUnit, number][] = [];
+  for (const [unit, quantityValue] of Object.entries(value)) {
+    if (
+      !isTrainingQuantityUnit(unit) ||
+      quantityValue === null ||
+      !isValidTrainingQuantityValue(unit, quantityValue)
+    ) {
+      return null;
+    }
+    entries.push([unit, quantityValue]);
+  }
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
+}
+
+function parseDashboardQuantityOverrides(value: unknown): DashboardQuantityOverrides | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const entries: [string, TrainingQuantityOverrides][] = [];
+  for (const [stepId, stepOverrides] of Object.entries(value)) {
+    const parsedOverrides = parseTrainingQuantityOverrides(stepOverrides);
+    if (stepId.trim().length === 0 || parsedOverrides === null) {
+      return null;
+    }
+    entries.push([stepId, parsedOverrides]);
+  }
+  return Object.fromEntries(entries);
+}
+
+function parseDashboardEntry(value: unknown): DashboardEntry | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const id = value['id'];
+  const trainingSetId = value['trainingSetId'];
+  const quantityOverrides = parseDashboardQuantityOverrides(value['quantityOverrides']);
+  const notes = value['notes'];
+  const createdAt = value['createdAt'];
+
+  if (
+    !isNonBlankString(id) ||
+    !isNonBlankString(trainingSetId) ||
+    quantityOverrides === null ||
+    typeof notes !== 'string' ||
+    typeof createdAt !== 'string'
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    trainingSetId: asTrainingSetId(trainingSetId),
+    quantityOverrides,
     notes,
     createdAt,
   };
@@ -506,7 +589,7 @@ function parseLegacyCustomTrainingSetV2(value: unknown): LegacyTrainingSetV2 | n
     : null;
 }
 
-function validateUniqueEntryIds(entries: readonly DashboardEntry[]): boolean {
+function validateUniqueEntryIds(entries: readonly { readonly id: string }[]): boolean {
   const ids = new Set<string>();
   for (const entry of entries) {
     if (ids.has(entry.id)) {
@@ -558,7 +641,7 @@ export function parsePersistedTrainingStateV1(value: unknown): LegacyPersistedTr
     return null;
   }
 
-  const dashboardEntries = parseArray(value['dashboardEntries'], parseDashboardEntry);
+  const dashboardEntries = parseArray(value['dashboardEntries'], parseLegacyDashboardEntry);
   const customTrainingSets = parseArray(value['customTrainingSets'], parseLegacyTrainingSet);
   if (
     dashboardEntries === null ||
@@ -580,11 +663,33 @@ export function parsePersistedTrainingStateV2(
     return null;
   }
 
-  const dashboardEntries = parseArray(value['dashboardEntries'], parseDashboardEntry);
+  const dashboardEntries = parseArray(value['dashboardEntries'], parseLegacyDashboardEntry);
   const customTrainingSets = parseArray(
     value['customTrainingSets'],
     parseLegacyCustomTrainingSetV2,
   );
+  if (
+    dashboardEntries === null ||
+    customTrainingSets === null ||
+    !validateUniqueEntryIds(dashboardEntries) ||
+    !validateUniqueSetIds(customTrainingSets) ||
+    !validateNoCuratedSetIdCollisions(customTrainingSets)
+  ) {
+    return null;
+  }
+
+  return { dashboardEntries, customTrainingSets };
+}
+
+export function parsePersistedTrainingStateV3(
+  value: unknown,
+): LegacyPersistedTrainingStateV3 | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const dashboardEntries = parseArray(value['dashboardEntries'], parseLegacyDashboardEntry);
+  const customTrainingSets = parseArray(value['customTrainingSets'], parseCustomTrainingSet);
   if (
     dashboardEntries === null ||
     customTrainingSets === null ||
@@ -664,7 +769,9 @@ function migrateLegacyTrainingStepV2ToV3(step: LegacyTrainingStep): TrainingStep
   return { ...step, quantities };
 }
 
-export function migratePersistedTrainingStateV2ToV3(value: unknown): PersistedTrainingState {
+export function migratePersistedTrainingStateV2ToV3(
+  value: unknown,
+): LegacyPersistedTrainingStateV3 {
   const parsed = parsePersistedTrainingStateV2(value);
   if (parsed === null) {
     throw new Error('Training-store version 2 state is invalid.');
@@ -684,7 +791,7 @@ export function migratePersistedTrainingStateV2ToV3(value: unknown): PersistedTr
   }));
 
   const migrated = { dashboardEntries: parsed.dashboardEntries, customTrainingSets };
-  const migratedState = parsePersistedTrainingState(migrated);
+  const migratedState = parsePersistedTrainingStateV3(migrated);
   if (migratedState === null) {
     throw new Error('Training-store version 2 migration produced invalid state.');
   }
@@ -692,6 +799,64 @@ export function migratePersistedTrainingStateV2ToV3(value: unknown): PersistedTr
 }
 
 export const migrateV2ToV3 = migratePersistedTrainingStateV2ToV3;
+
+function collectKnownLegacyOverrideUnits(
+  customTrainingSets: readonly TrainingSet[],
+): ReadonlyMap<string, TrainingQuantityUnit> {
+  const units = new Map<string, TrainingQuantityUnit>();
+  for (const trainingSet of [...DEFAULT_TRAINING_SETS, ...customTrainingSets]) {
+    for (const section of trainingSet.sections) {
+      for (const step of section.steps) {
+        if (isTrainingQuantityUnit(step.repUnit)) {
+          units.set(step.id, step.repUnit);
+        }
+      }
+    }
+  }
+  return units;
+}
+
+function migrateLegacyDashboardEntryV3ToV4(
+  entry: LegacyDashboardEntry,
+  unitsByStepId: ReadonlyMap<string, TrainingQuantityUnit>,
+): DashboardEntry {
+  const quantityOverrideEntries: [string, TrainingQuantityOverrides][] = Object.entries(
+    entry.repOverrides,
+  ).map(([stepId, value]) => {
+    const unit = unitsByStepId.get(stepId) ?? 'repetitions';
+    return [stepId, { [unit]: value }];
+  });
+
+  return {
+    id: entry.id,
+    trainingSetId: entry.trainingSetId,
+    quantityOverrides: Object.fromEntries(quantityOverrideEntries),
+    notes: entry.notes,
+    createdAt: entry.createdAt,
+  };
+}
+
+export function migratePersistedTrainingStateV3ToV4(value: unknown): PersistedTrainingState {
+  const parsed = parsePersistedTrainingStateV3(value);
+  if (parsed === null) {
+    throw new Error('Training-store version 3 state is invalid.');
+  }
+
+  const unitsByStepId = collectKnownLegacyOverrideUnits(parsed.customTrainingSets);
+  const migrated = {
+    dashboardEntries: parsed.dashboardEntries.map((entry) =>
+      migrateLegacyDashboardEntryV3ToV4(entry, unitsByStepId),
+    ),
+    customTrainingSets: parsed.customTrainingSets,
+  };
+  const migratedState = parsePersistedTrainingState(migrated);
+  if (migratedState === null) {
+    throw new Error('Training-store version 3 migration produced invalid state.');
+  }
+  return migratedState;
+}
+
+export const migrateV3ToV4 = migratePersistedTrainingStateV3ToV4;
 
 export function migratePersistedTrainingState(
   persistedState: unknown,
@@ -701,20 +866,26 @@ export function migratePersistedTrainingState(
     case 0: {
       const stateV1 = migratePersistedTrainingStateV0ToV1(persistedState);
       const stateV2 = migratePersistedTrainingStateV1ToV2(stateV1);
-      return migratePersistedTrainingStateV2ToV3(stateV2);
+      const stateV3 = migratePersistedTrainingStateV2ToV3(stateV2);
+      return migratePersistedTrainingStateV3ToV4(stateV3);
     }
     case 1: {
       const stateV2 = migratePersistedTrainingStateV1ToV2(persistedState);
-      return migratePersistedTrainingStateV2ToV3(stateV2);
+      const stateV3 = migratePersistedTrainingStateV2ToV3(stateV2);
+      return migratePersistedTrainingStateV3ToV4(stateV3);
     }
-    case 2:
-      return migratePersistedTrainingStateV2ToV3(persistedState);
+    case 2: {
+      const stateV3 = migratePersistedTrainingStateV2ToV3(persistedState);
+      return migratePersistedTrainingStateV3ToV4(stateV3);
+    }
+    case 3:
+      return migratePersistedTrainingStateV3ToV4(persistedState);
     case TRAINING_STORE_PERSISTENCE_VERSION: {
-      const stateV3 = parsePersistedTrainingState(persistedState);
-      if (stateV3 === null) {
-        throw new Error('Training-store version 3 state is invalid.');
+      const stateV4 = parsePersistedTrainingState(persistedState);
+      if (stateV4 === null) {
+        throw new Error('Training-store version 4 state is invalid.');
       }
-      return stateV3;
+      return stateV4;
     }
     default:
       throw new Error(`Unsupported training-store persistence version: ${String(version)}`);
@@ -761,6 +932,13 @@ function parseStorageValue(value: unknown): StorageValue<PersistedStorageState> 
       const legacyState = parsePersistedTrainingStateV2(value['state']);
       if (legacyState === null) {
         throw new Error('Training-store version 2 persistence data is invalid.');
+      }
+      return { state: legacyState, version };
+    }
+    case 3: {
+      const legacyState = parsePersistedTrainingStateV3(value['state']);
+      if (legacyState === null) {
+        throw new Error('Training-store version 3 persistence data is invalid.');
       }
       return { state: legacyState, version };
     }
@@ -819,6 +997,7 @@ function classifyParsedEnvelope(value: unknown): TrainingStorageInspection {
       case 0:
       case 1:
       case 2:
+      case 3:
         return {
           status: 'migrated',
           kind: 'migrated',

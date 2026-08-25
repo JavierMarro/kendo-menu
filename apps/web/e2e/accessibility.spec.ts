@@ -29,6 +29,16 @@ test.describe('accessibility and responsive layout', () => {
     );
     expect(libraryBlockingViolations).toEqual([]);
 
+    await page.goto('/app/library/international-dojo-2-hour-session');
+    const firstSection = page.locator('details.detail-section').first();
+    await expect(firstSection).not.toHaveAttribute('open', '');
+    await firstSection.locator('summary').click();
+    const detailResults = await new AxeBuilder({ page }).analyze();
+    const detailBlockingViolations = detailResults.violations.filter(
+      ({ impact }) => impact === 'critical' || impact === 'serious',
+    );
+    expect(detailBlockingViolations).toEqual([]);
+
     await page.goto('/app/drills/new');
     const builderResults = await new AxeBuilder({ page }).analyze();
     const builderBlockingViolations = builderResults.violations.filter(
@@ -49,19 +59,9 @@ test.describe('accessibility and responsive layout', () => {
     for (const width of [320, 800, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/app');
-      if (width <= 760) {
+      if (width <= 960) {
         await page.getByRole('button', { name: 'Open navigation' }).click();
         await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
-      } else if (width <= 840) {
-        await expect(page.locator('.brand-name')).toBeHidden();
-        await expect(page.getByRole('button', { name: 'Open navigation' })).toBeHidden();
-        await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
-        const navWhiteSpaces = await page
-          .locator('.nav-item')
-          .evaluateAll((elements) =>
-            elements.map((element) => getComputedStyle(element).whiteSpace),
-          );
-        expect(navWhiteSpaces.every((whiteSpace) => whiteSpace === 'nowrap')).toBe(true);
       } else {
         await expect(page.locator('.brand-name')).toBeVisible();
       }
@@ -88,12 +88,9 @@ test.describe('accessibility and responsive layout', () => {
           left: rect.left,
           right: window.innerWidth - rect.right,
           width: rect.width,
-          bodyBackground: getComputedStyle(document.body).backgroundColor,
-          navigationBackground: getComputedStyle(navigation).backgroundColor,
         };
       });
 
-      expect(noticeMetrics.navigationBackground).not.toBe(noticeMetrics.bodyBackground);
       if (width > 840) {
         expect(Math.abs(noticeMetrics.width - width * 0.6)).toBeLessThanOrEqual(1);
         expect(

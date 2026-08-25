@@ -3,7 +3,7 @@
 ## Product and repository
 
 KendoMenu is a local-first kendo training planner. The web milestone lets practitioners browse
-curated drills, build dashboards and custom training sets, adjust repetitions, and attach notes;
+curated drills, build dashboards and custom training sets, adjust exercise quantities, and attach notes;
 free-tier data stays in browser storage. Mobile may later reuse domain and state contracts; do not
 add server, accounts, sync, paid tiers, or initialize `apps/mobile` until shared contracts are stable.
 
@@ -47,7 +47,7 @@ keep one `pnpm-lock.yaml`, and do not mix Bun/npm/Yarn commands into the reposit
 - Keep training concepts in `packages/domain`, not React components. Put curated sets in
   `packages/domain/src/default-training-sets.ts`; every set and step needs a stable id.
 - Built-ins are immutable and use `isBuiltIn: true`; user-created data uses the same model with
-  `isBuiltIn: false`. Dashboard repetition overrides are keyed by step id.
+  `isBuiltIn: false`. Dashboard quantity overrides are keyed first by step id and then by unit.
 - Use Zustand `persist` for this small LocalStorage dataset, with an injected storage adapter so
   Expo can later provide AsyncStorage or another adapter.
 - Treat persisted JSON as untrusted: version and migrate shape changes. Do not store secrets,
