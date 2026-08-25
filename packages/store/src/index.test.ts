@@ -4,6 +4,7 @@ import {
   DEFAULT_TRAINING_SETS,
   asTrainingSetId,
   type DashboardEntry,
+  type TrainingQuantityUnit,
   type TrainingSetInput,
 } from '@kendo-menu/domain';
 
@@ -12,6 +13,7 @@ import {
   createTrainingStore,
   createTrainingStoreAsync,
   inspectTrainingStorage,
+  migratePersistedTrainingStateV2ToV3,
   TrainingStoreBootstrapError,
   type StateStorage,
 } from './index';
@@ -118,6 +120,18 @@ function parseJson(value: string): unknown {
   return JSON.parse(value) as unknown;
 }
 
+function repetitionQuantities(value: number | null): readonly {
+  readonly unit: 'repetitions' | 'sets' | 'minutes' | 'rounds';
+  readonly value: number | null;
+}[] {
+  return [
+    { unit: 'repetitions', value },
+    { unit: 'sets', value: null },
+    { unit: 'minutes', value: null },
+    { unit: 'rounds', value: null },
+  ];
+}
+
 function requireStoredValue(storage: StateStorage): string {
   const value = storage.getItem(STORAGE_KEY);
   if (typeof value !== 'string') {
@@ -136,6 +150,31 @@ function legacyState(): {
   };
 }
 
+function nestedVersion2State(): {
+  readonly dashboardEntries: readonly DashboardEntry[];
+  readonly customTrainingSets: readonly unknown[];
+} {
+  return {
+    dashboardEntries: [LEGACY_DASHBOARD_ENTRY],
+    customTrainingSets: [
+      {
+        id: LEGACY_CUSTOM_SET.id,
+        name: LEGACY_CUSTOM_SET.name,
+        description: LEGACY_CUSTOM_SET.description,
+        category: 'custom',
+        sections: [
+          {
+            id: 'custom-legacy-exercises',
+            label: 'Exercises',
+            steps: LEGACY_CUSTOM_SET.steps,
+          },
+        ],
+        isBuiltIn: false,
+      },
+    ],
+  };
+}
+
 describe('createTrainingStore', () => {
   it('creates nested custom sets with generated unique ids and repetitions', () => {
     const store = createTrainingStore({ storage: new MemoryStorage(), storageKey: STORAGE_KEY });
@@ -148,6 +187,7 @@ describe('createTrainingStore', () => {
       'Closing',
     ]);
     expect(trainingSet?.sections[0]?.steps[0]?.defaultReps).toBe(0);
+    expect(trainingSet?.sections[0]?.steps[0]?.quantities).toEqual(repetitionQuantities(0));
     expect(trainingSet?.sections[1]?.steps[0]?.defaultReps).toBe(500);
     expect(trainingSet?.sections.flatMap((section) => section.steps)).toEqual([
       expect.objectContaining({ label: 'Okuri-ashi', repUnit: 'repetitions' }),
@@ -259,7 +299,7 @@ describe('createTrainingStore', () => {
     expect(store.getState().dashboardEntries).toEqual(before);
   });
 
-  it('round-trips the nested state as version 2', () => {
+  it('round-trips the quantity-aware nested state as version 3', () => {
     const storage = new MemoryStorage();
     const firstStore = createTrainingStore({ storage, storageKey: STORAGE_KEY });
     firstStore.getState().createCustomTrainingSetAndAddToDashboard(CUSTOM_SET_INPUT);
@@ -268,7 +308,7 @@ describe('createTrainingStore', () => {
       customTrainingSets: firstStore.getState().customTrainingSets,
     };
 
-    expect(parseJson(requireStoredValue(storage))).toEqual({ state: persisted, version: 2 });
+    expect(parseJson(requireStoredValue(storage))).toEqual({ state: persisted, version: 3 });
     const restoredStore = createTrainingStore({ storage, storageKey: STORAGE_KEY });
     expect(restoredStore.getState().dashboardEntries).toEqual(persisted.dashboardEntries);
     expect(restoredStore.getState().customTrainingSets).toEqual(persisted.customTrainingSets);
@@ -325,7 +365,15 @@ describe('createTrainingStore', () => {
         {
           id: 'section',
           label: 'Section',
-          steps: [{ id: 'step', label: 'Step', defaultReps: 0, repUnit: 'repetitions' }],
+          steps: [
+            {
+              id: 'step',
+              label: 'Step',
+              defaultReps: 0,
+              repUnit: 'repetitions',
+              quantities: repetitionQuantities(0),
+            },
+          ],
         },
       ],
     });
@@ -340,12 +388,70 @@ describe('createTrainingStore', () => {
       {
         id: 'custom-legacy-exercises',
         label: 'Exercises',
-        steps: LEGACY_CUSTOM_SET.steps,
+        steps: LEGACY_CUSTOM_SET.steps.map((step) => ({
+          ...step,
+          quantities: repetitionQuantities(step.defaultReps),
+        })),
       },
     ]);
     expect(store.getState().dashboardEntries).toEqual([LEGACY_DASHBOARD_ENTRY]);
-    expect(parseJson(requireStoredValue(storage))).toMatchObject({ version: 2 });
+    expect(parseJson(requireStoredValue(storage))).toMatchObject({ version: 3 });
   });
+
+  it('migrates version 2 nested exercises to explicit quantity units', () => {
+    const raw = serializeState(nestedVersion2State(), 2);
+    const storage = new MemoryStorage(raw);
+
+    expect(classifyTrainingStorageValue(raw)).toMatchObject({
+      status: 'migrated',
+      kind: 'migrated',
+      fromVersion: 2,
+      version: 3,
+    });
+
+    const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+    expect(store.getState().customTrainingSets[0]?.sections[0]?.steps[0]).toEqual({
+      ...LEGACY_CUSTOM_SET.steps[0],
+      quantities: repetitionQuantities(20),
+    });
+    expect(parseJson(requireStoredValue(storage))).toMatchObject({ version: 3 });
+  });
+
+  it.each(['repetitions', 'sets', 'minutes', 'rounds'] as const)(
+    'preserves a version 2 singular %s value in its declared unit',
+    (unit: TrainingQuantityUnit) => {
+      const migrated = migratePersistedTrainingStateV2ToV3({
+        dashboardEntries: [],
+        customTrainingSets: [
+          {
+            id: LEGACY_CUSTOM_SET.id,
+            name: LEGACY_CUSTOM_SET.name,
+            description: LEGACY_CUSTOM_SET.description,
+            category: 'custom',
+            sections: [
+              {
+                id: 'unit-section',
+                label: 'Unit section',
+                steps: [
+                  {
+                    id: 'unit-step',
+                    label: 'Unit step',
+                    defaultReps: 2,
+                    repUnit: unit,
+                  },
+                ],
+              },
+            ],
+            isBuiltIn: false,
+          },
+        ],
+      });
+      const quantities = migrated.customTrainingSets[0]?.sections[0]?.steps[0]?.quantities;
+
+      expect(quantities?.find((quantity) => quantity.unit === unit)?.value).toBe(2);
+      expect(quantities?.filter((quantity) => quantity.value !== null)).toHaveLength(1);
+    },
+  );
 
   it('normalizes a legacy authored category to custom during migration', () => {
     const storage = new MemoryStorage(
@@ -387,6 +493,7 @@ describe('createTrainingStore', () => {
                     label: 'Step',
                     defaultReps: 0,
                     repUnit: 'repetitions',
+                    quantities: repetitionQuantities(0),
                   },
                 ],
               },
@@ -394,7 +501,7 @@ describe('createTrainingStore', () => {
           },
         ],
       },
-      2,
+      3,
     );
     const storage = new MemoryStorage(raw);
 
@@ -446,14 +553,14 @@ describe('createTrainingStore', () => {
       status: 'migrated',
       kind: 'migrated',
       fromVersion: 1,
-      version: 2,
+      version: 3,
     });
 
-    const currentRaw = serializeState({ dashboardEntries: [], customTrainingSets: [] }, 2);
+    const currentRaw = serializeState({ dashboardEntries: [], customTrainingSets: [] }, 3);
     expect(classifyTrainingStorageValue(currentRaw)).toMatchObject({
       status: 'ready',
       kind: 'ready',
-      version: 2,
+      version: 3,
     });
   });
 
@@ -504,6 +611,21 @@ describe('createTrainingStore', () => {
     );
     const storage = new MemoryStorage(raw);
 
+    expect(() => createTrainingStore({ storage, storageKey: STORAGE_KEY })).toThrow(
+      TrainingStoreBootstrapError,
+    );
+    expect(requireStoredValue(storage)).toBe(raw);
+  });
+
+  it('rejects current persisted exercises that omit explicit quantities', () => {
+    const raw = serializeState(nestedVersion2State(), 3);
+    const storage = new MemoryStorage(raw);
+
+    expect(classifyTrainingStorageValue(raw)).toEqual({
+      status: 'corrupt',
+      kind: 'corrupt',
+      reason: 'invalid-domain',
+    });
     expect(() => createTrainingStore({ storage, storageKey: STORAGE_KEY })).toThrow(
       TrainingStoreBootstrapError,
     );

@@ -5,18 +5,32 @@ export type TrainingSetId = string & {
 };
 
 export type DrillCategory =
-  'kihon' | 'kirikaeshi' | 'uchikomi' | 'kakari' | 'jigeiko' | 'mixed' | 'custom';
+  'kihon' | 'kirikaeshi' | 'uchikomi' | 'kakari' | 'jigeiko' | 'mixed' | 'unspecified' | 'custom';
 
-export type RepUnit = 'repetitions' | 'sets' | 'minutes' | 'rounds' | 'custom';
+export const TRAINING_QUANTITY_UNITS = ['repetitions', 'sets', 'minutes', 'rounds'] as const;
+
+export type TrainingQuantityUnit = (typeof TRAINING_QUANTITY_UNITS)[number];
+
+export type RepUnit = TrainingQuantityUnit | 'custom';
 
 export const MIN_REPETITIONS = 0;
 export const MAX_REPETITIONS = 500;
+
+export interface TrainingQuantity {
+  readonly unit: TrainingQuantityUnit;
+  readonly value: number | null;
+}
+
+export type TrainingQuantityValues = Readonly<Record<TrainingQuantityUnit, number | null>>;
+
+export type TrainingQuantities = readonly TrainingQuantity[];
 
 export interface TrainingStep {
   readonly id: string;
   readonly label: string;
   readonly defaultReps: number | null;
   readonly repUnit: RepUnit;
+  readonly quantities: TrainingQuantities;
   readonly description?: string;
 }
 
@@ -105,6 +119,29 @@ export function isValidRepetitionCount(value: unknown): value is number {
   );
 }
 
+export function isValidTrainingQuantityValue(
+  unit: TrainingQuantityUnit,
+  value: unknown,
+): value is number | null {
+  if (value === null) {
+    return true;
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return false;
+  }
+  if (unit === 'minutes') {
+    return true;
+  }
+  if (!Number.isSafeInteger(value)) {
+    return false;
+  }
+  return unit !== 'repetitions' || value <= MAX_REPETITIONS;
+}
+
+export function createTrainingQuantities(values: TrainingQuantityValues): TrainingQuantities {
+  return TRAINING_QUANTITY_UNITS.map((unit) => ({ unit, value: values[unit] }));
+}
+
 export const isValidReps = isValidRepetitionCount;
 
 export function validateRepetitionCount(value: unknown, path = 'reps'): ValidationResult<number> {
@@ -142,22 +179,74 @@ function isDrillCategory(value: unknown): value is DrillCategory {
     value === 'kakari' ||
     value === 'jigeiko' ||
     value === 'mixed' ||
+    value === 'unspecified' ||
     value === 'custom'
   );
 }
 
+function isTrainingQuantityUnit(value: unknown): value is TrainingQuantityUnit {
+  return value === 'repetitions' || value === 'sets' || value === 'minutes' || value === 'rounds';
+}
+
 function isRepUnit(value: unknown): value is RepUnit {
-  return (
-    value === 'repetitions' ||
-    value === 'sets' ||
-    value === 'minutes' ||
-    value === 'rounds' ||
-    value === 'custom'
-  );
+  return isTrainingQuantityUnit(value) || value === 'custom';
 }
 
 function pushIssue(issues: ValidationIssue[], path: string, message: string): void {
   issues.push({ path, message });
+}
+
+function validateTrainingQuantities(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): value is TrainingQuantities {
+  if (!Array.isArray(value)) {
+    pushIssue(issues, path, 'must be an array');
+    return false;
+  }
+
+  const issueCountBeforeValidation = issues.length;
+  const seenUnits = new Set<TrainingQuantityUnit>();
+  value.forEach((quantity, index) => {
+    const quantityPath = `${path}[${index}]`;
+    if (!isRecord(quantity)) {
+      pushIssue(issues, quantityPath, 'must be an object');
+      return;
+    }
+
+    const unit = quantity['unit'];
+    const quantityValue = quantity['value'];
+    if (!isTrainingQuantityUnit(unit)) {
+      pushIssue(issues, `${quantityPath}.unit`, 'must be a supported quantity unit');
+      return;
+    }
+    if (seenUnits.has(unit)) {
+      pushIssue(issues, `${quantityPath}.unit`, 'must be unique within an exercise');
+    } else {
+      seenUnits.add(unit);
+    }
+    if (!isValidTrainingQuantityValue(unit, quantityValue)) {
+      pushIssue(
+        issues,
+        `${quantityPath}.value`,
+        unit === 'minutes'
+          ? 'must be null or a finite nonnegative number'
+          : 'must be null or a nonnegative integer',
+      );
+    }
+  });
+
+  for (const unit of TRAINING_QUANTITY_UNITS) {
+    if (!seenUnits.has(unit)) {
+      pushIssue(issues, path, `must include the ${unit} unit`);
+    }
+  }
+
+  return (
+    seenUnits.size === TRAINING_QUANTITY_UNITS.length &&
+    issues.length === issueCountBeforeValidation
+  );
 }
 
 function validateTrainingStep(
@@ -174,6 +263,7 @@ function validateTrainingStep(
   const label = value['label'];
   const defaultReps = value['defaultReps'];
   const repUnit = value['repUnit'];
+  const quantities = value['quantities'];
   const description = value['description'];
 
   if (!isNonBlankString(id)) {
@@ -191,6 +281,18 @@ function validateTrainingStep(
   }
   if (!isRepUnit(repUnit)) {
     pushIssue(issues, `${path}.repUnit`, 'must be a supported repetition unit');
+  }
+  const quantitiesAreValid = validateTrainingQuantities(quantities, `${path}.quantities`, issues);
+  if (
+    defaultReps !== null &&
+    isValidRepetitionCount(defaultReps) &&
+    isTrainingQuantityUnit(repUnit) &&
+    quantitiesAreValid
+  ) {
+    const matchingQuantity = quantities.find((quantity) => quantity.unit === repUnit);
+    if (matchingQuantity?.value !== defaultReps) {
+      pushIssue(issues, `${path}.defaultReps`, `must match the ${repUnit} quantity when provided`);
+    }
   }
   if (description !== undefined && typeof description !== 'string') {
     pushIssue(issues, `${path}.description`, 'must be a string when provided');

@@ -26,6 +26,7 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-08-26 — researched kendo drills](./2026-08-26-researched-kendo-drills.md)
 - [2026-08-23 — landing typography](./2026-08-23-landing-typeset.md)
 - [2026-08-23 — landing page bolder refinement](./2026-08-23-landing-bolder.md)
 - [2026-08-23 — final landing page UX audit](./2026-08-23-ui-ux-final-audit.md)

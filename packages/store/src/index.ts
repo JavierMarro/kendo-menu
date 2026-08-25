@@ -3,6 +3,7 @@ import { persist, type StateStorage } from 'zustand/middleware';
 
 import {
   asTrainingSetId,
+  createTrainingQuantities,
   isValidRepetitionCount,
   TrainingValidationError,
   validateTrainingSetInput,
@@ -37,16 +38,23 @@ export {
   migratePersistedTrainingState,
   migratePersistedTrainingStateV0ToV1,
   migratePersistedTrainingStateV1ToV2,
+  migratePersistedTrainingStateV2ToV3,
   migrateV0ToV1,
   migrateV1ToV2,
+  migrateV2ToV3,
   parsePersistedTrainingState,
   parsePersistedTrainingStateV0,
   parsePersistedTrainingStateV1,
+  parsePersistedTrainingStateV2,
   TRAINING_STORE_PERSISTENCE_VERSION,
 } from './persistence';
 export type {
   LegacyPersistedTrainingState,
+  LegacyPersistedTrainingStateV2,
+  LegacyTrainingSectionV2,
   LegacyTrainingSet,
+  LegacyTrainingSetV2,
+  LegacyTrainingStep,
   PersistedStorageState,
   PersistedTrainingState,
   TrainingStorageInspection,
@@ -195,6 +203,12 @@ function buildCustomTrainingSet(input: TrainingSetInput, usedIds: Set<string>): 
         label: stepInput.label,
         defaultReps: stepInput.defaultReps,
         repUnit: 'repetitions',
+        quantities: createTrainingQuantities({
+          repetitions: stepInput.defaultReps,
+          sets: null,
+          minutes: null,
+          rounds: null,
+        }),
       };
       return stepInput.description === undefined
         ? step

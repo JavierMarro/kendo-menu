@@ -50,8 +50,7 @@ free-tier persistence boundary for the first milestone.
 - A server, accounts, remote sync, and paid tiers are later decisions, not requirements of this
   milestone. TanStack Query, a database, and an API are likewise out of scope until remote data or
   sync becomes real.
-- The exact initial curated catalogue and the future server, account, sync, and tier decisions are
-  still open.
+- Future catalogue additions and the server, account, sync, and tier decisions are still open.
 
 ## Brand Commitments
 
@@ -63,9 +62,9 @@ keiko terminology. No additional brand assets, claims, or formal voice rules hav
 - `AGENTS.md` contains the confirmed product brief and engineering constraints.
 - `README.md` documents the local-first milestone, workspace boundaries, and future mobile direction.
 - `packages/domain/src/types.ts` contains the typed training-set and dashboard-entry contracts.
-- `packages/domain/src/default-training-sets.ts` is the intended home for curated defaults but is
-  currently empty; future work must not fabricate drills, testimonials, customers, benchmarks, or
-  other proof.
+- `packages/domain/src/default-training-sets.ts` contains the 11 researched built-in training sets;
+  future work must not fabricate additional drills, testimonials, customers, benchmarks, or other
+  proof.
 - `packages/store/src/index.ts` contains the injected-storage Zustand store factory.
 - `apps/web` contains the current React/Vite shell with dashboard and drill-library views.
 

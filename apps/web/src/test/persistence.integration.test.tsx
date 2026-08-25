@@ -119,7 +119,15 @@ describe('browser persistence recovery', () => {
     }
 
     await user.click(within(appBanner).getByRole('link', { name: /Drill library/ }));
-    await user.click(screen.getByRole('button', { name: 'Add to dashboard' }));
+    const seniorHighSchoolCard = screen
+      .getByRole('heading', { name: 'Senior High School kendo club' })
+      .closest('article');
+    if (seniorHighSchoolCard === null) {
+      throw new Error('Expected the senior-high researched drill to render in a library card.');
+    }
+    await user.click(
+      within(seniorHighSchoolCard).getByRole('button', { name: 'Add to dashboard' }),
+    );
     await waitFor(() => {
       expect(
         within(appBanner).getByRole('status', { name: 'Changes are not being saved' }),

@@ -1,0 +1,8 @@
+- Session: researched kendo drills
+- Date/duration: 2026-08-26; about 1 hour
+- Scope/start: Classified researched-drills.json as embedded schema plus 11 records; the separate schema document is the Draft-07 meta-schema.
+- Changes: Replaced the placeholder with 11 immutable typed drills, explicit quantities, source round-trip tests, stable ids, and v2-to-v3 persistence migration.
+- Decisions: Preserved source wording; converted seconds exactly to minutes; used null for unstated units and unspecified for absent categories; did not infer totals.
+- Roadblocks: Duplicate labels, possible source typos, and prose-only amounts remain unresolved; four unrelated web tests and one existing UI lint error still fail.
+- Verification: Domain typecheck/lint/37 tests, store typecheck/lint/28 tests, format check, and production build passed; web tests 16/20 passed.
+- Follow-up: Keep multi-quantity library/dashboard presentation out of this slice; resolve source ambiguities and the existing web baseline separately.

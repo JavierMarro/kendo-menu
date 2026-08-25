@@ -6,7 +6,8 @@ import { asTrainingSetId } from '@kendo-menu/domain';
 
 import { renderApp, createTestStore } from './test-utils';
 
-const HIGH_SCHOOL_DRILL_ID = asTrainingSetId('high-school-kendo-club-drill');
+const SENIOR_HIGH_SCHOOL_DRILL_ID = asTrainingSetId('senior-high-school-kendo-club');
+const SENIOR_HIGH_SCHOOL_STRETCH_ID = 'senior-high-school-kendo-club-warm-up-stretch';
 
 describe('KendoMenu application flows', () => {
   it('shows a session-only cookie notice with policy details and dismisses without storage', async () => {
@@ -245,7 +246,7 @@ describe('KendoMenu application flows', () => {
   it('keeps a blank repetition distinct from an explicit zero and enforces 0–500', async () => {
     const user = userEvent.setup();
     const store = createTestStore();
-    store.getState().addToDashboard(HIGH_SCHOOL_DRILL_ID);
+    store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
     renderApp(store);
 
     const repetitions = screen.getByLabelText(/repetitions for stretch/i);
@@ -254,7 +255,9 @@ describe('KendoMenu application flows', () => {
     await user.type(repetitions, '0');
     await user.tab();
     expect(repetitions).toHaveValue(0);
-    expect(store.getState().dashboardEntries[0]?.repOverrides).toEqual({ 'warm-up-stretch': 0 });
+    expect(store.getState().dashboardEntries[0]?.repOverrides).toEqual({
+      [SENIOR_HIGH_SCHOOL_STRETCH_ID]: 0,
+    });
 
     await user.clear(repetitions);
     await user.tab();
@@ -270,13 +273,15 @@ describe('KendoMenu application flows', () => {
     await user.type(repetitions, '500');
     await user.tab();
     expect(repetitions).toHaveValue(500);
-    expect(store.getState().dashboardEntries[0]?.repOverrides).toEqual({ 'warm-up-stretch': 500 });
+    expect(store.getState().dashboardEntries[0]?.repOverrides).toEqual({
+      [SENIOR_HIGH_SCHOOL_STRETCH_ID]: 500,
+    });
   });
 
   it('persists notes and restores a removed dashboard entry with Undo', async () => {
     const user = userEvent.setup();
     const store = createTestStore();
-    store.getState().addToDashboard(HIGH_SCHOOL_DRILL_ID);
+    store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
     renderApp(store);
 
     const notes = screen.getByLabelText('Practice notes');
@@ -288,13 +293,13 @@ describe('KendoMenu application flows', () => {
 
     await user.click(screen.getByRole('button', { name: 'Remove' }));
     expect(
-      screen.queryByRole('heading', { name: 'High School Kendo Club Drill' }),
+      screen.queryByRole('heading', { name: 'Senior High School kendo club' }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Undo' }));
     expect(
-      screen.getByRole('heading', { name: 'High School Kendo Club Drill' }),
+      screen.getByRole('heading', { name: 'Senior High School kendo club' }),
     ).toBeInTheDocument();
     expect(store.getState().dashboardEntries[0]?.notes).toBe('Keep the shoulders relaxed.');
   });
