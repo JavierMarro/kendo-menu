@@ -593,7 +593,7 @@ describe('version 5 to version 6 canonical correction migration', () => {
     expect(migrated.customTrainingSets).toEqual([]);
   });
 
-  it('converts University version 2 kakarigeijo overrides to the corrected minutes unit', () => {
+  it('converts University dojo kakarigeijo overrides to the corrected minutes unit', () => {
     const state = {
       dashboardEntries: [
         {

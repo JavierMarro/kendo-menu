@@ -2,7 +2,7 @@
   {
     "id": "international-dojo-2-hour-session",
     "sourceId": 1,
-    "name": "International dojo (2 hour session)",
+    "name": "International dojo menu (2 hour session)",
     "sections": [
       {
         "id": "international-dojo-2-hour-session-warm-up-warm-up",
@@ -206,7 +206,7 @@
   {
     "id": "japanese-school-club",
     "sourceId": 2,
-    "name": "Japanese school club",
+    "name": "Japanese school dojo menu",
     "sections": [
       {
         "id": "japanese-school-club-warm-up-warm-up",
@@ -335,7 +335,7 @@
   {
     "id": "junior-high-kendo-club",
     "sourceId": 3,
-    "name": "Junior-high kendo club",
+    "name": "Junior-high school dojo menu",
     "sections": [
       {
         "id": "junior-high-kendo-club-suburi",
@@ -506,7 +506,7 @@
   {
     "id": "official-znkr-ajkf",
     "sourceId": 4,
-    "name": "Official ZNKR/AJKF",
+    "name": "Official ZNKR/AJKF menu",
     "description": "Officially published by the All Japan Kendo Federation in 2001, for nidan and below, focused on basics.",
     "sections": [
       {
@@ -597,7 +597,7 @@
   {
     "id": "police-dojo-asageiko",
     "sourceId": 5,
-    "name": "Police dojo asageiko",
+    "name": "Police dojo asageiko menu",
     "description": "Practiced with mostly 5th–8th dan practitioners",
     "sections": [
       {
@@ -684,13 +684,13 @@
   {
     "id": "police-dojo-asageiko-version-2",
     "sourceId": 6,
-    "name": "Police dojo asageiko version 2",
+    "name": "Police dojo asageiko type 2 menu",
     "sections": [
       {
         "id": "police-dojo-asageiko-version-2-kirikaeshi-1-kirikaeshi",
         "name": "Kirikaeshi",
         "quantities": {
-          "sets": 3
+          "repetitions": 3
         },
         "notes": "3 men + 1 full kirikaeshi",
         "exercises": []
@@ -820,6 +820,9 @@
       {
         "id": "police-dojo-asageiko-version-2-kirikaeshi-2-kirikaeshi",
         "name": "Kirikaeshi",
+        "quantities": {
+          "repetitions": 1
+        },
         "exercises": []
       }
     ]
@@ -827,7 +830,7 @@
   {
     "id": "senior-high-school-kendo-club",
     "sourceId": 7,
-    "name": "Senior High School kendo club",
+    "name": "Senior High School dojo menu",
     "sections": [
       {
         "id": "senior-high-school-kendo-club-warm-up",
@@ -1049,7 +1052,7 @@
   {
     "id": "university-high-school",
     "sourceId": 8,
-    "name": "University High School",
+    "name": "University High School dojo menu",
     "description": "Weekly rotation: Monday is cleaning and self-directed practice; Tuesday centers on their own muscle circuit training ('Ken-tore') with bogu on; Wednesday is a no-bogu day of running/stair sprints plus suburi and suri-ashi in the dojo; Thursday is kihon and waza-geiko plus ji-geiko; Friday is kihon plus match-simulation practice; weekends are tournaments or practice matches, defaulting to normal kihon/waza/Ken-tore when there are none.",
     "sections": [
       {
@@ -1058,23 +1061,38 @@
         "exercises": [
           {
             "id": "university-high-school-kirikaeshi-5-men-kirikaeshi",
-            "name": "5-men + kirikaeshi"
+            "name": "men + kirikaeshi",
+            "quantities": {
+              "repetitions": 5
+            }
           },
           {
             "id": "university-high-school-kirikaeshi-5-tsuki-kirikaeshi",
-            "name": "5-tsuki+kirikaeshi"
+            "name": "tsuki + kirikaeshi",
+            "quantities": {
+              "repetitions": 5
+            }
           },
           {
             "id": "university-high-school-kirikaeshi-fast-kirikaeshi",
-            "name": "fast kirikaeshi"
+            "name": "fast kirikaeshi",
+            "quantities": {
+              "repetitions": 1
+            }
           },
           {
             "id": "university-high-school-kirikaeshi-one-breath-kirikaeshi",
-            "name": "one-breath kirikaeshi"
+            "name": "one-breath kirikaeshi",
+            "quantities": {
+              "repetitions": 1
+            }
           },
           {
             "id": "university-high-school-kirikaeshi-ai-kirikaeshi",
-            "name": "ai kirikaeshi"
+            "name": "ai kirikaeshi",
+            "quantities": {
+              "repetitions": 1
+            }
           }
         ]
       },
@@ -1232,7 +1250,7 @@
   {
     "id": "junior-high-school-version-2",
     "sourceId": 9,
-    "name": "Junior High School version 2",
+    "name": "Junior High School dojo type 2 menu",
     "sections": [
       {
         "id": "junior-high-school-version-2-warm-up-warm-up",
@@ -1324,7 +1342,7 @@
   {
     "id": "university-version-2",
     "sourceId": 10,
-    "name": "University version 2",
+    "name": "University dojo menu",
     "sections": [
       {
         "id": "university-version-2-warm-up-warm-up",
@@ -1344,7 +1362,7 @@
       {
         "id": "university-version-2-dojo-length-drills",
         "name": "Dojo-length drills",
-        "notes": "All the exercises below, taking the length of the dojo",
+        "notes": "The following three Kirikaeshi exercises are performed over the length of the dojo",
         "exercises": [
           {
             "id": "university-version-2-dojo-length-drills-slow-kirikaeshi",
@@ -1523,7 +1541,7 @@
   {
     "id": "top-university",
     "sourceId": 11,
-    "name": "Top university",
+    "name": "Top university dojo menu",
     "sections": [
       {
         "id": "top-university-warm-up-warm-up",
@@ -1556,13 +1574,14 @@
           },
           {
             "id": "top-university-yakusoku-geiko-men-kote-men-taiatari",
-            "name": "Men → Kote-Men → Taiatari",
-            "notes": "body contact"
+            "name": "Men → Kote-Men → Taiatari"
           },
           {
             "id": "top-university-yakusoku-geiko-hiki-do-men-kirikaeshi",
             "name": "Hiki-dō → Men → Kirikaeshi",
-            "notes": "50 or 100"
+            "quantities": {
+              "repetitions": 100
+            }
           }
         ]
       },

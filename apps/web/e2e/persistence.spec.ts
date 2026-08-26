@@ -124,7 +124,7 @@ test.describe('local persistence recovery', () => {
     });
     await page.goto('/app/library');
     const seniorHighSchoolCard = page
-      .getByRole('heading', { name: 'Senior High School kendo club' })
+      .getByRole('heading', { name: 'Senior High School dojo menu' })
       .locator('xpath=ancestor::article');
     await seniorHighSchoolCard.getByRole('link', { name: 'View drill' }).click();
     await page.getByRole('button', { name: 'Add to dashboard' }).click();

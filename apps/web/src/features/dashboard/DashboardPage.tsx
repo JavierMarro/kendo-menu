@@ -5,6 +5,7 @@ import type {
   DashboardEntry,
   TrainingActivity,
   TrainingQuantityUnit,
+  TrainingSection,
   TrainingSet,
 } from '@kendo-menu/domain';
 import type { RemovedDashboardEntry } from '@kendo-menu/store';
@@ -288,7 +289,7 @@ function DashboardTrainingSet({
                     <QuantityEditors
                       entry={entry}
                       activity={exercise}
-                      sectionName={section.name}
+                      parentSection={section}
                       onSet={onSetQuantity}
                       onClear={onClearQuantity}
                     />
@@ -321,13 +322,13 @@ function DashboardTrainingSet({
 interface QuantityEditorsProps {
   readonly entry: DashboardEntry;
   readonly activity: TrainingActivity;
-  readonly sectionName?: string;
+  readonly parentSection?: TrainingSection;
   readonly onSet: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
   readonly onClear: (activityId: string, unit: TrainingQuantityUnit) => void;
 }
 
-function QuantityEditors({ entry, activity, sectionName, onSet, onClear }: QuantityEditorsProps) {
-  const units = getEditableTrainingQuantityUnits(entry, activity, sectionName);
+function QuantityEditors({ entry, activity, parentSection, onSet, onClear }: QuantityEditorsProps) {
+  const units = getEditableTrainingQuantityUnits(entry, activity, parentSection);
 
   return (
     <div className="quantity-editor-group">

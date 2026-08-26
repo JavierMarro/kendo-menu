@@ -82,9 +82,16 @@ export function getEffectiveTrainingQuantity(
 
 function getFallbackQuantityUnit(
   activity: TrainingActivity,
-  sectionName?: string,
+  parentSection?: TrainingSection,
 ): TrainingQuantityUnit {
-  const name = `${sectionName ?? ''} ${activity.name}`.toLocaleLowerCase('en');
+  const activityName = activity.name.toLocaleLowerCase('en');
+  const sectionName = parentSection?.name.toLocaleLowerCase('en');
+
+  if (sectionName?.includes('suburi') === true) {
+    return 'repetitions';
+  }
+
+  const name = `${sectionName ?? ''} ${activityName}`;
   if (name.includes('kakari')) {
     return 'seconds';
   }
@@ -106,15 +113,19 @@ function getFallbackQuantityUnit(
 export function getEditableTrainingQuantityUnits(
   entry: DashboardEntry,
   activity: TrainingActivity,
-  sectionName?: string,
+  parentSection?: TrainingSection,
 ): readonly TrainingQuantityUnit[] {
   const overrides = entry.quantityOverrides[activity.id];
-  const units = TRAINING_QUANTITY_UNITS.filter(
+  const defaultUnits = getDefaultTrainingQuantityUnits(activity);
+  const fallbackUnit =
+    defaultUnits.length === 0 ? getFallbackQuantityUnit(activity, parentSection) : undefined;
+
+  return TRAINING_QUANTITY_UNITS.filter(
     (unit) =>
-      getDefaultTrainingQuantity(activity, unit) !== undefined ||
-      (overrides !== undefined && Object.hasOwn(overrides, unit)),
+      defaultUnits.includes(unit) ||
+      (overrides !== undefined && Object.hasOwn(overrides, unit)) ||
+      unit === fallbackUnit,
   );
-  return units.length > 0 ? units : [getFallbackQuantityUnit(activity, sectionName)];
 }
 
 export function isValidQuantityValue(unit: TrainingQuantityUnit, value: number): boolean {

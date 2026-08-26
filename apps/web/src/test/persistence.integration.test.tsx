@@ -120,7 +120,7 @@ describe('browser persistence recovery', () => {
 
     await user.click(within(appBanner).getByRole('link', { name: /Drill library/ }));
     const seniorHighSchoolCard = screen
-      .getByRole('heading', { name: 'Senior High School kendo club' })
+      .getByRole('heading', { name: 'Senior High School dojo menu' })
       .closest('article');
     if (seniorHighSchoolCard === null) {
       throw new Error('Expected the senior-high researched drill to render in a library card.');

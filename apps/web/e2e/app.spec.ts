@@ -137,7 +137,7 @@ test.describe('routed training flows', () => {
     await expect(page.locator('.library-card')).toHaveCount(11);
 
     const card = page
-      .getByRole('heading', { name: 'International dojo (2 hour session)' })
+      .getByRole('heading', { name: 'International dojo menu (2 hour session)' })
       .locator('xpath=ancestor::article');
     await expect(card).toContainText('Category not specified');
     await expect(card).toContainText('Description not provided.');
@@ -174,7 +174,7 @@ test.describe('routed training flows', () => {
   }) => {
     await page.goto('/app/library');
     const card = page
-      .getByRole('heading', { name: 'Junior-high kendo club' })
+      .getByRole('heading', { name: 'Junior-high school dojo menu' })
       .locator('xpath=ancestor::article');
     await card.getByRole('link', { name: 'View drill' }).click();
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
@@ -205,9 +205,11 @@ test.describe('routed training flows', () => {
     await expect(page.getByLabel('Practice notes')).toHaveValue('Keep the shoulders relaxed.');
 
     await page.getByRole('button', { name: 'Remove' }).click();
-    await expect(page.getByRole('heading', { name: 'Junior-high kendo club' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Junior-high school dojo menu' })).toHaveCount(
+      0,
+    );
     await page.getByRole('button', { name: 'Undo' }).click();
-    await expect(page.getByRole('heading', { name: 'Junior-high kendo club' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Junior-high school dojo menu' })).toBeVisible();
   });
 
   test('persists standalone minute and second overrides without changing their units', async ({
@@ -215,7 +217,7 @@ test.describe('routed training flows', () => {
   }) => {
     await page.goto('/app/library');
     const card = page
-      .getByRole('heading', { name: 'International dojo (2 hour session)' })
+      .getByRole('heading', { name: 'International dojo menu (2 hour session)' })
       .locator('xpath=ancestor::article');
     await card.getByRole('link', { name: 'View drill' }).click();
     await page.getByRole('button', { name: 'Add to dashboard' }).click();

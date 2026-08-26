@@ -94,6 +94,68 @@ describe('canonical default drills', () => {
     ]);
   });
 
+  it('maps the current authoritative drill names to their existing IDs and source IDs', () => {
+    expect(DEFAULT_TRAINING_SETS.map(({ id, sourceId, name }) => ({ id, sourceId, name }))).toEqual(
+      [
+        {
+          id: 'international-dojo-2-hour-session',
+          sourceId: 1,
+          name: 'International dojo menu (2 hour session)',
+        },
+        {
+          id: 'japanese-school-club',
+          sourceId: 2,
+          name: 'Japanese school dojo menu',
+        },
+        {
+          id: 'junior-high-kendo-club',
+          sourceId: 3,
+          name: 'Junior-high school dojo menu',
+        },
+        {
+          id: 'official-znkr-ajkf',
+          sourceId: 4,
+          name: 'Official ZNKR/AJKF menu',
+        },
+        {
+          id: 'police-dojo-asageiko',
+          sourceId: 5,
+          name: 'Police dojo asageiko menu',
+        },
+        {
+          id: 'police-dojo-asageiko-version-2',
+          sourceId: 6,
+          name: 'Police dojo asageiko type 2 menu',
+        },
+        {
+          id: 'senior-high-school-kendo-club',
+          sourceId: 7,
+          name: 'Senior High School dojo menu',
+        },
+        {
+          id: 'university-high-school',
+          sourceId: 8,
+          name: 'University High School dojo menu',
+        },
+        {
+          id: 'junior-high-school-version-2',
+          sourceId: 9,
+          name: 'Junior High School dojo type 2 menu',
+        },
+        {
+          id: 'university-version-2',
+          sourceId: 10,
+          name: 'University dojo menu',
+        },
+        {
+          id: 'top-university',
+          sourceId: 11,
+          name: 'Top university dojo menu',
+        },
+      ],
+    );
+  });
+
   it('keeps accepted display normalization separate from stable ASCII IDs', () => {
     expect(
       requireActivity('japanese-school-club', 'japanese-school-club-suburi-joge'),
@@ -107,6 +169,47 @@ describe('canonical default drills', () => {
         name: 'Dō',
       },
     );
+  });
+
+  it('keeps Suburi source quantities sparse at the correct structural level', () => {
+    const internationalSuburi = requireSection(
+      'international-dojo-2-hour-session',
+      'international-dojo-2-hour-session-suburi-suburi',
+    );
+    const universitySuburi = requireSection(
+      'university-version-2',
+      'university-version-2-suburi-suburi',
+    );
+    const japaneseSuburi = requireSection('japanese-school-club', 'japanese-school-club-suburi');
+    const seniorHighSuburi = requireSection(
+      'senior-high-school-kendo-club',
+      'senior-high-school-kendo-club-suburi',
+    );
+
+    expect(internationalSuburi.quantities).toEqual({
+      duration: { unit: 'minutes', value: 15 },
+    });
+    expect(internationalSuburi.exercises).toEqual([]);
+    expect(universitySuburi.quantities).toBeUndefined();
+    expect(universitySuburi.exercises).toEqual([]);
+    expect(japaneseSuburi.exercises.map((exercise) => exercise.quantities)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(seniorHighSuburi.exercises.every((exercise) => exercise.quantities === undefined)).toBe(
+      true,
+    );
+    expect(
+      requireActivity('junior-high-kendo-club', 'junior-high-kendo-club-suburi-haya').quantities,
+    ).toEqual({ repetitions: 100, sets: 2 });
+    expect(
+      requireActivity(
+        'junior-high-school-version-2',
+        'junior-high-school-version-2-suburi-hayasuburi',
+      ).quantities,
+    ).toEqual({ repetitions: 100, sets: 3 });
   });
 
   it('deep-freezes the canonical runtime tree, including standalone and ranged activities', () => {
@@ -258,7 +361,9 @@ describe('canonical default drills', () => {
       'university-version-2-dojo-length-drills',
     );
 
-    expect(section.notes).toBe('All the exercises below, taking the length of the dojo');
+    expect(section.notes).toBe(
+      'The following three Kirikaeshi exercises are performed over the length of the dojo',
+    );
     expect(section.exercises.map((exercise) => exercise.id)).toEqual([
       'university-version-2-dojo-length-drills-slow-kirikaeshi',
       'university-version-2-dojo-length-drills-kirikaeshi',
@@ -267,6 +372,84 @@ describe('canonical default drills', () => {
     expect(section.exercises.map((exercise) => exercise.quantities?.repetitions)).toEqual([
       2, 2, 2,
     ]);
+  });
+
+  it('preserves the current source repetition scopes without changing stable IDs', () => {
+    expect(
+      requireSection('police-dojo-asageiko', 'police-dojo-asageiko-kirikaeshi-2-kirikaeshi'),
+    ).toMatchObject({
+      id: 'police-dojo-asageiko-kirikaeshi-2-kirikaeshi',
+      quantities: { repetitions: 1 },
+    });
+    expect(
+      requireSection(
+        'police-dojo-asageiko-version-2',
+        'police-dojo-asageiko-version-2-kirikaeshi-1-kirikaeshi',
+      ),
+    ).toMatchObject({
+      id: 'police-dojo-asageiko-version-2-kirikaeshi-1-kirikaeshi',
+      notes: '3 men + 1 full kirikaeshi',
+      quantities: { repetitions: 3 },
+    });
+    expect(
+      requireSection(
+        'police-dojo-asageiko-version-2',
+        'police-dojo-asageiko-version-2-kirikaeshi-2-kirikaeshi',
+      ),
+    ).toMatchObject({
+      id: 'police-dojo-asageiko-version-2-kirikaeshi-2-kirikaeshi',
+      quantities: { repetitions: 1 },
+    });
+
+    const universityHighKirikaeshi = requireSection(
+      'university-high-school',
+      'university-high-school-kirikaeshi',
+    );
+    expect(
+      universityHighKirikaeshi.exercises.map(({ id, name, quantities }) => ({
+        id,
+        name,
+        quantities,
+      })),
+    ).toEqual([
+      {
+        id: 'university-high-school-kirikaeshi-5-men-kirikaeshi',
+        name: 'men + kirikaeshi',
+        quantities: { repetitions: 5 },
+      },
+      {
+        id: 'university-high-school-kirikaeshi-5-tsuki-kirikaeshi',
+        name: 'tsuki + kirikaeshi',
+        quantities: { repetitions: 5 },
+      },
+      {
+        id: 'university-high-school-kirikaeshi-fast-kirikaeshi',
+        name: 'fast kirikaeshi',
+        quantities: { repetitions: 1 },
+      },
+      {
+        id: 'university-high-school-kirikaeshi-one-breath-kirikaeshi',
+        name: 'one-breath kirikaeshi',
+        quantities: { repetitions: 1 },
+      },
+      {
+        id: 'university-high-school-kirikaeshi-ai-kirikaeshi',
+        name: 'ai kirikaeshi',
+        quantities: { repetitions: 1 },
+      },
+    ]);
+
+    expect(
+      requireActivity('top-university', 'top-university-yakusoku-geiko-hiki-do-men-kirikaeshi'),
+    ).toEqual({
+      id: 'top-university-yakusoku-geiko-hiki-do-men-kirikaeshi',
+      name: 'Hiki-dō → Men → Kirikaeshi',
+      quantities: { repetitions: 100 },
+    });
+    expect(
+      requireActivity('top-university', 'top-university-yakusoku-geiko-men-kote-men-taiatari')
+        .notes,
+    ).toBeUndefined();
   });
 
   it('keeps explicit units, simultaneous counts, and continuous duration ranges', () => {
@@ -410,6 +593,13 @@ describe('canonical schema role and constraints', () => {
     });
     expect(kendoDrillsSchema.definitions.durationUnit.enum).toEqual(['seconds', 'minutes']);
     expect(kendoDrillsSchema.definitions.durationRange.required).toEqual(['unit', 'min', 'max']);
+    expect(kendoDrillsSchema.definitions.section.properties.quantities).toEqual({
+      $ref: '#/definitions/quantities',
+    });
+    expect(kendoDrillsSchema.definitions.exercise.properties.quantities).toEqual({
+      $ref: '#/definitions/quantities',
+    });
+    expect(kendoDrillsSchema.definitions.exercise.required).not.toContain('quantities');
     expect(kendoDrillsSchema.definitions.section.properties.notes).toEqual({ type: 'string' });
     expect(kendoDrillsSchema.definitions.exercise.properties.notes).toEqual({ type: 'string' });
   });

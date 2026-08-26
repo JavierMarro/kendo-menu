@@ -11,9 +11,14 @@ const SENIOR_HIGH_SCHOOL_DRILL_ID = asTrainingSetId('senior-high-school-kendo-cl
 const SENIOR_HIGH_SCHOOL_STRETCH_ID = 'senior-high-school-kendo-club-warm-up-stretch';
 const JUNIOR_HIGH_DRILL_ID = asTrainingSetId('junior-high-kendo-club');
 const JUNIOR_HIGH_HAYA_ID = 'junior-high-kendo-club-suburi-haya';
+const JAPANESE_SCHOOL_DRILL_ID = asTrainingSetId('japanese-school-club');
+const JAPANESE_SCHOOL_JOGE_ID = 'japanese-school-club-suburi-joge';
 const INTERNATIONAL_DOJO_ID = asTrainingSetId('international-dojo-2-hour-session');
 const INTERNATIONAL_WARM_UP_ID = 'international-dojo-2-hour-session-warm-up-warm-up';
+const INTERNATIONAL_SUBURI_ID = 'international-dojo-2-hour-session-suburi-suburi';
 const INTERNATIONAL_KAKARIGEIKO_ID = 'international-dojo-2-hour-session-kakarigeiko-kakarigeiko';
+const UNIVERSITY_DRILL_ID = asTrainingSetId('university-version-2');
+const UNIVERSITY_SUBURI_ID = 'university-version-2-suburi-suburi';
 const OFFICIAL_ZNKR_ID = asTrainingSetId('official-znkr-ajkf');
 const OFFICIAL_ZNKR_MEN_ID = 'official-znkr-ajkf-kihon-waza-men';
 const TOP_UNIVERSITY_ID = asTrainingSetId('top-university');
@@ -269,7 +274,7 @@ describe('KendoMenu application flows', () => {
     expect(cards).toHaveLength(11);
 
     const heading = within(library).getByRole('heading', {
-      name: 'International dojo (2 hour session)',
+      name: 'International dojo menu (2 hour session)',
     });
     const card = heading.closest('article');
     if (card === null) {
@@ -290,7 +295,7 @@ describe('KendoMenu application flows', () => {
     const user = userEvent.setup();
     const view = renderApp(createTestStore(), { initialEntries: ['/app/library'] });
     const cardHeading = screen.getByRole('heading', {
-      name: 'International dojo (2 hour session)',
+      name: 'International dojo menu (2 hour session)',
     });
     const card = cardHeading.closest('article');
     if (card === null) {
@@ -299,7 +304,10 @@ describe('KendoMenu application flows', () => {
 
     await user.click(within(card).getByRole('link', { name: 'View drill' }));
     expect(
-      screen.getByRole('heading', { name: 'International dojo (2 hour session)', level: 1 }),
+      screen.getByRole('heading', {
+        name: 'International dojo menu (2 hour session)',
+        level: 1,
+      }),
     ).toBeVisible();
     const sections = view.container.querySelectorAll<HTMLDetailsElement>('.detail-section');
     expect(sections).toHaveLength(12);
@@ -363,7 +371,7 @@ describe('KendoMenu application flows', () => {
     const missingSection = missingView.container.querySelector<HTMLDetailsElement>('details');
     const missingSummary = missingSection?.querySelector('summary');
     if (missingSection === null || missingSummary === null || missingSummary === undefined) {
-      throw new Error('Expected the Japanese school club Warm-up disclosure.');
+      throw new Error('Expected the Japanese school dojo Warm-up disclosure.');
     }
     await user.click(missingSummary);
     expect(within(missingSection).getByText('Quantity not specified')).toBeVisible();
@@ -416,6 +424,46 @@ describe('KendoMenu application flows', () => {
     expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
   });
 
+  it('uses structural Suburi fallbacks while preserving existing override units', async () => {
+    const user = userEvent.setup();
+    const japaneseStore = createTestStore();
+    const japaneseEntryId = japaneseStore.getState().addToDashboard(JAPANESE_SCHOOL_DRILL_ID);
+    japaneseStore
+      .getState()
+      .setQuantityOverride(japaneseEntryId, JAPANESE_SCHOOL_JOGE_ID, 'minutes', 2);
+    const japaneseView = renderApp(japaneseStore);
+
+    const repetitions = screen.getByLabelText('Repetitions for jōge');
+    const existingMinutes = screen.getByLabelText('Minutes for jōge');
+    expect(repetitions).toHaveValue(null);
+    expect(existingMinutes).toHaveValue(2);
+    expect(screen.queryByLabelText('Seconds for jōge')).not.toBeInTheDocument();
+
+    await user.type(repetitions, '24');
+    await user.tab();
+    expect(japaneseStore.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+      [JAPANESE_SCHOOL_JOGE_ID]: { repetitions: 24, minutes: 2 },
+    });
+    japaneseView.unmount();
+
+    const universityStore = createTestStore();
+    universityStore.getState().addToDashboard(UNIVERSITY_DRILL_ID);
+    renderApp(universityStore);
+    const suburiHeading = screen.getByRole('heading', { name: 'Suburi', level: 3 });
+    const suburiSection = suburiHeading.closest('section');
+    if (suburiSection === null) {
+      throw new Error('Expected the standalone University Suburi section.');
+    }
+    expect(within(suburiSection).getByLabelText('Minutes for Suburi')).toHaveValue(null);
+    expect(
+      within(suburiSection).queryByLabelText('Repetitions for Suburi'),
+    ).not.toBeInTheDocument();
+    expect(universityStore.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
+    expect(
+      universityStore.getState().dashboardEntries[0]?.quantityOverrides[UNIVERSITY_SUBURI_ID],
+    ).toBeUndefined();
+  });
+
   it('uses repetitions for untimed waza and enforces the existing 0–500 limit', async () => {
     const user = userEvent.setup();
     const store = createTestStore();
@@ -465,6 +513,7 @@ describe('KendoMenu application flows', () => {
     const sets = screen.getByLabelText('Sets for haya');
     expect(repetitions).toHaveValue(100);
     expect(sets).toHaveValue(2);
+    expect(screen.queryByLabelText('Minutes for haya')).not.toBeInTheDocument();
 
     await user.clear(sets);
     await user.type(sets, '0');
@@ -505,8 +554,18 @@ describe('KendoMenu application flows', () => {
     expect(within(warmUpSection).getAllByText('Warm-up')).toHaveLength(1);
 
     const minutes = within(warmUpSection).getByLabelText('Minutes for Warm-up');
+    const suburiHeading = screen.getByRole('heading', { name: 'Suburi', level: 3 });
+    const suburiSection = suburiHeading.closest('section');
+    if (suburiSection === null) {
+      throw new Error('Expected the standalone International Suburi section.');
+    }
+    const suburiMinutes = within(suburiSection).getByLabelText('Minutes for Suburi');
     const seconds = screen.getByLabelText('Seconds for Kakarigeiko');
     expect(minutes).toHaveValue(10);
+    expect(suburiMinutes).toHaveValue(15);
+    expect(
+      within(suburiSection).queryByLabelText('Repetitions for Suburi'),
+    ).not.toBeInTheDocument();
     expect(seconds).toHaveValue(60);
     expect(screen.queryByLabelText('Rounds for Kakarigeiko')).not.toBeInTheDocument();
 
@@ -521,6 +580,9 @@ describe('KendoMenu application flows', () => {
       [INTERNATIONAL_WARM_UP_ID]: { minutes: 12.5 },
       [INTERNATIONAL_KAKARIGEIKO_ID]: { seconds: 45 },
     });
+    expect(store.getState().dashboardEntries[0]?.quantityOverrides[INTERNATIONAL_SUBURI_ID]).toBe(
+      undefined,
+    );
     view.unmount();
   });
 
@@ -539,13 +601,13 @@ describe('KendoMenu application flows', () => {
 
     await user.click(screen.getByRole('button', { name: 'Remove' }));
     expect(
-      screen.queryByRole('heading', { name: 'Senior High School kendo club' }),
+      screen.queryByRole('heading', { name: 'Senior High School dojo menu' }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Undo' }));
     expect(
-      screen.getByRole('heading', { name: 'Senior High School kendo club' }),
+      screen.getByRole('heading', { name: 'Senior High School dojo menu' }),
     ).toBeInTheDocument();
     expect(store.getState().dashboardEntries[0]?.notes).toBe('Keep the shoulders relaxed.');
   });
