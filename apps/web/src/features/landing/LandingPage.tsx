@@ -12,13 +12,13 @@ const FAQ_ITEMS: readonly FaqItem[] = [
     id: 'what-is-kendomenu',
     question: 'What is KendoMenu?',
     answer:
-      'KendoMenu is a free web app for choosing, adapting, and organising keiko menus. Adjust repetitions or time for each exercise, then add the menu to your dashboard to prepare a session or share it with your dojo.',
+      'KendoMenu is a free web app for choosing, adapting, creating and organising keiko menus. Adjust repetitions or time for each exercise in a chosen menu, then add it to your dashboard to prepare a session or share it with your dojo. Alternatively, have you recently had a visiting sensei or have you attended a seminar and want to record the menu practised? Create a new menu and save it to your device.',
   },
   {
     id: 'is-kendomenu-free',
     question: 'Is KendoMenu free?',
     answer:
-      'Yes. KendoMenu is free to use, with no ads or premium features. For now, your menus and dashboard data stay on the device you use; account-based cloud access may be considered in the future.',
+      'Yes. KendoMenu is free to use, with no ads or premium features. For now, your menus and dashboard data stay on the device you use; account-based cloud access is a feature to be added in the future.',
   },
   {
     id: 'all-experience-levels',
@@ -30,7 +30,7 @@ const FAQ_ITEMS: readonly FaqItem[] = [
     id: 'menu-sources',
     question: 'Where do the keiko menus come from?',
     answer:
-      'The planned menus are being collated from publicly available kendo resources: English- and Japanese-language blogs, YouTube keiko sessions, high schools, universities, police training programmes, and experienced sensei who have shared how they train.',
+      'The planned menus are being collated from publicly available kendo resources: English and Japanese language blogs, YouTube keiko sessions, high schools, universities, police training programmes, and experienced sensei who have shared how they train. Find here the freely online available resource list.',
   },
   {
     id: 'phone-and-computer',
@@ -42,7 +42,7 @@ const FAQ_ITEMS: readonly FaqItem[] = [
     id: 'device-sync',
     question: 'Are my menus synchronised between devices?',
     answer:
-      'Not currently. Your saved menus and dashboard are tied to the device where you create them, so your computer and phone keep separate local data. Cloud synchronisation may be added in the future.',
+      'Not currently. Your saved menus and dashboard are tied to the device where you create them, so your computer and phone keep separate local data. Cloud synchronisation is part of the roadmap and will be added in the future.',
   },
 ];
 
@@ -53,10 +53,11 @@ export function LandingPage(): ReactElement {
     <>
       <section className="landing-page" aria-labelledby="landing-page-title">
         <div className="landing-content">
-          <p className="eyebrow">Kendo practice, shaped for today</p>
+          <p className="eyebrow">Kendo practice, curated for you</p>
           <h1 id="landing-page-title">Plan the keiko you need today.</h1>
           <p className="landing-intro">
-            Build a focused kendo session, adjust it to your day, and keep your practice moving.
+            Build a kendo session choosing from the 11 menus available in our library and keep
+            polishing the mind, spirit, and character with different intensity kendo menus.
           </p>
           <Link className="primary-button landing-cta" to="/app/library">
             Browse drill library
@@ -115,7 +116,7 @@ export function LandingPage(): ReactElement {
             <div className="landing-section-heading">
               <h2 id="how-it-works-title">How it works</h2>
               <p>
-                <strong>Choose. Adjust. Reuse.</strong> Move from a useful starting point to a
+                <strong>Choose. Adjust. Reuse.</strong> Move from an useful starting point to a
                 repeatable session in three simple steps.
               </p>
             </div>
@@ -165,7 +166,7 @@ export function LandingPage(): ReactElement {
               <div className="landing-stat">
                 <dt>Curated keiko menus</dt>
                 <dd>
-                  <span className="landing-stat-value">10</span>
+                  <span className="landing-stat-value">11</span>
                   <span className="landing-stat-note">planned starting point</span>
                 </dd>
               </div>
@@ -180,7 +181,9 @@ export function LandingPage(): ReactElement {
                 <dt>Potential intensity range</dt>
                 <dd>
                   <span className="landing-stat-value">Medium to high</span>
-                  <span className="landing-stat-note">future labels may cover this range</span>
+                  <span className="landing-stat-note">
+                    check the labels and choose your keiko for the day
+                  </span>
                 </dd>
               </div>
             </dl>
@@ -189,16 +192,16 @@ export function LandingPage(): ReactElement {
               <div>
                 <h3>Planned sources</h3>
                 <p>
-                  English- and Japanese-language blogs, YouTube keiko sessions, high schools,
+                  English and Japanese language blogs, YouTube keiko sessions, high schools,
                   universities, police training programmes, and experienced sensei who have shared
                   how they train.
                 </p>
               </div>
               <div>
-                <h3>Menu contexts we may include</h3>
+                <h3>Menu contexts we include</h3>
                 <p>
                   <strong>Examples include</strong> an Osaka police keiko menu, a high school menu,
-                  and a Kokushikan University menu.
+                  and a Nagoya University menu.
                 </p>
               </div>
             </div>
@@ -260,8 +263,8 @@ export function LandingPage(): ReactElement {
               <div>
                 <h2 id="final-cta-title">Your next keiko can be ready in two minutes.</h2>
                 <p>
-                  <strong>Make today’s plan real.</strong> Start with a menu from the library,
-                  adjust it to your day, and make the plan yours.
+                  <strong>Make today’s plan real.</strong> Choose a menu from the library, adjust it
+                  and make the plan yours.
                 </p>
               </div>
               <Link className="primary-button" to="/app/library">
