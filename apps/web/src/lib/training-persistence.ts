@@ -32,7 +32,10 @@ function mapStorageInspection(
       return {
         status: 'corrupt',
         raw: raw ?? '',
-        reason: inspection.reason,
+        reason:
+          inspection.reason === 'override-migration-conflict'
+            ? inspection.detail
+            : inspection.reason,
       };
     case 'unsupported-future':
       return { status: 'future-version', raw: raw ?? '', version: inspection.version };

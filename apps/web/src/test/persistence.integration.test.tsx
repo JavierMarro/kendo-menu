@@ -119,6 +119,13 @@ describe('browser persistence recovery', () => {
     }
 
     await user.click(within(appBanner).getByRole('link', { name: /Drill library/ }));
+    const seniorHighSchoolCard = screen
+      .getByRole('heading', { name: 'Senior High School dojo menu' })
+      .closest('article');
+    if (seniorHighSchoolCard === null) {
+      throw new Error('Expected the senior-high researched drill to render in a library card.');
+    }
+    await user.click(within(seniorHighSchoolCard).getByRole('link', { name: 'View drill' }));
     await user.click(screen.getByRole('button', { name: 'Add to dashboard' }));
     await waitFor(() => {
       expect(
@@ -131,8 +138,8 @@ describe('browser persistence recovery', () => {
         name: 'Dashboard',
       }),
     );
-    const repetitions = screen.getByLabelText(/repetitions for stretch/i);
-    await user.type(repetitions, '12');
+    const minutes = screen.getByLabelText(/minutes for stretch/i);
+    await user.type(minutes, '12');
     await user.tab();
     expect(screen.getByText('Not saved to this device.')).toBeInTheDocument();
     expect(screen.queryByText('Updated.')).not.toBeInTheDocument();
@@ -142,18 +149,6 @@ describe('browser persistence recovery', () => {
     });
     expect(bannerStatus).toBeVisible();
     expect(bannerStatus).toHaveClass('is-error');
-    const dashboardHeader = screen
-      .getByRole('heading', { name: 'Your dashboard' })
-      .closest('header');
-    if (dashboardHeader === null) {
-      throw new Error('The dashboard heading is not inside its page header.');
-    }
-    const dashboardStatus = within(dashboardHeader).getByRole('status', {
-      name: 'Changes are not being saved',
-    });
-    expect(dashboardStatus).toBeVisible();
-    expect(dashboardStatus).toHaveClass('is-error');
-
     const notes = screen.getByLabelText('Practice notes');
     await user.type(notes, 'Quota test note.');
     await user.tab();
@@ -174,5 +169,37 @@ describe('browser persistence recovery', () => {
 
     resetBrowserTrainingStorage();
     expect(window.localStorage.getItem(TRAINING_STORAGE_KEY)).toBeNull();
+  });
+
+  it('surfaces the exact conflict when legacy Uchikomi overrides cannot be merged', () => {
+    const raw = JSON.stringify({
+      version: 5,
+      state: {
+        dashboardEntries: [
+          {
+            id: 'international-entry',
+            trainingSetId: 'international-dojo-2-hour-session',
+            quantityOverrides: {
+              'international-dojo-2-hour-session-uchikomi-men-1': { repetitions: 4 },
+              'international-dojo-2-hour-session-uchikomi-kote': { repetitions: 5 },
+            },
+            notes: '',
+            createdAt: '2026-08-19T10:00:00.000Z',
+          },
+        ],
+        customTrainingSets: [],
+      },
+    });
+    window.localStorage.setItem(TRAINING_STORAGE_KEY, raw);
+
+    expect(inspectBrowserTrainingStorage()).toEqual({
+      status: 'corrupt',
+      raw,
+      reason:
+        'Dashboard entry international-entry has conflicting repetitions overrides for the ' +
+        'corrected International Uchikomi sequence: ' +
+        'international-dojo-2-hour-session-uchikomi-men-1=4, ' +
+        'international-dojo-2-hour-session-uchikomi-kote=5.',
+    });
   });
 });

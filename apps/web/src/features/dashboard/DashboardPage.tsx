@@ -1,46 +1,44 @@
 import { useState, type ChangeEvent, type FocusEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
-import type { DashboardEntry, TrainingSet, TrainingStep } from '@kendo-menu/domain';
+import type {
+  DashboardEntry,
+  TrainingActivity,
+  TrainingQuantityUnit,
+  TrainingSection,
+  TrainingSet,
+} from '@kendo-menu/domain';
 import type { RemovedDashboardEntry } from '@kendo-menu/store';
 
 import {
   findTrainingSet,
   formatCategory,
-  formatRepUnit,
+  formatQuantityValue,
+  formatQuantityUnit,
   getAllTrainingSets,
+  getEditableTrainingQuantityUnits,
+  getEffectiveTrainingQuantity,
+  getQuantityValidationMessage,
+  getTrainingQuantityValue,
+  getTrainingSetActivityCount,
+  getTrainingSetDescription,
   getTrainingSetSections,
-  isValidRepValue,
+  isTrainingQuantityRange,
+  isValidQuantityValue,
 } from '../../lib/training-data';
 import { useTrainingStore, useTrainingStoreApi } from '../../lib/training-store-context';
 import {
-  getPersistenceStatusLabel,
   getPersistenceUpdateLabel,
   usePersistenceStatus,
 } from '../persistence/persistence-context';
 
-function updateRepOverrides(
+function getQuantityDraftValue(
   entry: DashboardEntry,
-  stepId: string,
-  value: number | null,
-): Readonly<Record<string, number>> {
-  const next = { ...entry.repOverrides };
-
-  if (value === null) {
-    delete next[stepId];
-  } else {
-    next[stepId] = value;
-  }
-
-  return next;
-}
-
-function getRepDraftValue(entry: DashboardEntry, step: TrainingStep): string {
-  return Object.hasOwn(entry.repOverrides, step.id)
-    ? String(entry.repOverrides[step.id] ?? '')
-    : step.defaultReps === null
-      ? ''
-      : String(step.defaultReps);
+  activity: TrainingActivity,
+  unit: TrainingQuantityUnit,
+): string {
+  const value = getEffectiveTrainingQuantity(entry, activity, unit);
+  return value === undefined || isTrainingQuantityRange(value) ? '' : String(value);
 }
 
 export function DashboardPage() {
@@ -48,6 +46,8 @@ export function DashboardPage() {
   const customTrainingSets = useTrainingStore((state) => state.customTrainingSets);
   const removeFromDashboard = useTrainingStore((state) => state.removeFromDashboard);
   const updateDashboardEntry = useTrainingStore((state) => state.updateDashboardEntry);
+  const setQuantityOverride = useTrainingStore((state) => state.setQuantityOverride);
+  const clearQuantityOverride = useTrainingStore((state) => state.clearQuantityOverride);
   const store = useTrainingStoreApi();
   const [removedEntry, setRemovedEntry] = useState<RemovedDashboardEntry | null>(null);
   const [searchParams] = useSearchParams();
@@ -97,14 +97,6 @@ export function DashboardPage() {
         <Link className="primary-button" to="/app/drills/new">
           Create drill
         </Link>
-        {/* <div
-          className={persistenceStatus.writeFailed ? 'session-status is-error' : 'session-status'}
-          aria-label={getPersistenceStatusLabel(persistenceStatus)}
-          role="status"
-        >
-          <span className="status-pulse" aria-hidden="true" />
-          <span>{getPersistenceStatusLabel(persistenceStatus)}</span>
-        </div> */}
       </header>
 
       <p className="sr-only" role="status" aria-live="polite">
@@ -124,8 +116,8 @@ export function DashboardPage() {
           <p className="eyebrow">A clean starting line</p>
           <h2 id="empty-dashboard-title">Your dashboard is ready.</h2>
           <p>
-            Add a drill from the library and shape it for today&apos;s practice. Reps and notes stay
-            on this device as you refine the set.
+            Add a drill from the library and shape it for today&apos;s practice. Quantities and
+            notes stay on this device as you refine the set.
           </p>
           <div className="empty-actions">
             <Link className="primary-button" to="/app/library">
@@ -157,6 +149,12 @@ export function DashboardPage() {
                 trainingSet={trainingSet}
                 onRemove={() => removeEntry(entry, trainingSet.name)}
                 onUpdate={(patch) => updateDashboardEntry(entry.id, patch)}
+                onSetQuantity={(activityId, unit, value) =>
+                  setQuantityOverride(entry.id, activityId, unit, value)
+                }
+                onClearQuantity={(activityId, unit) =>
+                  clearQuantityOverride(entry.id, activityId, unit)
+                }
               />
             );
           })}
@@ -195,10 +193,9 @@ interface DashboardTrainingSetProps {
   readonly index: number;
   readonly trainingSet: TrainingSet;
   readonly onRemove: () => void;
-  readonly onUpdate: (patch: {
-    readonly repOverrides?: Readonly<Record<string, number>>;
-    readonly notes?: string;
-  }) => void;
+  readonly onUpdate: (patch: { readonly notes?: string }) => void;
+  readonly onSetQuantity: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
+  readonly onClearQuantity: (activityId: string, unit: TrainingQuantityUnit) => void;
 }
 
 function DashboardTrainingSet({
@@ -207,12 +204,14 @@ function DashboardTrainingSet({
   trainingSet,
   onRemove,
   onUpdate,
+  onSetQuantity,
+  onClearQuantity,
 }: DashboardTrainingSetProps) {
   const [notesDraft, setNotesDraft] = useState(entry.notes);
   const [notesStatus, setNotesStatus] = useState<'idle' | 'updated'>('idle');
   const persistenceStatus = usePersistenceStatus();
   const sections = getTrainingSetSections(trainingSet);
-  const stepCount = sections.reduce((count, section) => count + section.steps.length, 0);
+  const activityCount = getTrainingSetActivityCount(trainingSet);
 
   const handleNotesChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setNotesDraft(event.target.value);
@@ -235,9 +234,9 @@ function DashboardTrainingSet({
         <div className="card-content">
           <p className="card-kicker">{formatCategory(trainingSet.category)}</p>
           <h2>{trainingSet.name}</h2>
-          <p>{trainingSet.description}</p>
+          <p>{getTrainingSetDescription(trainingSet)}</p>
           <div className="card-meta">
-            <span>{stepCount} exercises</span>
+            <span>{activityCount} activities</span>
             <span>{entry.notes.length > 0 ? 'Has notes' : 'No notes yet'}</span>
           </div>
         </div>
@@ -257,28 +256,47 @@ function DashboardTrainingSet({
               <span className="section-number" aria-hidden="true">
                 {sectionIndex + 1}
               </span>
-              <h3 id={`${entry.id}-${section.id}`}>{section.label}</h3>
+              <h3 id={`${entry.id}-${section.id}`}>{section.name}</h3>
             </div>
-            <ol className="training-step-list">
-              {section.steps.map((step, stepIndex) => (
-                <li className="training-step" key={step.id}>
-                  <span className="step-number" aria-hidden="true">
-                    {stepIndex + 1}
-                  </span>
-                  <div className="step-copy">
-                    <span className="step-label">{step.label}</span>
-                    {step.description ? (
-                      <span className="step-description">{step.description}</span>
-                    ) : null}
-                  </div>
-                  <RepEditor
-                    entry={entry}
-                    step={step}
-                    onUpdate={(repOverrides) => onUpdate({ repOverrides })}
-                  />
-                </li>
-              ))}
-            </ol>
+            {section.exercises.length === 0 || section.quantities !== undefined ? (
+              <div className="training-step training-step--standalone">
+                {section.notes !== undefined && section.notes.length > 0 ? (
+                  <span className="step-description">{section.notes}</span>
+                ) : null}
+                <QuantityEditors
+                  entry={entry}
+                  activity={section}
+                  onSet={onSetQuantity}
+                  onClear={onClearQuantity}
+                />
+              </div>
+            ) : section.notes !== undefined && section.notes.length > 0 ? (
+              <p className="step-description">{section.notes}</p>
+            ) : null}
+            {section.exercises.length > 0 ? (
+              <ol className="training-step-list">
+                {section.exercises.map((exercise, exerciseIndex) => (
+                  <li className="training-step" key={exercise.id}>
+                    <span className="step-number" aria-hidden="true">
+                      {exerciseIndex + 1}
+                    </span>
+                    <div className="step-copy">
+                      <span className="step-label">{exercise.name}</span>
+                      {exercise.notes !== undefined && exercise.notes.length > 0 ? (
+                        <span className="step-description">{exercise.notes}</span>
+                      ) : null}
+                    </div>
+                    <QuantityEditors
+                      entry={entry}
+                      activity={exercise}
+                      parentSection={section}
+                      onSet={onSetQuantity}
+                      onClear={onClearQuantity}
+                    />
+                  </li>
+                ))}
+              </ol>
+            ) : null}
           </section>
         ))}
       </div>
@@ -301,64 +319,112 @@ function DashboardTrainingSet({
   );
 }
 
-interface RepEditorProps {
+interface QuantityEditorsProps {
   readonly entry: DashboardEntry;
-  readonly step: TrainingStep;
-  readonly onUpdate: (repOverrides: Readonly<Record<string, number>>) => void;
+  readonly activity: TrainingActivity;
+  readonly parentSection?: TrainingSection;
+  readonly onSet: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
+  readonly onClear: (activityId: string, unit: TrainingQuantityUnit) => void;
 }
 
-function RepEditor({ entry, step, onUpdate }: RepEditorProps) {
-  const [draft, setDraft] = useState(() => getRepDraftValue(entry, step));
+function QuantityEditors({ entry, activity, parentSection, onSet, onClear }: QuantityEditorsProps) {
+  const units = getEditableTrainingQuantityUnits(entry, activity, parentSection);
+
+  return (
+    <div className="quantity-editor-group">
+      {units.map((unit) => (
+        <QuantityEditor
+          key={unit}
+          entry={entry}
+          activity={activity}
+          unit={unit}
+          onSet={onSet}
+          onClear={onClear}
+        />
+      ))}
+    </div>
+  );
+}
+
+interface QuantityEditorProps extends QuantityEditorsProps {
+  readonly unit: TrainingQuantityUnit;
+}
+
+function QuantityEditor({ entry, activity, unit, onSet, onClear }: QuantityEditorProps) {
+  const [draft, setDraft] = useState(() => getQuantityDraftValue(entry, activity, unit));
   const [feedback, setFeedback] = useState<'idle' | 'updated' | 'invalid'>('idle');
   const persistenceStatus = usePersistenceStatus();
-  const inputId = `reps-${entry.id}-${step.id}`;
-  const errorId = `${inputId}-error`;
+  const inputId = `quantity-${unit}-${entry.id}-${activity.id}`;
+  const messageId = `${inputId}-message`;
+  const unitLabel = formatQuantityUnit(unit, 2);
+  const accessibleUnitLabel = `${unitLabel.charAt(0).toUpperCase()}${unitLabel.slice(1)}`;
+  const defaultValue = getTrainingQuantityValue(activity, unit);
+  const placeholder =
+    defaultValue !== undefined && isTrainingQuantityRange(defaultValue)
+      ? `${formatQuantityValue(defaultValue.min)}–${formatQuantityValue(defaultValue.max)}`
+      : 'Not specified';
   const feedbackMessage =
     feedback === 'invalid'
-      ? 'Enter a whole number from 0 to 500.'
+      ? getQuantityValidationMessage(unit)
       : feedback === 'updated'
         ? getPersistenceUpdateLabel(persistenceStatus)
         : '';
 
   const commit = (event: FocusEvent<HTMLInputElement>) => {
     const rawValue = event.currentTarget.value.trim();
+    const activityOverrides = entry.quantityOverrides[activity.id];
+    const hasOverride = activityOverrides !== undefined && Object.hasOwn(activityOverrides, unit);
 
     if (rawValue === '') {
-      onUpdate(updateRepOverrides(entry, step.id, null));
-      setDraft(step.defaultReps === null ? '' : String(step.defaultReps));
+      const defaultValue = getTrainingQuantityValue(activity, unit);
+      if (!hasOverride && defaultValue === undefined) {
+        setFeedback('idle');
+        return;
+      }
+      onClear(activity.id, unit);
+      setDraft(
+        defaultValue === undefined || isTrainingQuantityRange(defaultValue)
+          ? ''
+          : String(defaultValue),
+      );
       setFeedback('updated');
       return;
     }
 
-    if (!/^\d+$/.test(rawValue)) {
-      setFeedback('invalid');
-      return;
-    }
-
     const value = Number(rawValue);
-    if (!isValidRepValue(value)) {
+    if (!isValidQuantityValue(unit, value)) {
       setFeedback('invalid');
       return;
     }
 
-    onUpdate(updateRepOverrides(entry, step.id, value));
+    const effectiveValue = getEffectiveTrainingQuantity(entry, activity, unit);
+    if (typeof effectiveValue === 'number' && value === effectiveValue) {
+      setDraft(String(value));
+      setFeedback('idle');
+      return;
+    }
+
+    onSet(activity.id, unit, value);
     setDraft(String(value));
     setFeedback('updated');
   };
 
   return (
-    <div className="rep-editor">
-      <label htmlFor={inputId}>Repetitions for {step.label}</label>
-      <div className="rep-input-wrap">
+    <div className="quantity-editor">
+      <label htmlFor={inputId}>
+        {accessibleUnitLabel} for {activity.name}
+      </label>
+      <div className="quantity-input-wrap">
         <input
           id={inputId}
           type="number"
           min={0}
-          max={500}
-          step={1}
-          inputMode="numeric"
+          max={unit === 'repetitions' ? 500 : undefined}
+          step={unit === 'minutes' || unit === 'seconds' ? 'any' : 1}
+          inputMode={unit === 'minutes' || unit === 'seconds' ? 'decimal' : 'numeric'}
           value={draft}
-          aria-describedby={feedbackMessage.length > 0 ? errorId : undefined}
+          placeholder={placeholder}
+          aria-describedby={feedbackMessage.length > 0 ? messageId : undefined}
           aria-invalid={feedback === 'invalid'}
           onChange={(event) => {
             setDraft(event.target.value);
@@ -371,10 +437,14 @@ function RepEditor({ entry, step, onUpdate }: RepEditorProps) {
           }}
           onBlur={commit}
         />
-        <span aria-hidden="true">{formatRepUnit(step)}</span>
+        <span aria-hidden="true">{unitLabel}</span>
       </div>
       {feedbackMessage.length > 0 ? (
-        <span id={errorId} className={feedback === 'invalid' ? 'form-error' : 'field-status'}>
+        <span
+          id={messageId}
+          className={feedback === 'invalid' ? 'form-error' : 'field-status'}
+          role="status"
+        >
           {feedbackMessage}
         </span>
       ) : null}

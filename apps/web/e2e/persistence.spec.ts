@@ -123,6 +123,10 @@ test.describe('local persistence recovery', () => {
       });
     });
     await page.goto('/app/library');
+    const seniorHighSchoolCard = page
+      .getByRole('heading', { name: 'Senior High School dojo menu' })
+      .locator('xpath=ancestor::article');
+    await seniorHighSchoolCard.getByRole('link', { name: 'View drill' }).click();
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await expect(page.getByRole('status', { name: 'Changes are not being saved' })).toBeVisible();
     await openNavigationIfNeeded(page);
@@ -131,21 +135,14 @@ test.describe('local persistence recovery', () => {
       .getByRole('link', { name: 'Dashboard', exact: true })
       .click();
 
-    const repetitions = page.getByLabel(/repetitions for stretch/i);
-    await repetitions.fill('12');
-    await repetitions.blur();
+    const minutes = page.getByLabel(/minutes for stretch/i);
+    await minutes.fill('12');
+    await minutes.blur();
     await expect(page.getByText('Not saved to this device.')).toBeVisible();
     const appBanner = page.getByRole('banner');
     await expect(
       appBanner.getByRole('status', { name: 'Changes are not being saved' }),
     ).toBeVisible();
-    const dashboardHeader = page
-      .getByRole('heading', { name: 'Your dashboard', exact: true })
-      .locator('xpath=ancestor::header');
-    await expect(
-      dashboardHeader.getByRole('status', { name: 'Changes are not being saved' }),
-    ).toBeVisible();
-
     const notes = page.getByLabel('Practice notes');
     await notes.fill('Quota test note.');
     await notes.blur();

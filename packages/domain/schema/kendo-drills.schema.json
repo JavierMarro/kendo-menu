@@ -1,0 +1,159 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://kendomenu.local/schema/kendo-drills.schema.json",
+  "title": "Kendo drill collection",
+  "description": "Canonical curated kendo drills. Cross-object ID uniqueness and ordered duration ranges are enforced by the domain validator.",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "$ref": "#/definitions/drill"
+  },
+  "definitions": {
+    "nonblankString": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "durationUnit": {
+      "type": "string",
+      "enum": ["seconds", "minutes"]
+    },
+    "fixedDuration": {
+      "type": "object",
+      "properties": {
+        "unit": {
+          "$ref": "#/definitions/durationUnit"
+        },
+        "value": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": ["unit", "value"],
+      "additionalProperties": false
+    },
+    "durationRange": {
+      "type": "object",
+      "properties": {
+        "unit": {
+          "$ref": "#/definitions/durationUnit"
+        },
+        "min": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": ["unit", "min", "max"],
+      "additionalProperties": false
+    },
+    "duration": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/fixedDuration"
+        },
+        {
+          "$ref": "#/definitions/durationRange"
+        }
+      ]
+    },
+    "quantities": {
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "repetitions": {
+          "$ref": "#/definitions/count"
+        },
+        "sets": {
+          "$ref": "#/definitions/count"
+        },
+        "rounds": {
+          "$ref": "#/definitions/count"
+        },
+        "duration": {
+          "$ref": "#/definitions/duration"
+        }
+      },
+      "additionalProperties": false
+    },
+    "exercise": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/nonblankString"
+        },
+        "name": {
+          "$ref": "#/definitions/nonblankString"
+        },
+        "quantities": {
+          "$ref": "#/definitions/quantities"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "name"],
+      "additionalProperties": false
+    },
+    "section": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/nonblankString"
+        },
+        "name": {
+          "$ref": "#/definitions/nonblankString"
+        },
+        "quantities": {
+          "$ref": "#/definitions/quantities"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "exercises": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/exercise"
+          }
+        }
+      },
+      "required": ["id", "name", "exercises"],
+      "additionalProperties": false
+    },
+    "drill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/nonblankString"
+        },
+        "sourceId": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "name": {
+          "$ref": "#/definitions/nonblankString"
+        },
+        "description": {
+          "type": "string"
+        },
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/section"
+          }
+        }
+      },
+      "required": ["id", "name", "sections"],
+      "additionalProperties": false
+    }
+  }
+}

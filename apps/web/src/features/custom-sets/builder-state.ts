@@ -151,10 +151,10 @@ export function toTrainingSetInput(state: BuilderState): TrainingSetInput {
     description: state.description.trim(),
     category: 'custom',
     sections: state.sections.map((section) => ({
-      label: section.label.trim(),
-      steps: section.steps.map((step) => ({
-        label: step.label.trim(),
-        defaultReps: Number(step.reps),
+      name: section.label.trim(),
+      exercises: section.steps.map((step) => ({
+        name: step.label.trim(),
+        quantities: { repetitions: Number(step.reps) },
       })),
     })),
   };

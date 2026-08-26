@@ -12,6 +12,7 @@ apps/web/playwright-report/
 
 # User-global or plugin-managed third-party skills
 .agents/skills/
+.impeccable
 .codex/hooks.json
 
 # Local Impeccable runtime state

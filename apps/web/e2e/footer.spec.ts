@@ -8,9 +8,10 @@ async function dismissCookieNotice(page: Page): Promise<void> {
 
 async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): Promise<void> {
   await expect(footer.getByRole('link', { name: 'KendoMenu home' })).toBeVisible();
+  await expect(footer.getByRole('link', { name: 'How it works' })).toBeVisible();
   await expect(footer.getByRole('link', { name: /Drill library/ })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'Dashboard' })).toBeVisible();
-  await expect(footer.getByRole('link', { name: 'Create drill' })).toBeVisible();
+  await expect(footer.getByRole('link', { name: 'FAQ' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'GitHub (placeholder)' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'LinkedIn (placeholder)' })).toBeVisible();
 
@@ -61,7 +62,7 @@ test.describe('responsive site footer', () => {
     expect(scrollWidth).toBeLessThanOrEqual(1440);
   });
 
-  test('stacks brand, navigation, and social columns at 375px without horizontal overflow', async ({
+  test('places the brand above two link columns at 375px without horizontal overflow', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 375, height: 812 });
@@ -88,16 +89,20 @@ test.describe('responsive site footer', () => {
         }),
         gridColumnCount: getComputedStyle(element).gridTemplateColumns.split(/\s+/).filter(Boolean)
           .length,
-        isStacked:
-          firstRect !== undefined &&
-          rects.every((rect, index) => index === 0 || rect.top > (rects[index - 1]?.bottom ?? 0)),
+        isBrandAboveLinks:
+          firstRect !== undefined && rects.slice(1).every((rect) => rect.top >= firstRect.bottom),
+        areLinkColumnsAligned:
+          rects[1] !== undefined &&
+          rects[2] !== undefined &&
+          Math.abs(rects[1].top - rects[2].top) <= 1,
       };
     });
 
     expect(mobileLayout).toEqual({
       columnOrder: ['brand', 'navigation', 'social'],
-      gridColumnCount: 1,
-      isStacked: true,
+      gridColumnCount: 2,
+      isBrandAboveLinks: true,
+      areLinkColumnsAligned: true,
     });
     await verifyFooterLinksAndKeyboardFocus(page, footer);
 

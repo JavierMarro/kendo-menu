@@ -1,13 +1,33 @@
 import { Link, useParams } from 'react-router-dom';
 import { useState } from 'react';
 
+import type { TrainingActivity } from '@kendo-menu/domain';
+
 import { useTrainingStore } from '../../lib/training-store-context';
 import {
   findTrainingSet,
   formatCategory,
+  formatTrainingQuantity,
   getAllTrainingSets,
-  getTrainingSetStepCount,
+  getSpecifiedTrainingQuantities,
+  getTrainingSetDescription,
+  getSectionActivityCount,
+  getTrainingSetActivityCount,
 } from '../../lib/training-data';
+
+function TrainingActivityQuantities({ activity }: { readonly activity: TrainingActivity }) {
+  const quantities = getSpecifiedTrainingQuantities(activity);
+
+  return quantities.length === 0 ? (
+    <span className="quantity-not-specified">Quantity not specified</span>
+  ) : (
+    <ul className="quantity-list" aria-label={`Quantities for ${activity.name}`}>
+      {quantities.map((quantity) => (
+        <li key={quantity.unit}>{formatTrainingQuantity(quantity)}</li>
+      ))}
+    </ul>
+  );
+}
 
 export function TrainingSetDetailPage() {
   const { trainingSetId } = useParams();
@@ -40,7 +60,7 @@ export function TrainingSetDetailPage() {
         <div>
           <p className="eyebrow">{formatCategory(trainingSet.category)}</p>
           <h1>{trainingSet.name}</h1>
-          <p className="page-intro">{trainingSet.description}</p>
+          <p className="page-intro">{getTrainingSetDescription(trainingSet)}</p>
         </div>
         <button
           className="primary-button"
@@ -54,7 +74,9 @@ export function TrainingSetDetailPage() {
         </button>
       </header>
 
-      <p className="detail-meta">{getTrainingSetStepCount(trainingSet)} exercises in this drill.</p>
+      <p className="detail-meta">
+        {getTrainingSetActivityCount(trainingSet)} activities in this drill.
+      </p>
       <p className="sr-only" role="status" aria-live="polite">
         {statusMessage}
       </p>
@@ -65,38 +87,55 @@ export function TrainingSetDetailPage() {
       ) : null}
 
       <div className="detail-sections">
-        {trainingSet.sections.map((section, sectionIndex) => (
-          <section
-            className="detail-section"
-            key={section.id}
-            aria-labelledby={`detail-${section.id}`}
-          >
-            <div className="training-section-heading">
-              <span className="section-number" aria-hidden="true">
-                {sectionIndex + 1}
-              </span>
-              <h2 id={`detail-${section.id}`}>{section.label}</h2>
-            </div>
-            <ol className="training-step-list">
-              {section.steps.map((step, stepIndex) => (
-                <li className="training-step" key={step.id}>
-                  <span className="step-number" aria-hidden="true">
-                    {stepIndex + 1}
+        {trainingSet.sections.map((section, sectionIndex) => {
+          const activityCount = getSectionActivityCount(section);
+          const countLabel =
+            section.exercises.length === 0 || section.quantities !== undefined
+              ? `${activityCount} ${activityCount === 1 ? 'activity' : 'activities'}`
+              : `${activityCount} ${activityCount === 1 ? 'exercise' : 'exercises'}`;
+
+          return (
+            <details className="detail-section" key={section.id}>
+              <summary className="detail-section-summary">
+                <span className="detail-section-summary-content">
+                  <span className="section-number" aria-hidden="true">
+                    {sectionIndex + 1}
                   </span>
-                  <div className="step-copy">
-                    <span className="step-label">{step.label}</span>
-                    {step.description ? (
-                      <span className="step-description">{step.description}</span>
-                    ) : null}
-                  </div>
-                  <span className="detail-reps">
-                    {step.defaultReps === null ? 'Set reps' : `${step.defaultReps} reps`}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          </section>
-        ))}
+                  <span className="detail-section-label">{section.name}</span>
+                  <span className="detail-section-count">{countLabel}</span>
+                </span>
+              </summary>
+              {section.exercises.length === 0 || section.quantities !== undefined ? (
+                <div className="training-step training-step--standalone">
+                  {section.notes !== undefined && section.notes.length > 0 ? (
+                    <span className="step-description">{section.notes}</span>
+                  ) : null}
+                  <TrainingActivityQuantities activity={section} />
+                </div>
+              ) : section.notes !== undefined && section.notes.length > 0 ? (
+                <p className="step-description">{section.notes}</p>
+              ) : null}
+              {section.exercises.length > 0 ? (
+                <ol className="training-step-list">
+                  {section.exercises.map((exercise, exerciseIndex) => (
+                    <li className="training-step" key={exercise.id}>
+                      <span className="step-number" aria-hidden="true">
+                        {exerciseIndex + 1}
+                      </span>
+                      <div className="step-copy">
+                        <span className="step-label">{exercise.name}</span>
+                        {exercise.notes !== undefined && exercise.notes.length > 0 ? (
+                          <span className="step-description">{exercise.notes}</span>
+                        ) : null}
+                      </div>
+                      <TrainingActivityQuantities activity={exercise} />
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
+            </details>
+          );
+        })}
       </div>
     </>
   );
