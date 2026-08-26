@@ -84,29 +84,8 @@
         "name": "Uchikomi",
         "exercises": [
           {
-            "id": "international-dojo-2-hour-session-uchikomi-men-1",
-            "name": "men",
-            "quantities": {
-              "repetitions": 5
-            }
-          },
-          {
-            "id": "international-dojo-2-hour-session-uchikomi-kote",
-            "name": "kote",
-            "quantities": {
-              "repetitions": 5
-            }
-          },
-          {
-            "id": "international-dojo-2-hour-session-uchikomi-kote-men",
-            "name": "kote-men",
-            "quantities": {
-              "repetitions": 5
-            }
-          },
-          {
-            "id": "international-dojo-2-hour-session-uchikomi-men-2",
-            "name": "men",
+            "id": "international-dojo-2-hour-session-uchikomi-men-kote-kote-men-men",
+            "name": "Men → Kote → Kote-men → Men",
             "quantities": {
               "repetitions": 5
             }
@@ -201,8 +180,8 @@
       {
         "id": "international-dojo-2-hour-session-kakarigeiko-kakarigeiko",
         "name": "Kakarigeiko",
+        "notes": "10 minutes total",
         "quantities": {
-          "rounds": 10,
           "duration": {
             "unit": "seconds",
             "value": 60
@@ -213,8 +192,8 @@
       {
         "id": "international-dojo-2-hour-session-jigeiko-jigeiko",
         "name": "Jigeiko",
+        "notes": "20 minutes total",
         "quantities": {
-          "rounds": 10,
           "duration": {
             "unit": "minutes",
             "value": 2
@@ -502,8 +481,8 @@
       {
         "id": "junior-high-kendo-club-kakarigeiko-kakarigeiko",
         "name": "Kakarigeiko",
+        "notes": "10 minutes total",
         "quantities": {
-          "rounds": 30,
           "duration": {
             "unit": "seconds",
             "value": 20
@@ -1045,6 +1024,7 @@
       {
         "id": "senior-high-school-kendo-club-jigeiko-jigeiko",
         "name": "jigeiko",
+        "notes": "3 min rounds",
         "quantities": {
           "duration": {
             "unit": "minutes",
@@ -1163,12 +1143,12 @@
       {
         "id": "university-high-school-ken-tore-circuit",
         "name": "Ken-tore circuit",
+        "notes": "Station A: Kirikaeshi, Hayasuburi, Stationary kote-men, Left-right do-kirikaeshi\nStation B: Men, Kote, Kote-men, Do",
         "exercises": [
           {
             "id": "university-high-school-ken-tore-circuit-kirikaeshi",
             "name": "kirikaeshi",
             "quantities": {
-              "sets": 3,
               "duration": {
                 "unit": "seconds",
                 "value": 30
@@ -1179,7 +1159,6 @@
             "id": "university-high-school-ken-tore-circuit-hayasuburi",
             "name": "hayasuburi",
             "quantities": {
-              "sets": 3,
               "duration": {
                 "unit": "seconds",
                 "value": 30
@@ -1190,7 +1169,6 @@
             "id": "university-high-school-ken-tore-circuit-stationary-kote-men",
             "name": "stationary kote-men",
             "quantities": {
-              "sets": 3,
               "duration": {
                 "unit": "seconds",
                 "value": 30
@@ -1201,7 +1179,6 @@
             "id": "university-high-school-ken-tore-circuit-left-right-do-kirikaeshi",
             "name": "left-right do-kirikaeshi",
             "quantities": {
-              "sets": 3,
               "duration": {
                 "unit": "seconds",
                 "value": 30
@@ -1212,7 +1189,6 @@
             "id": "university-high-school-ken-tore-circuit-men",
             "name": "men",
             "quantities": {
-              "sets": 3,
               "duration": {
                 "unit": "seconds",
                 "value": 30
@@ -1223,7 +1199,6 @@
             "id": "university-high-school-ken-tore-circuit-kote",
             "name": "kote",
             "quantities": {
-              "sets": 3,
               "duration": {
                 "unit": "seconds",
                 "value": 30
@@ -1234,7 +1209,6 @@
             "id": "university-high-school-ken-tore-circuit-kote-men",
             "name": "kote-men",
             "quantities": {
-              "sets": 3,
               "duration": {
                 "unit": "seconds",
                 "value": 30
@@ -1245,7 +1219,6 @@
             "id": "university-high-school-ken-tore-circuit-do",
             "name": "do",
             "quantities": {
-              "sets": 3,
               "duration": {
                 "unit": "seconds",
                 "value": 30
@@ -1371,6 +1344,7 @@
       {
         "id": "university-version-2-dojo-length-drills",
         "name": "Dojo-length drills",
+        "notes": "All the exercises below, taking the length of the dojo",
         "exercises": [
           {
             "id": "university-version-2-dojo-length-drills-slow-kirikaeshi",
@@ -1527,8 +1501,8 @@
         "name": "kakarigeijo",
         "quantities": {
           "duration": {
-            "unit": "seconds",
-            "value": 300
+            "unit": "minutes",
+            "value": 5
           }
         },
         "exercises": []
@@ -1595,6 +1569,7 @@
       {
         "id": "top-university-fee-version",
         "name": "Fee version",
+        "notes": "These two methods are options, not sequential mandatory exercises.",
         "exercises": [
           {
             "id": "top-university-fee-version-uchikomi-geiko",
@@ -1611,27 +1586,50 @@
       {
         "id": "top-university-kubun-geiko",
         "name": "Kubun-geiko",
+        "notes": "Classification-geiko",
         "exercises": [
           {
             "id": "top-university-kubun-geiko-uchikomi-men-only",
             "name": "Uchikomi (Men only)",
-            "notes": "1st person, 30/60 seconds"
+            "quantities": {
+              "duration": {
+                "unit": "seconds",
+                "min": 30,
+                "max": 60
+              }
+            },
+            "notes": "1st person"
           },
           {
             "id": "top-university-kubun-geiko-kakari-geiko",
             "name": "Kakari-geiko",
-            "notes": "2nd person, 30/60 seconds"
+            "quantities": {
+              "duration": {
+                "unit": "seconds",
+                "min": 30,
+                "max": 60
+              }
+            },
+            "notes": "2nd person"
           },
           {
             "id": "top-university-kubun-geiko-kirikaeshi",
             "name": "Kirikaeshi",
-            "notes": "3rd person, 30/60 seconds"
+            "quantities": {
+              "duration": {
+                "unit": "seconds",
+                "min": 30,
+                "max": 60
+              }
+            },
+            "notes": "3rd person"
           }
         ]
       },
       {
         "id": "top-university-jigeiko-jigeiko",
         "name": "Jigeiko",
+        "notes": "2 min per round",
         "quantities": {
           "duration": {
             "unit": "minutes",

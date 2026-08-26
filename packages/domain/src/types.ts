@@ -145,7 +145,7 @@ export class TrainingValidationError extends Error {
 
 export const RESEARCHED_DRILL_COUNT = 11;
 export const RESEARCHED_SECTION_COUNT = 90;
-export const RESEARCHED_ACTIVITY_COUNT = 214;
+export const RESEARCHED_ACTIVITY_COUNT = 211;
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

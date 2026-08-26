@@ -339,12 +339,12 @@ describe('curated domain behavior', () => {
       'international-dojo-2-hour-session',
       'international-dojo-2-hour-session-warm-up-warm-up',
     );
-    const secondMen = requireActivity(
+    const uchikomiSequence = requireActivity(
       'international-dojo-2-hour-session',
-      'international-dojo-2-hour-session-uchikomi-men-2',
+      'international-dojo-2-hour-session-uchikomi-men-kote-kote-men-men',
     );
 
     expect(warmUp.name).toBe('Warm-up');
-    expect(secondMen.name).toBe('men');
+    expect(uchikomiSequence.name).toBe('Men → Kote → Kote-men → Men');
   });
 });

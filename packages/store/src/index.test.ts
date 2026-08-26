@@ -20,6 +20,7 @@ import {
   migratePersistedTrainingStateV2ToV3,
   migratePersistedTrainingStateV3ToV4,
   migratePersistedTrainingStateV4ToV5,
+  migratePersistedTrainingStateV5ToV6,
   parsePersistedTrainingState,
   parsePersistedTrainingStateV4,
   type LegacyDashboardEntry,
@@ -120,6 +121,35 @@ const LEGACY_V4_STATE = {
     },
   ],
 } as const;
+
+const INTERNATIONAL_DOJO_ID = asTrainingSetId('international-dojo-2-hour-session');
+const UNIVERSITY_VERSION_TWO_ID = asTrainingSetId('university-version-2');
+const CORRECTED_UCHIKOMI_ID = 'international-dojo-2-hour-session-uchikomi-men-kote-kote-men-men';
+const UNIVERSITY_VERSION_TWO_KAKARIGEIJO_ID = 'university-version-2-kakarigeijo-kakarigeijo';
+const LEGACY_UCHIKOMI_IDS = [
+  'international-dojo-2-hour-session-uchikomi-men-1',
+  'international-dojo-2-hour-session-uchikomi-kote',
+  'international-dojo-2-hour-session-uchikomi-kote-men',
+  'international-dojo-2-hour-session-uchikomi-men-2',
+] as const;
+
+function versionFiveUchikomiState(quantityOverrides: DashboardEntry['quantityOverrides']): {
+  readonly dashboardEntries: readonly DashboardEntry[];
+  readonly customTrainingSets: readonly [];
+} {
+  return {
+    dashboardEntries: [
+      {
+        id: 'international-entry',
+        trainingSetId: INTERNATIONAL_DOJO_ID,
+        quantityOverrides,
+        notes: 'Preserve this note.',
+        createdAt: '2026-08-19T10:00:00.000Z',
+      },
+    ],
+    customTrainingSets: [],
+  };
+}
 
 class MemoryStorage implements StateStorage {
   readonly #values = new Map<string, string>();
@@ -532,6 +562,132 @@ describe('version 4 to version 5 migration', () => {
   });
 });
 
+describe('version 5 to version 6 canonical correction migration', () => {
+  it('merges unambiguous legacy sequence overrides by unit and preserves unrelated data', () => {
+    const state = versionFiveUchikomiState({
+      [LEGACY_UCHIKOMI_IDS[0]]: { repetitions: 5, seconds: 30 },
+      [LEGACY_UCHIKOMI_IDS[1]]: { repetitions: 5, sets: 2 },
+      [LEGACY_UCHIKOMI_IDS[2]]: { minutes: 1 },
+      [LEGACY_UCHIKOMI_IDS[3]]: { rounds: 0 },
+      'unrelated-activity': { repetitions: 12 },
+    });
+
+    const migrated = migratePersistedTrainingStateV5ToV6(state);
+
+    expect(migrated.dashboardEntries[0]).toEqual({
+      id: 'international-entry',
+      trainingSetId: INTERNATIONAL_DOJO_ID,
+      quantityOverrides: {
+        'unrelated-activity': { repetitions: 12 },
+        [CORRECTED_UCHIKOMI_ID]: {
+          repetitions: 5,
+          sets: 2,
+          rounds: 0,
+          seconds: 30,
+          minutes: 1,
+        },
+      },
+      notes: 'Preserve this note.',
+      createdAt: '2026-08-19T10:00:00.000Z',
+    });
+    expect(migrated.customTrainingSets).toEqual([]);
+  });
+
+  it('converts University version 2 kakarigeijo overrides to the corrected minutes unit', () => {
+    const state = {
+      dashboardEntries: [
+        {
+          id: 'university-entry',
+          trainingSetId: UNIVERSITY_VERSION_TWO_ID,
+          quantityOverrides: {
+            [UNIVERSITY_VERSION_TWO_KAKARIGEIJO_ID]: { repetitions: 0, seconds: 300 },
+            'unrelated-activity': { seconds: 45 },
+          },
+          notes: 'Keep this note.',
+          createdAt: '2026-08-19T10:00:00.000Z',
+        },
+        {
+          id: 'university-zero-entry',
+          trainingSetId: UNIVERSITY_VERSION_TWO_ID,
+          quantityOverrides: {
+            [UNIVERSITY_VERSION_TWO_KAKARIGEIJO_ID]: { seconds: 0, minutes: 0 },
+          },
+          notes: '',
+          createdAt: '',
+        },
+      ],
+      customTrainingSets: [],
+    };
+
+    const migrated = migratePersistedTrainingStateV5ToV6(state);
+
+    expect(migrated.dashboardEntries[0]).toMatchObject({
+      id: 'university-entry',
+      quantityOverrides: {
+        [UNIVERSITY_VERSION_TWO_KAKARIGEIJO_ID]: { repetitions: 0, minutes: 5 },
+        'unrelated-activity': { seconds: 45 },
+      },
+      notes: 'Keep this note.',
+    });
+    expect(migrated.dashboardEntries[1]?.quantityOverrides).toEqual({
+      [UNIVERSITY_VERSION_TWO_KAKARIGEIJO_ID]: { minutes: 0 },
+    });
+  });
+
+  it('rejects disagreeing second and minute overrides for corrected kakarigeijo', () => {
+    const state = {
+      dashboardEntries: [
+        {
+          id: 'university-entry',
+          trainingSetId: UNIVERSITY_VERSION_TWO_ID,
+          quantityOverrides: {
+            [UNIVERSITY_VERSION_TWO_KAKARIGEIJO_ID]: { seconds: 300, minutes: 4 },
+          },
+          notes: '',
+          createdAt: '',
+        },
+      ],
+      customTrainingSets: [],
+    };
+
+    expect(() => migratePersistedTrainingStateV5ToV6(state)).toThrow(
+      'Dashboard entry university-entry has conflicting duration overrides for ' +
+        'university-version-2-kakarigeijo-kakarigeijo: seconds=300, minutes=4.',
+    );
+  });
+
+  it('rejects conflicting legacy values and reports every conflicting source ID', () => {
+    const state = versionFiveUchikomiState({
+      [LEGACY_UCHIKOMI_IDS[0]]: { repetitions: 4 },
+      [LEGACY_UCHIKOMI_IDS[1]]: { repetitions: 5 },
+      [LEGACY_UCHIKOMI_IDS[2]]: { repetitions: 4 },
+    });
+    const detail =
+      'Dashboard entry international-entry has conflicting repetitions overrides for the ' +
+      'corrected International Uchikomi sequence: ' +
+      'international-dojo-2-hour-session-uchikomi-men-1=4, ' +
+      'international-dojo-2-hour-session-uchikomi-kote=5, ' +
+      'international-dojo-2-hour-session-uchikomi-kote-men=4.';
+
+    expect(() => migratePersistedTrainingStateV5ToV6(state)).toThrow(detail);
+    expect(classifyTrainingStorageValue(serializeState(state, 5))).toEqual({
+      status: 'corrupt',
+      kind: 'corrupt',
+      reason: 'override-migration-conflict',
+      detail,
+      conflict: {
+        dashboardEntryId: 'international-entry',
+        unit: 'repetitions',
+        overrides: [
+          { activityId: LEGACY_UCHIKOMI_IDS[0], value: 4 },
+          { activityId: LEGACY_UCHIKOMI_IDS[1], value: 5 },
+          { activityId: LEGACY_UCHIKOMI_IDS[2], value: 4 },
+        ],
+      },
+    });
+  });
+});
+
 describe('older migration chain', () => {
   it('preserves v2 repetition data through full quantities and into v5 exercises', () => {
     const stateV3 = migratePersistedTrainingStateV2ToV3(legacyVersionTwoState());
@@ -565,7 +721,7 @@ describe('older migration chain', () => {
 });
 
 describe('persistence lifecycle', () => {
-  it('writes version 5 and reloads custom sets, notes, seconds, and independent units', () => {
+  it('writes version 6 and reloads custom sets, notes, seconds, and independent units', () => {
     const storage = new MemoryStorage();
     const first = createTrainingStore({ storage, storageKey: STORAGE_KEY });
     const customId = first.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
@@ -593,7 +749,7 @@ describe('persistence lifecycle', () => {
     });
   });
 
-  it('loads a v4 envelope through Zustand and persists migrated v5 state', () => {
+  it('loads a v4 envelope through Zustand and persists migrated v6 state', () => {
     const storage = new MemoryStorage(serializeState(LEGACY_V4_STATE, 4));
     const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
 
@@ -603,6 +759,21 @@ describe('persistence lifecycle', () => {
     expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
       'legacy-exercise': { repetitions: 0, sets: 4, seconds: 30 },
     });
+  });
+
+  it('loads v5 Uchikomi overrides through Zustand under the corrected activity ID', () => {
+    const state = versionFiveUchikomiState({
+      [LEGACY_UCHIKOMI_IDS[0]]: { repetitions: 7 },
+      [LEGACY_UCHIKOMI_IDS[1]]: { repetitions: 7, sets: 2 },
+    });
+    const storage = new MemoryStorage(serializeState(state, 5));
+    const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+
+    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+      [CORRECTED_UCHIKOMI_ID]: { repetitions: 7, sets: 2 },
+    });
+    const envelope: unknown = JSON.parse(requireString(storage.read()));
+    expect(envelope).toMatchObject({ version: TRAINING_STORE_PERSISTENCE_VERSION });
   });
 
   it('supports async injected storage', async () => {
@@ -643,13 +814,13 @@ describe('untrusted persistence classification', () => {
     });
     expect(
       classifyTrainingStorageValue(
-        serializeState({ dashboardEntries: [], customTrainingSets: [] }, 5),
+        serializeState({ dashboardEntries: [], customTrainingSets: [] }, 6),
       ),
-    ).toMatchObject({ status: 'ready', version: 5 });
+    ).toMatchObject({ status: 'ready', version: 6 });
     expect(classifyTrainingStorageValue(serializeState(LEGACY_V4_STATE, 4))).toMatchObject({
       status: 'migrated',
       fromVersion: 4,
-      version: 5,
+      version: 6,
     });
     expect(
       classifyTrainingStorageValue(

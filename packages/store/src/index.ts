@@ -48,17 +48,21 @@ export {
   migratePersistedTrainingStateV2ToV3,
   migratePersistedTrainingStateV3ToV4,
   migratePersistedTrainingStateV4ToV5,
+  migratePersistedTrainingStateV5ToV6,
   migrateV0ToV1,
   migrateV1ToV2,
   migrateV2ToV3,
   migrateV3ToV4,
   migrateV4ToV5,
+  migrateV5ToV6,
   parsePersistedTrainingState,
   parsePersistedTrainingStateV0,
   parsePersistedTrainingStateV1,
   parsePersistedTrainingStateV2,
   parsePersistedTrainingStateV3,
   parsePersistedTrainingStateV4,
+  TrainingDurationOverrideMigrationConflictError,
+  TrainingOverrideMigrationConflictError,
   TRAINING_STORE_PERSISTENCE_VERSION,
 } from './persistence';
 export type {
@@ -74,6 +78,9 @@ export type {
   LegacyTrainingStepV4,
   PersistedStorageState,
   PersistedTrainingState,
+  PersistedTrainingStateV5,
+  TrainingDurationOverrideMigrationConflict,
+  TrainingOverrideMigrationConflict,
   TrainingStorageInspection,
 } from './persistence';
 
@@ -136,7 +143,11 @@ export class TrainingStoreBootstrapError extends Error {
   readonly inspection: TrainingStorageInspection;
 
   constructor(inspection: TrainingStorageInspection) {
-    super(`Training-store storage is not writable (${inspection.status}).`);
+    super(
+      inspection.status === 'corrupt' && inspection.reason === 'override-migration-conflict'
+        ? inspection.detail
+        : `Training-store storage is not writable (${inspection.status}).`,
+    );
     this.name = 'TrainingStoreBootstrapError';
     this.inspection = inspection;
   }

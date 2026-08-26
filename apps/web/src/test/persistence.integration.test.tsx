@@ -170,4 +170,36 @@ describe('browser persistence recovery', () => {
     resetBrowserTrainingStorage();
     expect(window.localStorage.getItem(TRAINING_STORAGE_KEY)).toBeNull();
   });
+
+  it('surfaces the exact conflict when legacy Uchikomi overrides cannot be merged', () => {
+    const raw = JSON.stringify({
+      version: 5,
+      state: {
+        dashboardEntries: [
+          {
+            id: 'international-entry',
+            trainingSetId: 'international-dojo-2-hour-session',
+            quantityOverrides: {
+              'international-dojo-2-hour-session-uchikomi-men-1': { repetitions: 4 },
+              'international-dojo-2-hour-session-uchikomi-kote': { repetitions: 5 },
+            },
+            notes: '',
+            createdAt: '2026-08-19T10:00:00.000Z',
+          },
+        ],
+        customTrainingSets: [],
+      },
+    });
+    window.localStorage.setItem(TRAINING_STORAGE_KEY, raw);
+
+    expect(inspectBrowserTrainingStorage()).toEqual({
+      status: 'corrupt',
+      raw,
+      reason:
+        'Dashboard entry international-entry has conflicting repetitions overrides for the ' +
+        'corrected International Uchikomi sequence: ' +
+        'international-dojo-2-hour-session-uchikomi-men-1=4, ' +
+        'international-dojo-2-hour-session-uchikomi-kote=5.',
+    });
+  });
 });

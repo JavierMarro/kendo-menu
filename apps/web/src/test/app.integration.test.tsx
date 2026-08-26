@@ -278,7 +278,7 @@ describe('KendoMenu application flows', () => {
 
     expect(within(card).getByText('Category not specified')).toBeVisible();
     expect(within(card).getByText('Description not provided.')).toBeVisible();
-    expect(within(card).getByText('23 activities')).toBeVisible();
+    expect(within(card).getByText('20 activities')).toBeVisible();
     expect(within(card).getByRole('link', { name: 'View drill' })).toHaveAttribute(
       'href',
       '/app/library/international-dojo-2-hour-session',
@@ -321,6 +321,22 @@ describe('KendoMenu application flows', () => {
 
     await user.click(firstSummary);
     expect(firstSection).not.toHaveAttribute('open');
+
+    const uchikomiSection = [...sections].find((section) =>
+      section.querySelector('summary')?.textContent?.includes('Uchikomi'),
+    );
+    const uchikomiSummary = uchikomiSection?.querySelector('summary');
+    if (
+      uchikomiSection === undefined ||
+      uchikomiSummary === null ||
+      uchikomiSummary === undefined
+    ) {
+      throw new Error('Expected the corrected Uchikomi sequence disclosure.');
+    }
+    expect(uchikomiSummary).toHaveTextContent('1 exercise');
+    await user.click(uchikomiSummary);
+    expect(within(uchikomiSection).getAllByText('Men → Kote → Kote-men → Men')).toHaveLength(1);
+    expect(within(uchikomiSection).getByText('5 repetitions')).toBeVisible();
   });
 
   it('renders simultaneous units, missing quantities, and explicit zero distinctly', async () => {
@@ -490,10 +506,9 @@ describe('KendoMenu application flows', () => {
 
     const minutes = within(warmUpSection).getByLabelText('Minutes for Warm-up');
     const seconds = screen.getByLabelText('Seconds for Kakarigeiko');
-    const rounds = screen.getByLabelText('Rounds for Kakarigeiko');
     expect(minutes).toHaveValue(10);
     expect(seconds).toHaveValue(60);
-    expect(rounds).toHaveValue(10);
+    expect(screen.queryByLabelText('Rounds for Kakarigeiko')).not.toBeInTheDocument();
 
     await user.clear(minutes);
     await user.type(minutes, '12.5');

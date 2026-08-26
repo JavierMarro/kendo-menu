@@ -141,7 +141,7 @@ test.describe('routed training flows', () => {
       .locator('xpath=ancestor::article');
     await expect(card).toContainText('Category not specified');
     await expect(card).toContainText('Description not provided.');
-    await expect(card).toContainText('23 activities');
+    await expect(card).toContainText('20 activities');
     const viewDrill = card.getByRole('link', { name: 'View drill' });
     await expect(viewDrill).toHaveAttribute(
       'href',

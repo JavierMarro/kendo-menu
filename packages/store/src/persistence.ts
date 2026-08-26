@@ -23,11 +23,59 @@ import {
   type StorageValue,
 } from 'zustand/middleware';
 
-export const TRAINING_STORE_PERSISTENCE_VERSION = 5;
+export const TRAINING_STORE_PERSISTENCE_VERSION = 6;
 
 export interface PersistedTrainingState {
   readonly dashboardEntries: readonly DashboardEntry[];
   readonly customTrainingSets: readonly TrainingSet[];
+}
+
+export type PersistedTrainingStateV5 = PersistedTrainingState;
+
+export interface TrainingOverrideMigrationConflict {
+  readonly dashboardEntryId: string;
+  readonly unit: TrainingQuantityUnit;
+  readonly overrides: readonly {
+    readonly activityId: string;
+    readonly value: number;
+  }[];
+}
+
+export class TrainingOverrideMigrationConflictError extends Error {
+  readonly conflict: TrainingOverrideMigrationConflict;
+
+  constructor(conflict: TrainingOverrideMigrationConflict) {
+    const values = conflict.overrides
+      .map(({ activityId, value }) => `${activityId}=${String(value)}`)
+      .join(', ');
+    super(
+      `Dashboard entry ${conflict.dashboardEntryId} has conflicting ${conflict.unit} overrides ` +
+        `for the corrected International Uchikomi sequence: ${values}.`,
+    );
+    this.name = 'TrainingOverrideMigrationConflictError';
+    this.conflict = conflict;
+  }
+}
+
+export interface TrainingDurationOverrideMigrationConflict {
+  readonly dashboardEntryId: string;
+  readonly activityId: string;
+  readonly seconds: number;
+  readonly minutes: number;
+}
+
+export class TrainingDurationOverrideMigrationConflictError extends Error {
+  readonly conflict: TrainingDurationOverrideMigrationConflict;
+
+  constructor(conflict: TrainingDurationOverrideMigrationConflict) {
+    super(
+      `Dashboard entry ${conflict.dashboardEntryId} has conflicting duration overrides for ` +
+        `${conflict.activityId}: seconds=${String(conflict.seconds)}, ` +
+        `minutes=${String(conflict.minutes)}.`,
+    );
+    this.name = 'TrainingDurationOverrideMigrationConflictError';
+    this.conflict = conflict;
+  }
 }
 
 export type LegacyTrainingQuantityUnit = 'repetitions' | 'sets' | 'minutes' | 'rounds';
@@ -138,7 +186,7 @@ export type TrainingStorageInspection =
   | {
       readonly status: 'migrated';
       readonly kind: 'migrated';
-      readonly fromVersion: 0 | 1 | 2 | 3 | 4;
+      readonly fromVersion: 0 | 1 | 2 | 3 | 4 | 5;
       readonly version: typeof TRAINING_STORE_PERSISTENCE_VERSION;
       readonly state: PersistedTrainingState;
     }
@@ -146,6 +194,14 @@ export type TrainingStorageInspection =
       readonly status: 'corrupt';
       readonly kind: 'corrupt';
       readonly reason: 'malformed-json' | 'malformed-envelope' | 'invalid-domain';
+    }
+  | {
+      readonly status: 'corrupt';
+      readonly kind: 'corrupt';
+      readonly reason: 'override-migration-conflict';
+      readonly detail: string;
+      readonly conflict:
+        TrainingOverrideMigrationConflict | TrainingDurationOverrideMigrationConflict;
     }
   | {
       readonly status: 'unsupported-future';
@@ -1024,6 +1080,164 @@ export function migratePersistedTrainingStateV4ToV5(value: unknown): PersistedTr
 
 export const migrateV4ToV5 = migratePersistedTrainingStateV4ToV5;
 
+const INTERNATIONAL_DOJO_ID = asTrainingSetId('international-dojo-2-hour-session');
+const CORRECTED_INTERNATIONAL_UCHIKOMI_ACTIVITY_ID =
+  'international-dojo-2-hour-session-uchikomi-men-kote-kote-men-men';
+const LEGACY_INTERNATIONAL_UCHIKOMI_ACTIVITY_IDS = [
+  'international-dojo-2-hour-session-uchikomi-men-1',
+  'international-dojo-2-hour-session-uchikomi-kote',
+  'international-dojo-2-hour-session-uchikomi-kote-men',
+  'international-dojo-2-hour-session-uchikomi-men-2',
+] as const;
+const INTERNATIONAL_UCHIKOMI_MIGRATION_ACTIVITY_IDS = [
+  ...LEGACY_INTERNATIONAL_UCHIKOMI_ACTIVITY_IDS,
+  CORRECTED_INTERNATIONAL_UCHIKOMI_ACTIVITY_ID,
+] as const;
+const INTERNATIONAL_UCHIKOMI_MIGRATION_ACTIVITY_ID_SET = new Set<string>(
+  INTERNATIONAL_UCHIKOMI_MIGRATION_ACTIVITY_IDS,
+);
+const UNIVERSITY_VERSION_TWO_ID = asTrainingSetId('university-version-2');
+const UNIVERSITY_VERSION_TWO_KAKARIGEIJO_ACTIVITY_ID =
+  'university-version-2-kakarigeijo-kakarigeijo';
+
+function createQuantityOverridesFromMap(
+  values: ReadonlyMap<TrainingQuantityUnit, number>,
+): TrainingQuantityOverrides {
+  const repetitions = values.get('repetitions');
+  const sets = values.get('sets');
+  const rounds = values.get('rounds');
+  const seconds = values.get('seconds');
+  const minutes = values.get('minutes');
+  return {
+    ...(repetitions === undefined ? {} : { repetitions }),
+    ...(sets === undefined ? {} : { sets }),
+    ...(rounds === undefined ? {} : { rounds }),
+    ...(seconds === undefined ? {} : { seconds }),
+    ...(minutes === undefined ? {} : { minutes }),
+  };
+}
+
+function migrateDashboardEntryV5ToV6(entry: DashboardEntry): DashboardEntry {
+  if (entry.trainingSetId !== INTERNATIONAL_DOJO_ID) {
+    return entry;
+  }
+
+  const relevantOverrides: {
+    readonly activityId: string;
+    readonly overrides: TrainingQuantityOverrides;
+  }[] = [];
+  for (const activityId of INTERNATIONAL_UCHIKOMI_MIGRATION_ACTIVITY_IDS) {
+    const overrides = entry.quantityOverrides[activityId];
+    if (overrides !== undefined) {
+      relevantOverrides.push({ activityId, overrides });
+    }
+  }
+  if (relevantOverrides.length === 0) {
+    return entry;
+  }
+
+  const mergedValues = new Map<TrainingQuantityUnit, number>();
+  for (const { overrides } of relevantOverrides) {
+    for (const [unit, value] of Object.entries(overrides)) {
+      if (!isTrainingQuantityUnit(unit) || !isValidTrainingQuantityValue(unit, value)) {
+        throw new Error('Training-store version 5 state is invalid.');
+      }
+      const existingValue = mergedValues.get(unit);
+      if (existingValue !== undefined && existingValue !== value) {
+        const conflictingOverrides = relevantOverrides.flatMap(
+          ({ activityId, overrides: candidateOverrides }) => {
+            const candidateValue = candidateOverrides[unit];
+            return candidateValue === undefined ? [] : [{ activityId, value: candidateValue }];
+          },
+        );
+        throw new TrainingOverrideMigrationConflictError({
+          dashboardEntryId: entry.id,
+          unit,
+          overrides: conflictingOverrides,
+        });
+      }
+      mergedValues.set(unit, value);
+    }
+  }
+
+  const quantityOverrides: Record<string, TrainingQuantityOverrides> = {};
+  for (const [activityId, overrides] of Object.entries(entry.quantityOverrides)) {
+    if (!INTERNATIONAL_UCHIKOMI_MIGRATION_ACTIVITY_ID_SET.has(activityId)) {
+      quantityOverrides[activityId] = overrides;
+    }
+  }
+  quantityOverrides[CORRECTED_INTERNATIONAL_UCHIKOMI_ACTIVITY_ID] =
+    createQuantityOverridesFromMap(mergedValues);
+
+  return { ...entry, quantityOverrides };
+}
+
+function migrateKakarigeijoDurationOverrideV5ToV6(entry: DashboardEntry): DashboardEntry {
+  if (entry.trainingSetId !== UNIVERSITY_VERSION_TWO_ID) {
+    return entry;
+  }
+
+  const overrides = entry.quantityOverrides[UNIVERSITY_VERSION_TWO_KAKARIGEIJO_ACTIVITY_ID];
+  const seconds = overrides?.seconds;
+  if (overrides === undefined || seconds === undefined) {
+    return entry;
+  }
+
+  const migratedMinutes = seconds / 60;
+  if (!isValidTrainingQuantityValue('minutes', migratedMinutes)) {
+    throw new Error('Training-store version 5 state is invalid.');
+  }
+  if (overrides.minutes !== undefined && overrides.minutes !== migratedMinutes) {
+    throw new TrainingDurationOverrideMigrationConflictError({
+      dashboardEntryId: entry.id,
+      activityId: UNIVERSITY_VERSION_TWO_KAKARIGEIJO_ACTIVITY_ID,
+      seconds,
+      minutes: overrides.minutes,
+    });
+  }
+
+  const migratedValues = new Map<TrainingQuantityUnit, number>();
+  for (const [unit, value] of Object.entries(overrides)) {
+    if (!isTrainingQuantityUnit(unit) || !isValidTrainingQuantityValue(unit, value)) {
+      throw new Error('Training-store version 5 state is invalid.');
+    }
+    if (unit !== 'seconds') {
+      migratedValues.set(unit, value);
+    }
+  }
+  migratedValues.set('minutes', migratedMinutes);
+
+  return {
+    ...entry,
+    quantityOverrides: {
+      ...entry.quantityOverrides,
+      [UNIVERSITY_VERSION_TWO_KAKARIGEIJO_ACTIVITY_ID]:
+        createQuantityOverridesFromMap(migratedValues),
+    },
+  };
+}
+
+export function migratePersistedTrainingStateV5ToV6(value: unknown): PersistedTrainingState {
+  const parsed = parsePersistedTrainingState(value);
+  if (parsed === null) {
+    throw new Error('Training-store version 5 state is invalid.');
+  }
+
+  const migrated = {
+    dashboardEntries: parsed.dashboardEntries.map((entry) =>
+      migrateKakarigeijoDurationOverrideV5ToV6(migrateDashboardEntryV5ToV6(entry)),
+    ),
+    customTrainingSets: parsed.customTrainingSets,
+  };
+  const result = parsePersistedTrainingState(migrated);
+  if (result === null) {
+    throw new Error('Training-store version 5 migration produced invalid state.');
+  }
+  return result;
+}
+
+export const migrateV5ToV6 = migratePersistedTrainingStateV5ToV6;
+
 export function migratePersistedTrainingState(
   persistedState: unknown,
   version: number,
@@ -1034,31 +1248,39 @@ export function migratePersistedTrainingState(
       const stateV2 = migratePersistedTrainingStateV1ToV2(stateV1);
       const stateV3 = migratePersistedTrainingStateV2ToV3(stateV2);
       const stateV4 = migratePersistedTrainingStateV3ToV4(stateV3);
-      return migratePersistedTrainingStateV4ToV5(stateV4);
+      const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
+      return migratePersistedTrainingStateV5ToV6(stateV5);
     }
     case 1: {
       const stateV2 = migratePersistedTrainingStateV1ToV2(persistedState);
       const stateV3 = migratePersistedTrainingStateV2ToV3(stateV2);
       const stateV4 = migratePersistedTrainingStateV3ToV4(stateV3);
-      return migratePersistedTrainingStateV4ToV5(stateV4);
+      const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
+      return migratePersistedTrainingStateV5ToV6(stateV5);
     }
     case 2: {
       const stateV3 = migratePersistedTrainingStateV2ToV3(persistedState);
       const stateV4 = migratePersistedTrainingStateV3ToV4(stateV3);
-      return migratePersistedTrainingStateV4ToV5(stateV4);
+      const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
+      return migratePersistedTrainingStateV5ToV6(stateV5);
     }
     case 3: {
       const stateV4 = migratePersistedTrainingStateV3ToV4(persistedState);
-      return migratePersistedTrainingStateV4ToV5(stateV4);
+      const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
+      return migratePersistedTrainingStateV5ToV6(stateV5);
     }
-    case 4:
-      return migratePersistedTrainingStateV4ToV5(persistedState);
+    case 4: {
+      const stateV5 = migratePersistedTrainingStateV4ToV5(persistedState);
+      return migratePersistedTrainingStateV5ToV6(stateV5);
+    }
+    case 5:
+      return migratePersistedTrainingStateV5ToV6(persistedState);
     case TRAINING_STORE_PERSISTENCE_VERSION: {
-      const stateV5 = parsePersistedTrainingState(persistedState);
-      if (stateV5 === null) {
-        throw new Error('Training-store version 5 state is invalid.');
+      const stateV6 = parsePersistedTrainingState(persistedState);
+      if (stateV6 === null) {
+        throw new Error('Training-store version 6 state is invalid.');
       }
-      return stateV5;
+      return stateV6;
     }
     default:
       throw new Error(`Unsupported training-store persistence version: ${String(version)}`);
@@ -1122,6 +1344,13 @@ function parseStorageValue(value: unknown): StorageValue<PersistedStorageState> 
       }
       return { state, version };
     }
+    case 5: {
+      const state = parsePersistedTrainingState(value['state']);
+      if (state === null) {
+        throw new Error('Training-store version 5 persistence data is invalid.');
+      }
+      return { state, version };
+    }
     default:
       throw new Error(`Unsupported training-store persistence version: ${String(version)}`);
   }
@@ -1178,6 +1407,7 @@ function classifyParsedEnvelope(value: unknown): TrainingStorageInspection {
       case 2:
       case 3:
       case 4:
+      case 5:
         return {
           status: 'migrated',
           kind: 'migrated',
@@ -1188,7 +1418,19 @@ function classifyParsedEnvelope(value: unknown): TrainingStorageInspection {
       default:
         return { status: 'corrupt', kind: 'corrupt', reason: 'invalid-domain' };
     }
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof TrainingOverrideMigrationConflictError ||
+      error instanceof TrainingDurationOverrideMigrationConflictError
+    ) {
+      return {
+        status: 'corrupt',
+        kind: 'corrupt',
+        reason: 'override-migration-conflict',
+        detail: error.message,
+        conflict: error.conflict,
+      };
+    }
     return { status: 'corrupt', kind: 'corrupt', reason: 'invalid-domain' };
   }
 }

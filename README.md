@@ -40,10 +40,12 @@ pnpm check
 pnpm format
 ```
 
-Add the initial curated drills in
-`packages/domain/src/default-training-sets.ts`. Every step needs a stable id because dashboard
-quantity overrides are keyed first by step id and then by unit. The custom-set builder has a
-reserved feature boundary at `apps/web/src/features/custom-sets`.
+Curated drill content is authored in `packages/domain/data/default-drills.json`, with
+`packages/domain/schema/kendo-drills.schema.json` as its validation contract, and normalized by
+`packages/domain/src/default-training-sets.ts` into `DEFAULT_TRAINING_SETS`, the runtime interface
+used by store and web modules. Every activity needs a stable id because dashboard quantity
+overrides are keyed first by activity id and then by unit. The custom-set builder has a reserved
+feature boundary at `apps/web/src/features/custom-sets`.
 
 See [AGENTS.md](./AGENTS.md) for the working contract used by people and coding agents.
 
