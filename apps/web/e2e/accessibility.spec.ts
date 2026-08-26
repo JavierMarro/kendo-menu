@@ -70,10 +70,8 @@ test.describe('accessibility and responsive layout', () => {
     }
   });
 
-  test('uses proportional desktop privacy widths and responsive mobile gutters', async ({
-    page,
-  }) => {
-    for (const width of [320, 800, 1440]) {
+  test('keeps the cookie notice inside consistent responsive gutters', async ({ page }) => {
+    for (const width of [320, 680, 840, 841, 900, 960, 961, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/app');
 
@@ -91,14 +89,14 @@ test.describe('accessibility and responsive layout', () => {
         };
       });
 
-      if (width > 840) {
+      expect(noticeMetrics.left).toBeGreaterThanOrEqual(16);
+      expect(noticeMetrics.right).toBeGreaterThanOrEqual(16);
+      expect(Math.abs(noticeMetrics.left - noticeMetrics.right)).toBeLessThanOrEqual(1);
+
+      if (width > 960) {
         expect(Math.abs(noticeMetrics.width - width * 0.6)).toBeLessThanOrEqual(1);
-        expect(
-          Math.abs(noticeMetrics.left - (width - noticeMetrics.width) / 2),
-        ).toBeLessThanOrEqual(1);
       } else {
-        expect(noticeMetrics.left).toBeGreaterThanOrEqual(12);
-        expect(noticeMetrics.right).toBeGreaterThanOrEqual(12);
+        expect(Math.abs(noticeMetrics.width - (width - 32))).toBeLessThanOrEqual(1);
       }
 
       await page.goto('/cookies');
@@ -123,6 +121,19 @@ test.describe('accessibility and responsive layout', () => {
 
       const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(scrollWidth, `privacy layout overflow at ${width}px`).toBeLessThanOrEqual(width);
+    }
+  });
+
+  test('does not overscale the landing hero background at tablet widths', async ({ page }) => {
+    for (const width of [680, 800, 960]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/app');
+
+      const backgroundSize = await page
+        .locator('.landing-page')
+        .evaluate((element) => getComputedStyle(element).backgroundSize);
+
+      expect(backgroundSize, `hero background size at ${width}px`).toBe('cover, cover');
     }
   });
 });
