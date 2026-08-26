@@ -129,6 +129,7 @@ export interface TrainingStore {
 export interface TrainingStoreOptions {
   readonly storage: StateStorage;
   readonly storageKey?: string;
+  readonly onHydrationError?: (error: unknown) => void;
 }
 
 export type TrainingStoreApi = UseBoundStore<StoreApi<TrainingStore>>;
@@ -372,9 +373,11 @@ function createDashboardEntry(trainingSetId: TrainingSetId, usedIds: Set<string>
 }
 
 function createValidatedTrainingStore(
-  { storage, storageKey = 'kendo-menu' }: TrainingStoreOptions,
+  options: TrainingStoreOptions,
   skipHydration = false,
 ): HydratableTrainingStoreApi {
+  const { storage, storageKey = 'kendo-menu' } = options;
+
   return create<TrainingStore>()(
     persist(
       (set) => ({
@@ -539,6 +542,11 @@ function createValidatedTrainingStore(
           dashboardEntries: state.dashboardEntries,
           customTrainingSets: state.customTrainingSets,
         }),
+        onRehydrateStorage: () => (_state, error) => {
+          if (error !== undefined) {
+            options.onHydrationError?.(error);
+          }
+        },
         skipHydration,
       },
     ),

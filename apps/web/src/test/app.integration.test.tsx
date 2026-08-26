@@ -243,6 +243,28 @@ describe('KendoMenu application flows', () => {
     ).toBeInTheDocument();
   });
 
+  it('keeps an unavailable persisted dashboard entry recoverable and removable', async () => {
+    const user = userEvent.setup();
+    const store = createTestStore();
+    store.getState().addToDashboard(asTrainingSetId('unavailable-local-training-set'));
+
+    renderApp(store, { initialEntries: ['/app/dashboard'] });
+
+    const missingHeading = screen.getByRole('heading', { name: 'Training set unavailable' });
+    const missingEntry = missingHeading.closest('article');
+    if (missingEntry === null) {
+      throw new Error('Expected the unavailable dashboard entry fallback.');
+    }
+    expect(within(missingEntry).getByText(/no longer available in local data/)).toBeVisible();
+
+    await user.click(within(missingEntry).getByRole('button', { name: 'Remove' }));
+
+    expect(
+      screen.queryByRole('heading', { name: 'Training set unavailable' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeVisible();
+  });
+
   it('navigates between the dashboard, library, and direct builder route', async () => {
     const user = userEvent.setup();
     const store = createTestStore();

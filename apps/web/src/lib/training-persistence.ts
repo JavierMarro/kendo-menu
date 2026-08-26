@@ -118,10 +118,13 @@ export function downloadRawTrainingBackup(raw: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
 
-  anchor.href = url;
-  anchor.download = `kendomenu-local-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  try {
+    anchor.href = url;
+    anchor.download = `kendomenu-local-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 export function resetBrowserTrainingStorage(storageKey: string = TRAINING_STORAGE_KEY): void {

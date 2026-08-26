@@ -32,13 +32,18 @@ export function PersistenceGate({ children }: PersistenceGateProps) {
   const [sessionOnly, setSessionOnly] = useState(false);
   const [writeFailed, setWriteFailed] = useState(false);
   const [runtimeUnavailable, setRuntimeUnavailable] = useState(false);
+  const [backupError, setBackupError] = useState<string | null>(null);
   const [resetError, setResetError] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const onWriteError = useCallback(() => {
     setWriteFailed(true);
   }, []);
   const onReadError = useCallback(() => {
-    window.setTimeout(() => setRuntimeUnavailable(true), 0);
+    window.setTimeout(() => {
+      const nextInspection = inspectBrowserTrainingStorage(TRAINING_STORAGE_KEY);
+      setInspection(nextInspection);
+      setRuntimeUnavailable(nextInspection.status === 'empty' || nextInspection.status === 'ready');
+    }, 0);
   }, []);
 
   const store = useMemo<TrainingStoreHook | null>(() => {
@@ -48,7 +53,11 @@ export function PersistenceGate({ children }: PersistenceGateProps) {
           ? createMemoryTrainingStorage()
           : createBrowserTrainingStorage({ onReadError, onWriteError });
 
-        return createTrainingStore({ storage, storageKey: TRAINING_STORAGE_KEY });
+        return createTrainingStore({
+          storage,
+          storageKey: TRAINING_STORAGE_KEY,
+          onHydrationError: onReadError,
+        });
       } catch {
         onReadError();
         return null;
@@ -59,6 +68,7 @@ export function PersistenceGate({ children }: PersistenceGateProps) {
   }, [inspection, onReadError, onWriteError, sessionOnly]);
 
   const retry = useCallback(() => {
+    setBackupError(null);
     setResetError(null);
     setWriteFailed(false);
     setRuntimeUnavailable(false);
@@ -67,6 +77,7 @@ export function PersistenceGate({ children }: PersistenceGateProps) {
   }, []);
 
   const continueWithoutSaving = useCallback(() => {
+    setBackupError(null);
     setResetError(null);
     setWriteFailed(false);
     setRuntimeUnavailable(false);
@@ -77,6 +88,7 @@ export function PersistenceGate({ children }: PersistenceGateProps) {
     try {
       resetBrowserTrainingStorage(TRAINING_STORAGE_KEY);
       setConfirmReset(false);
+      setBackupError(null);
       setResetError(null);
       setSessionOnly(false);
       setRuntimeUnavailable(false);
@@ -87,7 +99,22 @@ export function PersistenceGate({ children }: PersistenceGateProps) {
     }
   }, []);
 
-  if (store !== null) {
+  const downloadBackup = useCallback(() => {
+    setBackupError(null);
+    if (!('raw' in inspection)) {
+      return;
+    }
+
+    try {
+      downloadRawTrainingBackup(inspection.raw);
+    } catch {
+      setBackupError(
+        'KendoMenu could not download the backup. Your local data has not been changed.',
+      );
+    }
+  }, [inspection]);
+
+  if (store !== null && !runtimeUnavailable) {
     return (
       <PersistenceContext.Provider value={{ mode: sessionOnly ? 'session' : 'local', writeFailed }}>
         <TrainingStoreProvider store={store}>{children}</TrainingStoreProvider>
@@ -103,14 +130,11 @@ export function PersistenceGate({ children }: PersistenceGateProps) {
           : inspection
       }
       confirmReset={confirmReset}
+      backupError={backupError}
       resetError={resetError}
       onConfirmReset={() => setConfirmReset(true)}
       onCancelReset={() => setConfirmReset(false)}
-      onDownload={() => {
-        if ('raw' in inspection) {
-          downloadRawTrainingBackup(inspection.raw);
-        }
-      }}
+      onDownload={downloadBackup}
       onReset={resetLocalData}
       onRetry={retry}
       onContinueWithoutSaving={continueWithoutSaving}
@@ -121,6 +145,7 @@ export function PersistenceGate({ children }: PersistenceGateProps) {
 interface PersistenceRecoveryProps {
   readonly inspection: PersistenceInspection;
   readonly confirmReset: boolean;
+  readonly backupError: string | null;
   readonly resetError: string | null;
   readonly onConfirmReset: () => void;
   readonly onCancelReset: () => void;
@@ -133,6 +158,7 @@ interface PersistenceRecoveryProps {
 function PersistenceRecovery({
   inspection,
   confirmReset,
+  backupError,
   resetError,
   onConfirmReset,
   onCancelReset,
@@ -212,6 +238,11 @@ function PersistenceRecovery({
         ) : null}
         {inspection.status === 'future-version' ? (
           <p className="recovery-detail">Stored version: {inspection.version}</p>
+        ) : null}
+        {backupError !== null ? (
+          <p className="form-error" role="alert">
+            {backupError}
+          </p>
         ) : null}
         {resetError !== null ? (
           <p className="form-error" role="alert">
