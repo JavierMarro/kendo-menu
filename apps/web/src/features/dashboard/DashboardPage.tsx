@@ -3,62 +3,41 @@ import { Link, useSearchParams } from 'react-router-dom';
 
 import type {
   DashboardEntry,
-  DashboardQuantityOverrides,
-  TrainingQuantityOverrides,
+  TrainingActivity,
   TrainingQuantityUnit,
   TrainingSet,
-  TrainingStep,
 } from '@kendo-menu/domain';
 import type { RemovedDashboardEntry } from '@kendo-menu/store';
 
 import {
   findTrainingSet,
   formatCategory,
+  formatQuantityValue,
   formatQuantityUnit,
   getAllTrainingSets,
   getEditableTrainingQuantityUnits,
   getEffectiveTrainingQuantity,
   getQuantityValidationMessage,
   getTrainingQuantityValue,
+  getTrainingSetActivityCount,
+  getTrainingSetDescription,
   getTrainingSetSections,
+  isTrainingQuantityRange,
   isValidQuantityValue,
 } from '../../lib/training-data';
 import { useTrainingStore, useTrainingStoreApi } from '../../lib/training-store-context';
-import { getPersistenceUpdateLabel, usePersistenceStatus } from '../persistence/persistence-context';
-
-function updateQuantityOverrides(
-  entry: DashboardEntry,
-  stepId: string,
-  unit: TrainingQuantityUnit,
-  value: number | null,
-): DashboardQuantityOverrides {
-  const next: Record<string, TrainingQuantityOverrides> = { ...entry.quantityOverrides };
-  const stepOverrides: Partial<Record<TrainingQuantityUnit, number>> = {
-    ...entry.quantityOverrides[stepId],
-  };
-
-  if (value === null) {
-    delete stepOverrides[unit];
-  } else {
-    stepOverrides[unit] = value;
-  }
-
-  if (Object.keys(stepOverrides).length === 0) {
-    delete next[stepId];
-  } else {
-    next[stepId] = stepOverrides;
-  }
-
-  return next;
-}
+import {
+  getPersistenceUpdateLabel,
+  usePersistenceStatus,
+} from '../persistence/persistence-context';
 
 function getQuantityDraftValue(
   entry: DashboardEntry,
-  step: TrainingStep,
+  activity: TrainingActivity,
   unit: TrainingQuantityUnit,
 ): string {
-  const value = getEffectiveTrainingQuantity(entry, step, unit);
-  return value === null ? '' : String(value);
+  const value = getEffectiveTrainingQuantity(entry, activity, unit);
+  return value === undefined || isTrainingQuantityRange(value) ? '' : String(value);
 }
 
 export function DashboardPage() {
@@ -66,6 +45,8 @@ export function DashboardPage() {
   const customTrainingSets = useTrainingStore((state) => state.customTrainingSets);
   const removeFromDashboard = useTrainingStore((state) => state.removeFromDashboard);
   const updateDashboardEntry = useTrainingStore((state) => state.updateDashboardEntry);
+  const setQuantityOverride = useTrainingStore((state) => state.setQuantityOverride);
+  const clearQuantityOverride = useTrainingStore((state) => state.clearQuantityOverride);
   const store = useTrainingStoreApi();
   const [removedEntry, setRemovedEntry] = useState<RemovedDashboardEntry | null>(null);
   const [searchParams] = useSearchParams();
@@ -134,8 +115,8 @@ export function DashboardPage() {
           <p className="eyebrow">A clean starting line</p>
           <h2 id="empty-dashboard-title">Your dashboard is ready.</h2>
           <p>
-            Add a drill from the library and shape it for today&apos;s practice. Quantities and notes
-            stay on this device as you refine the set.
+            Add a drill from the library and shape it for today&apos;s practice. Quantities and
+            notes stay on this device as you refine the set.
           </p>
           <div className="empty-actions">
             <Link className="primary-button" to="/app/library">
@@ -167,6 +148,12 @@ export function DashboardPage() {
                 trainingSet={trainingSet}
                 onRemove={() => removeEntry(entry, trainingSet.name)}
                 onUpdate={(patch) => updateDashboardEntry(entry.id, patch)}
+                onSetQuantity={(activityId, unit, value) =>
+                  setQuantityOverride(entry.id, activityId, unit, value)
+                }
+                onClearQuantity={(activityId, unit) =>
+                  clearQuantityOverride(entry.id, activityId, unit)
+                }
               />
             );
           })}
@@ -205,10 +192,9 @@ interface DashboardTrainingSetProps {
   readonly index: number;
   readonly trainingSet: TrainingSet;
   readonly onRemove: () => void;
-  readonly onUpdate: (patch: {
-    readonly quantityOverrides?: DashboardQuantityOverrides;
-    readonly notes?: string;
-  }) => void;
+  readonly onUpdate: (patch: { readonly notes?: string }) => void;
+  readonly onSetQuantity: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
+  readonly onClearQuantity: (activityId: string, unit: TrainingQuantityUnit) => void;
 }
 
 function DashboardTrainingSet({
@@ -217,12 +203,14 @@ function DashboardTrainingSet({
   trainingSet,
   onRemove,
   onUpdate,
+  onSetQuantity,
+  onClearQuantity,
 }: DashboardTrainingSetProps) {
   const [notesDraft, setNotesDraft] = useState(entry.notes);
   const [notesStatus, setNotesStatus] = useState<'idle' | 'updated'>('idle');
   const persistenceStatus = usePersistenceStatus();
   const sections = getTrainingSetSections(trainingSet);
-  const stepCount = sections.reduce((count, section) => count + section.steps.length, 0);
+  const activityCount = getTrainingSetActivityCount(trainingSet);
 
   const handleNotesChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setNotesDraft(event.target.value);
@@ -245,9 +233,9 @@ function DashboardTrainingSet({
         <div className="card-content">
           <p className="card-kicker">{formatCategory(trainingSet.category)}</p>
           <h2>{trainingSet.name}</h2>
-          <p>{trainingSet.description}</p>
+          <p>{getTrainingSetDescription(trainingSet)}</p>
           <div className="card-meta">
-            <span>{stepCount} exercises</span>
+            <span>{activityCount} activities</span>
             <span>{entry.notes.length > 0 ? 'Has notes' : 'No notes yet'}</span>
           </div>
         </div>
@@ -267,28 +255,47 @@ function DashboardTrainingSet({
               <span className="section-number" aria-hidden="true">
                 {sectionIndex + 1}
               </span>
-              <h3 id={`${entry.id}-${section.id}`}>{section.label}</h3>
+              <h3 id={`${entry.id}-${section.id}`}>{section.name}</h3>
             </div>
-            <ol className="training-step-list">
-              {section.steps.map((step, stepIndex) => (
-                <li className="training-step" key={step.id}>
-                  <span className="step-number" aria-hidden="true">
-                    {stepIndex + 1}
-                  </span>
-                  <div className="step-copy">
-                    <span className="step-label">{step.label}</span>
-                    {step.description ? (
-                      <span className="step-description">{step.description}</span>
-                    ) : null}
-                  </div>
-                  <QuantityEditors
-                    entry={entry}
-                    step={step}
-                    onUpdate={(quantityOverrides) => onUpdate({ quantityOverrides })}
-                  />
-                </li>
-              ))}
-            </ol>
+            {section.exercises.length === 0 || section.quantities !== undefined ? (
+              <div className="training-step training-step--standalone">
+                {section.notes !== undefined && section.notes.length > 0 ? (
+                  <span className="step-description">{section.notes}</span>
+                ) : null}
+                <QuantityEditors
+                  entry={entry}
+                  activity={section}
+                  onSet={onSetQuantity}
+                  onClear={onClearQuantity}
+                />
+              </div>
+            ) : section.notes !== undefined && section.notes.length > 0 ? (
+              <p className="step-description">{section.notes}</p>
+            ) : null}
+            {section.exercises.length > 0 ? (
+              <ol className="training-step-list">
+                {section.exercises.map((exercise, exerciseIndex) => (
+                  <li className="training-step" key={exercise.id}>
+                    <span className="step-number" aria-hidden="true">
+                      {exerciseIndex + 1}
+                    </span>
+                    <div className="step-copy">
+                      <span className="step-label">{exercise.name}</span>
+                      {exercise.notes !== undefined && exercise.notes.length > 0 ? (
+                        <span className="step-description">{exercise.notes}</span>
+                      ) : null}
+                    </div>
+                    <QuantityEditors
+                      entry={entry}
+                      activity={exercise}
+                      sectionName={section.name}
+                      onSet={onSetQuantity}
+                      onClear={onClearQuantity}
+                    />
+                  </li>
+                ))}
+              </ol>
+            ) : null}
           </section>
         ))}
       </div>
@@ -313,17 +320,26 @@ function DashboardTrainingSet({
 
 interface QuantityEditorsProps {
   readonly entry: DashboardEntry;
-  readonly step: TrainingStep;
-  readonly onUpdate: (quantityOverrides: DashboardQuantityOverrides) => void;
+  readonly activity: TrainingActivity;
+  readonly sectionName?: string;
+  readonly onSet: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
+  readonly onClear: (activityId: string, unit: TrainingQuantityUnit) => void;
 }
 
-function QuantityEditors({ entry, step, onUpdate }: QuantityEditorsProps) {
-  const units = getEditableTrainingQuantityUnits(entry, step);
+function QuantityEditors({ entry, activity, sectionName, onSet, onClear }: QuantityEditorsProps) {
+  const units = getEditableTrainingQuantityUnits(entry, activity, sectionName);
 
   return (
     <div className="quantity-editor-group">
       {units.map((unit) => (
-        <QuantityEditor key={unit} entry={entry} step={step} unit={unit} onUpdate={onUpdate} />
+        <QuantityEditor
+          key={unit}
+          entry={entry}
+          activity={activity}
+          unit={unit}
+          onSet={onSet}
+          onClear={onClear}
+        />
       ))}
     </div>
   );
@@ -333,14 +349,19 @@ interface QuantityEditorProps extends QuantityEditorsProps {
   readonly unit: TrainingQuantityUnit;
 }
 
-function QuantityEditor({ entry, step, unit, onUpdate }: QuantityEditorProps) {
-  const [draft, setDraft] = useState(() => getQuantityDraftValue(entry, step, unit));
+function QuantityEditor({ entry, activity, unit, onSet, onClear }: QuantityEditorProps) {
+  const [draft, setDraft] = useState(() => getQuantityDraftValue(entry, activity, unit));
   const [feedback, setFeedback] = useState<'idle' | 'updated' | 'invalid'>('idle');
   const persistenceStatus = usePersistenceStatus();
-  const inputId = `quantity-${unit}-${entry.id}-${step.id}`;
+  const inputId = `quantity-${unit}-${entry.id}-${activity.id}`;
   const messageId = `${inputId}-message`;
   const unitLabel = formatQuantityUnit(unit, 2);
   const accessibleUnitLabel = `${unitLabel.charAt(0).toUpperCase()}${unitLabel.slice(1)}`;
+  const defaultValue = getTrainingQuantityValue(activity, unit);
+  const placeholder =
+    defaultValue !== undefined && isTrainingQuantityRange(defaultValue)
+      ? `${formatQuantityValue(defaultValue.min)}–${formatQuantityValue(defaultValue.max)}`
+      : 'Not specified';
   const feedbackMessage =
     feedback === 'invalid'
       ? getQuantityValidationMessage(unit)
@@ -350,17 +371,21 @@ function QuantityEditor({ entry, step, unit, onUpdate }: QuantityEditorProps) {
 
   const commit = (event: FocusEvent<HTMLInputElement>) => {
     const rawValue = event.currentTarget.value.trim();
-    const stepOverrides = entry.quantityOverrides[step.id];
-    const hasOverride = stepOverrides !== undefined && Object.hasOwn(stepOverrides, unit);
+    const activityOverrides = entry.quantityOverrides[activity.id];
+    const hasOverride = activityOverrides !== undefined && Object.hasOwn(activityOverrides, unit);
 
     if (rawValue === '') {
-      if (!hasOverride && getTrainingQuantityValue(step, unit) === null) {
+      const defaultValue = getTrainingQuantityValue(activity, unit);
+      if (!hasOverride && defaultValue === undefined) {
         setFeedback('idle');
         return;
       }
-      onUpdate(updateQuantityOverrides(entry, step.id, unit, null));
-      const defaultValue = getTrainingQuantityValue(step, unit);
-      setDraft(defaultValue === null ? '' : String(defaultValue));
+      onClear(activity.id, unit);
+      setDraft(
+        defaultValue === undefined || isTrainingQuantityRange(defaultValue)
+          ? ''
+          : String(defaultValue),
+      );
       setFeedback('updated');
       return;
     }
@@ -371,13 +396,14 @@ function QuantityEditor({ entry, step, unit, onUpdate }: QuantityEditorProps) {
       return;
     }
 
-    if (value === getEffectiveTrainingQuantity(entry, step, unit)) {
+    const effectiveValue = getEffectiveTrainingQuantity(entry, activity, unit);
+    if (typeof effectiveValue === 'number' && value === effectiveValue) {
       setDraft(String(value));
       setFeedback('idle');
       return;
     }
 
-    onUpdate(updateQuantityOverrides(entry, step.id, unit, value));
+    onSet(activity.id, unit, value);
     setDraft(String(value));
     setFeedback('updated');
   };
@@ -385,7 +411,7 @@ function QuantityEditor({ entry, step, unit, onUpdate }: QuantityEditorProps) {
   return (
     <div className="quantity-editor">
       <label htmlFor={inputId}>
-        {accessibleUnitLabel} for {step.label}
+        {accessibleUnitLabel} for {activity.name}
       </label>
       <div className="quantity-input-wrap">
         <input
@@ -393,10 +419,10 @@ function QuantityEditor({ entry, step, unit, onUpdate }: QuantityEditorProps) {
           type="number"
           min={0}
           max={unit === 'repetitions' ? 500 : undefined}
-          step={unit === 'minutes' ? 'any' : 1}
-          inputMode={unit === 'minutes' ? 'decimal' : 'numeric'}
+          step={unit === 'minutes' || unit === 'seconds' ? 'any' : 1}
+          inputMode={unit === 'minutes' || unit === 'seconds' ? 'decimal' : 'numeric'}
           value={draft}
-          placeholder="Not specified"
+          placeholder={placeholder}
           aria-describedby={feedbackMessage.length > 0 ? messageId : undefined}
           aria-invalid={feedback === 'invalid'}
           onChange={(event) => {

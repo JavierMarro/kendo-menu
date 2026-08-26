@@ -138,8 +138,8 @@ describe('browser persistence recovery', () => {
         name: 'Dashboard',
       }),
     );
-    const repetitions = screen.getByLabelText(/repetitions for stretch/i);
-    await user.type(repetitions, '12');
+    const minutes = screen.getByLabelText(/minutes for stretch/i);
+    await user.type(minutes, '12');
     await user.tab();
     expect(screen.getByText('Not saved to this device.')).toBeInTheDocument();
     expect(screen.queryByText('Updated.')).not.toBeInTheDocument();

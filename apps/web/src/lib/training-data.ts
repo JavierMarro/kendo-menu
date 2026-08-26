@@ -1,25 +1,40 @@
 import {
   DEFAULT_TRAINING_SETS,
+  getDefaultTrainingQuantity,
+  getDefaultTrainingQuantityUnits,
+  getEffectiveTrainingQuantity as calculateEffectiveTrainingQuantity,
+  getTrainingSectionActivities,
+  getTrainingSetActivities as getDomainTrainingSetActivities,
+  getTrainingSetActivityCount as getDomainTrainingSetActivityCount,
   isValidTrainingQuantityValue,
   TRAINING_QUANTITY_UNITS,
   type DashboardEntry,
+  type TrainingActivity,
+  type TrainingQuantityUnit,
+  type TrainingQuantityValue,
   type TrainingSection,
   type TrainingSet,
-  type TrainingStep,
-  type TrainingQuantity,
-  type TrainingQuantityUnit,
 } from '@kendo-menu/domain';
+
+export interface DisplayTrainingQuantity {
+  readonly unit: TrainingQuantityUnit;
+  readonly value: TrainingQuantityValue;
+}
 
 export function getTrainingSetSections(trainingSet: TrainingSet): readonly TrainingSection[] {
   return trainingSet.sections;
 }
 
-export function getTrainingSetSteps(trainingSet: TrainingSet): readonly TrainingStep[] {
-  return getTrainingSetSections(trainingSet).flatMap((section) => section.steps);
+export function getTrainingSetActivities(trainingSet: TrainingSet): readonly TrainingActivity[] {
+  return getDomainTrainingSetActivities(trainingSet);
 }
 
-export function getTrainingSetStepCount(trainingSet: TrainingSet): number {
-  return getTrainingSetSteps(trainingSet).length;
+export function getTrainingSetActivityCount(trainingSet: TrainingSet): number {
+  return getDomainTrainingSetActivityCount(trainingSet);
+}
+
+export function getSectionActivityCount(section: TrainingSection): number {
+  return getTrainingSectionActivities(section).length;
 }
 
 export function getAllTrainingSets(
@@ -36,51 +51,80 @@ export function findTrainingSet(
 }
 
 export function getTrainingSetDescription(trainingSet: TrainingSet): string {
-  return trainingSet.description.trim().length > 0
+  return trainingSet.description !== undefined && trainingSet.description.trim().length > 0
     ? trainingSet.description
     : 'Description not provided.';
 }
 
 export function getTrainingQuantityValue(
-  step: TrainingStep,
+  activity: TrainingActivity,
   unit: TrainingQuantityUnit,
-): number | null {
-  return step.quantities.find((quantity) => quantity.unit === unit)?.value ?? null;
+): TrainingQuantityValue | undefined {
+  return getDefaultTrainingQuantity(activity, unit);
 }
 
-export function getSpecifiedTrainingQuantities(step: TrainingStep): readonly TrainingQuantity[] {
-  return step.quantities.filter((quantity) => quantity.value !== null);
+export function getSpecifiedTrainingQuantities(
+  activity: TrainingActivity,
+): readonly DisplayTrainingQuantity[] {
+  return getDefaultTrainingQuantityUnits(activity).flatMap((unit) => {
+    const value = getDefaultTrainingQuantity(activity, unit);
+    return value === undefined ? [] : [{ unit, value }];
+  });
 }
 
 export function getEffectiveTrainingQuantity(
   entry: DashboardEntry,
-  step: TrainingStep,
+  activity: TrainingActivity,
   unit: TrainingQuantityUnit,
-): number | null {
-  const stepOverrides = entry.quantityOverrides[step.id];
-  return stepOverrides !== undefined && Object.hasOwn(stepOverrides, unit)
-    ? (stepOverrides[unit] ?? null)
-    : getTrainingQuantityValue(step, unit);
+): TrainingQuantityValue | undefined {
+  return calculateEffectiveTrainingQuantity(activity, entry.quantityOverrides[activity.id], unit);
+}
+
+function getFallbackQuantityUnit(
+  activity: TrainingActivity,
+  sectionName?: string,
+): TrainingQuantityUnit {
+  const name = `${sectionName ?? ''} ${activity.name}`.toLocaleLowerCase('en');
+  if (name.includes('kakari')) {
+    return 'seconds';
+  }
+  if (
+    name.includes('warm-up') ||
+    name.includes('warmup') ||
+    name.includes('suburi') ||
+    name.includes('ashi sabaki') ||
+    name.includes('suri-ashi') ||
+    name.includes('footwork') ||
+    name.includes('jigeiko') ||
+    name.includes('shiaigeiko')
+  ) {
+    return 'minutes';
+  }
+  return 'repetitions';
 }
 
 export function getEditableTrainingQuantityUnits(
   entry: DashboardEntry,
-  step: TrainingStep,
+  activity: TrainingActivity,
+  sectionName?: string,
 ): readonly TrainingQuantityUnit[] {
-  const stepOverrides = entry.quantityOverrides[step.id];
+  const overrides = entry.quantityOverrides[activity.id];
   const units = TRAINING_QUANTITY_UNITS.filter(
     (unit) =>
-      getTrainingQuantityValue(step, unit) !== null ||
-      (stepOverrides !== undefined && Object.hasOwn(stepOverrides, unit)),
+      getDefaultTrainingQuantity(activity, unit) !== undefined ||
+      (overrides !== undefined && Object.hasOwn(overrides, unit)),
   );
-  if (units.length > 0) {
-    return units;
-  }
-  return [step.repUnit === 'custom' ? 'repetitions' : step.repUnit];
+  return units.length > 0 ? units : [getFallbackQuantityUnit(activity, sectionName)];
 }
 
 export function isValidQuantityValue(unit: TrainingQuantityUnit, value: number): boolean {
   return isValidTrainingQuantityValue(unit, value);
+}
+
+export function isTrainingQuantityRange(
+  value: TrainingQuantityValue,
+): value is Exclude<TrainingQuantityValue, number> {
+  return typeof value !== 'number';
 }
 
 export function formatQuantityUnit(unit: TrainingQuantityUnit, value: number): string {
@@ -90,10 +134,12 @@ export function formatQuantityUnit(unit: TrainingQuantityUnit, value: number): s
         return 'repetition';
       case 'sets':
         return 'set';
-      case 'minutes':
-        return 'minute';
       case 'rounds':
         return 'round';
+      case 'seconds':
+        return 'second';
+      case 'minutes':
+        return 'minute';
     }
   }
   return unit;
@@ -103,10 +149,17 @@ export function formatQuantityValue(value: number): string {
   return new Intl.NumberFormat('en', { maximumFractionDigits: 2 }).format(value);
 }
 
-export function formatTrainingQuantity(quantity: TrainingQuantity): string {
-  return quantity.value === null
-    ? 'Quantity not specified'
-    : `${formatQuantityValue(quantity.value)} ${formatQuantityUnit(quantity.unit, quantity.value)}`;
+export function formatTrainingQuantity(quantity: DisplayTrainingQuantity): string {
+  if (typeof quantity.value === 'number') {
+    return `${formatQuantityValue(quantity.value)} ${formatQuantityUnit(
+      quantity.unit,
+      quantity.value,
+    )}`;
+  }
+
+  return `${formatQuantityValue(quantity.value.min)}–${formatQuantityValue(
+    quantity.value.max,
+  )} ${formatQuantityUnit(quantity.unit, 2)}`;
 }
 
 export function getQuantityValidationMessage(unit: TrainingQuantityUnit): string {
@@ -115,10 +168,12 @@ export function getQuantityValidationMessage(unit: TrainingQuantityUnit): string
       return 'Enter a whole number from 0 to 500.';
     case 'sets':
       return 'Enter a whole number of sets, 0 or more.';
-    case 'minutes':
-      return 'Enter a number of minutes, 0 or more.';
     case 'rounds':
       return 'Enter a whole number of rounds, 0 or more.';
+    case 'seconds':
+      return 'Enter a number of seconds, 0 or more.';
+    case 'minutes':
+      return 'Enter a number of minutes, 0 or more.';
   }
 }
 
@@ -126,7 +181,6 @@ export function formatCategory(category: TrainingSet['category']): string {
   if (category === 'custom') {
     return 'Custom';
   }
-
   if (category === 'unspecified') {
     return 'Category not specified';
   }

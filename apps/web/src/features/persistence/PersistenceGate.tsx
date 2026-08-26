@@ -259,7 +259,7 @@ function PersistenceRecovery({
           >
             <h2 id="reset-title">Reset local data?</h2>
             <p id="reset-description">
-              This permanently removes dashboard selections, repetition values, notes, and custom
+              This permanently removes dashboard selections, quantity values, notes, and custom
               drills from this browser. Built-in drills will remain available.
             </p>
             <div className="dialog-actions">

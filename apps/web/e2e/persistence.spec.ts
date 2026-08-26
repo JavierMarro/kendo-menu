@@ -135,9 +135,9 @@ test.describe('local persistence recovery', () => {
       .getByRole('link', { name: 'Dashboard', exact: true })
       .click();
 
-    const repetitions = page.getByLabel(/repetitions for stretch/i);
-    await repetitions.fill('12');
-    await repetitions.blur();
+    const minutes = page.getByLabel(/minutes for stretch/i);
+    await minutes.fill('12');
+    await minutes.blur();
     await expect(page.getByText('Not saved to this device.')).toBeVisible();
     const appBanner = page.getByRole('banner');
     await expect(

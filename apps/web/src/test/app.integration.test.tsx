@@ -4,14 +4,33 @@ import { describe, expect, it } from 'vitest';
 
 import { asTrainingSetId } from '@kendo-menu/domain';
 
+import { formatTrainingQuantity } from '../lib/training-data';
 import { renderApp, createTestStore } from './test-utils';
 
 const SENIOR_HIGH_SCHOOL_DRILL_ID = asTrainingSetId('senior-high-school-kendo-club');
 const SENIOR_HIGH_SCHOOL_STRETCH_ID = 'senior-high-school-kendo-club-warm-up-stretch';
 const JUNIOR_HIGH_DRILL_ID = asTrainingSetId('junior-high-kendo-club');
 const JUNIOR_HIGH_HAYA_ID = 'junior-high-kendo-club-suburi-haya';
+const INTERNATIONAL_DOJO_ID = asTrainingSetId('international-dojo-2-hour-session');
+const INTERNATIONAL_WARM_UP_ID = 'international-dojo-2-hour-session-warm-up-warm-up';
+const INTERNATIONAL_KAKARIGEIKO_ID = 'international-dojo-2-hour-session-kakarigeiko-kakarigeiko';
+const OFFICIAL_ZNKR_ID = asTrainingSetId('official-znkr-ajkf');
+const OFFICIAL_ZNKR_MEN_ID = 'official-znkr-ajkf-kihon-waza-men';
+const TOP_UNIVERSITY_ID = asTrainingSetId('top-university');
+const TOP_UNIVERSITY_KAKARIGEIKO_ID = 'top-university-kakarigeiko-kakarigeiko';
 
 describe('KendoMenu application flows', () => {
+  it('formats count, fixed-duration, and range quantities without changing units', () => {
+    expect(formatTrainingQuantity({ unit: 'repetitions', value: 5 })).toBe('5 repetitions');
+    expect(formatTrainingQuantity({ unit: 'sets', value: 1 })).toBe('1 set');
+    expect(formatTrainingQuantity({ unit: 'rounds', value: 3 })).toBe('3 rounds');
+    expect(formatTrainingQuantity({ unit: 'seconds', value: 30 })).toBe('30 seconds');
+    expect(formatTrainingQuantity({ unit: 'minutes', value: 2.5 })).toBe('2.5 minutes');
+    expect(formatTrainingQuantity({ unit: 'seconds', value: { min: 30, max: 60 } })).toBe(
+      '30–60 seconds',
+    );
+  });
+
   it('shows a session-only cookie notice with policy details and dismisses without storage', async () => {
     const user = userEvent.setup();
 
@@ -82,12 +101,7 @@ describe('KendoMenu application flows', () => {
       within(footerNavigation)
         .getAllByRole('link')
         .map((link) => link.getAttribute('href')),
-    ).toEqual([
-      '/app#how-it-works-title',
-      '/app/library',
-      '/app/dashboard',
-      '/app#faq-title',
-    ]);
+    ).toEqual(['/app#how-it-works-title', '/app/library', '/app/dashboard', '/app#faq-title']);
 
     const socialNavigation = within(footer).getByRole('navigation', { name: 'Social' });
     expect(
@@ -264,7 +278,7 @@ describe('KendoMenu application flows', () => {
 
     expect(within(card).getByText('Category not specified')).toBeVisible();
     expect(within(card).getByText('Description not provided.')).toBeVisible();
-    expect(within(card).getByText('23 exercises')).toBeVisible();
+    expect(within(card).getByText('23 activities')).toBeVisible();
     expect(within(card).getByRole('link', { name: 'View drill' })).toHaveAttribute(
       'href',
       '/app/library/international-dojo-2-hour-session',
@@ -297,11 +311,13 @@ describe('KendoMenu application flows', () => {
       throw new Error('Expected the first drill section to have a summary.');
     }
     expect(firstSummary).toHaveTextContent('Warm-up');
-    expect(firstSummary).toHaveTextContent('1 exercise');
+    expect(firstSummary).toHaveTextContent('1 activity');
 
     await user.click(firstSummary);
     expect(firstSection).toHaveAttribute('open');
     expect(within(firstSection).getByText('10 minutes')).toBeVisible();
+    expect(firstSection.querySelector('.step-label')).toBeNull();
+    expect(within(firstSection).getAllByText('Warm-up')).toHaveLength(1);
 
     await user.click(firstSummary);
     expect(firstSection).not.toHaveAttribute('open');
@@ -312,7 +328,9 @@ describe('KendoMenu application flows', () => {
     const juniorView = renderApp(createTestStore(), {
       initialEntries: ['/app/library/junior-high-kendo-club'],
     });
-    const suburiSection = [...juniorView.container.querySelectorAll<HTMLDetailsElement>('details')][0];
+    const suburiSection = [
+      ...juniorView.container.querySelectorAll<HTMLDetailsElement>('details'),
+    ][0];
     const suburiSummary = suburiSection?.querySelector('summary');
     if (suburiSection === undefined || suburiSummary === null || suburiSummary === undefined) {
       throw new Error('Expected the junior-high Suburi disclosure.');
@@ -340,7 +358,12 @@ describe('KendoMenu application flows', () => {
       name: 'Zero quantity example',
       description: '',
       category: 'custom',
-      sections: [{ label: 'Example', steps: [{ label: 'Still explicit', defaultReps: 0 }] }],
+      sections: [
+        {
+          name: 'Example',
+          exercises: [{ name: 'Still explicit', quantities: { repetitions: 0 } }],
+        },
+      ],
     });
     const zeroView = renderApp(zeroStore, {
       initialEntries: [`/app/library/${zeroSetId}`],
@@ -355,26 +378,36 @@ describe('KendoMenu application flows', () => {
     expect(within(zeroSection).queryByText('Quantity not specified')).not.toBeInTheDocument();
   });
 
-  it('keeps a blank repetition distinct from an explicit zero and enforces 0–500', async () => {
+  it('uses the minute convention for missing Warm-up quantities and preserves explicit zero', async () => {
     const user = userEvent.setup();
     const store = createTestStore();
     store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
     renderApp(store);
 
-    const repetitions = screen.getByLabelText(/repetitions for stretch/i);
-    expect(repetitions).toHaveValue(null);
+    const minutes = screen.getByLabelText(/minutes for stretch/i);
+    expect(minutes).toHaveValue(null);
 
-    await user.type(repetitions, '0');
+    await user.type(minutes, '0');
     await user.tab();
-    expect(repetitions).toHaveValue(0);
+    expect(minutes).toHaveValue(0);
     expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [SENIOR_HIGH_SCHOOL_STRETCH_ID]: { repetitions: 0 },
+      [SENIOR_HIGH_SCHOOL_STRETCH_ID]: { minutes: 0 },
     });
 
-    await user.clear(repetitions);
+    await user.clear(minutes);
     await user.tab();
-    expect(repetitions).toHaveValue(null);
+    expect(minutes).toHaveValue(null);
     expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
+  });
+
+  it('uses repetitions for untimed waza and enforces the existing 0–500 limit', async () => {
+    const user = userEvent.setup();
+    const store = createTestStore();
+    store.getState().addToDashboard(OFFICIAL_ZNKR_ID);
+    renderApp(store);
+
+    const repetitions = screen.getByLabelText('Repetitions for Men');
+    expect(repetitions).toHaveValue(null);
 
     await user.type(repetitions, '501');
     await user.tab();
@@ -386,7 +419,23 @@ describe('KendoMenu application flows', () => {
     await user.tab();
     expect(repetitions).toHaveValue(500);
     expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [SENIOR_HIGH_SCHOOL_STRETCH_ID]: { repetitions: 500 },
+      [OFFICIAL_ZNKR_MEN_ID]: { repetitions: 500 },
+    });
+  });
+
+  it('uses seconds when adding an override to Kakarigeiko without a default', async () => {
+    const user = userEvent.setup();
+    const store = createTestStore();
+    store.getState().addToDashboard(TOP_UNIVERSITY_ID);
+    renderApp(store);
+
+    const seconds = screen.getByLabelText('Seconds for Kakarigeiko');
+    expect(seconds).toHaveValue(null);
+    await user.type(seconds, '30');
+    await user.tab();
+
+    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+      [TOP_UNIVERSITY_KAKARIGEIKO_ID]: { seconds: 30 },
     });
   });
 
@@ -411,6 +460,53 @@ describe('KendoMenu application flows', () => {
     expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
       [JUNIOR_HIGH_HAYA_ID]: { repetitions: 80, sets: 0 },
     });
+
+    await user.clear(repetitions);
+    await user.tab();
+    expect(repetitions).toHaveValue(100);
+    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+      [JUNIOR_HIGH_HAYA_ID]: { sets: 0 },
+    });
+
+    await user.clear(sets);
+    await user.tab();
+    expect(sets).toHaveValue(2);
+    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
+  });
+
+  it('edits standalone section quantities by stable IDs without duplicate labels', async () => {
+    const user = userEvent.setup();
+    const store = createTestStore();
+    store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+    const view = renderApp(store);
+
+    const warmUpHeading = screen.getByRole('heading', { name: 'Warm-up', level: 3 });
+    const warmUpSection = warmUpHeading.closest('section');
+    if (warmUpSection === null) {
+      throw new Error('Expected the standalone Warm-up section.');
+    }
+    expect(warmUpSection.querySelector('.step-label')).toBeNull();
+    expect(within(warmUpSection).getAllByText('Warm-up')).toHaveLength(1);
+
+    const minutes = within(warmUpSection).getByLabelText('Minutes for Warm-up');
+    const seconds = screen.getByLabelText('Seconds for Kakarigeiko');
+    const rounds = screen.getByLabelText('Rounds for Kakarigeiko');
+    expect(minutes).toHaveValue(10);
+    expect(seconds).toHaveValue(60);
+    expect(rounds).toHaveValue(10);
+
+    await user.clear(minutes);
+    await user.type(minutes, '12.5');
+    await user.tab();
+    await user.clear(seconds);
+    await user.type(seconds, '45');
+    await user.tab();
+
+    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+      [INTERNATIONAL_WARM_UP_ID]: { minutes: 12.5 },
+      [INTERNATIONAL_KAKARIGEIKO_ID]: { seconds: 45 },
+    });
+    view.unmount();
   });
 
   it('persists notes and restores a removed dashboard entry with Undo', async () => {
@@ -446,9 +542,12 @@ describe('KendoMenu application flows', () => {
 
     await user.type(screen.getByLabelText('Drill name'), 'Monday footwork');
     await user.type(screen.getByLabelText('Description (optional)'), 'A short solo session.');
-    await user.type(screen.getAllByLabelText('Exercise name')[0]!, 'Footwork');
-    await user.type(screen.getAllByLabelText('Subexercise name')[0]!, 'Big step forward and back');
-    await user.type(screen.getAllByLabelText('Repetitions')[0]!, '24');
+    await user.type(screen.getByLabelText('Exercise name', { exact: true }), 'Footwork');
+    await user.type(
+      screen.getByLabelText('Subexercise name', { exact: true }),
+      'Big step forward and back',
+    );
+    await user.type(screen.getByLabelText('Repetitions', { exact: true }), '24');
     await user.click(screen.getByRole('button', { name: 'Save drill to dashboard' }));
 
     await waitFor(() => {
@@ -462,7 +561,7 @@ describe('KendoMenu application flows', () => {
     const entry = store.getState().dashboardEntries[0];
     expect(customSet?.id).toBe(entry?.trainingSetId);
     expect(customSet?.isBuiltIn).toBe(false);
-    expect(customSet?.sections[0]?.steps[0]?.defaultReps).toBe(24);
+    expect(customSet?.sections[0]?.exercises[0]?.quantities?.repetitions).toBe(24);
   });
 
   it('does not partially create a custom drill when a repetition is outside the allowed range', async () => {
@@ -471,9 +570,9 @@ describe('KendoMenu application flows', () => {
     renderApp(store, { initialEntries: ['/app/drills/new'] });
 
     await user.type(screen.getByLabelText('Drill name'), 'Invalid repetitions');
-    await user.type(screen.getAllByLabelText('Exercise name')[0]!, 'Footwork');
-    await user.type(screen.getAllByLabelText('Subexercise name')[0]!, 'Too many steps');
-    await user.type(screen.getAllByLabelText('Repetitions')[0]!, '501');
+    await user.type(screen.getByLabelText('Exercise name', { exact: true }), 'Footwork');
+    await user.type(screen.getByLabelText('Subexercise name', { exact: true }), 'Too many steps');
+    await user.type(screen.getByLabelText('Repetitions', { exact: true }), '501');
     await user.click(screen.getByRole('button', { name: 'Save drill to dashboard' }));
 
     expect(

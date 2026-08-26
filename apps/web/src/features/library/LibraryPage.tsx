@@ -4,7 +4,7 @@ import {
   formatCategory,
   getAllTrainingSets,
   getTrainingSetDescription,
-  getTrainingSetStepCount,
+  getTrainingSetActivityCount,
 } from '../../lib/training-data';
 import { useTrainingStore } from '../../lib/training-store-context';
 
@@ -45,7 +45,9 @@ export function LibraryPage() {
             <article className="library-card" key={trainingSet.id}>
               <div className="library-card-topline">
                 <span className="category-pill">{formatCategory(trainingSet.category)}</span>
-                <span className="step-count">{getTrainingSetStepCount(trainingSet)} exercises</span>
+                <span className="step-count">
+                  {getTrainingSetActivityCount(trainingSet)} activities
+                </span>
               </div>
               <h2>{trainingSet.name}</h2>
               <p>{getTrainingSetDescription(trainingSet)}</p>

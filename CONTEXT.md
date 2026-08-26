@@ -4,22 +4,26 @@ KendoMenu models reusable kendo practice menus and the amounts of work they pres
 
 ## Language
 
-**Training set**:
-A complete, reusable practice menu made of ordered sections. The product may present a training set as a drill.
-_Avoid_: Session, workout
+**Drill**:
+A complete, reusable, ordered kendo training session made of sections.
+_Avoid_: Workout
 
 **Section**:
-A named grouping of related exercises within a training set.
+A named, ordered activity block within a drill. A section may prescribe quantities for the whole block and may contain exercises.
 _Avoid_: Phase, category
 
+**Standalone section**:
+A section with no child exercises. The section itself is a valid editable activity.
+_Avoid_: Empty section, placeholder exercise
+
 **Exercise**:
-A single prescribed practice activity within a section.
+A named practice activity within a section.
 _Avoid_: Step, drill
 
 **Quantity**:
-An amount of work paired with one explicit unit; an exercise can carry several independent quantities, and an unstated amount remains unknown rather than zero.
+A count or duration prescribed for a section or exercise. An activity can carry several independent quantities; an unstated quantity remains unknown, while zero is an explicit amount.
 _Avoid_: Reps when the unit is unknown or is not repetitions
 
 **Unspecified category**:
-A training set whose source did not assign a practice category.
+A drill whose source did not assign a practice category.
 _Avoid_: Mixed when the source does not establish a mixture

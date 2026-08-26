@@ -141,7 +141,7 @@ test.describe('routed training flows', () => {
       .locator('xpath=ancestor::article');
     await expect(card).toContainText('Category not specified');
     await expect(card).toContainText('Description not provided.');
-    await expect(card).toContainText('23 exercises');
+    await expect(card).toContainText('23 activities');
     const viewDrill = card.getByRole('link', { name: 'View drill' });
     await expect(viewDrill).toHaveAttribute(
       'href',
@@ -159,7 +159,7 @@ test.describe('routed training flows', () => {
     await expect(firstSection).not.toHaveAttribute('open', '');
     const firstSummary = firstSection.locator('summary');
     await expect(firstSummary).toContainText('Warm-up');
-    await expect(firstSummary).toContainText('1 exercise');
+    await expect(firstSummary).toContainText('1 activity');
 
     await firstSummary.focus();
     await page.keyboard.press('Enter');
@@ -208,6 +208,48 @@ test.describe('routed training flows', () => {
     await expect(page.getByRole('heading', { name: 'Junior-high kendo club' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Undo' }).click();
     await expect(page.getByRole('heading', { name: 'Junior-high kendo club' })).toBeVisible();
+  });
+
+  test('persists standalone minute and second overrides without changing their units', async ({
+    page,
+  }) => {
+    await page.goto('/app/library');
+    const card = page
+      .getByRole('heading', { name: 'International dojo (2 hour session)' })
+      .locator('xpath=ancestor::article');
+    await card.getByRole('link', { name: 'View drill' }).click();
+    await page.getByRole('button', { name: 'Add to dashboard' }).click();
+    await openNavigationIfNeeded(page);
+    await page
+      .getByRole('navigation', { name: 'Primary navigation' })
+      .getByRole('link', { name: 'Dashboard', exact: true })
+      .click();
+
+    const minutes = page.getByLabel('Minutes for Warm-up');
+    const seconds = page.getByLabel('Seconds for Kakarigeiko');
+    await expect(minutes).toHaveValue('10');
+    await expect(seconds).toHaveValue('60');
+    await minutes.fill('12.5');
+    await minutes.blur();
+    await seconds.fill('45');
+    await seconds.blur();
+
+    await openNavigationIfNeeded(page);
+    await page
+      .getByRole('navigation', { name: 'Primary navigation' })
+      .getByRole('link', { name: /Drill library/ })
+      .click();
+    await openNavigationIfNeeded(page);
+    await page
+      .getByRole('navigation', { name: 'Primary navigation' })
+      .getByRole('link', { name: 'Dashboard', exact: true })
+      .click();
+    await expect(page.getByLabel('Minutes for Warm-up')).toHaveValue('12.5');
+    await expect(page.getByLabel('Seconds for Kakarigeiko')).toHaveValue('45');
+
+    await page.reload();
+    await expect(page.getByLabel('Minutes for Warm-up')).toHaveValue('12.5');
+    await expect(page.getByLabel('Seconds for Kakarigeiko')).toHaveValue('45');
   });
 
   test('prompts before browser Back discards a dirty draft, but dismiss keeps the draft', async ({
