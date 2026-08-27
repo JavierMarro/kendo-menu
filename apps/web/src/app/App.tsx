@@ -10,6 +10,7 @@ import { LibraryPage } from '../features/library/LibraryPage';
 import { TrainingSetDetailPage } from '../features/library/TrainingSetDetailPage';
 import { NotFoundPage } from '../features/not-found/NotFoundPage';
 import { CookiePolicyPage } from '../features/privacy/CookiePolicyPage';
+import { SourcesPage } from '../features/sources/SourcesPage';
 import { useTrainingStore } from '../lib/training-store-context';
 import { getAllTrainingSets } from '../lib/training-data';
 
@@ -18,6 +19,7 @@ const routeTitles: Readonly<Record<string, string>> = {
   '/app/dashboard': 'Dashboard',
   '/app/library': 'Drill library',
   '/app/drills/new': 'Create drill',
+  '/app/sources': 'Sources',
   '/cookies': 'Cookie Policy',
 };
 
@@ -77,6 +79,7 @@ export const appRoutes: RouteObject[] = [
           { path: 'library', element: <LibraryPage /> },
           { path: 'library/:trainingSetId', element: <TrainingSetDetailPage /> },
           { path: 'drills/new', element: <CreateDrillPage /> },
+          { path: 'sources', element: <SourcesPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

@@ -21,6 +21,18 @@ export interface DisplayTrainingQuantity {
   readonly value: TrainingQuantityValue;
 }
 
+export const CURATED_TRAINING_SET_COUNT = DEFAULT_TRAINING_SETS.length;
+
+export const CURATED_EXERCISE_COUNT = DEFAULT_TRAINING_SETS.reduce(
+  (trainingSetTotal, trainingSet) =>
+    trainingSetTotal +
+    trainingSet.sections.reduce(
+      (sectionTotal, section) => sectionTotal + section.exercises.length,
+      0,
+    ),
+  0,
+);
+
 export function getTrainingSetSections(trainingSet: TrainingSet): readonly TrainingSection[] {
   return trainingSet.sections;
 }

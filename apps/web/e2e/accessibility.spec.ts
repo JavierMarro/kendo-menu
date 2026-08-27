@@ -46,6 +46,14 @@ test.describe('accessibility and responsive layout', () => {
     );
     expect(builderBlockingViolations).toEqual([]);
 
+    await page.goto('/app/sources');
+    await expect(page.getByRole('heading', { name: 'Sources', level: 1 })).toBeVisible();
+    const sourcesResults = await new AxeBuilder({ page }).analyze();
+    const sourcesBlockingViolations = sourcesResults.violations.filter(
+      ({ impact }) => impact === 'critical' || impact === 'serious',
+    );
+    expect(sourcesBlockingViolations).toEqual([]);
+
     await page.goto('/cookies');
     await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toBeVisible();
     const cookiePolicyResults = await new AxeBuilder({ page }).analyze();
@@ -67,6 +75,10 @@ test.describe('accessibility and responsive layout', () => {
       }
       const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(scrollWidth, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(width);
+
+      await page.goto('/app/sources');
+      const sourcesScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      expect(sourcesScrollWidth, `sources overflow at ${width}px`).toBeLessThanOrEqual(width);
     }
   });
 

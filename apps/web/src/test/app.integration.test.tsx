@@ -2,9 +2,13 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
-import { asTrainingSetId } from '@kendo-menu/domain';
+import { DEFAULT_TRAINING_SETS, asTrainingSetId } from '@kendo-menu/domain';
 
-import { formatTrainingQuantity } from '../lib/training-data';
+import {
+  CURATED_EXERCISE_COUNT,
+  CURATED_TRAINING_SET_COUNT,
+  formatTrainingQuantity,
+} from '../lib/training-data';
 import { renderApp, createTestStore } from './test-utils';
 
 const SENIOR_HIGH_SCHOOL_DRILL_ID = asTrainingSetId('senior-high-school-kendo-club');
@@ -139,7 +143,7 @@ describe('KendoMenu application flows', () => {
     ).toBe('/assets/kendo-menu-logo.jpeg');
     expect(
       screen.getByText(
-        'Build a focused kendo session, adjust it to your day, and keep your practice moving.',
+        'Choose from 11 curated menus, shape the workload for today and keep polishing mind, spirit and character through varied kendo practice.',
       ),
     ).toBeInTheDocument();
     expect(
@@ -150,36 +154,112 @@ describe('KendoMenu application flows', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'How it works', level: 2 })).toBeInTheDocument();
     expect(
-      screen.getByText(
-        /These figures are a working target for a compact, carefully sourced starting point/,
-      ),
+      screen.getByText(/The figures below are calculated from the current curated data/),
     ).toBeInTheDocument();
 
-    const faqButton = screen.getByRole('button', { name: 'What is KendoMenu?' });
-    expect(faqButton).toHaveAttribute('aria-expanded', 'true');
-    expect(faqButton).toHaveAttribute('aria-controls', 'what-is-kendomenu-answer');
-    expect(document.getElementById('what-is-kendomenu-answer')).not.toHaveAttribute('hidden');
+    const canonicalExerciseCount = DEFAULT_TRAINING_SETS.reduce(
+      (trainingSetTotal, trainingSet) =>
+        trainingSetTotal +
+        trainingSet.sections.reduce(
+          (sectionTotal, section) => sectionTotal + section.exercises.length,
+          0,
+        ),
+      0,
+    );
+    expect(CURATED_TRAINING_SET_COUNT).toBe(DEFAULT_TRAINING_SETS.length);
+    expect(CURATED_EXERCISE_COUNT).toBe(canonicalExerciseCount);
+    const exerciseCount = screen.getByText(String(canonicalExerciseCount), {
+      selector: '.landing-stat-value',
+    });
+    expect(exerciseCount.closest('dd')).toHaveAttribute(
+      'aria-label',
+      `${canonicalExerciseCount} child exercises in the curated menus`,
+    );
+    expect(screen.queryByText('~150')).not.toBeInTheDocument();
 
-    await user.click(faqButton);
-    expect(faqButton).toHaveAttribute('aria-expanded', 'false');
+    const faqButton = screen.getByRole('button', { name: 'What is KendoMenu?' });
+    const faqButtons = screen.getAllByRole('button', { name: /\?$/ });
+    expect(faqButtons).toHaveLength(6);
+    for (const button of faqButtons) {
+      expect(button).toHaveAttribute('aria-expanded', 'false');
+    }
+    expect(faqButton).toHaveAttribute('aria-controls', 'what-is-kendomenu-answer');
     expect(document.getElementById('what-is-kendomenu-answer')).toHaveAttribute('hidden');
 
-    await user.keyboard('{Enter}');
+    await user.click(faqButton);
     expect(faqButton).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getAllByRole('button', { name: /\?$/ })).toHaveLength(6);
+    expect(document.getElementById('what-is-kendomenu-answer')).not.toHaveAttribute('hidden');
 
-    expect(screen.getByRole('link', { name: 'Record your first keiko' })).toHaveAttribute(
-      'href',
-      '/app/library',
-    );
+    const browseLink = screen.getByRole('link', { name: 'Browse drill library' });
+    expect(browseLink).toHaveClass('landing-primary-action');
 
-    await user.click(screen.getByRole('link', { name: 'Browse drill library' }));
+    const recordLink = screen.getByRole('link', { name: 'Record your first keiko' });
+    expect(recordLink).toHaveAttribute('href', '/app/library');
+    expect(recordLink).toHaveClass('landing-primary-action');
+
+    await user.click(browseLink);
     expect(screen.getByRole('heading', { name: 'Drill library' })).toBeInTheDocument();
 
     await user.click(within(header).getByRole('link', { name: 'KendoMenu home' }));
     expect(
       screen.getByRole('heading', { name: 'Plan the keiko you need today.' }),
     ).toBeInTheDocument();
+  });
+
+  it('links the menu-sources FAQ to the complete Sources page', async () => {
+    const user = userEvent.setup();
+    renderApp(createTestStore(), { initialEntries: ['/app'] });
+
+    const sourcesQuestion = screen.getByRole('button', {
+      name: 'Where do the keiko menus come from?',
+    });
+    expect(sourcesQuestion).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(sourcesQuestion);
+
+    const sourceLink = screen.getByRole('link', { name: 'here' });
+    expect(sourceLink).toHaveTextContent(/^here$/);
+    expect(sourceLink).toHaveAttribute('href', '/app/sources');
+    expect(sourceLink).toHaveClass('landing-faq-source-link');
+    expect(sourceLink.parentElement?.tagName).toBe('STRONG');
+
+    await user.click(sourceLink);
+    expect(screen.getByRole('heading', { name: 'Sources', level: 1 })).toBeInTheDocument();
+  });
+
+  it('renders every verified source with safe external-link behaviour', () => {
+    renderApp(createTestStore(), { initialEntries: ['/app/sources'] });
+
+    const sourcesPage = screen.getByRole('article', { name: 'Sources' });
+    expect(
+      within(sourcesPage).getByRole('heading', { name: 'Kanoya University YouTube series' }),
+    ).toBeInTheDocument();
+    expect(
+      within(sourcesPage).getByText('Useful reference — not currently used by KendoMenu.'),
+    ).toBeVisible();
+
+    const externalLinks = within(sourcesPage).getAllByRole('link');
+    expect(externalLinks.map((link) => link.getAttribute('href'))).toEqual([
+      'https://minaken3.com/kendo-practice/training-menu-introduction/',
+      'https://www.kendoubu.com/category22/entry71.html',
+      'https://kenshi247.net/blog/2023/01/22/asageiko/',
+      'https://sportsjoutatsu.com/kendou-joutatsu-kyoukadvd/shiodachuugaku-renshuuhou.html',
+      'https://www.letskendo.com/posts/1693/',
+      'https://www.ritsumei.ac.jp/nkc/student/club/kendo/rensyunaiyou2016new.html/',
+      'https://www.kaminarikan.org/en/articles/bokuto_ni_waza',
+      'https://kenshi247.net/blog/2010/06/28/bokuto-ni-yoru-kendo-kihon-waza-keikoho/',
+      'https://www.youtube.com/watch?v=wVFUgb4PBhE',
+      'https://www.youtube.com/watch?v=C5_rVSlroyQ',
+      'https://www.youtube.com/watch?v=PUKn48yiFGg',
+      'https://www.youtube.com/watch?v=zAW4i2ThTLo',
+      'https://www.youtube.com/watch?v=egkw-tg_Twk',
+      'https://www.kendo.or.jp/wp/wp-content/uploads/2022/06/kendojugyonotenkai_digest_04_all.pdf',
+    ]);
+    for (const link of externalLinks) {
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      expect(link).toHaveAccessibleName(/opens in a new tab/);
+    }
   });
 
   it('keeps the current primary navigation order', () => {
@@ -296,7 +376,7 @@ describe('KendoMenu application flows', () => {
     expect(cards).toHaveLength(11);
 
     const heading = within(library).getByRole('heading', {
-      name: 'International dojo menu (2 hour session)',
+      name: 'International dojo menu',
     });
     const card = heading.closest('article');
     if (card === null) {
@@ -304,7 +384,7 @@ describe('KendoMenu application flows', () => {
     }
 
     expect(within(card).getByText('Category not specified')).toBeVisible();
-    expect(within(card).getByText('Description not provided.')).toBeVisible();
+    expect(within(card).getByText('Set for a 2 hours long session.')).toBeVisible();
     expect(within(card).getByText('20 activities')).toBeVisible();
     expect(within(card).getByRole('link', { name: 'View drill' })).toHaveAttribute(
       'href',
@@ -317,7 +397,7 @@ describe('KendoMenu application flows', () => {
     const user = userEvent.setup();
     const view = renderApp(createTestStore(), { initialEntries: ['/app/library'] });
     const cardHeading = screen.getByRole('heading', {
-      name: 'International dojo menu (2 hour session)',
+      name: 'International dojo menu',
     });
     const card = cardHeading.closest('article');
     if (card === null) {
@@ -327,7 +407,7 @@ describe('KendoMenu application flows', () => {
     await user.click(within(card).getByRole('link', { name: 'View drill' }));
     expect(
       screen.getByRole('heading', {
-        name: 'International dojo menu (2 hour session)',
+        name: 'International dojo menu',
         level: 1,
       }),
     ).toBeVisible();

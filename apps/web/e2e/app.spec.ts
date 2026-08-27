@@ -137,10 +137,10 @@ test.describe('routed training flows', () => {
     await expect(page.locator('.library-card')).toHaveCount(11);
 
     const card = page
-      .getByRole('heading', { name: 'International dojo menu (2 hour session)' })
+      .getByRole('heading', { name: 'International dojo menu' })
       .locator('xpath=ancestor::article');
     await expect(card).toContainText('Category not specified');
-    await expect(card).toContainText('Description not provided.');
+    await expect(card).toContainText('Set for a 2 hours long session.');
     await expect(card).toContainText('20 activities');
     const viewDrill = card.getByRole('link', { name: 'View drill' });
     await expect(viewDrill).toHaveAttribute(
@@ -217,7 +217,7 @@ test.describe('routed training flows', () => {
   }) => {
     await page.goto('/app/library');
     const card = page
-      .getByRole('heading', { name: 'International dojo menu (2 hour session)' })
+      .getByRole('heading', { name: 'International dojo menu' })
       .locator('xpath=ancestor::article');
     await card.getByRole('link', { name: 'View drill' }).click();
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
