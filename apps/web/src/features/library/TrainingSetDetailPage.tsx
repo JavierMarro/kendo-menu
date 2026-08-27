@@ -49,6 +49,8 @@ export function TrainingSetDetailPage() {
     );
   }
 
+  const description = getTrainingSetDescription(trainingSet);
+
   return (
     <>
       <p className="breadcrumb">
@@ -60,7 +62,7 @@ export function TrainingSetDetailPage() {
         <div>
           <p className="eyebrow">{formatCategory(trainingSet.category)}</p>
           <h1>{trainingSet.name}</h1>
-          <p className="page-intro">{getTrainingSetDescription(trainingSet)}</p>
+          {description === undefined ? null : <p className="page-intro">{description}</p>}
         </div>
         <button
           className="primary-button"

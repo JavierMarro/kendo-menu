@@ -212,6 +212,7 @@ function DashboardTrainingSet({
   const persistenceStatus = usePersistenceStatus();
   const sections = getTrainingSetSections(trainingSet);
   const activityCount = getTrainingSetActivityCount(trainingSet);
+  const description = getTrainingSetDescription(trainingSet);
 
   const handleNotesChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setNotesDraft(event.target.value);
@@ -234,7 +235,7 @@ function DashboardTrainingSet({
         <div className="card-content">
           <p className="card-kicker">{formatCategory(trainingSet.category)}</p>
           <h2>{trainingSet.name}</h2>
-          <p>{getTrainingSetDescription(trainingSet)}</p>
+          {description === undefined ? null : <p>{description}</p>}
           <div className="card-meta">
             <span>{activityCount} activities</span>
             <span>{entry.notes.length > 0 ? 'Has notes' : 'No notes yet'}</span>

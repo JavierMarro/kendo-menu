@@ -134,12 +134,48 @@ test.describe('routed training flows', () => {
     page,
   }) => {
     await page.goto('/app/library');
-    await expect(page.locator('.library-card')).toHaveCount(11);
+    const cards = page.locator('.library-card');
+    await expect(cards).toHaveCount(11);
+    await expect(page.locator('.category-pill', { hasText: 'High intensity drill' })).toHaveCount(
+      4,
+    );
+    await expect(page.locator('.category-pill', { hasText: 'Intense drill' })).toHaveCount(7);
+    await expect(page.getByText('Category not specified')).toHaveCount(0);
+    await expect(page.getByText('Description not provided.')).toHaveCount(0);
+    await expect(page.locator('.library-card > p:empty')).toHaveCount(0);
+
+    const cardLayout = await cards.evaluateAll((elements) =>
+      elements.map((element) => {
+        const cardBox = element.getBoundingClientRect();
+        const actions = element.querySelector('.library-card-actions');
+        const actionsBox = actions?.getBoundingClientRect();
+
+        return {
+          width: Math.round(cardBox.width * 100) / 100,
+          height: Math.round(cardBox.height * 100) / 100,
+          actionBottomInset:
+            actionsBox === undefined
+              ? null
+              : Math.round((cardBox.bottom - actionsBox.bottom) * 100) / 100,
+        };
+      }),
+    );
+    expect(new Set(cardLayout.map(({ width }) => width)).size).toBe(1);
+    expect(new Set(cardLayout.map(({ height }) => height)).size).toBe(1);
+    expect(new Set(cardLayout.map(({ actionBottomInset }) => actionBottomInset)).size).toBe(1);
+
+    const viewport = page.viewportSize();
+    if (viewport === null) {
+      throw new Error('The drill-library viewport is unavailable.');
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      viewport.width,
+    );
 
     const card = page
       .getByRole('heading', { name: 'International dojo menu' })
       .locator('xpath=ancestor::article');
-    await expect(card).toContainText('Category not specified');
+    await expect(card).toContainText('Intense drill');
     await expect(card).toContainText('Set for a 2 hours long session.');
     await expect(card).toContainText('20 activities');
     const viewDrill = card.getByRole('link', { name: 'View drill' });
@@ -150,6 +186,8 @@ test.describe('routed training flows', () => {
 
     await viewDrill.focus();
     await expect(viewDrill).toBeFocused();
+    await expect(viewDrill).toHaveCSS('outline-style', 'solid');
+    await expect(viewDrill).toHaveCSS('outline-width', '3px');
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/app\/library\/international-dojo-2-hour-session$/);
 
@@ -167,6 +205,27 @@ test.describe('routed training flows', () => {
     await expect(firstSection.getByText('10 minutes')).toBeVisible();
     await page.keyboard.press('Enter');
     await expect(firstSection).not.toHaveAttribute('open', '');
+  });
+
+  test('clamps the University High School card preview and shows its full detail description', async ({
+    page,
+  }) => {
+    const description =
+      "Weekly rotation: Monday self-directed practice; Tuesday 'Ken-tore' circuits; Wednesday is a running/stair sprints plus suburi and suri-ashi; Thursday is kihon and waza-geiko; Friday is kihon plus shiaigeiko; weekends are tournaments or shiaigeiko.";
+    await page.goto('/app/library');
+
+    const card = page
+      .getByRole('heading', { name: 'University High School dojo menu' })
+      .locator('xpath=ancestor::article');
+    const preview = card.locator('.library-card-description');
+    await expect(preview).toHaveText(description);
+    expect(await preview.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(
+      true,
+    );
+
+    await card.getByRole('link', { name: 'View drill' }).click();
+
+    await expect(page.locator('.detail-header .page-intro')).toHaveText(description);
   });
 
   test('persists multi-unit quantities, notes, and an Undo restoration across reload', async ({

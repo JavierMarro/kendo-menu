@@ -16,10 +16,10 @@ export function LibraryPage() {
     <>
       <header className="page-header">
         <div>
-          <p className="eyebrow">Your practice catalogue</p>
+          <p className="eyebrow">Keiko catalogue</p>
           <h1>Drill library</h1>
           <p className="page-intro">
-            Browse curated keiko drills and the training sets you create for yourself.
+            Browse curated keiko menus, add them to your dashboard and set the workload.
           </p>
         </div>
         {/* <Link className="primary-button" to="/app/drills/new">
@@ -41,23 +41,29 @@ export function LibraryPage() {
           <h2 id="library-list-title" className="sr-only">
             Available training sets
           </h2>
-          {trainingSets.map((trainingSet) => (
-            <article className="library-card" key={trainingSet.id}>
-              <div className="library-card-topline">
-                <span className="category-pill">{formatCategory(trainingSet.category)}</span>
-                <span className="step-count">
-                  {getTrainingSetActivityCount(trainingSet)} activities
-                </span>
-              </div>
-              <h2>{trainingSet.name}</h2>
-              <p>{getTrainingSetDescription(trainingSet)}</p>
-              <div className="library-card-actions">
-                <Link className="secondary-button" to={`/app/library/${trainingSet.id}`}>
-                  View drill
-                </Link>
-              </div>
-            </article>
-          ))}
+          {trainingSets.map((trainingSet) => {
+            const description = getTrainingSetDescription(trainingSet);
+
+            return (
+              <article className="library-card" key={trainingSet.id}>
+                <div className="library-card-topline">
+                  <span className="category-pill">{formatCategory(trainingSet.category)}</span>
+                  <span className="step-count">
+                    {getTrainingSetActivityCount(trainingSet)} activities
+                  </span>
+                </div>
+                <h2>{trainingSet.name}</h2>
+                {description === undefined ? null : (
+                  <p className="library-card-description">{description}</p>
+                )}
+                <div className="library-card-actions">
+                  <Link className="secondary-button" to={`/app/library/${trainingSet.id}`}>
+                    View drill
+                  </Link>
+                </div>
+              </article>
+            );
+          })}
         </section>
       )}
     </>

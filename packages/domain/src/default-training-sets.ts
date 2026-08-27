@@ -5,12 +5,45 @@ import {
   asTrainingSetId,
   validateCuratedDrills,
   type CuratedDrill,
+  type DrillCategory,
   type TrainingDuration,
   type TrainingExercise,
   type TrainingQuantities,
   type TrainingSection,
   type TrainingSet,
 } from './types';
+
+type BuiltInDrillCategory = Extract<DrillCategory, 'intense-drill' | 'high-intensity-drill'>;
+
+const BUILT_IN_DRILL_CATEGORIES = Object.freeze({
+  'international-dojo-2-hour-session': 'intense-drill',
+  'japanese-school-club': 'intense-drill',
+  'junior-high-kendo-club': 'high-intensity-drill',
+  'official-znkr-ajkf': 'intense-drill',
+  'police-dojo-asageiko': 'intense-drill',
+  'police-dojo-asageiko-version-2': 'intense-drill',
+  'senior-high-school-kendo-club': 'high-intensity-drill',
+  'university-high-school': 'high-intensity-drill',
+  'junior-high-school-version-2': 'intense-drill',
+  'university-version-2': 'intense-drill',
+  'top-university': 'high-intensity-drill',
+} satisfies Readonly<Record<string, BuiltInDrillCategory>>);
+
+type BuiltInDrillId = keyof typeof BUILT_IN_DRILL_CATEGORIES;
+
+function isBuiltInDrillId(id: string): id is BuiltInDrillId {
+  return Object.hasOwn(BUILT_IN_DRILL_CATEGORIES, id);
+}
+
+function getBuiltInDrillCategory(id: string): BuiltInDrillCategory {
+  if (!isBuiltInDrillId(id)) {
+    throw new TrainingValidationError([
+      { path: 'id', message: `has no built-in category mapping: ${id}` },
+    ]);
+  }
+
+  return BUILT_IN_DRILL_CATEGORIES[id];
+}
 
 function freezeDuration(duration: TrainingDuration): TrainingDuration {
   return Object.freeze(
@@ -58,7 +91,7 @@ function createBuiltInTrainingSet(drill: CuratedDrill): TrainingSet {
     ...(drill.sourceId === undefined ? {} : { sourceId: drill.sourceId }),
     name: drill.name,
     ...(drill.description === undefined ? {} : { description: drill.description }),
-    category: 'unspecified',
+    category: getBuiltInDrillCategory(drill.id),
     sections: Object.freeze(drill.sections.map(freezeSection)),
     isBuiltIn: true,
   });

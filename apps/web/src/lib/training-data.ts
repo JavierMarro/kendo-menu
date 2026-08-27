@@ -62,10 +62,10 @@ export function findTrainingSet(
   return trainingSets.find((trainingSet) => trainingSet.id === trainingSetId);
 }
 
-export function getTrainingSetDescription(trainingSet: TrainingSet): string {
+export function getTrainingSetDescription(trainingSet: TrainingSet): string | undefined {
   return trainingSet.description !== undefined && trainingSet.description.trim().length > 0
     ? trainingSet.description
-    : 'Description not provided.';
+    : undefined;
 }
 
 export function getTrainingQuantityValue(

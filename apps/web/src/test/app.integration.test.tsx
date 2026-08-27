@@ -395,6 +395,9 @@ describe('KendoMenu application flows', () => {
     const library = screen.getByRole('region', { name: 'Available training sets' });
     const cards = within(library).getAllByRole('article');
     expect(cards).toHaveLength(11);
+    expect(within(library).getAllByText('High intensity drill')).toHaveLength(4);
+    expect(within(library).getAllByText('Intense drill')).toHaveLength(7);
+    expect(within(library).queryByText('Category not specified')).not.toBeInTheDocument();
 
     const heading = within(library).getByRole('heading', {
       name: 'International dojo menu',
@@ -404,7 +407,7 @@ describe('KendoMenu application flows', () => {
       throw new Error('Expected the international-dojo heading inside a drill card.');
     }
 
-    expect(within(card).getByText('Category not specified')).toBeVisible();
+    expect(within(card).getByText('Intense drill')).toBeVisible();
     expect(within(card).getByText('Set for a 2 hours long session.')).toBeVisible();
     expect(within(card).getByText('20 activities')).toBeVisible();
     expect(within(card).getByRole('link', { name: 'View drill' })).toHaveAttribute(
@@ -412,6 +415,71 @@ describe('KendoMenu application flows', () => {
       '/app/library/international-dojo-2-hour-session',
     );
     expect(within(card).queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('omits missing and blank descriptions in the library, detail page, and dashboard', () => {
+    const store = createTestStore();
+    const trainingSetId = store.getState().addCustomTrainingSet({
+      name: 'Blank description drill',
+      description: '   ',
+      category: 'custom',
+      sections: [
+        { name: 'Practice', exercises: [{ name: 'Men', quantities: { repetitions: 5 } }] },
+      ],
+    });
+    store.getState().addToDashboard(trainingSetId);
+
+    const libraryView = renderApp(store, { initialEntries: ['/app/library'] });
+    const libraryHeading = screen.getByRole('heading', { name: 'Blank description drill' });
+    const libraryCard = libraryHeading.closest('article');
+    if (libraryCard === null) {
+      throw new Error('Expected the blank-description drill inside a library card.');
+    }
+    expect(libraryCard.querySelector('.library-card-description')).toBeNull();
+    expect(within(libraryCard).queryByText('Description not provided.')).not.toBeInTheDocument();
+    libraryView.unmount();
+
+    const detailView = renderApp(store, { initialEntries: [`/app/library/${trainingSetId}`] });
+    const detailHeading = screen.getByRole('heading', {
+      name: 'Blank description drill',
+      level: 1,
+    });
+    const detailHeader = detailHeading.closest('header');
+    if (detailHeader === null) {
+      throw new Error('Expected the blank-description drill inside the detail header.');
+    }
+    expect(detailHeader.querySelector('.page-intro')).toBeNull();
+    expect(within(detailHeader).queryByText('Description not provided.')).not.toBeInTheDocument();
+    detailView.unmount();
+
+    renderApp(store);
+    const dashboardHeading = screen.getByRole('heading', { name: 'Blank description drill' });
+    const dashboardCard = dashboardHeading.closest('article');
+    if (dashboardCard === null) {
+      throw new Error('Expected the blank-description drill inside a dashboard card.');
+    }
+    expect(dashboardCard.querySelector('.card-content > p:not(.card-kicker)')).toBeNull();
+    expect(within(dashboardCard).queryByText('Description not provided.')).not.toBeInTheDocument();
+  });
+
+  it('shows the complete University High School description on its detail page', async () => {
+    const user = userEvent.setup();
+    const description =
+      "Weekly rotation: Monday self-directed practice; Tuesday 'Ken-tore' circuits; Wednesday is a running/stair sprints plus suburi and suri-ashi; Thursday is kihon and waza-geiko; Friday is kihon plus shiaigeiko; weekends are tournaments or shiaigeiko.";
+    renderApp(createTestStore(), { initialEntries: ['/app/library'] });
+
+    const heading = screen.getByRole('heading', { name: 'University High School dojo menu' });
+    const card = heading.closest('article');
+    if (card === null) {
+      throw new Error('Expected the University High School drill inside a library card.');
+    }
+    const preview = card.querySelector('.library-card-description');
+    expect(preview).not.toBeNull();
+    expect(preview?.textContent).toBe(description);
+
+    await user.click(within(card).getByRole('link', { name: 'View drill' }));
+
+    expect(screen.getByText(description, { exact: true })).toHaveClass('page-intro');
   });
 
   it('opens full drill details and toggles collapsed native section disclosures', async () => {
@@ -432,6 +500,7 @@ describe('KendoMenu application flows', () => {
         level: 1,
       }),
     ).toBeVisible();
+    expect(screen.getByText('Intense drill')).toBeVisible();
     const sections = view.container.querySelectorAll<HTMLDetailsElement>('.detail-section');
     expect(sections).toHaveLength(12);
     expect([...sections].every((section) => !section.open)).toBe(true);
@@ -530,6 +599,15 @@ describe('KendoMenu application flows', () => {
     const store = createTestStore();
     store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
     renderApp(store);
+
+    const dashboardHeading = screen.getByRole('heading', {
+      name: 'Senior High School dojo menu',
+    });
+    const dashboardCard = dashboardHeading.closest('article');
+    if (dashboardCard === null) {
+      throw new Error('Expected the Senior High School drill inside a dashboard card.');
+    }
+    expect(within(dashboardCard).getByText('High intensity drill')).toBeVisible();
 
     const minutes = screen.getByLabelText(/minutes for stretch/i);
     expect(minutes).toHaveValue(null);
