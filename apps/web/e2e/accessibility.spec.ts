@@ -1,5 +1,14 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
+
+async function getElementBox(locator: Locator) {
+  const box = await locator.boundingBox();
+  if (box === null) {
+    throw new Error(`Could not measure ${await locator.evaluate((element) => element.outerHTML)}.`);
+  }
+
+  return box;
+}
 
 test.describe('accessibility and responsive layout', () => {
   test('has no critical or serious axe violations on the main routes', async ({ page }) => {
@@ -147,5 +156,74 @@ test.describe('accessibility and responsive layout', () => {
 
       expect(backgroundSize, `hero background size at ${width}px`).toBe('cover, cover');
     }
+  });
+
+  test('progressively reveals landing groups and honours reduced motion', async ({ page }) => {
+    await page.goto('/app');
+
+    const sections = page.locator('.landing-sections');
+    const introductionHeading = page.getByRole('heading', {
+      name: 'A keiko menu for the day in front of you.',
+    });
+    const steps = page.locator('.landing-steps');
+
+    await expect(sections).toHaveClass(/landing-motion-ready/);
+    await expect(introductionHeading).toHaveCSS('opacity', '1');
+    await expect(steps).not.toHaveClass(/is-revealed/);
+
+    await steps.scrollIntoViewIfNeeded();
+    await expect(steps).toHaveClass(/is-revealed/);
+    await expect(steps).toHaveCSS('opacity', '1');
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.reload();
+
+    await expect(sections).not.toHaveClass(/landing-motion-ready/);
+    const revealOpacities = await page
+      .locator('[data-landing-reveal]')
+      .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).opacity));
+    expect(revealOpacities.every((opacity) => opacity === '1')).toBe(true);
+  });
+
+  test('alternates the desktop rhythm and restores heading-first mobile flow', async ({ page }) => {
+    await page.goto('/app');
+
+    const viewport = page.viewportSize();
+    if (viewport === null) {
+      throw new Error('The landing-page viewport is unavailable.');
+    }
+
+    const introductionHeading = await getElementBox(page.locator('#intro-title'));
+    const introductionCopy = await getElementBox(page.locator('.landing-section-copy'));
+    const libraryHeading = await getElementBox(page.locator('#library-story-title'));
+    const libraryCopy = await getElementBox(page.locator('.landing-library-heading > p'));
+    const finalHeading = await getElementBox(page.locator('#final-cta-title'));
+    const finalAction = await getElementBox(
+      page.getByRole('link', { name: 'Record your first keiko' }),
+    );
+    const stepBoxes = await Promise.all(
+      (await page.locator('.landing-step').all()).map((step) => getElementBox(step)),
+    );
+    const firstStep = stepBoxes[0];
+    const secondStep = stepBoxes[1];
+    const thirdStep = stepBoxes[2];
+    if (firstStep === undefined || secondStep === undefined || thirdStep === undefined) {
+      throw new Error('The complete three-step journey is unavailable.');
+    }
+
+    if (viewport.width > 900) {
+      expect(introductionCopy.x).toBeLessThan(introductionHeading.x);
+      expect(libraryCopy.x).toBeLessThan(libraryHeading.x);
+      expect(finalAction.x).toBeLessThan(finalHeading.x);
+      expect(firstStep.y).toBe(secondStep.y);
+      expect(secondStep.y).toBe(thirdStep.y);
+      return;
+    }
+
+    expect(introductionHeading.y).toBeLessThan(introductionCopy.y);
+    expect(libraryHeading.y).toBeLessThan(libraryCopy.y);
+    expect(finalHeading.y).toBeLessThan(finalAction.y);
+    expect(firstStep.y).toBeLessThan(secondStep.y);
+    expect(secondStep.y).toBeLessThan(thirdStep.y);
   });
 });

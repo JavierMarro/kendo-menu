@@ -94,7 +94,7 @@ describe('KendoMenu application flows', () => {
     expect(screen.getByText(/privacy-friendly Plausible Analytics/)).toBeInTheDocument();
   });
 
-  it('renders a named footer with shared navigation and placeholder social destinations', () => {
+  it('renders a named footer with shared navigation and information links', () => {
     renderApp(createTestStore(), { initialEntries: ['/app'] });
 
     const footer = screen.getByRole('contentinfo', { name: 'Site footer' });
@@ -112,13 +112,15 @@ describe('KendoMenu application flows', () => {
         .map((link) => link.getAttribute('href')),
     ).toEqual(['/app#how-it-works-title', '/app/library', '/app/dashboard', '/app#faq-title']);
 
-    const socialNavigation = within(footer).getByRole('navigation', { name: 'Social' });
-    expect(
-      within(socialNavigation).getByRole('link', { name: 'GitHub (placeholder)' }),
-    ).toHaveAttribute('href', 'https://github.com/');
-    expect(
-      within(socialNavigation).getByRole('link', { name: 'LinkedIn (placeholder)' }),
-    ).toHaveAttribute('href', 'https://www.linkedin.com/');
+    const informationNavigation = within(footer).getByRole('navigation', { name: 'Information' });
+    expect(within(informationNavigation).getByRole('link', { name: 'Sources' })).toHaveAttribute(
+      'href',
+      '/app/sources',
+    );
+    expect(within(informationNavigation).getByRole('link', { name: 'Cookies' })).toHaveAttribute(
+      'href',
+      '/cookies',
+    );
   });
 
   it('renders the landing page at /app and links into the drill library', async () => {
@@ -143,7 +145,7 @@ describe('KendoMenu application flows', () => {
     ).toBe('/assets/kendo-menu-logo.jpeg');
     expect(
       screen.getByText(
-        'Choose from 11 curated menus, shape the workload for today and keep polishing mind, spirit and character through varied kendo practice.',
+        'Choose from 11 curated menus, shape the workload for your training and keep polishing mind, spirit and character through varied kendo practice.',
       ),
     ).toBeInTheDocument();
     expect(
@@ -154,8 +156,27 @@ describe('KendoMenu application flows', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'How it works', level: 2 })).toBeInTheDocument();
     expect(
-      screen.getByText(/The figures below are calculated from the current curated data/),
+      screen.getByText(/These figures reflect the training currently available in KendoMenu/),
     ).toBeInTheDocument();
+
+    const introductionHeading = screen.getByRole('heading', {
+      name: 'A keiko menu for the day in front of you.',
+      level: 2,
+    });
+    const introductionLayout = introductionHeading.closest('.landing-introduction-grid');
+    expect(introductionLayout?.firstElementChild).toContainElement(introductionHeading);
+    expect(introductionLayout?.querySelector('.landing-section-copy')).toHaveAttribute(
+      'data-landing-reveal',
+      'left',
+    );
+
+    const steps = screen.getByRole('heading', { name: 'Choose a starting point' }).closest('ol');
+    if (steps === null) {
+      throw new Error('The three-step journey is missing its ordered-list container.');
+    }
+    expect(steps).toHaveClass('landing-steps');
+    expect(within(steps).getAllByRole('listitem')).toHaveLength(3);
+    expect(steps).toHaveAttribute('data-landing-reveal', 'steps');
 
     const canonicalExerciseCount = DEFAULT_TRAINING_SETS.reduce(
       (trainingSetTotal, trainingSet) =>

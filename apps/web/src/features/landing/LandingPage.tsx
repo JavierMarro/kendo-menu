@@ -1,4 +1,4 @@
-import { useState, type ReactElement, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 import { CURATED_EXERCISE_COUNT, CURATED_TRAINING_SET_COUNT } from '../../lib/training-data';
@@ -59,8 +59,82 @@ const FAQ_ITEMS: readonly FaqItem[] = [
   },
 ];
 
+const LANDING_REVEAL_SELECTOR = '[data-landing-reveal]';
+
+function useLandingScrollReveal() {
+  const sectionsRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const sections = sectionsRef.current;
+    if (
+      sections === null ||
+      typeof IntersectionObserver === 'undefined' ||
+      typeof window.matchMedia !== 'function' ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      return undefined;
+    }
+
+    const revealTargets = Array.from(
+      sections.querySelectorAll<HTMLElement>(LANDING_REVEAL_SELECTOR),
+    );
+    const initialRevealBoundary = window.innerHeight * 0.88;
+
+    for (const target of revealTargets) {
+      const bounds = target.getBoundingClientRect();
+      if (bounds.top <= initialRevealBoundary && bounds.bottom >= 0) {
+        target.classList.add('is-revealed');
+      }
+    }
+
+    sections.classList.add('landing-motion-ready');
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) {
+            continue;
+          }
+
+          entry.target.classList.add('is-revealed');
+          observer.unobserve(entry.target);
+        }
+      },
+      { rootMargin: '0px 0px -12% 0px', threshold: 0.08 },
+    );
+
+    const revealFocusedGroup = (event: FocusEvent) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      const revealTarget = event.target.closest<HTMLElement>(LANDING_REVEAL_SELECTOR);
+      if (revealTarget !== null && sections.contains(revealTarget)) {
+        revealTarget.classList.add('is-revealed');
+        observer.unobserve(revealTarget);
+      }
+    };
+
+    for (const target of revealTargets) {
+      if (!target.classList.contains('is-revealed')) {
+        observer.observe(target);
+      }
+    }
+    sections.addEventListener('focusin', revealFocusedGroup);
+
+    return () => {
+      observer.disconnect();
+      sections.removeEventListener('focusin', revealFocusedGroup);
+      sections.classList.remove('landing-motion-ready');
+    };
+  }, []);
+
+  return sectionsRef;
+}
+
 export function LandingPage(): ReactElement {
   const [openFaqId, setOpenFaqId] = useState<string | null>(null);
+  const sectionsRef = useLandingScrollReveal();
 
   return (
     <>
@@ -72,20 +146,24 @@ export function LandingPage(): ReactElement {
             Choose from {CURATED_TRAINING_SET_COUNT} curated menus, shape the workload for your
             training and keep polishing mind, spirit and character through varied kendo practice.
           </p>
-          <Link className="primary-button landing-cta landing-primary-action" to="/app/library">
+          <Link
+            className="primary-button landing-cta landing-primary-action"
+            to="/app/library"
+            aria-label="Browse drill library"
+          >
             BROWSE DRILL LIBRARY HERE →
           </Link>
         </div>
       </section>
 
-      <div className="landing-sections">
+      <div ref={sectionsRef} className="landing-sections">
         <section className="landing-section landing-introduction" aria-labelledby="intro-title">
           <div className="landing-section-inner landing-introduction-grid">
             <div className="landing-section-heading">
               <h2 id="intro-title">A keiko menu for the day in front of you.</h2>
             </div>
 
-            <div className="landing-section-copy">
+            <div className="landing-section-copy" data-landing-reveal="left">
               <p>
                 <strong>KendoMenu meets you where you are in your keiko.</strong> It is for senpai
                 looking for fresh inspiration, sensei and dojo leaders planning a training session,
@@ -125,7 +203,7 @@ export function LandingPage(): ReactElement {
 
         <section className="landing-section landing-process" aria-labelledby="how-it-works-title">
           <div className="landing-section-inner">
-            <div className="landing-section-heading">
+            <div className="landing-section-heading" data-landing-reveal="up">
               <h2 id="how-it-works-title">How it works</h2>
               <p>
                 <strong>Choose. Adjust. Reuse.</strong> Move from a useful starting point to a
@@ -133,7 +211,7 @@ export function LandingPage(): ReactElement {
               </p>
             </div>
 
-            <ol className="landing-steps">
+            <ol className="landing-steps" data-landing-reveal="steps">
               <li className="landing-step">
                 <span className="landing-step-number" aria-hidden="true">
                   01
@@ -163,19 +241,19 @@ export function LandingPage(): ReactElement {
 
         <section className="landing-section landing-library" aria-labelledby="library-story-title">
           <div className="landing-section-inner">
-            <div className="landing-library-heading">
-              <div className="landing-section-heading">
+            <div className="landing-library-heading" data-landing-reveal="split">
+              <div className="landing-section-heading landing-reveal-right">
                 <h2 id="library-story-title">A curated library with real training context.</h2>
               </div>
-              <p>
-                <strong>Carefully sourced and easy to adapt.</strong> The figures below are
-                calculated from the current curated drills. In the domain model, an exercise is a
-                child item within a section; standalone sections remain activities and are not
-                included in the exercise total.
+              <p className="landing-reveal-left">
+                <strong>Carefully sourced and easy to adapt.</strong> These figures reflect the
+                training currently available in KendoMenu. Individual drills are counted as
+                exercises, while complete practice activities are shown separately so each number
+                gives you a clearer picture of the library.
               </p>
             </div>
 
-            <dl className="landing-stats">
+            <dl className="landing-stats" data-landing-reveal="stats">
               <div className="landing-stat">
                 <dt>
                   <strong>CURATED KEIKO MENUS</strong>
@@ -208,7 +286,7 @@ export function LandingPage(): ReactElement {
               </div>
             </dl>
 
-            <div className="landing-library-details">
+            <div className="landing-library-details" data-landing-reveal="up">
               <div>
                 <h3>Research sources</h3>
                 <p>
@@ -230,7 +308,7 @@ export function LandingPage(): ReactElement {
 
         <section className="landing-section landing-faq" aria-labelledby="faq-title">
           <div className="landing-section-inner">
-            <div className="landing-section-heading">
+            <div className="landing-section-heading" data-landing-reveal="up">
               <h2 id="faq-title">Questions, answered.</h2>
               <p>
                 <strong>Clear answers before you start honing your skills.</strong> The essentials
@@ -238,7 +316,7 @@ export function LandingPage(): ReactElement {
               </p>
             </div>
 
-            <div className="landing-faq-grid">
+            <div className="landing-faq-grid" data-landing-reveal="up">
               {FAQ_ITEMS.map((item) => {
                 const isOpen = openFaqId === item.id;
                 const questionId = `${item.id}-question`;
@@ -279,15 +357,19 @@ export function LandingPage(): ReactElement {
 
         <section className="landing-section landing-final-cta" aria-labelledby="final-cta-title">
           <div className="landing-section-inner">
-            <div className="landing-final-cta-panel">
-              <div>
+            <div className="landing-final-cta-panel" data-landing-reveal="split">
+              <div className="landing-final-cta-copy landing-reveal-right">
                 <h2 id="final-cta-title">Your next keiko starts with a clear plan.</h2>
                 <p>
                   <strong>Make today’s plan real.</strong> Choose a menu from the library, adjust it
                   and make the plan yours.
                 </p>
               </div>
-              <Link className="primary-button landing-primary-action" to="/app/library">
+              <Link
+                className="primary-button landing-primary-action landing-reveal-left"
+                to="/app/library"
+                aria-label="Record your first keiko"
+              >
                 RECORD YOUR FIRST KEIKO HERE →
               </Link>
             </div>
