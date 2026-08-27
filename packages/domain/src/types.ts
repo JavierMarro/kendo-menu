@@ -5,7 +5,16 @@ export type TrainingSetId = string & {
 };
 
 export type DrillCategory =
-  'kihon' | 'kirikaeshi' | 'uchikomi' | 'kakari' | 'jigeiko' | 'mixed' | 'unspecified' | 'custom';
+  | 'kihon'
+  | 'kirikaeshi'
+  | 'uchikomi'
+  | 'kakari'
+  | 'jigeiko'
+  | 'mixed'
+  | 'unspecified'
+  | 'intense-drill'
+  | 'high-intensity-drill'
+  | 'custom';
 
 export const TRAINING_QUANTITY_UNITS = [
   'repetitions',
@@ -291,6 +300,8 @@ function isDrillCategory(value: unknown): value is DrillCategory {
     value === 'jigeiko' ||
     value === 'mixed' ||
     value === 'unspecified' ||
+    value === 'intense-drill' ||
+    value === 'high-intensity-drill' ||
     value === 'custom'
   );
 }

@@ -256,6 +256,8 @@ function isDrillCategory(value: unknown): value is DrillCategory {
     value === 'jigeiko' ||
     value === 'mixed' ||
     value === 'unspecified' ||
+    value === 'intense-drill' ||
+    value === 'high-intensity-drill' ||
     value === 'custom'
   );
 }

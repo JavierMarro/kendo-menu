@@ -201,26 +201,23 @@ describe('browser persistence recovery', () => {
       throw new Error('The primary navigation is not inside the application banner.');
     }
 
-    await user.click(within(appBanner).getByRole('link', { name: /Drill library/ }));
+    await user.click(within(appBanner).getByRole('link', { name: /Keiko library/ }));
     const seniorHighSchoolCard = screen
       .getByRole('heading', { name: 'Senior High School dojo menu' })
       .closest('article');
     if (seniorHighSchoolCard === null) {
       throw new Error('Expected the senior-high researched drill to render in a library card.');
     }
-    await user.click(within(seniorHighSchoolCard).getByRole('link', { name: 'View drill' }));
+    await user.click(within(seniorHighSchoolCard).getByRole('link', { name: 'View session' }));
     await user.click(screen.getByRole('button', { name: 'Add to dashboard' }));
+    const detailDialog = screen.getByRole('dialog', { name: 'Senior High School dojo menu' });
+    await user.click(within(detailDialog).getByRole('link', { name: 'View dashboard' }));
     await waitFor(() => {
       expect(
         within(appBanner).getByRole('status', { name: 'Changes are not being saved' }),
       ).toBeVisible();
     });
 
-    await user.click(
-      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
-        name: 'Dashboard',
-      }),
-    );
     const minutes = screen.getByLabelText(/minutes for stretch/i);
     await user.type(minutes, '12');
     await user.tab();

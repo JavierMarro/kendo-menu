@@ -1,0 +1,8 @@
+- Session: drill-card intensity and layout
+- Date/duration: 2026-08-27; about 35 minutes
+- Scope/start: The 11-card Drill Library used unspecified categories, description fallback copy, and content-dependent row heights.
+- Changes: Derived two built-in intensity categories by stable ID; omitted blank descriptions; clamped library previews; equalized card rows and actions; expanded tests.
+- Decisions: Kept curated JSON/schema and persistence version 6 unchanged; retained legacy categories and custom parsing; used a three-line CSS-only preview.
+- Roadblocks: Loopback binding needed scoped approval; the in-app browser was unavailable, so configured Playwright projects and screenshots supplied visual QA.
+- Verification: pnpm check passed; 4 focused Playwright desktop/mobile tests passed; screenshots confirmed equal cards, responsive stacking, and the clamped preview.
+- Follow-up: None for this slice; two existing Fast Refresh lint warnings remain in untouched files.

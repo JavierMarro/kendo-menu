@@ -149,9 +149,9 @@ export function LandingPage(): ReactElement {
           <Link
             className="primary-button landing-cta landing-primary-action"
             to="/app/library"
-            aria-label="Browse drill library"
+            aria-label="Browse Keiko library"
           >
-            BROWSE DRILL LIBRARY HERE →
+            BROWSE KEIKO LIBRARY HERE →
           </Link>
         </div>
       </section>
@@ -247,9 +247,9 @@ export function LandingPage(): ReactElement {
               </div>
               <p className="landing-reveal-left">
                 <strong>Carefully sourced and easy to adapt.</strong> These figures reflect the
-                training currently available in KendoMenu. Individual drills are counted as
-                exercises, while complete practice activities are shown separately so each number
-                gives you a clearer picture of the library.
+                training sessions currently available in KendoMenu. Choose a keiko menu, add it to
+                your dashboard, then adjust its repetitions or duration to suit the practice you are
+                planning.
               </p>
             </div>
 
@@ -267,9 +267,11 @@ export function LandingPage(): ReactElement {
                 <dt>
                   <strong>A TOTAL OF</strong>
                 </dt>
-                <dd aria-label={`${CURATED_EXERCISE_COUNT} child exercises in the curated menus`}>
+                <dd
+                  aria-label={`${CURATED_EXERCISE_COUNT} child exercises across all training sessions`}
+                >
                   <span className="landing-stat-value">{CURATED_EXERCISE_COUNT}</span>
-                  <span className="landing-stat-note">exercises across all drills</span>
+                  <span className="landing-stat-note">exercises across all training sessions</span>
                 </dd>
               </div>
               <div className="landing-stat">

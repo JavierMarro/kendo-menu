@@ -6,6 +6,7 @@ import {
   DEFAULT_TRAINING_SETS,
   getTrainingSetActivities,
   validateCuratedDrills,
+  validateTrainingSet,
   type CuratedDrill,
   type TrainingActivity,
   type TrainingSection,
@@ -100,7 +101,7 @@ describe('canonical default drills', () => {
         {
           id: 'international-dojo-2-hour-session',
           sourceId: 1,
-          name: 'International dojo menu (2 hour session)',
+          name: 'International dojo menu',
         },
         {
           id: 'japanese-school-club',
@@ -154,6 +155,35 @@ describe('canonical default drills', () => {
         },
       ],
     );
+  });
+
+  it('derives the exact built-in intensity categories from stable drill IDs', () => {
+    expect(
+      DEFAULT_TRAINING_SETS.filter(
+        (trainingSet) => trainingSet.category === 'high-intensity-drill',
+      ).map((trainingSet) => trainingSet.id),
+    ).toEqual([
+      'junior-high-kendo-club',
+      'senior-high-school-kendo-club',
+      'university-high-school',
+      'top-university',
+    ]);
+    expect(
+      DEFAULT_TRAINING_SETS.filter((trainingSet) => trainingSet.category === 'intense-drill').map(
+        (trainingSet) => trainingSet.id,
+      ),
+    ).toEqual([
+      'international-dojo-2-hour-session',
+      'japanese-school-club',
+      'official-znkr-ajkf',
+      'police-dojo-asageiko',
+      'police-dojo-asageiko-version-2',
+      'junior-high-school-version-2',
+      'university-version-2',
+    ]);
+    expect(
+      DEFAULT_TRAINING_SETS.every((trainingSet) => validateTrainingSet(trainingSet).success),
+    ).toBe(true);
   });
 
   it('keeps accepted display normalization separate from stable ASCII IDs', () => {

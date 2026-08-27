@@ -64,7 +64,7 @@ export function DashboardPage() {
           ? `${createdName} was added for this session only.`
           : `${createdName} saved to your dashboard.`;
 
-  const removeEntry = (entry: DashboardEntry, label = 'Training set') => {
+  const removeEntry = (entry: DashboardEntry, label = 'Training session') => {
     const removed = removeFromDashboard(entry.id);
     if (removed === null) {
       return;
@@ -81,7 +81,7 @@ export function DashboardPage() {
 
     store.getState().restoreDashboardEntry(removedEntry);
     setRemovedEntry(null);
-    setStatusMessage('Training set restored to its previous position.');
+    setStatusMessage('Training session restored to its previous position.');
   };
 
   return (
@@ -95,7 +95,7 @@ export function DashboardPage() {
           </p>
         </div>
         <Link className="primary-button" to="/app/drills/new">
-          Create drill
+          Create session
         </Link>
       </header>
 
@@ -104,7 +104,7 @@ export function DashboardPage() {
       </p>
       {removedEntry !== null ? (
         <div className="undo-banner" role="status">
-          <span>Training set removed.</span>
+          <span>Training session removed.</span>
           <button className="text-button" type="button" onClick={undoRemove}>
             Undo
           </button>
@@ -116,22 +116,22 @@ export function DashboardPage() {
           <p className="eyebrow">A clean starting line</p>
           <h2 id="empty-dashboard-title">Your dashboard is ready.</h2>
           <p>
-            Add a drill from the library and shape it for today&apos;s practice. Quantities and
-            notes stay on this device as you refine the set.
+            Add a session from the Keiko library and shape it for today&apos;s practice. Quantities
+            and notes stay on this device as you refine the session.
           </p>
           <div className="empty-actions">
             <Link className="primary-button" to="/app/library">
-              Browse drill library
+              Browse Keiko library
             </Link>
             <Link className="secondary-button" to="/app/drills/new">
-              Create a drill
+              Create a training session
             </Link>
           </div>
         </section>
       ) : (
         <section className="dashboard-list" aria-labelledby="dashboard-list-title">
           <h2 id="dashboard-list-title" className="sr-only">
-            Selected training sets
+            Selected training sessions
           </h2>
           {dashboardEntries.map((entry, index) => {
             const trainingSet = findTrainingSet(trainingSets, entry.trainingSetId);
@@ -176,9 +176,9 @@ function UnknownDashboardEntry({ entry, onRemove }: UnknownDashboardEntryProps) 
         !
       </div>
       <div className="card-content">
-        <p className="card-kicker">Unavailable drill</p>
-        <h2>Training set unavailable</h2>
-        <p>The drill for this dashboard entry is no longer available in local data.</p>
+        <p className="card-kicker">Unavailable session</p>
+        <h2>Training session unavailable</h2>
+        <p>The session for this dashboard entry is no longer available in local data.</p>
       </div>
       <button className="text-button" type="button" onClick={onRemove}>
         Remove
@@ -212,6 +212,7 @@ function DashboardTrainingSet({
   const persistenceStatus = usePersistenceStatus();
   const sections = getTrainingSetSections(trainingSet);
   const activityCount = getTrainingSetActivityCount(trainingSet);
+  const description = getTrainingSetDescription(trainingSet);
 
   const handleNotesChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setNotesDraft(event.target.value);
@@ -234,7 +235,7 @@ function DashboardTrainingSet({
         <div className="card-content">
           <p className="card-kicker">{formatCategory(trainingSet.category)}</p>
           <h2>{trainingSet.name}</h2>
-          <p>{getTrainingSetDescription(trainingSet)}</p>
+          {description === undefined ? null : <p>{description}</p>}
           <div className="card-meta">
             <span>{activityCount} activities</span>
             <span>{entry.notes.length > 0 ? 'Has notes' : 'No notes yet'}</span>

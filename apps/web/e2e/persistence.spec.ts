@@ -1,15 +1,8 @@
 import { readFile } from 'node:fs/promises';
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 const STORAGE_KEY = 'kendo-menu';
-
-async function openNavigationIfNeeded(page: Page): Promise<void> {
-  const menuToggle = page.getByRole('button', { name: 'Open navigation' });
-  if (await menuToggle.isVisible()) {
-    await menuToggle.click();
-  }
-}
 
 test.describe('local persistence recovery', () => {
   test('downloads the exact corrupt payload, preserves it on cancel, and resets only KendoMenu data', async ({
@@ -126,14 +119,10 @@ test.describe('local persistence recovery', () => {
     const seniorHighSchoolCard = page
       .getByRole('heading', { name: 'Senior High School dojo menu' })
       .locator('xpath=ancestor::article');
-    await seniorHighSchoolCard.getByRole('link', { name: 'View drill' }).click();
+    await seniorHighSchoolCard.getByRole('link', { name: 'View session' }).click();
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
+    await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
     await expect(page.getByRole('status', { name: 'Changes are not being saved' })).toBeVisible();
-    await openNavigationIfNeeded(page);
-    await page
-      .getByRole('navigation', { name: 'Primary navigation' })
-      .getByRole('link', { name: 'Dashboard', exact: true })
-      .click();
 
     const minutes = page.getByLabel(/minutes for stretch/i);
     await minutes.fill('12');

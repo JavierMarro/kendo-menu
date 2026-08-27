@@ -17,8 +17,8 @@ import { getAllTrainingSets } from '../lib/training-data';
 const routeTitles: Readonly<Record<string, string>> = {
   '/app': 'Plan your keiko',
   '/app/dashboard': 'Dashboard',
-  '/app/library': 'Drill library',
-  '/app/drills/new': 'Create drill',
+  '/app/library': 'Keiko library',
+  '/app/drills/new': 'Create session',
   '/app/sources': 'Sources',
   '/cookies': 'Cookie Policy',
 };
@@ -39,7 +39,7 @@ function RouteFocusAndTitle() {
   useEffect(() => {
     const title =
       routeTitles[location.pathname] ??
-      (location.pathname.startsWith('/app/library/') ? 'Drill details' : 'KendoMenu');
+      (location.pathname.startsWith('/app/library/') ? 'Session details' : 'KendoMenu');
     document.title = `${title} · KendoMenu`;
     document.getElementById('main-content')?.focus();
   }, [location.pathname]);

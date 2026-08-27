@@ -11,7 +11,7 @@ export function NotFoundPage() {
           Go to dashboard
         </Link>
         <Link className="secondary-button" to="/app/library">
-          Browse drill library
+          Browse Keiko library
         </Link>
       </div>
     </section>

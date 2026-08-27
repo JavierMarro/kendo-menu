@@ -11,6 +11,33 @@ async function getElementBox(locator: Locator) {
 }
 
 test.describe('accessibility and responsive layout', () => {
+  test('has no blocking axe violations with the library dialog closed or open', async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/app/library');
+
+    const closedResults = await new AxeBuilder({ page }).analyze();
+    expect(
+      closedResults.violations.filter(
+        ({ impact }) => impact === 'critical' || impact === 'serious',
+      ),
+    ).toEqual([]);
+
+    const card = page
+      .getByRole('heading', { name: 'International dojo menu' })
+      .locator('xpath=ancestor::article');
+    await card.getByRole('link', { name: 'View session' }).click();
+    const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
+    await expect(dialog).toBeVisible();
+    await dialog.locator('details.detail-section').first().locator('summary').click();
+
+    const openResults = await new AxeBuilder({ page }).analyze();
+    expect(
+      openResults.violations.filter(({ impact }) => impact === 'critical' || impact === 'serious'),
+    ).toEqual([]);
+  });
+
   test('has no critical or serious axe violations on the main routes', async ({ page }) => {
     await page.goto('/app');
     const viewport = page.viewportSize();
@@ -38,7 +65,8 @@ test.describe('accessibility and responsive layout', () => {
     );
     expect(libraryBlockingViolations).toEqual([]);
 
-    await page.goto('/app/library/international-dojo-2-hour-session');
+    await page.goto('/app/library?drill=international-dojo-2-hour-session');
+    await expect(page.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
     const firstSection = page.locator('details.detail-section').first();
     await expect(firstSection).not.toHaveAttribute('open', '');
     await firstSection.locator('summary').click();
