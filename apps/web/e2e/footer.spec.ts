@@ -9,19 +9,19 @@ async function dismissCookieNotice(page: Page): Promise<void> {
 async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): Promise<void> {
   await expect(footer.getByRole('link', { name: 'KendoMenu home' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'How it works' })).toBeVisible();
-  await expect(footer.getByRole('link', { name: /Drill library/ })).toBeVisible();
+  await expect(footer.getByRole('link', { name: /Keiko library/ })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'Dashboard' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'FAQ' })).toBeVisible();
-  await expect(footer.getByRole('link', { name: 'GitHub (placeholder)' })).toBeVisible();
-  await expect(footer.getByRole('link', { name: 'LinkedIn (placeholder)' })).toBeVisible();
+  await expect(footer.getByRole('link', { name: 'Sources' })).toBeVisible();
+  await expect(footer.getByRole('link', { name: 'Cookies' })).toBeVisible();
 
-  const githubLink = footer.getByRole('link', { name: 'GitHub (placeholder)' });
-  const linkedInLink = footer.getByRole('link', { name: 'LinkedIn (placeholder)' });
-  await githubLink.focus();
+  const sourcesLink = footer.getByRole('link', { name: 'Sources' });
+  const cookiesLink = footer.getByRole('link', { name: 'Cookies' });
+  await sourcesLink.focus();
   await page.keyboard.press('Tab');
-  await expect(linkedInLink).toBeFocused();
+  await expect(cookiesLink).toBeFocused();
 
-  const focusStyle = await linkedInLink.evaluate((element) => {
+  const focusStyle = await cookiesLink.evaluate((element) => {
     const computedStyle = getComputedStyle(element);
     return {
       outlineStyle: computedStyle.outlineStyle,

@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 
 const primaryNavigationItems = [
   { id: 'how-it-works', label: 'How it works', to: '/app#how-it-works-title', showsCount: false },
-  { id: 'library', label: 'Drill library', to: '/app/library', showsCount: true },
+  { id: 'library', label: 'Keiko library', to: '/app/library', showsCount: true },
   { id: 'dashboard', label: 'Dashboard', to: '/app/dashboard', showsCount: false },
   { id: 'faq', label: 'FAQ', to: '/app#faq-title', showsCount: false },
 ] as const;

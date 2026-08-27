@@ -31,9 +31,9 @@ export function CookiePolicyPage() {
         <section className="policy-section" aria-labelledby="local-storage-title">
           <h2 id="local-storage-title">Local storage</h2>
           <p>
-            Your dashboard drills are stored locally in your browser so KendoMenu can work without
-            an account or a server. This training data is separate from cookies, is not sent to a
-            remote service and can be deleted by clearing site data in your browser.
+            Your dashboard training sessions are stored locally in your browser so KendoMenu can
+            work without an account or a server. This training data is separate from cookies, is not
+            sent to a remote service and can be deleted by clearing site data in your browser.
           </p>
         </section>
 

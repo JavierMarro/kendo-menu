@@ -1,0 +1,8 @@
+- Session: session terminology and library-detail refinement
+- Date/duration: 2026-08-27; about 3 hours
+- Scope/start: Query-driven details were complete, but user copy still called complete sessions drills and compact missing quantities used a broad fallback.
+- Changes: Added session-facing terminology, shared quantity-context inference, detailed category pills, same-row standalone activities, custom disclosure glyphs, and focused unit/integration/browser coverage.
+- Decisions: Stable drill IDs, category values, routes, query keys, curated data, and persistence stay unchanged; explicit quantities precede name-context inference.
+- Roadblocks: Sandbox loopback binding required scoped approval; a focused rerun corrected two browser-test assertions without changing product behavior.
+- Verification: `pnpm check` passed; all 54 Playwright scenarios passed across Desktop Chrome and Pixel 5 with closed/open Axe coverage; desktop/mobile screenshots were inspected.
+- Follow-up: None for this slice.

@@ -6,6 +6,8 @@ import type { TrainingActivity, TrainingSet } from '@kendo-menu/domain';
 import {
   formatCategory,
   formatTrainingQuantity,
+  getCategoryBadgeVariant,
+  getMissingTrainingQuantityLabel,
   getSpecifiedTrainingQuantities,
   getTrainingSetActivityCount,
   getTrainingSetDescription,
@@ -21,11 +23,18 @@ function hasText(value: string | undefined): value is string {
   return value !== undefined && value.trim().length > 0;
 }
 
-function TrainingActivityQuantities({ activity }: { readonly activity: TrainingActivity }) {
+interface TrainingActivityQuantitiesProps {
+  readonly activity: TrainingActivity;
+  readonly parentSection?: TrainingSet['sections'][number];
+}
+
+function TrainingActivityQuantities({ activity, parentSection }: TrainingActivityQuantitiesProps) {
   const quantities = getSpecifiedTrainingQuantities(activity);
 
   return quantities.length === 0 ? (
-    <span className="quantity-not-specified">Not set</span>
+    <span className="quantity-not-specified">
+      {getMissingTrainingQuantityLabel(activity, parentSection)}
+    </span>
   ) : (
     <ul className="quantity-list" aria-label={`Quantities for ${activity.name}`}>
       {quantities.map((quantity) => (
@@ -44,7 +53,12 @@ export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentP
     <div className="drill-detail-content">
       <header className="page-header detail-header drill-detail-header">
         <div>
-          <p className="eyebrow">{formatCategory(trainingSet.category)}</p>
+          <span
+            className="category-pill drill-detail-category"
+            data-category-variant={getCategoryBadgeVariant(trainingSet.category)}
+          >
+            {formatCategory(trainingSet.category)}
+          </span>
           <h1 id={titleId}>{trainingSet.name}</h1>
           {description === undefined ? null : <p className="page-intro">{description}</p>}
         </div>
@@ -61,7 +75,7 @@ export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentP
       </header>
 
       <p className="detail-meta">
-        {getTrainingSetActivityCount(trainingSet)} activities in this drill.
+        {getTrainingSetActivityCount(trainingSet)} activities in this session.
       </p>
       <p className="sr-only" role="status" aria-live="polite">
         {statusMessage}
@@ -84,20 +98,18 @@ export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentP
                 aria-labelledby={sectionHeadingId}
                 key={section.id}
               >
-                <div className="detail-standalone-heading">
-                  <span className="section-number" aria-hidden="true">
-                    {sectionNumber}
-                  </span>
+                <span className="section-number" aria-hidden="true">
+                  {sectionNumber}
+                </span>
+                <div className="detail-standalone-copy">
                   <h2 className="detail-section-label" id={sectionHeadingId}>
                     {section.name}
                   </h2>
-                </div>
-                <div className="training-step training-step--standalone">
                   {hasText(section.notes) ? (
-                    <span className="step-description">{section.notes}</span>
+                    <p className="step-description">{section.notes}</p>
                   ) : null}
-                  <TrainingActivityQuantities activity={section} />
                 </div>
+                <TrainingActivityQuantities activity={section} />
               </section>
             );
           }
@@ -109,6 +121,7 @@ export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentP
             <details className="detail-section" key={section.id}>
               <summary className="detail-section-summary">
                 <span className="detail-section-summary-content">
+                  <span className="detail-section-indicator" aria-hidden="true" />
                   <span className="section-number" aria-hidden="true">
                     {sectionNumber}
                   </span>
@@ -138,7 +151,7 @@ export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentP
                         <span className="step-description">{exercise.notes}</span>
                       ) : null}
                     </div>
-                    <TrainingActivityQuantities activity={exercise} />
+                    <TrainingActivityQuantities activity={exercise} parentSection={section} />
                   </li>
                 ))}
               </ol>

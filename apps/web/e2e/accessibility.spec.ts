@@ -27,7 +27,7 @@ test.describe('accessibility and responsive layout', () => {
     const card = page
       .getByRole('heading', { name: 'International dojo menu' })
       .locator('xpath=ancestor::article');
-    await card.getByRole('link', { name: 'View drill' }).click();
+    await card.getByRole('link', { name: 'View session' }).click();
     const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
     await expect(dialog).toBeVisible();
     await dialog.locator('details.detail-section').first().locator('summary').click();

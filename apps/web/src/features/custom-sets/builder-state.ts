@@ -117,7 +117,7 @@ export function validateBuilderState(state: BuilderState): BuilderErrors {
   const errors: Record<string, string> = {};
 
   if (state.name.trim().length === 0) {
-    errors['name'] = 'Give this training set a name.';
+    errors['name'] = 'Give this session a name.';
   }
 
   state.sections.forEach((section) => {

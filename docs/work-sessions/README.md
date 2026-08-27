@@ -26,6 +26,7 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-08-27 — session terminology and library-detail refinement](./2026-08-27-session-terminology-refinement.md)
 - [2026-08-27 — query-driven drill library dialog](./2026-08-27-drill-library-dialog.md)
 - [2026-08-27 — drill-card intensity and layout](./2026-08-27-drill-card-intensity.md)
 - [2026-08-26 — researched kendo drills](./2026-08-26-researched-kendo-drills.md)

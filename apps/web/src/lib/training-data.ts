@@ -107,27 +107,31 @@ export function getEffectiveTrainingQuantity(
   return calculateEffectiveTrainingQuantity(activity, entry.quantityOverrides[activity.id], unit);
 }
 
-function getFallbackQuantityUnit(
+function normalizeTrainingActivityName(value: string): string {
+  return value.toLocaleLowerCase('en').replaceAll(/[^a-z0-9]+/g, '');
+}
+
+export function getInferredTrainingQuantityUnit(
   activity: TrainingActivity,
   parentSection?: TrainingSection,
 ): TrainingQuantityUnit {
-  const activityName = activity.name.toLocaleLowerCase('en');
-  const sectionName = parentSection?.name.toLocaleLowerCase('en');
+  const activityName = normalizeTrainingActivityName(activity.name);
+  const sectionName =
+    parentSection === undefined ? undefined : normalizeTrainingActivityName(parentSection.name);
 
   if (sectionName?.includes('suburi') === true) {
     return 'repetitions';
   }
 
-  const name = `${sectionName ?? ''} ${activityName}`;
-  if (name.includes('kakari')) {
+  const name = `${sectionName ?? ''}${activityName}`;
+  if (name.includes('kakari') || name.includes('butsukari')) {
     return 'seconds';
   }
   if (
-    name.includes('warm-up') ||
     name.includes('warmup') ||
     name.includes('suburi') ||
-    name.includes('ashi sabaki') ||
-    name.includes('suri-ashi') ||
+    name.includes('ashisabaki') ||
+    name.includes('suriashi') ||
     name.includes('footwork') ||
     name.includes('jigeiko') ||
     name.includes('shiaigeiko')
@@ -135,6 +139,14 @@ function getFallbackQuantityUnit(
     return 'minutes';
   }
   return 'repetitions';
+}
+
+export function getMissingTrainingQuantityLabel(
+  activity: TrainingActivity,
+  parentSection?: TrainingSection,
+): 'Reps not set' | 'Time not set' {
+  const inferredUnit = getInferredTrainingQuantityUnit(activity, parentSection);
+  return inferredUnit === 'seconds' || inferredUnit === 'minutes' ? 'Time not set' : 'Reps not set';
 }
 
 export function getEditableTrainingQuantityUnits(
@@ -145,7 +157,9 @@ export function getEditableTrainingQuantityUnits(
   const overrides = entry.quantityOverrides[activity.id];
   const defaultUnits = getDefaultTrainingQuantityUnits(activity);
   const fallbackUnit =
-    defaultUnits.length === 0 ? getFallbackQuantityUnit(activity, parentSection) : undefined;
+    defaultUnits.length === 0
+      ? getInferredTrainingQuantityUnit(activity, parentSection)
+      : undefined;
 
   return TRAINING_QUANTITY_UNITS.filter(
     (unit) =>
@@ -216,6 +230,12 @@ export function getQuantityValidationMessage(unit: TrainingQuantityUnit): string
 }
 
 export function formatCategory(category: TrainingSet['category']): string {
+  if (category === 'intense-drill') {
+    return 'Intense session';
+  }
+  if (category === 'high-intensity-drill') {
+    return 'High intensity session';
+  }
   if (category === 'custom') {
     return 'Custom';
   }

@@ -106,8 +106,12 @@ test.describe('routed training flows', () => {
       .evaluate((element) => getComputedStyle(element).backgroundImage);
     expect(backgroundImage).toContain('kendo-menu-hero.jpeg');
 
-    await page.getByRole('link', { name: 'Browse drill library' }).click();
+    const browseLibrary = page.getByRole('link', { name: 'Browse Keiko library' });
+    await expect(browseLibrary).toHaveText('BROWSE KEIKO LIBRARY HERE →');
+    await expect(page.getByText('exercises across all training sessions')).toBeVisible();
+    await browseLibrary.click();
     await expect(page).toHaveURL(/\/app\/library$/);
+    await expect(page.getByRole('heading', { name: 'Keiko library' })).toBeVisible();
     await page.locator('.top-bar').getByRole('link', { name: 'KendoMenu home' }).click();
     await expect(page).toHaveURL(/\/app$/);
   });
@@ -152,10 +156,10 @@ test.describe('routed training flows', () => {
     await openNavigationIfNeeded(page);
     await page
       .getByRole('navigation', { name: 'Primary navigation' })
-      .getByRole('link', { name: /Drill library/ })
+      .getByRole('link', { name: /Keiko library/ })
       .click();
     await expect(page).toHaveURL(/\/app\/library$/);
-    await expect(page.getByRole('heading', { name: 'Drill library' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Keiko library' })).toBeVisible();
 
     await page.goBack();
     await expect(page).toHaveURL(/\/app\/dashboard$/);
@@ -163,10 +167,10 @@ test.describe('routed training flows', () => {
     await expect(page).toHaveURL(/\/app\/library$/);
 
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Drill library' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Keiko library' })).toBeVisible();
 
     await page.goto('/app/drills/new');
-    await expect(page.getByRole('heading', { name: 'Create a drill' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Create a training session' })).toBeVisible();
   });
 
   test('opens a compact drill card and operates collapsed sections by keyboard', async ({
@@ -175,10 +179,10 @@ test.describe('routed training flows', () => {
     await page.goto('/app/library');
     const cards = page.locator('.library-card');
     await expect(cards).toHaveCount(11);
-    await expect(page.locator('.category-pill', { hasText: 'High intensity drill' })).toHaveCount(
+    await expect(page.locator('.category-pill', { hasText: 'High intensity session' })).toHaveCount(
       4,
     );
-    await expect(page.locator('.category-pill', { hasText: 'Intense drill' })).toHaveCount(7);
+    await expect(page.locator('.category-pill', { hasText: 'Intense session' })).toHaveCount(7);
     await expect(
       page.locator('.category-pill[data-category-variant="high-intensity"]'),
     ).toHaveCount(4);
@@ -223,10 +227,10 @@ test.describe('routed training flows', () => {
     const card = page
       .getByRole('heading', { name: 'International dojo menu' })
       .locator('xpath=ancestor::article');
-    await expect(card).toContainText('Intense drill');
+    await expect(card).toContainText('Intense session');
     await expect(card).toContainText('Set for a 2 hours long session.');
     await expect(card).toContainText('20 activities');
-    const viewDrill = card.getByRole('link', { name: 'View drill' });
+    const viewDrill = card.getByRole('link', { name: 'View session' });
     await expect(viewDrill).toHaveAttribute(
       'href',
       '/app/library?drill=international-dojo-2-hour-session',
@@ -244,6 +248,14 @@ test.describe('routed training flows', () => {
     await expect(
       dialog.getByRole('button', { name: 'Close International dojo menu details.' }),
     ).toBeFocused();
+    const detailBadge = dialog.locator('.drill-detail-category');
+    await expect(detailBadge).toHaveText('Intense session');
+    await expect(detailBadge).toHaveAttribute('data-category-variant', 'intense');
+    expect(
+      await detailBadge.evaluate(
+        (badge) => badge.nextElementSibling?.textContent === 'International dojo menu',
+      ),
+    ).toBe(true);
 
     const warmUpActivity = dialog
       .getByRole('heading', { name: 'Warm-up', level: 2 })
@@ -252,6 +264,26 @@ test.describe('routed training flows', () => {
     await expect(warmUpActivity.locator('details')).toHaveCount(0);
     await expect(warmUpActivity).toContainText('10 minutes');
     await expect(warmUpActivity).not.toContainText('1 activity');
+    const standaloneLayout = await warmUpActivity.evaluate((element) => {
+      const name = element.querySelector('.detail-section-label');
+      const quantity = element.querySelector('.quantity-list');
+      if (name === null || quantity === null) {
+        throw new Error('The standalone activity row is incomplete.');
+      }
+
+      const elementBox = element.getBoundingClientRect();
+      const nameBox = name.getBoundingClientRect();
+      const quantityBox = quantity.getBoundingClientRect();
+      return {
+        hasOverflow: element.scrollWidth > element.clientWidth,
+        quantityRightInset: elementBox.right - quantityBox.right,
+        rowsOverlap: nameBox.top < quantityBox.bottom && quantityBox.top < nameBox.bottom,
+      };
+    });
+    expect(standaloneLayout.hasOverflow).toBe(false);
+    expect(standaloneLayout.quantityRightInset).toBeGreaterThanOrEqual(12);
+    expect(standaloneLayout.quantityRightInset).toBeLessThanOrEqual(20);
+    expect(standaloneLayout.rowsOverlap).toBe(true);
 
     const sections = dialog.locator('details.detail-section');
     await expect(sections).toHaveCount(5);
@@ -259,11 +291,39 @@ test.describe('routed training flows', () => {
     await expect(uchikomiSection).not.toHaveAttribute('open', '');
     const uchikomiSummary = uchikomiSection.locator('summary');
     await expect(uchikomiSummary).toContainText('1 exercise');
+    await expect(uchikomiSummary).toHaveCSS('list-style-type', 'none');
+    const disclosureIndicator = uchikomiSummary.locator('.detail-section-indicator');
+    await expect(disclosureIndicator).toHaveAttribute('aria-hidden', 'true');
+    expect(
+      await disclosureIndicator.evaluate(
+        (element) => getComputedStyle(element, '::before').content,
+      ),
+    ).toBe('"+"');
 
-    await uchikomiSummary.focus();
-    await page.keyboard.press('Enter');
+    await disclosureIndicator.click();
     await expect(uchikomiSection).toHaveAttribute('open', '');
+    expect(
+      await disclosureIndicator.evaluate(
+        (element) => getComputedStyle(element, '::before').content,
+      ),
+    ).toBe('"−"');
     await expect(uchikomiSection.getByText('5 repetitions')).toBeVisible();
+    await disclosureIndicator.click();
+    await expect(uchikomiSection).not.toHaveAttribute('open', '');
+    expect(
+      await disclosureIndicator.evaluate(
+        (element) => getComputedStyle(element, '::before').content,
+      ),
+    ).toBe('"+"');
+
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Shift+Tab');
+    await expect(uchikomiSummary).toBeFocused();
+    await expect(uchikomiSummary).toHaveCSS('outline-style', 'solid');
+    await expect(uchikomiSummary).toHaveCSS('outline-width', '3px');
+    await expect(uchikomiSummary).toHaveCSS('outline-offset', '-3px');
+    await page.keyboard.press('Space');
+    await expect(uchikomiSection).toHaveAttribute('open', '');
     await page.keyboard.press('Enter');
     await expect(uchikomiSection).not.toHaveAttribute('open', '');
   });
@@ -301,6 +361,28 @@ test.describe('routed training flows', () => {
       'background-color',
       await highIntensityBadge.evaluate((element) => getComputedStyle(element).backgroundColor),
     );
+
+    const intenseCardColours = await intenseBadge.evaluate((element) => ({
+      background: getComputedStyle(element).backgroundColor,
+      foreground: getComputedStyle(element).color,
+    }));
+    await page.goto('/app/library?drill=international-dojo-2-hour-session');
+    const intenseDetailBadge = page.getByRole('dialog').locator('.drill-detail-category');
+    await expect(intenseDetailBadge).toHaveAttribute('data-category-variant', 'intense');
+    await expect(intenseDetailBadge).toHaveCSS('background-color', intenseCardColours.background);
+    await expect(intenseDetailBadge).toHaveCSS('color', intenseCardColours.foreground);
+
+    await page.goto('/app/library?drill=senior-high-school-kendo-club');
+    const highDetailBadge = page.getByRole('dialog').locator('.drill-detail-category');
+    await expect(highDetailBadge).toHaveText('High intensity session');
+    await expect(highDetailBadge).toHaveAttribute('data-category-variant', 'high-intensity');
+    const highDetailColours = await highDetailBadge.evaluate((element) => ({
+      background: getComputedStyle(element).backgroundColor,
+      foreground: getComputedStyle(element).color,
+    }));
+    expect(
+      getContrastRatio(highDetailColours.foreground, highDetailColours.background),
+    ).toBeGreaterThanOrEqual(4.5);
   });
 
   test('uses the drill query as history state and redirects legacy detail URLs with replace', async ({
@@ -310,7 +392,7 @@ test.describe('routed training flows', () => {
     const card = page
       .getByRole('heading', { name: 'International dojo menu' })
       .locator('xpath=ancestor::article');
-    const viewDrill = card.getByRole('link', { name: 'View drill' });
+    const viewDrill = card.getByRole('link', { name: 'View session' });
 
     await viewDrill.click();
     await expect(page).toHaveURL(
@@ -348,7 +430,7 @@ test.describe('routed training flows', () => {
 
     await page.goto('/app/library?source=curated&drill=not-a-real-drill');
     await expect(page).toHaveURL(/\/app\/library\?source=curated$/);
-    await expect(page.getByRole('heading', { name: 'Drill library' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Keiko library' })).toBeVisible();
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
@@ -359,7 +441,7 @@ test.describe('routed training flows', () => {
     const card = page
       .getByRole('heading', { name: 'International dojo menu' })
       .locator('xpath=ancestor::article');
-    const viewDrill = card.getByRole('link', { name: 'View drill' });
+    const viewDrill = card.getByRole('link', { name: 'View session' });
     await viewDrill.click();
 
     let dialog = page.getByRole('dialog', { name: 'International dojo menu' });
@@ -476,9 +558,37 @@ test.describe('routed training flows', () => {
       true,
     );
 
-    await card.getByRole('link', { name: 'View drill' }).click();
+    await card.getByRole('link', { name: 'View session' }).click();
 
     await expect(page.locator('.detail-header .page-intro')).toHaveText(description);
+  });
+
+  test('labels missing read-only quantities from the shared activity context', async ({ page }) => {
+    await page.goto('/app/library?drill=japanese-school-club');
+    const dialog = page.getByRole('dialog', { name: 'Japanese school dojo menu' });
+
+    const getStandaloneActivity = (name: string) =>
+      dialog
+        .getByRole('heading', { name, level: 2, exact: true })
+        .locator('xpath=ancestor::section');
+
+    await expect(getStandaloneActivity('warm-up')).toContainText('Time not set');
+    await expect(getStandaloneActivity('kakarigeiko')).toContainText('Time not set');
+    await expect(getStandaloneActivity('Kirikaeshi')).toContainText('Reps not set');
+    await expect(getStandaloneActivity('Kihon-waza')).toContainText('Reps not set');
+
+    const suburiSection = dialog.locator('details.detail-section').filter({ hasText: 'suburi' });
+    await suburiSection.locator('summary').click();
+    await expect(suburiSection.getByText('Reps not set')).toHaveCount(4);
+    await expect(dialog.getByText(/^Not set$/)).toHaveCount(0);
+
+    await page.goto('/app/library?drill=university-version-2');
+    const universityDialog = page.getByRole('dialog', { name: 'University dojo menu' });
+    const standaloneSuburi = universityDialog
+      .getByRole('heading', { name: 'Suburi', level: 2, exact: true })
+      .locator('xpath=ancestor::section');
+    await expect(standaloneSuburi).toContainText('Time not set');
+    await expect(standaloneSuburi.locator('details')).toHaveCount(0);
   });
 
   test('persists multi-unit quantities, notes, and an Undo restoration across reload', async ({
@@ -488,7 +598,7 @@ test.describe('routed training flows', () => {
     const card = page
       .getByRole('heading', { name: 'Junior-high school dojo menu' })
       .locator('xpath=ancestor::article');
-    await card.getByRole('link', { name: 'View drill' }).click();
+    await card.getByRole('link', { name: 'View session' }).click();
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
 
@@ -527,7 +637,7 @@ test.describe('routed training flows', () => {
     const card = page
       .getByRole('heading', { name: 'International dojo menu' })
       .locator('xpath=ancestor::article');
-    await card.getByRole('link', { name: 'View drill' }).click();
+    await card.getByRole('link', { name: 'View session' }).click();
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
 
@@ -543,7 +653,7 @@ test.describe('routed training flows', () => {
     await openNavigationIfNeeded(page);
     await page
       .getByRole('navigation', { name: 'Primary navigation' })
-      .getByRole('link', { name: /Drill library/ })
+      .getByRole('link', { name: /Keiko library/ })
       .click();
     await openNavigationIfNeeded(page);
     await page
@@ -564,9 +674,9 @@ test.describe('routed training flows', () => {
     const dashboardHeader = page
       .getByRole('heading', { name: 'Your dashboard', exact: true })
       .locator('xpath=ancestor::header');
-    await dashboardHeader.getByRole('link', { name: 'Create drill', exact: true }).click();
+    await dashboardHeader.getByRole('link', { name: 'Create session', exact: true }).click();
     await expect(page).toHaveURL(/\/app\/drills\/new$/);
-    const name = page.getByLabel('Drill name');
+    const name = page.getByLabel('Session name');
     await name.fill('Unfinished draft');
 
     const dismissedMessages: string[] = [];
@@ -577,12 +687,12 @@ test.describe('routed training flows', () => {
     const dismissedDialog = await dismissedDialogPromise;
     dismissedMessages.push(dismissedDialog.message());
     expect(dismissedMessages).toEqual([
-      'You have an unsaved drill draft. Leave this page and discard it?',
+      'You have an unsaved session draft. Leave this page and discard it?',
     ]);
     await dismissedDialog.dismiss();
     await dismissedNavigationPromise;
     await expect(page).toHaveURL(/\/app\/drills\/new$/);
-    await expect(page.getByLabel('Drill name')).toHaveValue('Unfinished draft');
+    await expect(page.getByLabel('Session name')).toHaveValue('Unfinished draft');
 
     const acceptedMessages: string[] = [];
     const acceptedDialogPromise = page.waitForEvent('dialog');
@@ -590,7 +700,7 @@ test.describe('routed training flows', () => {
     const acceptedDialog = await acceptedDialogPromise;
     acceptedMessages.push(acceptedDialog.message());
     expect(acceptedMessages).toEqual([
-      'You have an unsaved drill draft. Leave this page and discard it?',
+      'You have an unsaved session draft. Leave this page and discard it?',
     ]);
     await acceptedDialog.accept();
     await acceptedNavigationPromise;
@@ -606,12 +716,12 @@ test.describe('routed training flows', () => {
       await dialog.dismiss();
     });
     await page.goto('/app/drills/new');
-    await page.getByLabel('Drill name').fill('Monday footwork');
+    await page.getByLabel('Session name').fill('Monday footwork');
     await page.getByLabel('Description (optional)').fill('A short solo session.');
     await page.getByLabel('Exercise name', { exact: true }).fill('Footwork');
     await page.getByLabel('Subexercise name', { exact: true }).fill('Big step forward and back');
     await page.getByLabel('Repetitions', { exact: true }).fill('24');
-    await page.getByRole('button', { name: 'Save drill to dashboard' }).click();
+    await page.getByRole('button', { name: 'Save session to dashboard' }).click();
 
     await expect(page).toHaveURL(/\/app\/dashboard\?created=Monday%20footwork$/);
     expect(unexpectedDialogMessage).toBeNull();

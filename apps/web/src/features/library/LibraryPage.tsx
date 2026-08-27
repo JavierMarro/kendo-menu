@@ -80,29 +80,29 @@ export function LibraryPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">Keiko catalogue</p>
-          <h1>Drill library</h1>
+          <h1>Keiko library</h1>
           <p className="page-intro">
             Browse curated keiko menus, add them to your dashboard and set the workload.
           </p>
         </div>
         {/* <Link className="primary-button" to="/app/drills/new">
-          Create drill
+          Create session
         </Link> */}
       </header>
 
       {trainingSets.length === 0 ? (
         <section className="empty-state empty-state--library" aria-labelledby="empty-library-title">
           <p className="eyebrow">Build your catalogue</p>
-          <h2 id="empty-library-title">No drills are available yet.</h2>
-          <p>Create the first training set for your own practice.</p>
+          <h2 id="empty-library-title">No training sessions are available yet.</h2>
+          <p>Create the first training session for your own practice.</p>
           <Link className="primary-button" to="/app/drills/new">
-            Create a drill
+            Create a training session
           </Link>
         </section>
       ) : (
         <section className="library-grid" aria-labelledby="library-list-title">
           <h2 id="library-list-title" className="sr-only">
-            Available training sets
+            Available training sessions
           </h2>
           {trainingSets.map((trainingSet) => {
             const description = getTrainingSetDescription(trainingSet);
@@ -142,7 +142,7 @@ export function LibraryPage() {
                       originatingDrillIdRef.current = trainingSet.id;
                     }}
                   >
-                    View drill
+                    View session
                   </Link>
                 </div>
               </article>

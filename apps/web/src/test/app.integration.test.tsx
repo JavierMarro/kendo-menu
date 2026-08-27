@@ -67,11 +67,11 @@ describe('KendoMenu application flows', () => {
     await user.click(screen.getByRole('button', { name: 'Got it' }));
     await user.click(
       within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
-        name: /Drill library/,
+        name: /Keiko library/,
       }),
     );
 
-    expect(screen.getByRole('heading', { name: 'Drill library' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Keiko library' })).toBeInTheDocument();
     expect(screen.queryByRole('complementary', { name: 'Cookie notice' })).not.toBeInTheDocument();
 
     view.unmount();
@@ -106,6 +106,7 @@ describe('KendoMenu application flows', () => {
     expect(within(footer).getByRole('heading', { name: 'Navigation', level: 2 })).toBeVisible();
 
     const footerNavigation = within(footer).getByRole('navigation', { name: 'Navigation' });
+    expect(within(footerNavigation).getByRole('link', { name: /Keiko library/ })).toBeVisible();
     expect(
       within(footerNavigation)
         .getAllByRole('link')
@@ -123,7 +124,7 @@ describe('KendoMenu application flows', () => {
     );
   });
 
-  it('renders the landing page at /app and links into the drill library', async () => {
+  it('renders the landing page at /app and links into the Keiko library', async () => {
     const user = userEvent.setup();
     const store = createTestStore();
 
@@ -156,7 +157,9 @@ describe('KendoMenu application flows', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'How it works', level: 2 })).toBeInTheDocument();
     expect(
-      screen.getByText(/These figures reflect the training currently available in KendoMenu/),
+      screen.getByText(
+        /These figures reflect the training sessions currently available in KendoMenu/,
+      ),
     ).toBeInTheDocument();
 
     const introductionHeading = screen.getByRole('heading', {
@@ -194,7 +197,7 @@ describe('KendoMenu application flows', () => {
     });
     expect(exerciseCount.closest('dd')).toHaveAttribute(
       'aria-label',
-      `${canonicalExerciseCount} child exercises in the curated menus`,
+      `${canonicalExerciseCount} child exercises across all training sessions`,
     );
     expect(screen.queryByText('~150')).not.toBeInTheDocument();
 
@@ -211,15 +214,24 @@ describe('KendoMenu application flows', () => {
     expect(faqButton).toHaveAttribute('aria-expanded', 'true');
     expect(document.getElementById('what-is-kendomenu-answer')).not.toHaveAttribute('hidden');
 
-    const browseLink = screen.getByRole('link', { name: 'Browse drill library' });
+    const browseLink = screen.getByRole('link', { name: 'Browse Keiko library' });
     expect(browseLink).toHaveClass('landing-primary-action');
+    expect(browseLink).toHaveTextContent('BROWSE KEIKO LIBRARY HERE →');
+    expect(
+      screen.getByText('exercises across all training sessions', { exact: true }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        /Choose a keiko menu, add it to your dashboard, then adjust its repetitions or duration/,
+      ),
+    ).toBeVisible();
 
     const recordLink = screen.getByRole('link', { name: 'Record your first keiko' });
     expect(recordLink).toHaveAttribute('href', '/app/library');
     expect(recordLink).toHaveClass('landing-primary-action');
 
     await user.click(browseLink);
-    expect(screen.getByRole('heading', { name: 'Drill library' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Keiko library' })).toBeInTheDocument();
 
     await user.click(within(header).getByRole('link', { name: 'KendoMenu home' }));
     expect(
@@ -295,6 +307,11 @@ describe('KendoMenu application flows', () => {
       '/app/dashboard',
       '/app#faq-title',
     ]);
+    expect(
+      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
+        name: /Keiko library/,
+      }),
+    ).toBeVisible();
   });
 
   it('opens and closes the responsive navigation accessibly', async () => {
@@ -328,6 +345,9 @@ describe('KendoMenu application flows', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Create session$/ })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Browse Keiko library' })).toBeVisible();
+    expect(screen.getByText(/Add a session from the Keiko library/)).toBeVisible();
     expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveAttribute(
       'aria-expanded',
       'false',
@@ -351,7 +371,7 @@ describe('KendoMenu application flows', () => {
 
     renderApp(store, { initialEntries: ['/app/dashboard'] });
 
-    const missingHeading = screen.getByRole('heading', { name: 'Training set unavailable' });
+    const missingHeading = screen.getByRole('heading', { name: 'Training session unavailable' });
     const missingEntry = missingHeading.closest('article');
     if (missingEntry === null) {
       throw new Error('Expected the unavailable dashboard entry fallback.');
@@ -361,7 +381,7 @@ describe('KendoMenu application flows', () => {
     await user.click(within(missingEntry).getByRole('button', { name: 'Remove' }));
 
     expect(
-      screen.queryByRole('heading', { name: 'Training set unavailable' }),
+      screen.queryByRole('heading', { name: 'Training session unavailable' }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Undo' })).toBeVisible();
   });
@@ -375,33 +395,43 @@ describe('KendoMenu application flows', () => {
 
     await user.click(
       within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
-        name: /Drill library/,
+        name: /Keiko library/,
       }),
     );
-    expect(screen.getByRole('heading', { name: 'Drill library' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Keiko library' })).toBeInTheDocument();
+    expect(document.title).toBe('Keiko library · KendoMenu');
 
     view.unmount();
     const builderView = renderApp(createTestStore(), { initialEntries: ['/app/drills/new'] });
-    expect(screen.getByRole('heading', { name: 'Create a drill' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Create a training session' })).toBeInTheDocument();
+    expect(document.title).toBe('Create session · KendoMenu');
+    expect(screen.getByLabelText('Session name')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save session to dashboard' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Back to Keiko library' })).toBeVisible();
+    expect(
+      screen.getByText(
+        'Build a repeatable keiko session containing the sections and exercises you want to practise.',
+      ),
+    ).toBeVisible();
 
     builderView.unmount();
     renderApp(createTestStore(), { initialEntries: ['/app/library'] });
-    expect(screen.getByRole('heading', { name: 'Drill library' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Keiko library' })).toBeInTheDocument();
   });
 
   it('renders exactly 11 compact drill cards with semantic badge variants and query links', () => {
     renderApp(createTestStore(), { initialEntries: ['/app/library'] });
 
-    const library = screen.getByRole('region', { name: 'Available training sets' });
+    const library = screen.getByRole('region', { name: 'Available training sessions' });
     const cards = within(library).getAllByRole('article');
     expect(cards).toHaveLength(11);
-    expect(within(library).getAllByText('High intensity drill')).toHaveLength(4);
-    expect(within(library).getAllByText('Intense drill')).toHaveLength(7);
+    expect(within(library).getAllByText('High intensity session')).toHaveLength(4);
+    expect(within(library).getAllByText('Intense session')).toHaveLength(7);
     expect(within(library).queryByText('Category not specified')).not.toBeInTheDocument();
-    for (const badge of within(library).getAllByText('Intense drill')) {
+    for (const badge of within(library).getAllByText('Intense session')) {
       expect(badge).toHaveAttribute('data-category-variant', 'intense');
     }
-    for (const badge of within(library).getAllByText('High intensity drill')) {
+    for (const badge of within(library).getAllByText('High intensity session')) {
       expect(badge).toHaveAttribute('data-category-variant', 'high-intensity');
     }
 
@@ -413,10 +443,10 @@ describe('KendoMenu application flows', () => {
       throw new Error('Expected the international-dojo heading inside a drill card.');
     }
 
-    expect(within(card).getByText('Intense drill')).toBeVisible();
+    expect(within(card).getByText('Intense session')).toBeVisible();
     expect(within(card).getByText('Set for a 2 hours long session.')).toBeVisible();
     expect(within(card).getByText('20 activities')).toBeVisible();
-    expect(within(card).getByRole('link', { name: 'View drill' })).toHaveAttribute(
+    expect(within(card).getByRole('link', { name: 'View session' })).toHaveAttribute(
       'href',
       '/app/library?drill=international-dojo-2-hour-session',
     );
@@ -486,7 +516,7 @@ describe('KendoMenu application flows', () => {
     expect(preview).not.toBeNull();
     expect(preview?.textContent).toBe(description);
 
-    await user.click(within(card).getByRole('link', { name: 'View drill' }));
+    await user.click(within(card).getByRole('link', { name: 'View session' }));
 
     const dialog = screen.getByRole('dialog', { name: 'University High School dojo menu' });
     expect(within(dialog).getByText(description, { exact: true })).toHaveClass('page-intro');
@@ -514,7 +544,7 @@ describe('KendoMenu application flows', () => {
       initialEntries: ['/app/library?source=shared&drill=unavailable-drill'],
     });
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(screen.getByRole('heading', { name: 'Drill library' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Keiko library' })).toBeVisible();
   });
 
   it('keeps the modal focused, inert, open after adding, and restores the originating link', async () => {
@@ -526,7 +556,7 @@ describe('KendoMenu application flows', () => {
     if (card === null) {
       throw new Error('Expected the International dojo menu card.');
     }
-    const viewDrill = within(card).getByRole('link', { name: 'View drill' });
+    const viewDrill = within(card).getByRole('link', { name: 'View session' });
 
     await user.click(viewDrill);
     let dialog = screen.getByRole('dialog', { name: 'International dojo menu' });
@@ -579,7 +609,7 @@ describe('KendoMenu application flows', () => {
     expect(viewDrill).toHaveFocus();
   });
 
-  it('opens full drill details with standalone activities and native child disclosures', async () => {
+  it('opens full session details with standalone activities and native child disclosures', async () => {
     const user = userEvent.setup();
     renderApp(createTestStore(), { initialEntries: ['/app/library'] });
     const cardHeading = screen.getByRole('heading', {
@@ -590,12 +620,19 @@ describe('KendoMenu application flows', () => {
       throw new Error('Expected the international-dojo heading inside a drill card.');
     }
 
-    await user.click(within(card).getByRole('link', { name: 'View drill' }));
+    await user.click(within(card).getByRole('link', { name: 'View session' }));
     const dialog = screen.getByRole('dialog', { name: 'International dojo menu' });
     expect(
       within(dialog).getByRole('heading', { name: 'International dojo menu', level: 1 }),
     ).toBeVisible();
-    expect(within(dialog).getByText('Intense drill')).toBeVisible();
+    const detailBadge = within(dialog).getByText('Intense session');
+    const detailTitle = within(dialog).getByRole('heading', {
+      name: 'International dojo menu',
+      level: 1,
+    });
+    expect(detailBadge).toHaveClass('category-pill', 'drill-detail-category');
+    expect(detailBadge).toHaveAttribute('data-category-variant', 'intense');
+    expect(detailBadge.nextElementSibling).toBe(detailTitle);
     const sections = dialog.querySelectorAll<HTMLDetailsElement>('details.detail-section');
     const standaloneActivities = dialog.querySelectorAll<HTMLElement>(
       '.detail-standalone-activity',
@@ -612,6 +649,9 @@ describe('KendoMenu application flows', () => {
     expect(warmUpActivity.closest('details')).toBeNull();
     expect(within(warmUpActivity).getByText('10 minutes')).toBeVisible();
     expect(within(warmUpActivity).queryByText('1 activity')).not.toBeInTheDocument();
+    expect(warmUpActivity.children.item(0)).toHaveClass('section-number');
+    expect(warmUpActivity.children.item(1)).toHaveClass('detail-standalone-copy');
+    expect(warmUpActivity.children.item(2)).toHaveClass('quantity-list');
 
     const uchikomiSection = [...sections].find((section) =>
       section.querySelector('summary')?.textContent?.includes('Uchikomi'),
@@ -625,9 +665,18 @@ describe('KendoMenu application flows', () => {
       throw new Error('Expected the corrected Uchikomi sequence disclosure.');
     }
     expect(uchikomiSummary).toHaveTextContent('1 exercise');
-    await user.click(uchikomiSummary);
+    expect(uchikomiSummary.querySelector('button')).toBeNull();
+    const disclosureIndicator = uchikomiSummary.querySelector('.detail-section-indicator');
+    if (disclosureIndicator === null) {
+      throw new Error('Expected a decorative disclosure-state indicator.');
+    }
+    expect(disclosureIndicator).toHaveAttribute('aria-hidden', 'true');
+    await user.click(disclosureIndicator);
+    expect(uchikomiSection).toHaveAttribute('open');
     expect(within(uchikomiSection).getAllByText('Men → Kote → Kote-men → Men')).toHaveLength(1);
     expect(within(uchikomiSection).getByText('5 repetitions')).toBeVisible();
+    await user.click(disclosureIndicator);
+    expect(uchikomiSection).not.toHaveAttribute('open');
   });
 
   it('renders simultaneous units, missing quantities, and explicit zero distinctly', async () => {
@@ -661,8 +710,26 @@ describe('KendoMenu application flows', () => {
     if (standaloneWarmUpActivity === null) {
       throw new Error('Expected the Japanese school Warm-up standalone activity.');
     }
-    expect(within(standaloneWarmUpActivity).getByText('Not set')).toBeVisible();
+    expect(within(standaloneWarmUpActivity).getByText('Time not set')).toBeVisible();
     expect(standaloneWarmUpActivity.closest('details')).toBeNull();
+
+    for (const [activityName, missingLabel] of [
+      ['kakarigeiko', 'Time not set'],
+      ['Kirikaeshi', 'Reps not set'],
+      ['Kihon-waza', 'Reps not set'],
+    ] as const) {
+      const activityHeading = within(missingDialog).getByRole('heading', {
+        name: activityName,
+        level: 2,
+      });
+      const standaloneActivity = activityHeading.closest<HTMLElement>(
+        '.detail-standalone-activity',
+      );
+      if (standaloneActivity === null) {
+        throw new Error(`Expected ${activityName} to render as a standalone activity.`);
+      }
+      expect(within(standaloneActivity).getByText(missingLabel)).toBeVisible();
+    }
 
     const missingSection = missingDialog.querySelector<HTMLDetailsElement>('details');
     const missingSummary = missingSection?.querySelector('summary');
@@ -670,9 +737,26 @@ describe('KendoMenu application flows', () => {
       throw new Error('Expected the Japanese school dojo Warm-up disclosure.');
     }
     await user.click(missingSummary);
-    expect(within(missingSection).getAllByText('Not set')).not.toHaveLength(0);
+    expect(within(missingSection).getAllByText('Reps not set')).not.toHaveLength(0);
     expect(within(missingSection).queryByText('Quantity not specified')).not.toBeInTheDocument();
     missingView.unmount();
+
+    const standaloneSuburiView = renderApp(createTestStore(), {
+      initialEntries: ['/app/library?drill=university-version-2'],
+    });
+    const universityDialog = screen.getByRole('dialog', { name: 'University dojo menu' });
+    const standaloneSuburiHeading = within(universityDialog).getByRole('heading', {
+      name: 'Suburi',
+      level: 2,
+    });
+    const standaloneSuburiActivity = standaloneSuburiHeading.closest<HTMLElement>(
+      '.detail-standalone-activity',
+    );
+    if (standaloneSuburiActivity === null) {
+      throw new Error('Expected University Suburi to render as a standalone activity.');
+    }
+    expect(within(standaloneSuburiActivity).getByText('Time not set')).toBeVisible();
+    standaloneSuburiView.unmount();
 
     const zeroStore = createTestStore();
     const zeroSetId = zeroStore.getState().addCustomTrainingSet({
@@ -755,7 +839,7 @@ describe('KendoMenu application flows', () => {
     expect(within(layeredSection).getByText('Parent section guidance.')).toBeVisible();
     expect(within(layeredSection).getByText('2 rounds')).toBeVisible();
     expect(within(layeredSection).getByText('Child exercise guidance.')).toBeVisible();
-    expect(within(layeredSection).getByText('Not set')).toBeVisible();
+    expect(within(layeredSection).getByText('Reps not set')).toBeVisible();
   });
 
   it('uses the minute convention for missing Warm-up quantities and preserves explicit zero', async () => {
@@ -771,7 +855,7 @@ describe('KendoMenu application flows', () => {
     if (dashboardCard === null) {
       throw new Error('Expected the Senior High School drill inside a dashboard card.');
     }
-    expect(within(dashboardCard).getByText('High intensity drill')).toBeVisible();
+    expect(within(dashboardCard).getByText('High intensity session')).toBeVisible();
 
     const minutes = screen.getByLabelText(/minutes for stretch/i);
     expect(minutes).toHaveValue(null);
@@ -982,7 +1066,7 @@ describe('KendoMenu application flows', () => {
     const store = createTestStore();
     renderApp(store, { initialEntries: ['/app/drills/new'] });
 
-    await user.type(screen.getByLabelText('Drill name'), 'Monday footwork');
+    await user.type(screen.getByLabelText('Session name'), 'Monday footwork');
     await user.type(screen.getByLabelText('Description (optional)'), 'A short solo session.');
     await user.type(screen.getByLabelText('Exercise name', { exact: true }), 'Footwork');
     await user.type(
@@ -990,7 +1074,7 @@ describe('KendoMenu application flows', () => {
       'Big step forward and back',
     );
     await user.type(screen.getByLabelText('Repetitions', { exact: true }), '24');
-    await user.click(screen.getByRole('button', { name: 'Save drill to dashboard' }));
+    await user.click(screen.getByRole('button', { name: 'Save session to dashboard' }));
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
@@ -1011,16 +1095,16 @@ describe('KendoMenu application flows', () => {
     const store = createTestStore();
     renderApp(store, { initialEntries: ['/app/drills/new'] });
 
-    await user.type(screen.getByLabelText('Drill name'), 'Invalid repetitions');
+    await user.type(screen.getByLabelText('Session name'), 'Invalid repetitions');
     await user.type(screen.getByLabelText('Exercise name', { exact: true }), 'Footwork');
     await user.type(screen.getByLabelText('Subexercise name', { exact: true }), 'Too many steps');
     await user.type(screen.getByLabelText('Repetitions', { exact: true }), '501');
-    await user.click(screen.getByRole('button', { name: 'Save drill to dashboard' }));
+    await user.click(screen.getByRole('button', { name: 'Save session to dashboard' }));
 
     expect(
       screen.getByRole('alert', { name: 'Check the highlighted fields.' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Create a drill' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Create a training session' })).toBeInTheDocument();
     expect(store.getState().customTrainingSets).toEqual([]);
     expect(store.getState().dashboardEntries).toEqual([]);
   });
@@ -1030,18 +1114,18 @@ describe('KendoMenu application flows', () => {
     const store = createTestStore();
     renderApp(store, { initialEntries: ['/app/drills/new'] });
 
-    await user.click(screen.getByRole('button', { name: 'Save drill to dashboard' }));
+    await user.click(screen.getByRole('button', { name: 'Save session to dashboard' }));
     const summary = screen.getByRole('alert', { name: 'Check the highlighted fields.' });
     await waitFor(() => expect(summary).toHaveFocus());
 
-    const name = screen.getByLabelText('Drill name');
+    const name = screen.getByLabelText('Session name');
     await user.click(name);
     await user.type(name, 'Correctable');
     expect(name).toHaveValue('Correctable');
     expect(name).toHaveFocus();
     expect(summary).not.toHaveFocus();
 
-    await user.click(screen.getByRole('button', { name: 'Save drill to dashboard' }));
+    await user.click(screen.getByRole('button', { name: 'Save session to dashboard' }));
     await waitFor(() => expect(summary).toHaveFocus());
   });
 

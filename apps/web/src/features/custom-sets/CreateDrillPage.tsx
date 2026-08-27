@@ -40,7 +40,7 @@ function DataRouterDirtyNavigationBlocker({
       return false;
     }
 
-    return !window.confirm('You have an unsaved drill draft. Leave this page and discard it?');
+    return !window.confirm('You have an unsaved session draft. Leave this page and discard it?');
   }, [isDirtyRef]);
 
   useBlocker(shouldBlock);
@@ -131,10 +131,10 @@ export function CreateDrillPage() {
       void Promise.resolve(navigation).catch(() => {
         isDirtyRef.current = true;
         setIsDirty(true);
-        setSubmitError('The drill was saved, but KendoMenu could not open the dashboard.');
+        setSubmitError('The session was saved, but KendoMenu could not open the dashboard.');
       });
     } catch {
-      setSubmitError('The drill could not be saved. Your draft is still here; try again.');
+      setSubmitError('The session could not be saved. Your draft is still here; try again.');
     }
   };
 
@@ -144,13 +144,14 @@ export function CreateDrillPage() {
       <header className="page-header builder-header">
         <div>
           <p className="eyebrow">Your own practice</p>
-          <h1>Create a drill</h1>
+          <h1>Create a training session</h1>
           <p className="page-intro">
-            Build a repeatable keiko drill with sections and the subexercises you want to work on.
+            Build a repeatable keiko session containing the sections and exercises you want to
+            practise.
           </p>
         </div>
         <Link className="text-button" to="/app/library">
-          Back to library
+          Back to Keiko library
         </Link>
       </header>
 
@@ -181,7 +182,7 @@ export function CreateDrillPage() {
 
         <div className="builder-basic-fields">
           <div className="field-group">
-            <label htmlFor="drill-name">Drill name</label>
+            <label htmlFor="drill-name">Session name</label>
             <input
               id="drill-name"
               name="name"
@@ -372,7 +373,7 @@ export function CreateDrillPage() {
         </button>
         <div className="builder-actions">
           <button className="primary-button" type="submit">
-            Save drill to dashboard
+            Save session to dashboard
           </button>
           <span className="field-hint">
             Every subexercise needs a whole-number repetition target from 0 to 500.
