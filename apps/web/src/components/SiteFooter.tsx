@@ -2,6 +2,7 @@ import type { MouseEventHandler, ReactElement } from 'react';
 
 import { BrandLockup } from './BrandLockup';
 import { PrimaryNavigationLinks } from './PrimaryNavigation';
+import { Link } from 'react-router-dom';
 
 interface SiteFooterProps {
   readonly libraryCount: number;
@@ -32,14 +33,14 @@ export function SiteFooter({ libraryCount, onNavigate }: SiteFooterProps): React
         </section>
 
         <section className="site-footer-column" aria-labelledby="footer-social-title">
-          <h2 id="footer-social-title">Social</h2>
+          <h2 id="footer-social-title">Information</h2>
           <nav className="footer-social-links" aria-labelledby="footer-social-title">
-            <a className="footer-social-link" href="https://github.com/">
-              GitHub (placeholder)
-            </a>
-            <a className="footer-social-link" href="https://www.linkedin.com/">
-              LinkedIn (placeholder)
-            </a>
+            <Link className="footer-social-link" to="/app/sources">
+              Sources
+            </Link>
+            <Link className="footer-social-link" to="/cookies">
+              Cookies
+            </Link>
           </nav>
         </section>
       </div>

@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
+import { TRAINING_STORE_PERSISTENCE_VERSION } from '@kendo-menu/store';
+
 import { App } from '../app/App';
 import { PersistenceGate, usePersistenceStatus } from '../features/persistence/PersistenceGate';
 import {
@@ -79,6 +81,65 @@ describe('browser persistence recovery', () => {
     expect(window.localStorage.getItem(TRAINING_STORAGE_KEY)).toBe(raw);
   });
 
+  it('treats a valid JSON envelope with invalid domain data as corrupt without replacing it', () => {
+    const raw = JSON.stringify({
+      version: TRAINING_STORE_PERSISTENCE_VERSION,
+      state: { dashboardEntries: 'not-an-array', customTrainingSets: [] },
+    });
+    window.localStorage.setItem(TRAINING_STORAGE_KEY, raw);
+
+    render(
+      <PersistenceGate>
+        <ReadyProbe />
+      </PersistenceGate>,
+    );
+
+    expect(
+      screen.getByRole('heading', { name: 'We couldn’t read your local KendoMenu data.' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Reason: invalid-domain')).toBeInTheDocument();
+    expect(screen.queryByText(/Ready \(/)).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(TRAINING_STORAGE_KEY)).toBe(raw);
+  });
+
+  it('leaves the application for recovery when persisted data changes during hydration', async () => {
+    const validRaw = JSON.stringify({
+      version: TRAINING_STORE_PERSISTENCE_VERSION,
+      state: { dashboardEntries: [], customTrainingSets: [] },
+    });
+    const invalidRaw = '{changed during hydration';
+    window.localStorage.setItem(TRAINING_STORAGE_KEY, validRaw);
+    const originalGetItem = window.localStorage.getItem.bind(window.localStorage);
+    let trainingDataReads = 0;
+    vi.spyOn(window.localStorage, 'getItem').mockImplementation((name) => {
+      if (name !== TRAINING_STORAGE_KEY) {
+        return originalGetItem(name);
+      }
+
+      trainingDataReads += 1;
+      if (trainingDataReads === 3) {
+        window.localStorage.setItem(TRAINING_STORAGE_KEY, invalidRaw);
+        return invalidRaw;
+      }
+      return originalGetItem(name);
+    });
+
+    render(
+      <PersistenceGate>
+        <ReadyProbe />
+      </PersistenceGate>,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: 'We couldn’t read your local KendoMenu data.' }),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText('Reason: malformed-json')).toBeInTheDocument();
+    expect(screen.queryByText(/Ready \(/)).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(TRAINING_STORAGE_KEY)).toBe(invalidRaw);
+  });
+
   it('offers a session-only mode when localStorage cannot be read', async () => {
     const user = userEvent.setup();
     vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
@@ -96,6 +157,28 @@ describe('browser persistence recovery', () => {
     ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Continue without saving' }));
     await waitFor(() => expect(screen.getByText('Ready (session)')).toBeInTheDocument());
+  });
+
+  it('announces a failed raw-backup download without changing local data', async () => {
+    const user = userEvent.setup();
+    const raw = '{not valid json';
+    window.localStorage.setItem(TRAINING_STORAGE_KEY, raw);
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => {
+      throw new Error('downloads blocked');
+    });
+
+    render(
+      <PersistenceGate>
+        <ReadyProbe />
+      </PersistenceGate>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Download raw backup' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'KendoMenu could not download the backup. Your local data has not been changed.',
+    );
+    expect(window.localStorage.getItem(TRAINING_STORAGE_KEY)).toBe(raw);
   });
 
   it('reports write failures in the application shell instead of claiming changes were saved', async () => {

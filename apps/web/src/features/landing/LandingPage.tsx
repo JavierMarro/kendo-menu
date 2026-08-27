@@ -1,10 +1,12 @@
-import { useState, type ReactElement } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+
+import { CURATED_EXERCISE_COUNT, CURATED_TRAINING_SET_COUNT } from '../../lib/training-data';
 
 interface FaqItem {
   readonly id: string;
   readonly question: string;
-  readonly answer: string;
+  readonly answer: ReactNode;
 }
 
 const FAQ_ITEMS: readonly FaqItem[] = [
@@ -12,71 +14,160 @@ const FAQ_ITEMS: readonly FaqItem[] = [
     id: 'what-is-kendomenu',
     question: 'What is KendoMenu?',
     answer:
-      'KendoMenu is a free web app for choosing, adapting, and organising keiko menus. Adjust repetitions or time for each exercise, then add the menu to your dashboard to prepare a session or share it with your dojo.',
+      'KendoMenu is a free web app for choosing, adapting, creating and organising keiko menus. Choose a menu, add it to your dashboard, then adjust each activity’s repetitions or duration to prepare a session. You can also record a menu practised with a visiting sensei or at a seminar, or create one from scratch, and save it on your device.',
   },
   {
     id: 'is-kendomenu-free',
     question: 'Is KendoMenu free?',
     answer:
-      'Yes. KendoMenu is free to use, with no ads or premium features. For now, your menus and dashboard data stay on the device you use; account-based cloud access may be considered in the future.',
+      'Yes. KendoMenu is free to use, with no adverts or premium features. Your menus and dashboard data stay on the device you use; account-based cloud access will be available in the future.',
   },
   {
     id: 'all-experience-levels',
     question: 'Is KendoMenu useful for all experience levels?',
     answer:
-      'Yes. KendoMenu is intended for all experience levels. Curated menus will cover a range of intensities, and every menu can be adapted by changing repetitions or duration to suit your dojo and training goals.',
+      'Yes. KendoMenu is intended for all experience levels. The curated menus cover different kinds of practice, and each menu can be adapted by changing repetitions or duration to suit your dojo and training goals.',
   },
   {
     id: 'menu-sources',
     question: 'Where do the keiko menus come from?',
-    answer:
-      'The planned menus are being collated from publicly available kendo resources: English- and Japanese-language blogs, YouTube keiko sessions, high schools, universities, police training programmes, and experienced sensei who have shared how they train.',
+    answer: (
+      <>
+        The curated menus draw on publicly available English and Japanese language articles, filmed
+        keiko sessions, and practice shared by schools, universities, dojo and experienced sensei.
+        Find the full resource list{' '}
+        <strong>
+          <Link className="landing-faq-source-link" to="/app/sources">
+            here
+          </Link>
+        </strong>
+        .
+      </>
+    ),
   },
   {
     id: 'phone-and-computer',
     question: 'Can I use KendoMenu on my phone and computer?',
     answer:
-      'KendoMenu is designed as a progressive web app experience for desktop and mobile devices. If your browser offers an installation prompt, you may be able to add it to your phone.',
+      'Yes. KendoMenu is designed for desktop and mobile browsers. Depending on your browser, you may also be able to add a shortcut to your phone’s home screen.',
   },
   {
     id: 'device-sync',
     question: 'Are my menus synchronised between devices?',
     answer:
-      'Not currently. Your saved menus and dashboard are tied to the device where you create them, so your computer and phone keep separate local data. Cloud synchronisation may be added in the future.',
+      'Not currently. Your saved menus and dashboard are tied to the device where you create them, so your computer and phone keep separate local data. Cloud synchronisation will be available in the future.',
   },
 ];
 
+const LANDING_REVEAL_SELECTOR = '[data-landing-reveal]';
+
+function useLandingScrollReveal() {
+  const sectionsRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const sections = sectionsRef.current;
+    if (
+      sections === null ||
+      typeof IntersectionObserver === 'undefined' ||
+      typeof window.matchMedia !== 'function' ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      return undefined;
+    }
+
+    const revealTargets = Array.from(
+      sections.querySelectorAll<HTMLElement>(LANDING_REVEAL_SELECTOR),
+    );
+    const initialRevealBoundary = window.innerHeight * 0.88;
+
+    for (const target of revealTargets) {
+      const bounds = target.getBoundingClientRect();
+      if (bounds.top <= initialRevealBoundary && bounds.bottom >= 0) {
+        target.classList.add('is-revealed');
+      }
+    }
+
+    sections.classList.add('landing-motion-ready');
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) {
+            continue;
+          }
+
+          entry.target.classList.add('is-revealed');
+          observer.unobserve(entry.target);
+        }
+      },
+      { rootMargin: '0px 0px -12% 0px', threshold: 0.08 },
+    );
+
+    const revealFocusedGroup = (event: FocusEvent) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      const revealTarget = event.target.closest<HTMLElement>(LANDING_REVEAL_SELECTOR);
+      if (revealTarget !== null && sections.contains(revealTarget)) {
+        revealTarget.classList.add('is-revealed');
+        observer.unobserve(revealTarget);
+      }
+    };
+
+    for (const target of revealTargets) {
+      if (!target.classList.contains('is-revealed')) {
+        observer.observe(target);
+      }
+    }
+    sections.addEventListener('focusin', revealFocusedGroup);
+
+    return () => {
+      observer.disconnect();
+      sections.removeEventListener('focusin', revealFocusedGroup);
+      sections.classList.remove('landing-motion-ready');
+    };
+  }, []);
+
+  return sectionsRef;
+}
+
 export function LandingPage(): ReactElement {
-  const [openFaqId, setOpenFaqId] = useState<string | null>('what-is-kendomenu');
+  const [openFaqId, setOpenFaqId] = useState<string | null>(null);
+  const sectionsRef = useLandingScrollReveal();
 
   return (
     <>
       <section className="landing-page" aria-labelledby="landing-page-title">
         <div className="landing-content">
-          <p className="eyebrow">Kendo practice, shaped for today</p>
+          <p className="eyebrow">Kendo practice, curated for you</p>
           <h1 id="landing-page-title">Plan the keiko you need today.</h1>
           <p className="landing-intro">
-            Build a focused kendo session, adjust it to your day, and keep your practice moving.
+            Choose from {CURATED_TRAINING_SET_COUNT} curated menus, shape the workload for your
+            training and keep polishing mind, spirit and character through varied kendo practice.
           </p>
-          <Link className="primary-button landing-cta" to="/app/library">
-            Browse drill library
+          <Link
+            className="primary-button landing-cta landing-primary-action"
+            to="/app/library"
+            aria-label="Browse drill library"
+          >
+            BROWSE DRILL LIBRARY HERE →
           </Link>
         </div>
       </section>
 
-      <div className="landing-sections">
+      <div ref={sectionsRef} className="landing-sections">
         <section className="landing-section landing-introduction" aria-labelledby="intro-title">
           <div className="landing-section-inner landing-introduction-grid">
             <div className="landing-section-heading">
               <h2 id="intro-title">A keiko menu for the day in front of you.</h2>
             </div>
 
-            <div className="landing-section-copy">
+            <div className="landing-section-copy" data-landing-reveal="left">
               <p>
-                <strong>KendoMenu meets you where your keiko is.</strong> It is for senpai looking
-                for fresh inspiration, sensei and dojo leaders who want to create and share a
-                training session, and practitioners who need to adapt exercises by changing
-                repetitions or duration.
+                <strong>KendoMenu meets you where you are in your keiko.</strong> It is for senpai
+                looking for fresh inspiration, sensei and dojo leaders planning a training session,
+                and practitioners who want to adapt activities by changing repetitions or duration.
               </p>
               <p>
                 <strong>Start with a curated menu or build from scratch.</strong> Shape it around
@@ -95,7 +186,7 @@ export function LandingPage(): ReactElement {
                   <li>
                     <span>
                       <strong>Use real context.</strong> Draw on curated training ideas gathered
-                      from real kendo resources.
+                      from online available kendo resources.
                     </span>
                   </li>
                   <li>
@@ -112,7 +203,7 @@ export function LandingPage(): ReactElement {
 
         <section className="landing-section landing-process" aria-labelledby="how-it-works-title">
           <div className="landing-section-inner">
-            <div className="landing-section-heading">
+            <div className="landing-section-heading" data-landing-reveal="up">
               <h2 id="how-it-works-title">How it works</h2>
               <p>
                 <strong>Choose. Adjust. Reuse.</strong> Move from a useful starting point to a
@@ -120,7 +211,7 @@ export function LandingPage(): ReactElement {
               </p>
             </div>
 
-            <ol className="landing-steps">
+            <ol className="landing-steps" data-landing-reveal="steps">
               <li className="landing-step">
                 <span className="landing-step-number" aria-hidden="true">
                   01
@@ -134,7 +225,7 @@ export function LandingPage(): ReactElement {
                 </span>
                 <h3>Shape the workload</h3>
                 <p>
-                  Adjust repetitions or time for each exercise to match the session you want to run.
+                  Adjust repetitions or time for each activity to match the session you want to run.
                 </p>
               </li>
               <li className="landing-step">
@@ -150,55 +241,65 @@ export function LandingPage(): ReactElement {
 
         <section className="landing-section landing-library" aria-labelledby="library-story-title">
           <div className="landing-section-inner">
-            <div className="landing-library-heading">
-              <div className="landing-section-heading">
+            <div className="landing-library-heading" data-landing-reveal="split">
+              <div className="landing-section-heading landing-reveal-right">
                 <h2 id="library-story-title">A curated library with real training context.</h2>
               </div>
-              <p>
-                <strong>Planned, carefully sourced, and easy to expand.</strong> The catalogue is
-                still being assembled. These figures are a working target for a compact, carefully
-                sourced starting point—not a live count of what is currently in the app.
+              <p className="landing-reveal-left">
+                <strong>Carefully sourced and easy to adapt.</strong> These figures reflect the
+                training currently available in KendoMenu. Individual drills are counted as
+                exercises, while complete practice activities are shown separately so each number
+                gives you a clearer picture of the library.
               </p>
             </div>
 
-            <dl className="landing-stats">
+            <dl className="landing-stats" data-landing-reveal="stats">
               <div className="landing-stat">
-                <dt>Curated keiko menus</dt>
+                <dt>
+                  <strong>CURATED KEIKO MENUS</strong>
+                </dt>
                 <dd>
-                  <span className="landing-stat-value">10</span>
-                  <span className="landing-stat-note">planned starting point</span>
+                  <span className="landing-stat-value">{CURATED_TRAINING_SET_COUNT}</span>
+                  <span className="landing-stat-note">researched menus in the library</span>
                 </dd>
               </div>
               <div className="landing-stat">
-                <dt>Exercises in total</dt>
-                <dd aria-label="Approximately 150">
-                  <span className="landing-stat-value">~150</span>
-                  <span className="landing-stat-note">planned across the menus</span>
+                <dt>
+                  <strong>A TOTAL OF</strong>
+                </dt>
+                <dd aria-label={`${CURATED_EXERCISE_COUNT} child exercises in the curated menus`}>
+                  <span className="landing-stat-value">{CURATED_EXERCISE_COUNT}</span>
+                  <span className="landing-stat-note">exercises across all drills</span>
                 </dd>
               </div>
               <div className="landing-stat">
-                <dt>Potential intensity range</dt>
+                <dt>
+                  <strong>WORKLOAD</strong>
+                </dt>
                 <dd>
-                  <span className="landing-stat-value">Medium to high</span>
-                  <span className="landing-stat-note">future labels may cover this range</span>
+                  <span className="landing-stat-value">Adaptable</span>
+                  <span className="landing-stat-note">
+                    choose from moderate to high intensity menus and adjust quantities for the
+                    practice you need
+                  </span>
                 </dd>
               </div>
             </dl>
 
-            <div className="landing-library-details">
+            <div className="landing-library-details" data-landing-reveal="up">
               <div>
-                <h3>Planned sources</h3>
+                <h3>Research sources</h3>
                 <p>
-                  English- and Japanese-language blogs, YouTube keiko sessions, high schools,
+                  English- and Japanese-language articles, filmed keiko sessions, high schools,
                   universities, police training programmes, and experienced sensei who have shared
                   how they train.
                 </p>
               </div>
               <div>
-                <h3>Menu contexts we may include</h3>
+                <h3>Menu contexts we include</h3>
                 <p>
                   <strong>Examples include</strong> an Osaka police keiko menu, a high school menu,
-                  and a Kokushikan University menu.
+                  and a Kanoya University menu.
                 </p>
               </div>
             </div>
@@ -207,15 +308,15 @@ export function LandingPage(): ReactElement {
 
         <section className="landing-section landing-faq" aria-labelledby="faq-title">
           <div className="landing-section-inner">
-            <div className="landing-section-heading">
+            <div className="landing-section-heading" data-landing-reveal="up">
               <h2 id="faq-title">Questions, answered.</h2>
               <p>
-                <strong>Clear answers before you plan.</strong> Everything you need to know before
-                your first session.
+                <strong>Clear answers before you start honing your skills.</strong> The essentials
+                for getting started with your first recorded training session.
               </p>
             </div>
 
-            <div className="landing-faq-grid">
+            <div className="landing-faq-grid" data-landing-reveal="up">
               {FAQ_ITEMS.map((item) => {
                 const isOpen = openFaqId === item.id;
                 const questionId = `${item.id}-question`;
@@ -256,16 +357,20 @@ export function LandingPage(): ReactElement {
 
         <section className="landing-section landing-final-cta" aria-labelledby="final-cta-title">
           <div className="landing-section-inner">
-            <div className="landing-final-cta-panel">
-              <div>
-                <h2 id="final-cta-title">Your next keiko can be ready in two minutes.</h2>
+            <div className="landing-final-cta-panel" data-landing-reveal="split">
+              <div className="landing-final-cta-copy landing-reveal-right">
+                <h2 id="final-cta-title">Your next keiko starts with a clear plan.</h2>
                 <p>
-                  <strong>Make today’s plan real.</strong> Start with a menu from the library,
-                  adjust it to your day, and make the plan yours.
+                  <strong>Make today’s plan real.</strong> Choose a menu from the library, adjust it
+                  and make the plan yours.
                 </p>
               </div>
-              <Link className="primary-button" to="/app/library">
-                Record your first keiko
+              <Link
+                className="primary-button landing-primary-action landing-reveal-left"
+                to="/app/library"
+                aria-label="Record your first keiko"
+              >
+                RECORD YOUR FIRST KEIKO HERE →
               </Link>
             </div>
           </div>

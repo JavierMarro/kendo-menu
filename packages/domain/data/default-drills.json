@@ -2,7 +2,8 @@
   {
     "id": "international-dojo-2-hour-session",
     "sourceId": 1,
-    "name": "International dojo menu (2 hour session)",
+    "name": "International dojo menu",
+    "description": "Set for a 2 hours long session.",
     "sections": [
       {
         "id": "international-dojo-2-hour-session-warm-up-warm-up",
@@ -1053,7 +1054,7 @@
     "id": "university-high-school",
     "sourceId": 8,
     "name": "University High School dojo menu",
-    "description": "Weekly rotation: Monday is cleaning and self-directed practice; Tuesday centers on their own muscle circuit training ('Ken-tore') with bogu on; Wednesday is a no-bogu day of running/stair sprints plus suburi and suri-ashi in the dojo; Thursday is kihon and waza-geiko plus ji-geiko; Friday is kihon plus match-simulation practice; weekends are tournaments or practice matches, defaulting to normal kihon/waza/Ken-tore when there are none.",
+    "description": "Weekly rotation: Monday self-directed practice; Tuesday 'Ken-tore' circuits; Wednesday is a running/stair sprints plus suburi and suri-ashi; Thursday is kihon and waza-geiko; Friday is kihon plus shiaigeiko; weekends are tournaments or shiaigeiko.",
     "sections": [
       {
         "id": "university-high-school-kirikaeshi",

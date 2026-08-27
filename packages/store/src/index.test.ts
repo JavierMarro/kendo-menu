@@ -786,6 +786,32 @@ describe('persistence lifecycle', () => {
     expect(store.getState().dashboardEntries).toHaveLength(1);
   });
 
+  it('reports data that becomes invalid between preflight and hydration', () => {
+    const validValue = serializeState({ dashboardEntries: [], customTrainingSets: [] }, 6);
+    let reads = 0;
+    let hydrationError: unknown;
+    const storage: StateStorage = {
+      getItem: () => {
+        reads += 1;
+        return reads === 1 ? validValue : '{became invalid';
+      },
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    };
+
+    const store = createTrainingStore({
+      storage,
+      storageKey: STORAGE_KEY,
+      onHydrationError: (error) => {
+        hydrationError = error;
+      },
+    });
+
+    expect(hydrationError).toBeInstanceOf(SyntaxError);
+    expect(store.getState().dashboardEntries).toEqual([]);
+    expect(store.getState().customTrainingSets).toEqual([]);
+  });
+
   it('removes and restores a dashboard entry at its previous position', () => {
     const store = createTrainingStore({ storage: new MemoryStorage(), storageKey: STORAGE_KEY });
     const firstId = store
