@@ -21,6 +21,21 @@ export interface DisplayTrainingQuantity {
   readonly value: TrainingQuantityValue;
 }
 
+export type CategoryBadgeVariant = 'custom' | 'high-intensity' | 'intense' | 'legacy';
+
+const CATEGORY_BADGE_VARIANTS = {
+  custom: 'custom',
+  'high-intensity-drill': 'high-intensity',
+  'intense-drill': 'intense',
+  jigeiko: 'legacy',
+  kakari: 'legacy',
+  kihon: 'legacy',
+  kirikaeshi: 'legacy',
+  mixed: 'legacy',
+  uchikomi: 'legacy',
+  unspecified: 'legacy',
+} as const satisfies Readonly<Record<TrainingSet['category'], CategoryBadgeVariant>>;
+
 export const CURATED_TRAINING_SET_COUNT = DEFAULT_TRAINING_SETS.length;
 
 export const CURATED_EXERCISE_COUNT = DEFAULT_TRAINING_SETS.reduce(
@@ -210,4 +225,8 @@ export function formatCategory(category: TrainingSet['category']): string {
 
   const label = category.replaceAll('-', ' ');
   return `${label.charAt(0).toUpperCase()}${label.slice(1)}`;
+}
+
+export function getCategoryBadgeVariant(category: TrainingSet['category']): CategoryBadgeVariant {
+  return CATEGORY_BADGE_VARIANTS[category];
 }

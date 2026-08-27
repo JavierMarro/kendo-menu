@@ -33,6 +33,12 @@
   --danger-soft: rgba(240, 120, 111, 0.14);
   --success: #9bd0aa;
   --success-soft: rgba(155, 208, 170, 0.14);
+  --badge-intense-background: #4b2a12;
+  --badge-intense-border: #e99a39;
+  --badge-intense-text: #ffd89a;
+  --badge-high-intensity-background: #501f1a;
+  --badge-high-intensity-border: #ff785a;
+  --badge-high-intensity-text: #ffd5cb;
   --focus: #f3c95e;
   --shadow: 0 6px 18px rgba(3, 10, 22, 0.22);
   --type-12: 0.75rem;
@@ -84,6 +90,12 @@ body {
   color: var(--text);
   font-size: var(--type-16);
   line-height: 1.5;
+}
+
+html.drill-dialog-open,
+body.drill-dialog-open {
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body,
@@ -1586,6 +1598,44 @@ a {
   padding-inline: var(--space-4);
 }
 
+.detail-standalone-activity {
+  padding: var(--space-4);
+}
+
+.detail-standalone-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.training-step.training-step--standalone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: 0;
+}
+
+.detail-section-parent {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.detail-section-parent > .step-description {
+  margin: 0;
+}
+
+.detail-section-parent > .quantity-list,
+.detail-section-parent > .quantity-not-specified {
+  grid-column: 2;
+}
+
 .training-section-heading {
   display: flex;
   align-items: baseline;
@@ -1801,7 +1851,7 @@ textarea[aria-invalid='true'] {
 
 .library-card {
   display: flex;
-  min-height: 12rem;
+  min-height: 11rem;
   flex-direction: column;
   align-items: flex-start;
   padding: var(--space-5);
@@ -1834,6 +1884,18 @@ textarea[aria-invalid='true'] {
   font-weight: 650;
 }
 
+.category-pill[data-category-variant='intense'] {
+  border-color: var(--badge-intense-border);
+  color: var(--badge-intense-text);
+  background: var(--badge-intense-background);
+}
+
+.category-pill[data-category-variant='high-intensity'] {
+  border-color: var(--badge-high-intensity-border);
+  color: var(--badge-high-intensity-text);
+  background: var(--badge-high-intensity-background);
+}
+
 .step-count,
 .detail-meta,
 .quantity-list,
@@ -1849,7 +1911,7 @@ textarea[aria-invalid='true'] {
   gap: var(--space-2);
   align-items: center;
   margin-top: auto;
-  padding-top: var(--space-4);
+  padding-top: var(--space-2);
 }
 
 .library-card-actions .secondary-button {
@@ -1884,6 +1946,132 @@ textarea[aria-invalid='true'] {
 .quantity-not-specified {
   min-width: 7rem;
   text-align: right;
+}
+
+.drill-dialog-layer {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  padding: clamp(var(--space-4), 4vw, var(--space-10));
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.drill-dialog-backdrop {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  background: rgba(3, 10, 22, 0.76);
+  backdrop-filter: blur(3px);
+  animation: drill-dialog-backdrop-in 160ms ease-out both;
+}
+
+.drill-dialog-panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(52rem, 100%);
+  min-width: 0;
+  max-height: min(88dvh, 60rem);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  outline: 0;
+  background: var(--surface);
+  box-shadow: 0 1.5rem 4rem rgba(3, 10, 22, 0.55);
+  animation: drill-dialog-panel-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.drill-dialog-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding: var(--space-3) var(--space-3) 0;
+}
+
+.drill-dialog-close {
+  display: inline-flex;
+  width: 2.75rem;
+  min-width: 2.75rem;
+  height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--muted-strong);
+  background: var(--surface-soft);
+  transition:
+    color 160ms ease-out,
+    border-color 160ms ease-out,
+    background-color 160ms ease-out;
+}
+
+.drill-dialog-close:hover {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.drill-dialog-close svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.drill-dialog-scroll {
+  min-width: 0;
+  min-height: 0;
+  padding: 0 var(--space-6) var(--space-6);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.drill-detail-content {
+  min-width: 0;
+}
+
+.drill-detail-header {
+  align-items: flex-start;
+  margin-bottom: var(--space-4);
+}
+
+.drill-detail-header .primary-button {
+  flex: 0 0 auto;
+}
+
+.drill-detail-content .detail-meta {
+  margin: 0;
+}
+
+.drill-detail-content .detail-sections {
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+@keyframes drill-dialog-backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes drill-dialog-panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
 }
 
 .builder-form {
@@ -2415,6 +2603,55 @@ textarea[aria-invalid='true'] {
   }
 }
 
+@media (max-width: 640px) {
+  .drill-dialog-layer {
+    display: block;
+    padding: 0;
+  }
+
+  .drill-dialog-panel {
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .drill-dialog-toolbar {
+    padding-top: max(var(--space-3), env(safe-area-inset-top));
+    padding-right: max(var(--space-3), env(safe-area-inset-right));
+    padding-left: max(var(--space-3), env(safe-area-inset-left));
+  }
+
+  .drill-dialog-scroll {
+    padding-right: max(var(--space-4), env(safe-area-inset-right));
+    padding-bottom: max(var(--space-8), env(safe-area-inset-bottom));
+    padding-left: max(var(--space-4), env(safe-area-inset-left));
+    scrollbar-gutter: auto;
+  }
+
+  .drill-detail-header .primary-button {
+    width: 100%;
+  }
+
+  .training-step.training-step--standalone {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .detail-section-parent {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-section-parent > .quantity-list,
+  .detail-section-parent > .quantity-not-specified {
+    grid-column: 1;
+    justify-self: start;
+    text-align: left;
+  }
+}
+
 @media (max-width: 380px) {
   .top-bar {
     gap: var(--space-2);
@@ -2457,6 +2694,11 @@ textarea[aria-invalid='true'] {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .drill-dialog-backdrop,
+  .drill-dialog-panel {
+    animation: none;
+  }
+
   .landing-motion-ready [data-landing-reveal],
   .landing-motion-ready [data-landing-reveal] > .landing-reveal-left,
   .landing-motion-ready [data-landing-reveal] > .landing-reveal-right,

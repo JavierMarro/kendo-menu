@@ -1,0 +1,8 @@
+- Session: query-driven drill library dialog
+- Date/duration: 2026-08-27; about 2 hours
+- Scope/start: Drill details used standalone routes, intensity badges shared the green success style, and every section rendered as a disclosure.
+- Changes: Added a query-driven responsive modal, focus/background/scroll management, semantic badge variants, compact equal cards, shared detail rendering, standalone activity panels, and focused tests.
+- Decisions: Card links push `drill`; opener closes use history Back while direct links strip it with replace; legacy paths redirect with replace; read-only missing quantities use `Not set` only in library details.
+- Roadblocks: Loopback binding needed scoped approval and the in-app browser had no available instance, so standalone Playwright and inspected screenshots supplied browser and visual QA.
+- Verification: `pnpm check` passed; 16 focused Playwright tests passed in Desktop Chromium and Pixel 5, including closed/open Axe scans; desktop/mobile screenshots and geometry checks passed.
+- Follow-up: The unrelated full Playwright suite still contains existing footer-link expectations and a motion-sensitive landing-page Axe check outside this slice.

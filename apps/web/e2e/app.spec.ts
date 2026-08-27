@@ -2,6 +2,45 @@ import { expect, test, type Page } from '@playwright/test';
 
 const STORAGE_KEY = 'kendo-menu';
 
+function parseRgb(color: string): readonly [number, number, number] {
+  const channels = color
+    .match(/[\d.]+/g)
+    ?.slice(0, 3)
+    .map(Number);
+  if (channels === undefined || channels.length !== 3) {
+    throw new Error(`Could not parse CSS colour ${color}.`);
+  }
+
+  const [red, green, blue] = channels;
+  if (red === undefined || green === undefined || blue === undefined) {
+    throw new Error(`CSS colour ${color} did not contain three channels.`);
+  }
+
+  return [red, green, blue];
+}
+
+function getRelativeLuminance(color: string): number {
+  const channels = parseRgb(color).map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  const [red, green, blue] = channels;
+  if (red === undefined || green === undefined || blue === undefined) {
+    throw new Error(`CSS colour ${color} could not be converted to luminance.`);
+  }
+
+  return red * 0.2126 + green * 0.7152 + blue * 0.0722;
+}
+
+function getContrastRatio(first: string, second: string): number {
+  const firstLuminance = getRelativeLuminance(first);
+  const secondLuminance = getRelativeLuminance(second);
+  return (
+    (Math.max(firstLuminance, secondLuminance) + 0.05) /
+    (Math.min(firstLuminance, secondLuminance) + 0.05)
+  );
+}
+
 async function startFresh(page: Page): Promise<void> {
   await page.goto('/app/dashboard');
   await page.evaluate((key) => window.localStorage.removeItem(key), STORAGE_KEY);
@@ -140,6 +179,10 @@ test.describe('routed training flows', () => {
       4,
     );
     await expect(page.locator('.category-pill', { hasText: 'Intense drill' })).toHaveCount(7);
+    await expect(
+      page.locator('.category-pill[data-category-variant="high-intensity"]'),
+    ).toHaveCount(4);
+    await expect(page.locator('.category-pill[data-category-variant="intense"]')).toHaveCount(7);
     await expect(page.getByText('Category not specified')).toHaveCount(0);
     await expect(page.getByText('Description not provided.')).toHaveCount(0);
     await expect(page.locator('.library-card > p:empty')).toHaveCount(0);
@@ -157,12 +200,17 @@ test.describe('routed training flows', () => {
             actionsBox === undefined
               ? null
               : Math.round((cardBox.bottom - actionsBox.bottom) * 100) / 100,
+          actionTopPadding:
+            actions === null ? null : Number.parseFloat(getComputedStyle(actions).paddingTop),
         };
       }),
     );
     expect(new Set(cardLayout.map(({ width }) => width)).size).toBe(1);
     expect(new Set(cardLayout.map(({ height }) => height)).size).toBe(1);
     expect(new Set(cardLayout.map(({ actionBottomInset }) => actionBottomInset)).size).toBe(1);
+    expect(new Set(cardLayout.map(({ actionTopPadding }) => actionTopPadding))).toEqual(
+      new Set([8]),
+    );
 
     const viewport = page.viewportSize();
     if (viewport === null) {
@@ -181,7 +229,7 @@ test.describe('routed training flows', () => {
     const viewDrill = card.getByRole('link', { name: 'View drill' });
     await expect(viewDrill).toHaveAttribute(
       'href',
-      '/app/library/international-dojo-2-hour-session',
+      '/app/library?drill=international-dojo-2-hour-session',
     );
 
     await viewDrill.focus();
@@ -189,22 +237,227 @@ test.describe('routed training flows', () => {
     await expect(viewDrill).toHaveCSS('outline-style', 'solid');
     await expect(viewDrill).toHaveCSS('outline-width', '3px');
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/\/app\/library\/international-dojo-2-hour-session$/);
+    await expect(page).toHaveURL(/\/app\/library\?drill=international-dojo-2-hour-session$/);
 
-    const sections = page.locator('details.detail-section');
-    await expect(sections).toHaveCount(12);
-    const firstSection = sections.first();
-    await expect(firstSection).not.toHaveAttribute('open', '');
-    const firstSummary = firstSection.locator('summary');
-    await expect(firstSummary).toContainText('Warm-up');
-    await expect(firstSummary).toContainText('1 activity');
+    const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole('button', { name: 'Close International dojo menu details.' }),
+    ).toBeFocused();
 
-    await firstSummary.focus();
+    const warmUpActivity = dialog
+      .getByRole('heading', { name: 'Warm-up', level: 2 })
+      .locator('xpath=ancestor::section');
+    await expect(warmUpActivity).toHaveClass(/detail-standalone-activity/);
+    await expect(warmUpActivity.locator('details')).toHaveCount(0);
+    await expect(warmUpActivity).toContainText('10 minutes');
+    await expect(warmUpActivity).not.toContainText('1 activity');
+
+    const sections = dialog.locator('details.detail-section');
+    await expect(sections).toHaveCount(5);
+    const uchikomiSection = sections.filter({ hasText: 'Uchikomi' });
+    await expect(uchikomiSection).not.toHaveAttribute('open', '');
+    const uchikomiSummary = uchikomiSection.locator('summary');
+    await expect(uchikomiSummary).toContainText('1 exercise');
+
+    await uchikomiSummary.focus();
     await page.keyboard.press('Enter');
-    await expect(firstSection).toHaveAttribute('open', '');
-    await expect(firstSection.getByText('10 minutes')).toBeVisible();
+    await expect(uchikomiSection).toHaveAttribute('open', '');
+    await expect(uchikomiSection.getByText('5 repetitions')).toBeVisible();
     await page.keyboard.press('Enter');
-    await expect(firstSection).not.toHaveAttribute('open', '');
+    await expect(uchikomiSection).not.toHaveAttribute('open', '');
+  });
+
+  test('uses distinct accessible intensity badge colours', async ({ page }) => {
+    await page.goto('/app/library');
+    const intenseBadge = page.locator('.category-pill[data-category-variant="intense"]').first();
+    const highIntensityBadge = page
+      .locator('.category-pill[data-category-variant="high-intensity"]')
+      .first();
+
+    for (const badge of [intenseBadge, highIntensityBadge]) {
+      const colours = await badge.evaluate((element) => {
+        const badgeStyles = getComputedStyle(element);
+        const card = element.closest('.library-card');
+        if (card === null) {
+          throw new Error('The category badge is missing its library card.');
+        }
+
+        return {
+          background: badgeStyles.backgroundColor,
+          border: badgeStyles.borderTopColor,
+          card: getComputedStyle(card).backgroundColor,
+          foreground: badgeStyles.color,
+        };
+      });
+
+      expect(getContrastRatio(colours.foreground, colours.background)).toBeGreaterThanOrEqual(4.5);
+      expect(getContrastRatio(colours.border, colours.card)).toBeGreaterThanOrEqual(3);
+      expect(colours.foreground).not.toBe('rgb(155, 208, 170)');
+      expect(colours.background).not.toContain('155, 208, 170');
+    }
+
+    await expect(intenseBadge).not.toHaveCSS(
+      'background-color',
+      await highIntensityBadge.evaluate((element) => getComputedStyle(element).backgroundColor),
+    );
+  });
+
+  test('uses the drill query as history state and redirects legacy detail URLs with replace', async ({
+    page,
+  }) => {
+    await page.goto('/app/library?source=curated');
+    const card = page
+      .getByRole('heading', { name: 'International dojo menu' })
+      .locator('xpath=ancestor::article');
+    const viewDrill = card.getByRole('link', { name: 'View drill' });
+
+    await viewDrill.click();
+    await expect(page).toHaveURL(
+      /\/app\/library\?source=curated&drill=international-dojo-2-hour-session$/,
+    );
+    await expect(page.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/app\/library\?source=curated$/);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(viewDrill).toBeFocused();
+
+    await page.goForward();
+    await expect(page.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
+    await page.reload();
+    await expect(page).toHaveURL(
+      /\/app\/library\?source=curated&drill=international-dojo-2-hour-session$/,
+    );
+    await expect(page.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Close International dojo menu details.' }).click();
+    await expect(page).toHaveURL(/\/app\/library\?source=curated$/);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/app\/dashboard$/);
+
+    await page.goto('/app/library/official-znkr-ajkf?source=legacy');
+    await expect(page).toHaveURL(/\/app\/library\?source=legacy&drill=official-znkr-ajkf$/);
+    const directDialog = page.getByRole('dialog', { name: 'Official ZNKR/AJKF menu' });
+    await expect(directDialog).toBeVisible();
+    await expect(
+      directDialog.getByRole('button', { name: 'Close Official ZNKR/AJKF menu details.' }),
+    ).toBeFocused();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/app\/dashboard$/);
+
+    await page.goto('/app/library?source=curated&drill=not-a-real-drill');
+    await expect(page).toHaveURL(/\/app\/library\?source=curated$/);
+    await expect(page.getByRole('heading', { name: 'Drill library' })).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+
+  test('traps modal focus, blocks the background, and uses responsive internal scrolling', async ({
+    page,
+  }) => {
+    await page.goto('/app/library');
+    const card = page
+      .getByRole('heading', { name: 'International dojo menu' })
+      .locator('xpath=ancestor::article');
+    const viewDrill = card.getByRole('link', { name: 'View drill' });
+    await viewDrill.click();
+
+    let dialog = page.getByRole('dialog', { name: 'International dojo menu' });
+    let closeButton = dialog.getByRole('button', {
+      name: 'Close International dojo menu details.',
+    });
+    await expect(closeButton).toBeFocused();
+    await expect(page.locator('.app-shell').locator('xpath=..')).toHaveAttribute('inert', '');
+    await expect(page.locator('.app-shell').locator('xpath=..')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
+    await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
+
+    await page
+      .locator('.top-bar a')
+      .first()
+      .evaluate((element) => element.focus());
+    expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+
+    await dialog.getByRole('button', { name: 'Add to dashboard' }).click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('.inline-confirmation')).toContainText(
+      'International dojo menu added to your dashboard.',
+    );
+    await expect(dialog.getByRole('link', { name: 'View dashboard' })).toBeVisible();
+
+    await closeButton.focus();
+    await page.keyboard.press('Shift+Tab');
+    await expect(dialog.locator('summary').last()).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(closeButton).toBeFocused();
+
+    const viewport = page.viewportSize();
+    const panelBox = await dialog.boundingBox();
+    const closeBox = await closeButton.boundingBox();
+    if (viewport === null || panelBox === null || closeBox === null) {
+      throw new Error('The responsive drill-dialog geometry is unavailable.');
+    }
+    const scrollMetrics = await dialog.locator('.drill-dialog-scroll').evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+    }));
+    expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      viewport.width,
+    );
+
+    if (viewport.width <= 640) {
+      expect(panelBox.x).toBe(0);
+      expect(panelBox.y).toBe(0);
+      expect(Math.abs(panelBox.width - viewport.width)).toBeLessThanOrEqual(1);
+      expect(Math.abs(panelBox.height - viewport.height)).toBeLessThanOrEqual(1);
+      expect(closeBox.y).toBeGreaterThanOrEqual(0);
+      expect(closeBox.y + closeBox.height).toBeLessThanOrEqual(viewport.height);
+    } else {
+      expect(panelBox.width).toBeLessThan(viewport.width);
+      expect(Math.abs(panelBox.x - (viewport.width - panelBox.width) / 2)).toBeLessThanOrEqual(1);
+      await expect(page.locator('.drill-dialog-backdrop')).toHaveCSS(
+        'backdrop-filter',
+        'blur(3px)',
+      );
+    }
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(viewDrill).toBeFocused();
+
+    await viewDrill.click();
+    dialog = page.getByRole('dialog', { name: 'International dojo menu' });
+    closeButton = dialog.getByRole('button', {
+      name: 'Close International dojo menu details.',
+    });
+    if (viewport.width > 640) {
+      await page.locator('.drill-dialog-backdrop').click({ position: { x: 8, y: 8 } });
+      await expect(dialog).toHaveCount(0);
+      await expect(viewDrill).toBeFocused();
+      await viewDrill.click();
+      dialog = page.getByRole('dialog', { name: 'International dojo menu' });
+      closeButton = dialog.getByRole('button', {
+        name: 'Close International dojo menu details.',
+      });
+    }
+
+    await closeButton.click();
+    await expect(dialog).toHaveCount(0);
+    await expect(viewDrill).toBeFocused();
+  });
+
+  test('removes non-essential drill-dialog motion when reduced motion is requested', async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/app/library?drill=international-dojo-2-hour-session');
+
+    await expect(page.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
+    await expect(page.locator('.drill-dialog-panel')).toHaveCSS('animation-name', 'none');
+    await expect(page.locator('.drill-dialog-backdrop')).toHaveCSS('animation-name', 'none');
   });
 
   test('clamps the University High School card preview and shows its full detail description', async ({
@@ -237,11 +490,7 @@ test.describe('routed training flows', () => {
       .locator('xpath=ancestor::article');
     await card.getByRole('link', { name: 'View drill' }).click();
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
-    await openNavigationIfNeeded(page);
-    await page
-      .getByRole('navigation', { name: 'Primary navigation' })
-      .getByRole('link', { name: 'Dashboard', exact: true })
-      .click();
+    await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
 
     const repetitions = page.getByLabel('Repetitions for haya');
     const sets = page.getByLabel('Sets for haya');
@@ -280,11 +529,7 @@ test.describe('routed training flows', () => {
       .locator('xpath=ancestor::article');
     await card.getByRole('link', { name: 'View drill' }).click();
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
-    await openNavigationIfNeeded(page);
-    await page
-      .getByRole('navigation', { name: 'Primary navigation' })
-      .getByRole('link', { name: 'Dashboard', exact: true })
-      .click();
+    await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
 
     const minutes = page.getByLabel('Minutes for Warm-up');
     const seconds = page.getByLabel('Seconds for Kakarigeiko');
