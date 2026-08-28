@@ -22,6 +22,7 @@ import {
   migratePersistedTrainingStateV3ToV4,
   migratePersistedTrainingStateV4ToV5,
   migratePersistedTrainingStateV5ToV6,
+  migratePersistedTrainingStateV6ToV7,
   parsePersistedTrainingState,
   parsePersistedTrainingStateV4,
   type LegacyDashboardEntry,
@@ -127,6 +128,9 @@ const INTERNATIONAL_DOJO_ID = asTrainingSetId('international-dojo-2-hour-session
 const UNIVERSITY_VERSION_TWO_ID = asTrainingSetId('university-version-2');
 const CORRECTED_UCHIKOMI_ID = 'international-dojo-2-hour-session-uchikomi-men-kote-kote-men-men';
 const UNIVERSITY_VERSION_TWO_KAKARIGEIJO_ID = 'university-version-2-kakarigeijo-kakarigeijo';
+const POLICE_TYPE_TWO_MAWARIGEIKO_ID = 'police-dojo-asageiko-version-2-mawari-geiko-mawari-geiko';
+const REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ID =
+  'senior-high-school-kendo-club-core-strength-training-core-strength-training';
 const LEGACY_UCHIKOMI_IDS = [
   'international-dojo-2-hour-session-uchikomi-men-1',
   'international-dojo-2-hour-session-uchikomi-kote',
@@ -692,6 +696,138 @@ describe('version 5 to version 6 canonical correction migration', () => {
   });
 });
 
+describe('version 6 to version 7 curated-data correction migration', () => {
+  it('keeps Mawarigeiko minutes, removes incompatible and stale overrides, and round-trips', () => {
+    const customTrainingSets =
+      migratePersistedTrainingStateV4ToV5(LEGACY_V4_STATE).customTrainingSets;
+    const state = {
+      dashboardEntries: [
+        {
+          id: 'police-entry',
+          trainingSetId: asTrainingSetId('police-dojo-asageiko-version-2'),
+          quantityOverrides: {
+            [POLICE_TYPE_TWO_MAWARIGEIKO_ID]: {
+              repetitions: 6,
+              sets: 2,
+              rounds: 1,
+              seconds: 45,
+              minutes: 8,
+            },
+            [REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ID]: { minutes: 5 },
+            'unrelated-activity': { repetitions: 12, seconds: 30 },
+          },
+          notes: 'Preserve the police entry note.',
+          createdAt: '2026-08-28T10:00:00.000Z',
+        },
+        {
+          id: 'other-entry',
+          trainingSetId: asTrainingSetId('custom-legacy'),
+          quantityOverrides: {
+            [POLICE_TYPE_TWO_MAWARIGEIKO_ID]: { repetitions: 4 },
+            [REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ID]: { repetitions: 10 },
+            'legacy-exercise': { repetitions: 0, sets: 4, seconds: 30 },
+          },
+          notes: 'Preserve the unrelated entry note.',
+          createdAt: '2026-08-19T10:00:00.000Z',
+        },
+        {
+          id: 'zero-entry',
+          trainingSetId: asTrainingSetId('police-dojo-asageiko-version-2'),
+          quantityOverrides: {
+            [POLICE_TYPE_TWO_MAWARIGEIKO_ID]: { seconds: 0, minutes: 0 },
+          },
+          notes: 'Preserve an explicit zero.',
+          createdAt: '',
+        },
+      ],
+      customTrainingSets,
+    } as const;
+
+    const migrated = migratePersistedTrainingStateV6ToV7(state);
+
+    expect(migrated.dashboardEntries).toEqual([
+      {
+        ...state.dashboardEntries[0],
+        quantityOverrides: {
+          [POLICE_TYPE_TWO_MAWARIGEIKO_ID]: { minutes: 8 },
+          'unrelated-activity': { repetitions: 12, seconds: 30 },
+        },
+      },
+      {
+        ...state.dashboardEntries[1],
+        quantityOverrides: {
+          'legacy-exercise': { repetitions: 0, sets: 4, seconds: 30 },
+        },
+      },
+      {
+        ...state.dashboardEntries[2],
+        quantityOverrides: {
+          [POLICE_TYPE_TWO_MAWARIGEIKO_ID]: { minutes: 0 },
+        },
+      },
+    ]);
+    expect(migrated.customTrainingSets).toEqual(customTrainingSets);
+    expect(parsePersistedTrainingState(migrated)).toEqual(migrated);
+    expect(parsePersistedTrainingState(encodePersistedTrainingState(migrated))).toEqual(migrated);
+  });
+
+  it('rejects malformed version 6 input before applying cleanup', () => {
+    const malformed = {
+      dashboardEntries: [
+        {
+          id: 'malformed-entry',
+          trainingSetId: asTrainingSetId('police-dojo-asageiko-version-2'),
+          quantityOverrides: {
+            [POLICE_TYPE_TWO_MAWARIGEIKO_ID]: { minutes: Number.POSITIVE_INFINITY },
+          },
+          notes: '',
+          createdAt: '',
+        },
+      ],
+      customTrainingSets: [],
+    };
+
+    expect(() => migratePersistedTrainingStateV6ToV7(malformed)).toThrow(
+      'Training-store version 6 state is invalid.',
+    );
+  });
+
+  it('classifies an old version 6 envelope as migrated with the same cleanup', () => {
+    const state = {
+      dashboardEntries: [
+        {
+          id: 'version-six-entry',
+          trainingSetId: asTrainingSetId('police-dojo-asageiko-version-2'),
+          quantityOverrides: {
+            [POLICE_TYPE_TWO_MAWARIGEIKO_ID]: { repetitions: 6, minutes: 9 },
+            [REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ID]: { repetitions: 3 },
+          },
+          notes: 'Keep me.',
+          createdAt: '',
+        },
+      ],
+      customTrainingSets: [],
+    };
+
+    const inspection = classifyTrainingStorageValue(serializeState(state, 6));
+
+    expect(inspection).toMatchObject({
+      status: 'migrated',
+      fromVersion: 6,
+      version: 7,
+    });
+    if (inspection.status !== 'migrated') {
+      throw new Error('Expected the version 6 envelope to migrate.');
+    }
+    expect(inspection.state.dashboardEntries[0]).toMatchObject({
+      notes: 'Keep me.',
+    });
+    expect(inspection.state.dashboardEntries[0]?.quantityOverrides).toEqual({
+      [POLICE_TYPE_TWO_MAWARIGEIKO_ID]: { minutes: 9 },
+    });
+  });
+});
+
 describe('older migration chain', () => {
   it('preserves v2 repetition data through full quantities and into v5 exercises', () => {
     const stateV3 = migratePersistedTrainingStateV2ToV3(legacyVersionTwoState());
@@ -726,7 +862,7 @@ describe('older migration chain', () => {
 });
 
 describe('persistence lifecycle', () => {
-  it('writes version 6 and reloads custom sets, notes, seconds, and independent units', () => {
+  it('round-trips version 7 custom sets, notes, seconds, and independent units', () => {
     const storage = new MemoryStorage();
     const first = createTrainingStore({ storage, storageKey: STORAGE_KEY });
     const customId = first.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
@@ -757,7 +893,7 @@ describe('persistence lifecycle', () => {
     });
   });
 
-  it('decodes the v6 wire tree and rejects deeper canonical trees on encode', () => {
+  it('decodes the v7 wire tree and rejects deeper canonical trees on encode', () => {
     const wireState = {
       dashboardEntries: [],
       customTrainingSets: [
@@ -812,7 +948,7 @@ describe('persistence lifecycle', () => {
     );
   });
 
-  it('loads a v4 envelope through Zustand and persists migrated v6 state', () => {
+  it('loads a v4 envelope through Zustand and persists migrated v7 state', () => {
     const storage = new MemoryStorage(serializeState(LEGACY_V4_STATE, 4));
     const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
 
@@ -850,7 +986,10 @@ describe('persistence lifecycle', () => {
   });
 
   it('reports data that becomes invalid between preflight and hydration', () => {
-    const validValue = serializeState({ dashboardEntries: [], customTrainingSets: [] }, 6);
+    const validValue = serializeState(
+      { dashboardEntries: [], customTrainingSets: [] },
+      TRAINING_STORE_PERSISTENCE_VERSION,
+    );
     let reads = 0;
     let hydrationError: unknown;
     const storage: StateStorage = {
@@ -903,13 +1042,16 @@ describe('untrusted persistence classification', () => {
     });
     expect(
       classifyTrainingStorageValue(
-        serializeState({ dashboardEntries: [], customTrainingSets: [] }, 6),
+        serializeState(
+          { dashboardEntries: [], customTrainingSets: [] },
+          TRAINING_STORE_PERSISTENCE_VERSION,
+        ),
       ),
-    ).toMatchObject({ status: 'ready', version: 6 });
+    ).toMatchObject({ status: 'ready', version: 7 });
     expect(classifyTrainingStorageValue(serializeState(LEGACY_V4_STATE, 4))).toMatchObject({
       status: 'migrated',
       fromVersion: 4,
-      version: 6,
+      version: 7,
     });
     expect(
       classifyTrainingStorageValue(
@@ -918,7 +1060,7 @@ describe('untrusted persistence classification', () => {
     ).toEqual({ status: 'unsupported-future', kind: 'unsupported-future', version: 999 });
   });
 
-  it('rejects canonical runtime trees at the v6 storage boundary', () => {
+  it('rejects canonical runtime trees at the v7 storage boundary', () => {
     const deepCanonicalState = {
       dashboardEntries: [],
       customTrainingSets: [
@@ -964,12 +1106,20 @@ describe('untrusted persistence classification', () => {
       ],
     };
 
-    expect(classifyTrainingStorageValue(serializeState(deepCanonicalState, 6))).toEqual({
+    expect(
+      classifyTrainingStorageValue(
+        serializeState(deepCanonicalState, TRAINING_STORE_PERSISTENCE_VERSION),
+      ),
+    ).toEqual({
       status: 'corrupt',
       kind: 'corrupt',
       reason: 'invalid-domain',
     });
-    expect(classifyTrainingStorageValue(serializeState(metadataCanonicalState, 6))).toEqual({
+    expect(
+      classifyTrainingStorageValue(
+        serializeState(metadataCanonicalState, TRAINING_STORE_PERSISTENCE_VERSION),
+      ),
+    ).toEqual({
       status: 'corrupt',
       kind: 'corrupt',
       reason: 'invalid-domain',

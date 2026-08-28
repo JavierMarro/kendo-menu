@@ -23,14 +23,14 @@ import {
   type StorageValue,
 } from 'zustand/middleware';
 
-export const TRAINING_STORE_PERSISTENCE_VERSION = 6;
+export const TRAINING_STORE_PERSISTENCE_VERSION = 7;
 
 export interface PersistedTrainingState {
   readonly dashboardEntries: readonly DashboardEntry[];
   readonly customTrainingSets: readonly TrainingSet[];
 }
 
-/** The v5/v6 storage DTO retained for the on-disk two-level sections/exercises shape. */
+/** The v5-v7 storage DTO retained for the on-disk two-level sections/exercises shape. */
 export interface PersistedTrainingExercise {
   readonly id: string;
   readonly name: string;
@@ -62,6 +62,7 @@ export interface PersistedTrainingWireState {
 }
 
 export type PersistedTrainingStateV5 = PersistedTrainingWireState;
+export type PersistedTrainingStateV6 = PersistedTrainingWireState;
 
 export interface TrainingOverrideMigrationConflict {
   readonly dashboardEntryId: string;
@@ -218,7 +219,7 @@ export type TrainingStorageInspection =
   | {
       readonly status: 'migrated';
       readonly kind: 'migrated';
-      readonly fromVersion: 0 | 1 | 2 | 3 | 4 | 5;
+      readonly fromVersion: 0 | 1 | 2 | 3 | 4 | 5 | 6;
       readonly version: typeof TRAINING_STORE_PERSISTENCE_VERSION;
       readonly state: PersistedTrainingState;
     }
@@ -1438,6 +1439,60 @@ export function migratePersistedTrainingStateV5ToV6(value: unknown): PersistedTr
 
 export const migrateV5ToV6 = migratePersistedTrainingStateV5ToV6;
 
+const POLICE_TYPE_TWO_MAWARIGEIKO_ACTIVITY_ID =
+  'police-dojo-asageiko-version-2-mawari-geiko-mawari-geiko';
+const REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ACTIVITY_ID =
+  'senior-high-school-kendo-club-core-strength-training-core-strength-training';
+
+function migrateDashboardEntryV6ToV7(entry: DashboardEntry): DashboardEntry {
+  let changed = false;
+  const quantityOverrides: Record<string, TrainingQuantityOverrides> = {};
+
+  for (const [activityId, overrides] of Object.entries(entry.quantityOverrides)) {
+    if (activityId === REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ACTIVITY_ID) {
+      changed = true;
+      continue;
+    }
+
+    if (activityId === POLICE_TYPE_TWO_MAWARIGEIKO_ACTIVITY_ID) {
+      const minutes = overrides.minutes;
+      if (minutes === undefined) {
+        changed = true;
+        continue;
+      }
+
+      quantityOverrides[activityId] = { minutes };
+      if (Object.keys(overrides).length !== 1) {
+        changed = true;
+      }
+      continue;
+    }
+
+    quantityOverrides[activityId] = overrides;
+  }
+
+  return changed ? { ...entry, quantityOverrides } : entry;
+}
+
+export function migratePersistedTrainingStateV6ToV7(value: unknown): PersistedTrainingState {
+  const parsed = parsePersistedTrainingState(value);
+  if (parsed === null) {
+    throw new Error('Training-store version 6 state is invalid.');
+  }
+
+  const migrated = {
+    dashboardEntries: parsed.dashboardEntries.map(migrateDashboardEntryV6ToV7),
+    customTrainingSets: parsed.customTrainingSets,
+  };
+  const result = parsePersistedTrainingState(migrated);
+  if (result === null) {
+    throw new Error('Training-store version 6 migration produced invalid state.');
+  }
+  return result;
+}
+
+export const migrateV6ToV7 = migratePersistedTrainingStateV6ToV7;
+
 export function migratePersistedTrainingState(
   persistedState: unknown,
   version: number,
@@ -1449,38 +1504,47 @@ export function migratePersistedTrainingState(
       const stateV3 = migratePersistedTrainingStateV2ToV3(stateV2);
       const stateV4 = migratePersistedTrainingStateV3ToV4(stateV3);
       const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
-      return migratePersistedTrainingStateV5ToV6(stateV5);
+      const stateV6 = migratePersistedTrainingStateV5ToV6(stateV5);
+      return migratePersistedTrainingStateV6ToV7(stateV6);
     }
     case 1: {
       const stateV2 = migratePersistedTrainingStateV1ToV2(persistedState);
       const stateV3 = migratePersistedTrainingStateV2ToV3(stateV2);
       const stateV4 = migratePersistedTrainingStateV3ToV4(stateV3);
       const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
-      return migratePersistedTrainingStateV5ToV6(stateV5);
+      const stateV6 = migratePersistedTrainingStateV5ToV6(stateV5);
+      return migratePersistedTrainingStateV6ToV7(stateV6);
     }
     case 2: {
       const stateV3 = migratePersistedTrainingStateV2ToV3(persistedState);
       const stateV4 = migratePersistedTrainingStateV3ToV4(stateV3);
       const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
-      return migratePersistedTrainingStateV5ToV6(stateV5);
+      const stateV6 = migratePersistedTrainingStateV5ToV6(stateV5);
+      return migratePersistedTrainingStateV6ToV7(stateV6);
     }
     case 3: {
       const stateV4 = migratePersistedTrainingStateV3ToV4(persistedState);
       const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
-      return migratePersistedTrainingStateV5ToV6(stateV5);
+      const stateV6 = migratePersistedTrainingStateV5ToV6(stateV5);
+      return migratePersistedTrainingStateV6ToV7(stateV6);
     }
     case 4: {
       const stateV5 = migratePersistedTrainingStateV4ToV5(persistedState);
-      return migratePersistedTrainingStateV5ToV6(stateV5);
+      const stateV6 = migratePersistedTrainingStateV5ToV6(stateV5);
+      return migratePersistedTrainingStateV6ToV7(stateV6);
     }
-    case 5:
-      return migratePersistedTrainingStateV5ToV6(persistedState);
+    case 5: {
+      const stateV6 = migratePersistedTrainingStateV5ToV6(persistedState);
+      return migratePersistedTrainingStateV6ToV7(stateV6);
+    }
+    case 6:
+      return migratePersistedTrainingStateV6ToV7(persistedState);
     case TRAINING_STORE_PERSISTENCE_VERSION: {
-      const stateV6 = parsePersistedTrainingState(persistedState);
-      if (stateV6 === null) {
-        throw new Error('Training-store version 6 state is invalid.');
+      const stateV7 = parsePersistedTrainingState(persistedState);
+      if (stateV7 === null) {
+        throw new Error('Training-store version 7 state is invalid.');
       }
-      return stateV6;
+      return stateV7;
     }
     default:
       throw new Error(`Unsupported training-store persistence version: ${String(version)}`);
@@ -1489,7 +1553,7 @@ export function migratePersistedTrainingState(
 
 function assertStorageCompatibleActivity(activity: TrainingActivity, path: string): void {
   if (activity.editableQuantityUnits !== undefined || activity.allowsSessionNotes !== undefined) {
-    throw new Error(`${path} contains activity metadata unsupported by v6 custom-set storage.`);
+    throw new Error(`${path} contains activity metadata unsupported by v7 custom-set storage.`);
   }
 }
 
@@ -1551,7 +1615,7 @@ function encodePersistedCustomTrainingSet(
   };
 }
 
-/** Encode canonical state into the unchanged v6 two-level sections/exercises storage DTO. */
+/** Encode canonical state into the unchanged v7 two-level sections/exercises storage DTO. */
 export function encodePersistedTrainingState(value: unknown): PersistedTrainingWireState {
   const parsed = parsePersistedTrainingState(value);
   if (parsed === null) {
@@ -1627,6 +1691,13 @@ function parseStorageValue(value: unknown): StorageValue<PersistedStorageState> 
       }
       return { state, version };
     }
+    case 6: {
+      const state = parsePersistedTrainingWireState(value['state']);
+      if (state === null) {
+        throw new Error('Training-store version 6 persistence data is invalid.');
+      }
+      return { state, version };
+    }
     default:
       throw new Error(`Unsupported training-store persistence version: ${String(version)}`);
   }
@@ -1682,7 +1753,9 @@ function classifyParsedEnvelope(value: unknown): TrainingStorageInspection {
 
   try {
     const persistedState =
-      version === 5 ? parsePersistedTrainingWireState(value['state']) : value['state'];
+      version === 5 || version === 6
+        ? parsePersistedTrainingWireState(value['state'])
+        : value['state'];
     if (persistedState === null) {
       return { status: 'corrupt', kind: 'corrupt', reason: 'invalid-domain' };
     }
@@ -1694,6 +1767,7 @@ function classifyParsedEnvelope(value: unknown): TrainingStorageInspection {
       case 3:
       case 4:
       case 5:
+      case 6:
         return {
           status: 'migrated',
           kind: 'migrated',

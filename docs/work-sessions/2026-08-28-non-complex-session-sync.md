@@ -1,0 +1,8 @@
+- Session: non-complex curated session synchronization
+- Date/duration: 2026-08-28; not recorded
+- Scope/start: Job 4 began from committed recursive Jobs 2 and 3, the final eight-page PDF, the original audit, and its superseding corrected addendum.
+- Changes: Synchronized nine in-scope sessions, added standalone Junior High type 2 Kihon-waza, removed Senior seasonal Core/Strength, added Mawarigeiko minutes metadata, and introduced persistence v7 cleanup.
+- Decisions: Preserved every retained ID and the recursive contract/renderers; aggregate counts remain 90 top-level activities, 255 total activities, 211 leaves, and 266 unique IDs.
+- Roadblocks: Poppler was unavailable; macOS PDFKit provided complete text extraction and eight-page visual inspection without adding dependencies.
+- Verification: Domain 37 tests/typecheck, store 34 tests/typecheck, web 67 tests/typecheck, computed count/ID evidence, and `pnpm check` passed; ESLint retained two pre-existing Fast Refresh warnings.
+- Follow-up: Synchronize University High School and Top University separately; keep activity-specific user notes deferred until explicitly scoped.

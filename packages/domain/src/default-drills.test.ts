@@ -153,6 +153,187 @@ const RECURSIVE_SCHEMA_INVALID_FIXTURES: readonly unknown[] = [
   ],
 ];
 
+type ActivityNameTree = string | readonly [string, readonly ActivityNameTree[]];
+
+function projectActivityNameTree(activity: TrainingActivity): ActivityNameTree {
+  return activity.children.length === 0
+    ? activity.name
+    : [activity.name, activity.children.map(projectActivityNameTree)];
+}
+
+const IN_SCOPE_ACTIVITY_NAME_TREES = {
+  'international-dojo-2-hour-session': [
+    'Warm-up',
+    'Suburi',
+    'Ashi sabaki',
+    'Kirikaeshi',
+    ['Kihon-waza', ['men', 'kote', 'do', 'tsuki']],
+    ['Uchikomi', ['Men → Kote → Kote-men → Men']],
+    ['Shikake-waza', ['men', 'kote', 'do']],
+    ['Oji-waza', ['kaeshi do', 'kaeshi men']],
+    ['Hiki-waza', ['hiki men', 'hiki kote', 'hiki do']],
+    'Butsukarigeiko',
+    'Kakarigeiko',
+    'Jigeiko',
+  ],
+  'japanese-school-club': [
+    'Warm-up',
+    ['Suburi', ['Joge', 'Shomen', 'Sayu-men', 'Haya']],
+    'Ashi sabaki',
+    'Kirikaeshi',
+    'Kihon-waza',
+    [
+      'Oji-waza',
+      [
+        'Ai-men',
+        'Men-suriage-men',
+        'Debana kote',
+        'Nuki-do',
+        'Kaeshi-do',
+        'Kote-suriage-men',
+        'Kote-kaeshi-men',
+        'Ai-kote-men',
+        'Kote-nuki-men',
+      ],
+    ],
+    'Jigeiko',
+    ['Hiki-waza', ['Hiki men', 'Hiki kote', 'Hiki do']],
+    'Kakarigeiko',
+    'Ai kakarigeiko',
+    'Kirikaeshi',
+  ],
+  'junior-high-kendo-club': [
+    ['Suburi', ['Joge', 'Shomen', 'Fumikomi', 'Sayu-men', 'Taisabaki-joge', 'Haya']],
+    'Men-kirikaeshi',
+    'Do-kirikaeshi',
+    'Ai kirikaeshi',
+    ['Kihon-waza', ['Big men', 'Big kote-men']],
+    ['"Match-speed" strikes', ['Men', 'Kote', 'Do', 'Kote-men', 'Kote-do']],
+    'Kakarigeiko',
+    'Jigeiko',
+  ],
+  'official-znkr-ajkf': [
+    'Warm-up',
+    ['Kihon-waza', ['Men', 'Kote', 'Do', 'Tsuki']],
+    ['Renzoku-waza', ['Kote-men']],
+    ['Shikake-waza', ['Harai-men', 'Debana-kote']],
+    ['Hiki-waza', ['Hiki-do']],
+    ['Oji-waza', ['Men-nuki-do', 'Kote-suriage-men', 'Men-kaeshi-do', 'Do-uchiotoshi-men']],
+  ],
+  'police-dojo-asageiko': [
+    'Warm-up',
+    'Kirikaeshi',
+    ['Kihon-waza', ['Men', 'Kote', 'Kote-men', "Moshiawase (kakarite's choice)"]],
+    ['Uchikomi', ['Men']],
+    'Kirikaeshi',
+  ],
+  'police-dojo-asageiko-version-2': [
+    'Kirikaeshi',
+    ['Renzoku-waza', ['Big men', 'Small men']],
+    [
+      'Kihon-waza',
+      ['Small men', 'Small men', 'Small men', 'Kote', 'Kote-men', 'Katate-kote → morote-men'],
+    ],
+    ['Moshiawase oji-waza', ['Men', 'Kote', 'Men oji-waza vs. jodan', 'Kote oji-waza vs. jodan']],
+    'Mawarigeiko',
+    'Kirikaeshi',
+  ],
+  'senior-high-school-kendo-club': [
+    ['Warm-up', ['Stretch', 'Ladder training']],
+    ['Suburi', ['Joge', 'Shomen', 'Sayu-men', 'Matawari', 'Fumikomi', 'Ikkyodo (one-hand)']],
+    ['Ashi sabaki', ['Suri-ashi drills']],
+    'Suri-ash-kirikaeshi',
+    'One-breath-kirikaeshi',
+    'Ai kirikaeshi',
+    'Do-kirikaeshi',
+    ['Kihon-waza', ['Men', 'Sashi-men', 'Kote', 'Do', 'Morote-tsuki', 'Gyaku-do', 'Kote-men']],
+    ['Hiki-waza', ['Hiki-men', 'Hiki-kote', 'Hiki-do', 'Hiki-gyaku-do']],
+    [
+      'Waza-geiko',
+      [
+        'Debana-men',
+        'Debana-kote',
+        'Men-nuki-do',
+        'Men-suriage-men',
+        'Ai-kote-men',
+        'Kote-kaeshi-men',
+      ],
+    ],
+    ['Oikomi-geiko', ['Big men', 'Small men', 'Kote-men', 'Hiki-men', 'Kote-men-do-kote-men']],
+    'Pattern-geiko',
+    'Jigeiko',
+    'Kakarigeiko',
+  ],
+  'junior-high-school-version-2': [
+    'Warm-up',
+    [
+      'Suburi',
+      [
+        'Sankyodo-shomen',
+        'Sayu-men',
+        'Shomen 2-step 4-directions',
+        'Sayu 2-step 8-directions',
+        'Zenshin-kotae shomen',
+        'Haya',
+      ],
+    ],
+    [
+      'Ashi sabaki',
+      [
+        'One-step advances',
+        'Position-swap suri-ashi',
+        'One-leg suburi',
+        '3-direction fumikomi',
+        'Fumikomi-into-strike drills',
+      ],
+    ],
+    'Kihon-waza',
+    'Mawarigeiko',
+  ],
+  'university-version-2': [
+    'Warm-up',
+    'Suburi',
+    'Ashi sabaki',
+    ['Dojo-length drills', ['Slow kirikaeshi', 'Kirikaeshi', 'Kirikaeshi + suri-ashi']],
+    ['Oikomi-geiko', ['Men', 'Kote-men']],
+    ['Kihon-waza', ['Men', 'Kote', 'Do', 'Tsuki']],
+    ['Shikake-waza', ['Men', 'Kote', 'Do']],
+    ['Debana-waza', ['Debana men', 'Debana kote']],
+    ['Hiki-waza', ['Hiki men', 'Hiki kote', 'Hiki do']],
+    'Jigeiko',
+    'Kakarigeiko',
+    'Shiaigeiko',
+  ],
+} satisfies Readonly<Record<string, readonly ActivityNameTree[]>>;
+
+const IN_SCOPE_DESCRIPTIONS = {
+  'international-dojo-2-hour-session': 'Set for a 2 hours long session.',
+  'japanese-school-club': undefined,
+  'junior-high-kendo-club': undefined,
+  'official-znkr-ajkf':
+    'Officially published by the All Japan Kendo Federation in 2001, for nidan and below, focused on basics.',
+  'police-dojo-asageiko': 'Practiced with mostly 5th–8th dan practitioners, 30 minutes long.',
+  'police-dojo-asageiko-version-2':
+    'Normally run for small groups, and the menu tends to change depending on practitioners. 45 minutes long.',
+  'senior-high-school-kendo-club': undefined,
+  'junior-high-school-version-2': undefined,
+  'university-version-2': undefined,
+} satisfies Readonly<Record<string, string | undefined>>;
+
+const RESEARCHED_SESSION_COUNTS = {
+  'international-dojo-2-hour-session': { topLevel: 12, activities: 25, leaves: 20 },
+  'japanese-school-club': { topLevel: 11, activities: 27, leaves: 24 },
+  'junior-high-kendo-club': { topLevel: 8, activities: 21, leaves: 18 },
+  'official-znkr-ajkf': { topLevel: 6, activities: 18, leaves: 13 },
+  'police-dojo-asageiko': { topLevel: 5, activities: 10, leaves: 8 },
+  'police-dojo-asageiko-version-2': { topLevel: 6, activities: 18, leaves: 15 },
+  'senior-high-school-kendo-club': { topLevel: 14, activities: 45, leaves: 38 },
+  'university-high-school': { topLevel: 4, activities: 29, leaves: 25 },
+  'junior-high-school-version-2': { topLevel: 5, activities: 16, leaves: 14 },
+  'university-version-2': { topLevel: 12, activities: 29, leaves: 23 },
+  'top-university': { topLevel: 7, activities: 17, leaves: 13 },
+} as const;
+
 describe('canonical default drills', () => {
   it('validates the canonical source and preserves it exactly in the runtime adapter', () => {
     expect(validateCuratedDrills(defaultDrillsSource)).toEqual({
@@ -166,19 +347,17 @@ describe('canonical default drills', () => {
     const sections = DEFAULT_TRAINING_SETS.flatMap((trainingSet) => trainingSet.activities);
     const childExercises = sections.flatMap((section) => section.children);
     const standaloneSections = sections.filter((section) => section.children.length === 0);
+    const activities = DEFAULT_TRAINING_SETS.flatMap(getTrainingSetActivities);
     const ids = DEFAULT_TRAINING_SETS.flatMap((trainingSet) => [
       trainingSet.id,
-      ...trainingSet.activities.flatMap((section) => [
-        section.id,
-        ...section.children.map((exercise) => exercise.id),
-      ]),
+      ...getTrainingSetActivities(trainingSet).map((activity) => activity.id),
     ]);
 
     expect(DEFAULT_TRAINING_SETS).toHaveLength(11);
     expect(sections).toHaveLength(90);
     expect(childExercises).toHaveLength(165);
     expect(standaloneSections).toHaveLength(46);
-    expect(DEFAULT_TRAINING_SETS.flatMap(getTrainingSetActivities)).toHaveLength(255);
+    expect(activities).toHaveLength(255);
     expect(
       DEFAULT_TRAINING_SETS.reduce(
         (total, trainingSet) => total + getTrainingSetLeafExerciseCount(trainingSet),
@@ -190,6 +369,72 @@ describe('canonical default drills', () => {
     expect(DEFAULT_TRAINING_SETS.map((trainingSet) => trainingSet.sourceId)).toEqual([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
     ]);
+  });
+
+  it('matches the final PDF name, hierarchy, and order projection for every in-scope session', () => {
+    for (const [trainingSetId, expected] of Object.entries(IN_SCOPE_ACTIVITY_NAME_TREES)) {
+      expect(
+        requireTrainingSet(trainingSetId).activities.map(projectActivityNameTree),
+        trainingSetId,
+      ).toEqual(expected);
+    }
+  });
+
+  it('keeps every in-scope session description exactly aligned with the final PDF', () => {
+    for (const [trainingSetId, expected] of Object.entries(IN_SCOPE_DESCRIPTIONS)) {
+      expect(requireTrainingSet(trainingSetId).description, trainingSetId).toBe(expected);
+    }
+  });
+
+  it('matches independently calculated section, activity, and leaf counts per session', () => {
+    for (const [trainingSetId, expected] of Object.entries(RESEARCHED_SESSION_COUNTS)) {
+      const trainingSet = requireTrainingSet(trainingSetId);
+      expect(
+        {
+          topLevel: trainingSet.activities.length,
+          activities: getTrainingSetActivities(trainingSet).length,
+          leaves: getTrainingSetLeafExerciseCount(trainingSet),
+        },
+        trainingSetId,
+      ).toEqual(expected);
+    }
+  });
+
+  it('adds and removes only the audited IDs while preserving corrected-name IDs', () => {
+    expect(
+      requireSection(
+        'junior-high-school-version-2',
+        'junior-high-school-version-2-kihon-waza-kihon-waza',
+      ),
+    ).toEqual({
+      id: 'junior-high-school-version-2-kihon-waza-kihon-waza',
+      name: 'Kihon-waza',
+      children: [],
+    });
+    expect(
+      getTrainingSetActivities(requireTrainingSet('senior-high-school-kendo-club')).some(
+        (activity) =>
+          activity.id ===
+          'senior-high-school-kendo-club-core-strength-training-core-strength-training',
+      ),
+    ).toBe(false);
+    expect(
+      requireActivity(
+        'police-dojo-asageiko-version-2',
+        'police-dojo-asageiko-version-2-mawari-geiko-mawari-geiko',
+      ),
+    ).toEqual({
+      id: 'police-dojo-asageiko-version-2-mawari-geiko-mawari-geiko',
+      name: 'Mawarigeiko',
+      editableQuantityUnits: ['minutes'],
+      children: [],
+    });
+    expect(
+      requireActivity('university-version-2', 'university-version-2-kakarigeijo-kakarigeijo'),
+    ).toMatchObject({
+      id: 'university-version-2-kakarigeijo-kakarigeijo',
+      name: 'Kakarigeiko',
+    });
   });
 
   it('maps the current authoritative drill names to their existing IDs and source IDs', () => {
@@ -283,17 +528,17 @@ describe('canonical default drills', () => {
     ).toBe(true);
   });
 
-  it('keeps accepted display normalization separate from stable ASCII IDs', () => {
+  it('keeps final-PDF display corrections separate from stable IDs', () => {
     expect(
       requireActivity('japanese-school-club', 'japanese-school-club-suburi-joge'),
     ).toMatchObject({
       id: 'japanese-school-club-suburi-joge',
-      name: 'jōge',
+      name: 'Joge',
     });
     expect(requireActivity('official-znkr-ajkf', 'official-znkr-ajkf-kihon-waza-do')).toMatchObject(
       {
         id: 'official-znkr-ajkf-kihon-waza-do',
-        name: 'Dō',
+        name: 'Do',
       },
     );
   });
@@ -437,7 +682,7 @@ describe('canonical default drills', () => {
         'senior-high-school-kendo-club-jigeiko-jigeiko',
       ),
     ).toMatchObject({
-      notes: '3 min rounds',
+      notes: '3 minutes rounds',
       quantities: { duration: { unit: 'minutes', value: 3 } },
     });
     expect(requireActivity('top-university', 'top-university-jigeiko-jigeiko')).toMatchObject({
@@ -490,7 +735,7 @@ describe('canonical default drills', () => {
     );
 
     expect(section.notes).toBe(
-      'The following three Kirikaeshi exercises are performed over the length of the dojo',
+      'The following three Kirikaeshi exercises are performed over the length of the dojo:',
     );
     expect(section.children.map((exercise) => exercise.id)).toEqual([
       'university-version-2-dojo-length-drills-slow-kirikaeshi',

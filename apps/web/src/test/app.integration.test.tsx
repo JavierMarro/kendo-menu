@@ -31,6 +31,33 @@ const OFFICIAL_ZNKR_ID = asTrainingSetId('official-znkr-ajkf');
 const OFFICIAL_ZNKR_MEN_ID = 'official-znkr-ajkf-kihon-waza-men';
 const TOP_UNIVERSITY_ID = asTrainingSetId('top-university');
 const TOP_UNIVERSITY_KAKARIGEIKO_ID = 'top-university-kakarigeiko-kakarigeiko';
+const IN_SCOPE_SESSION_SMOKE_CASES = [
+  {
+    id: 'international-dojo-2-hour-session',
+    name: 'International dojo menu',
+    activityCount: 25,
+  },
+  { id: 'japanese-school-club', name: 'Japanese school dojo menu', activityCount: 27 },
+  { id: 'junior-high-kendo-club', name: 'Junior-high school dojo menu', activityCount: 21 },
+  { id: 'official-znkr-ajkf', name: 'Official ZNKR/AJKF menu', activityCount: 18 },
+  { id: 'police-dojo-asageiko', name: 'Police dojo asageiko menu', activityCount: 10 },
+  {
+    id: 'police-dojo-asageiko-version-2',
+    name: 'Police dojo asageiko type 2 menu',
+    activityCount: 18,
+  },
+  {
+    id: 'senior-high-school-kendo-club',
+    name: 'Senior High School dojo menu',
+    activityCount: 45,
+  },
+  {
+    id: 'junior-high-school-version-2',
+    name: 'Junior High School dojo type 2 menu',
+    activityCount: 16,
+  },
+  { id: 'university-version-2', name: 'University dojo menu', activityCount: 29 },
+] as const;
 
 describe('KendoMenu application flows', () => {
   it('formats count, fixed-duration, and range quantities without changing units', () => {
@@ -453,6 +480,79 @@ describe('KendoMenu application flows', () => {
     expect(within(card).queryByRole('button')).not.toBeInTheDocument();
   });
 
+  it.each(IN_SCOPE_SESSION_SMOKE_CASES)(
+    'renders the synchronized $name activity tree from a direct library URL',
+    ({ id, name, activityCount }) => {
+      renderApp(createTestStore(), { initialEntries: [`/app/library?drill=${id}`] });
+
+      const dialog = screen.getByRole('dialog', { name });
+      expect(
+        within(dialog).getByText(`${String(activityCount)} activities in this session.`),
+      ).toBeVisible();
+      expect(dialog.querySelectorAll('[data-activity-id]')).toHaveLength(activityCount);
+    },
+  );
+
+  it('renders the corrected standalone activities and police descriptions without seasonal data', () => {
+    const policeView = renderApp(createTestStore(), {
+      initialEntries: ['/app/library?drill=police-dojo-asageiko-version-2'],
+    });
+    const policeDialog = screen.getByRole('dialog', {
+      name: 'Police dojo asageiko type 2 menu',
+    });
+    expect(
+      within(policeDialog).getByText(
+        'Normally run for small groups, and the menu tends to change depending on practitioners. 45 minutes long.',
+        { exact: true },
+      ),
+    ).toBeVisible();
+    const mawarigeiko = within(policeDialog).getByRole('heading', {
+      name: 'Mawarigeiko',
+      level: 2,
+    });
+    const mawarigeikoActivity = mawarigeiko.closest<HTMLElement>('[data-activity-id]');
+    if (mawarigeikoActivity === null) {
+      throw new Error('Expected the standalone Mawarigeiko activity.');
+    }
+    expect(mawarigeikoActivity).toHaveAttribute(
+      'data-activity-id',
+      'police-dojo-asageiko-version-2-mawari-geiko-mawari-geiko',
+    );
+    expect(within(mawarigeikoActivity).getByText('Time not set')).toBeVisible();
+    expect(within(mawarigeikoActivity).queryByRole('list', { name: /Quantities/ })).toBeNull();
+    policeView.unmount();
+
+    const juniorView = renderApp(createTestStore(), {
+      initialEntries: ['/app/library?drill=junior-high-school-version-2'],
+    });
+    const juniorDialog = screen.getByRole('dialog', {
+      name: 'Junior High School dojo type 2 menu',
+    });
+    expect(
+      juniorDialog.querySelector(
+        '[data-activity-id="junior-high-school-version-2-kihon-waza-kihon-waza"]',
+      ),
+    ).toHaveTextContent('Kihon-waza');
+    juniorView.unmount();
+
+    const seniorView = renderApp(createTestStore(), {
+      initialEntries: ['/app/library?drill=senior-high-school-kendo-club'],
+    });
+    const seniorDialog = screen.getByRole('dialog', { name: 'Senior High School dojo menu' });
+    expect(within(seniorDialog).queryByText(/Core\/strength training/i)).toBeNull();
+    seniorView.unmount();
+
+    renderApp(createTestStore(), {
+      initialEntries: ['/app/library?drill=university-version-2'],
+    });
+    const universityDialog = screen.getByRole('dialog', { name: 'University dojo menu' });
+    expect(
+      universityDialog.querySelector(
+        '[data-activity-id="university-version-2-kakarigeijo-kakarigeijo"]',
+      ),
+    ).toHaveTextContent('Kakarigeiko');
+  });
+
   it('omits missing and blank descriptions in the library, detail page, and dashboard', () => {
     const store = createTestStore();
     const trainingSetId = store.getState().addCustomTrainingSet({
@@ -691,7 +791,7 @@ describe('KendoMenu application flows', () => {
       throw new Error('Expected the junior-high Suburi disclosure.');
     }
     await user.click(suburiSummary);
-    const hayaQuantities = within(suburiSection).getByRole('list', { name: 'Quantities for haya' });
+    const hayaQuantities = within(suburiSection).getByRole('list', { name: 'Quantities for Haya' });
     expect(within(hayaQuantities).getByText('100 repetitions')).toBeVisible();
     expect(within(hayaQuantities).getByText('2 sets')).toBeVisible();
     juniorView.unmount();
@@ -701,7 +801,7 @@ describe('KendoMenu application flows', () => {
     });
     const missingDialog = screen.getByRole('dialog', { name: 'Japanese school dojo menu' });
     const standaloneWarmUp = within(missingDialog).getByRole('heading', {
-      name: 'warm-up',
+      name: 'Warm-up',
       level: 2,
     });
     const standaloneWarmUpActivity = standaloneWarmUp.closest<HTMLElement>(
@@ -714,21 +814,23 @@ describe('KendoMenu application flows', () => {
     expect(standaloneWarmUpActivity.closest('details')).toBeNull();
 
     for (const [activityName, missingLabel] of [
-      ['kakarigeiko', 'Time not set'],
+      ['Kakarigeiko', 'Time not set'],
       ['Kirikaeshi', 'Reps not set'],
       ['Kihon-waza', 'Reps not set'],
     ] as const) {
-      const activityHeading = within(missingDialog).getByRole('heading', {
+      const activityHeadings = within(missingDialog).getAllByRole('heading', {
         name: activityName,
         level: 2,
       });
-      const standaloneActivity = activityHeading.closest<HTMLElement>(
-        '.detail-standalone-activity',
-      );
-      if (standaloneActivity === null) {
-        throw new Error(`Expected ${activityName} to render as a standalone activity.`);
+      for (const activityHeading of activityHeadings) {
+        const standaloneActivity = activityHeading.closest<HTMLElement>(
+          '.detail-standalone-activity',
+        );
+        if (standaloneActivity === null) {
+          throw new Error(`Expected ${activityName} to render as a standalone activity.`);
+        }
+        expect(within(standaloneActivity).getByText(missingLabel)).toBeVisible();
       }
-      expect(within(standaloneActivity).getByText(missingLabel)).toBeVisible();
     }
 
     const missingSection = missingDialog.querySelector<HTMLDetailsElement>('details');
@@ -882,11 +984,11 @@ describe('KendoMenu application flows', () => {
       .setQuantityOverride(japaneseEntryId, JAPANESE_SCHOOL_JOGE_ID, 'minutes', 2);
     const japaneseView = renderApp(japaneseStore);
 
-    const repetitions = screen.getByLabelText('Repetitions for jōge');
-    const existingMinutes = screen.getByLabelText('Minutes for jōge');
+    const repetitions = screen.getByLabelText('Repetitions for Joge');
+    const existingMinutes = screen.getByLabelText('Minutes for Joge');
     expect(repetitions).toHaveValue(null);
     expect(existingMinutes).toHaveValue(2);
-    expect(screen.queryByLabelText('Seconds for jōge')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Seconds for Joge')).not.toBeInTheDocument();
 
     await user.type(repetitions, '24');
     await user.tab();
@@ -958,11 +1060,11 @@ describe('KendoMenu application flows', () => {
     store.getState().addToDashboard(JUNIOR_HIGH_DRILL_ID);
     renderApp(store);
 
-    const repetitions = screen.getByLabelText('Repetitions for haya');
-    const sets = screen.getByLabelText('Sets for haya');
+    const repetitions = screen.getByLabelText('Repetitions for Haya');
+    const sets = screen.getByLabelText('Sets for Haya');
     expect(repetitions).toHaveValue(100);
     expect(sets).toHaveValue(2);
-    expect(screen.queryByLabelText('Minutes for haya')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Minutes for Haya')).not.toBeInTheDocument();
 
     await user.clear(sets);
     await user.type(sets, '0');

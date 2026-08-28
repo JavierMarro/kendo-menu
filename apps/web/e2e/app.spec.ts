@@ -567,17 +567,25 @@ test.describe('routed training flows', () => {
     await page.goto('/app/library?drill=japanese-school-club');
     const dialog = page.getByRole('dialog', { name: 'Japanese school dojo menu' });
 
-    const getStandaloneActivity = (name: string) =>
+    const getStandaloneActivities = (name: string) =>
       dialog
         .getByRole('heading', { name, level: 2, exact: true })
         .locator('xpath=ancestor::section');
 
-    await expect(getStandaloneActivity('warm-up')).toContainText('Time not set');
-    await expect(getStandaloneActivity('kakarigeiko')).toContainText('Time not set');
-    await expect(getStandaloneActivity('Kirikaeshi')).toContainText('Reps not set');
-    await expect(getStandaloneActivity('Kihon-waza')).toContainText('Reps not set');
+    for (const [activityName, missingLabel, expectedCount] of [
+      ['Warm-up', 'Time not set', 1],
+      ['Kakarigeiko', 'Time not set', 1],
+      ['Kirikaeshi', 'Reps not set', 2],
+      ['Kihon-waza', 'Reps not set', 1],
+    ] as const) {
+      const activities = getStandaloneActivities(activityName);
+      await expect(activities).toHaveCount(expectedCount);
+      for (const activity of await activities.all()) {
+        await expect(activity).toContainText(missingLabel);
+      }
+    }
 
-    const suburiSection = dialog.locator('details.detail-section').filter({ hasText: 'suburi' });
+    const suburiSection = dialog.locator('details.detail-section').filter({ hasText: 'Suburi' });
     await suburiSection.locator('summary').click();
     await expect(suburiSection.getByText('Reps not set')).toHaveCount(4);
     await expect(dialog.getByText(/^Not set$/)).toHaveCount(0);
@@ -602,8 +610,8 @@ test.describe('routed training flows', () => {
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
 
-    const repetitions = page.getByLabel('Repetitions for haya');
-    const sets = page.getByLabel('Sets for haya');
+    const repetitions = page.getByLabel('Repetitions for Haya');
+    const sets = page.getByLabel('Sets for Haya');
     await expect(repetitions).toHaveValue('100');
     await expect(sets).toHaveValue('2');
     await repetitions.fill('80');
@@ -618,8 +626,8 @@ test.describe('routed training flows', () => {
     await notes.blur();
 
     await page.reload();
-    await expect(page.getByLabel('Repetitions for haya')).toHaveValue('80');
-    await expect(page.getByLabel('Sets for haya')).toHaveValue('0');
+    await expect(page.getByLabel('Repetitions for Haya')).toHaveValue('80');
+    await expect(page.getByLabel('Sets for Haya')).toHaveValue('0');
     await expect(page.getByLabel('Practice notes')).toHaveValue('Keep the shoulders relaxed.');
 
     await page.getByRole('button', { name: 'Remove' }).click();

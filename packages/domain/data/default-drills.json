@@ -211,28 +211,28 @@
     "sections": [
       {
         "id": "japanese-school-club-warm-up-warm-up",
-        "name": "warm-up",
+        "name": "Warm-up",
         "exercises": []
       },
       {
         "id": "japanese-school-club-suburi",
-        "name": "suburi",
+        "name": "Suburi",
         "exercises": [
           {
             "id": "japanese-school-club-suburi-joge",
-            "name": "jōge"
+            "name": "Joge"
           },
           {
             "id": "japanese-school-club-suburi-shomen",
-            "name": "shōmen"
+            "name": "Shomen"
           },
           {
             "id": "japanese-school-club-suburi-sayu-men",
-            "name": "sayū-men"
+            "name": "Sayu-men"
           },
           {
             "id": "japanese-school-club-suburi-haya",
-            "name": "haya"
+            "name": "Haya"
           }
         ]
       },
@@ -257,78 +257,78 @@
         "exercises": [
           {
             "id": "japanese-school-club-oji-waza-ai-men",
-            "name": "ai-men"
+            "name": "Ai-men"
           },
           {
             "id": "japanese-school-club-oji-waza-men-suriage-men",
-            "name": "men-suriage-men"
+            "name": "Men-suriage-men"
           },
           {
             "id": "japanese-school-club-oji-waza-debana-kote",
-            "name": "debana kote"
+            "name": "Debana kote"
           },
           {
             "id": "japanese-school-club-oji-waza-nuki-do",
-            "name": "nuki-dō"
+            "name": "Nuki-do"
           },
           {
             "id": "japanese-school-club-oji-waza-kaeshi-do",
-            "name": "kaeshi-dō"
+            "name": "Kaeshi-do"
           },
           {
             "id": "japanese-school-club-oji-waza-kote-suriage-men",
-            "name": "kote-suriage-men"
+            "name": "Kote-suriage-men"
           },
           {
             "id": "japanese-school-club-oji-waza-kote-kaeshi-men",
-            "name": "kote-kaeshi-men"
+            "name": "Kote-kaeshi-men"
           },
           {
             "id": "japanese-school-club-oji-waza-ai-kote-men",
-            "name": "ai-kote-men"
+            "name": "Ai-kote-men"
           },
           {
             "id": "japanese-school-club-oji-waza-kote-nuki-men",
-            "name": "kote-nuki-men"
+            "name": "Kote-nuki-men"
           }
         ]
       },
       {
         "id": "japanese-school-club-jigeiko-jigeiko",
-        "name": "jigeiko",
+        "name": "Jigeiko",
         "exercises": []
       },
       {
         "id": "japanese-school-club-hikiwaza",
-        "name": "hikiwaza",
+        "name": "Hiki-waza",
         "exercises": [
           {
             "id": "japanese-school-club-hikiwaza-hiki-men",
-            "name": "hiki men"
+            "name": "Hiki men"
           },
           {
             "id": "japanese-school-club-hikiwaza-hiki-kote",
-            "name": "hiki kote"
+            "name": "Hiki kote"
           },
           {
             "id": "japanese-school-club-hikiwaza-hiki-do",
-            "name": "hiki do"
+            "name": "Hiki do"
           }
         ]
       },
       {
         "id": "japanese-school-club-kakarigeiko-kakarigeiko",
-        "name": "kakarigeiko",
+        "name": "Kakarigeiko",
         "exercises": []
       },
       {
         "id": "japanese-school-club-ai-kakarigeiko-ai-kakarigeiko",
-        "name": "ai kakarigeiko",
+        "name": "Ai kakarigeiko",
         "exercises": []
       },
       {
         "id": "japanese-school-club-kirikaeshi-2-kirikaeshi",
-        "name": "kirikaeshi",
+        "name": "Kirikaeshi",
         "exercises": []
       }
     ]
@@ -344,42 +344,42 @@
         "exercises": [
           {
             "id": "junior-high-kendo-club-suburi-joge",
-            "name": "jōge",
+            "name": "Joge",
             "quantities": {
               "repetitions": 50
             }
           },
           {
             "id": "junior-high-kendo-club-suburi-shomen",
-            "name": "shōmen",
+            "name": "Shomen",
             "quantities": {
               "repetitions": 50
             }
           },
           {
             "id": "junior-high-kendo-club-suburi-fumikomi",
-            "name": "fumikomi",
+            "name": "Fumikomi",
             "quantities": {
               "repetitions": 50
             }
           },
           {
             "id": "junior-high-kendo-club-suburi-sayu-men",
-            "name": "sayū-men",
+            "name": "Sayu-men",
             "quantities": {
               "repetitions": 50
             }
           },
           {
             "id": "junior-high-kendo-club-suburi-taisabaki-joge",
-            "name": "taisabaki-jōge",
+            "name": "Taisabaki-joge",
             "quantities": {
               "repetitions": 50
             }
           },
           {
             "id": "junior-high-kendo-club-suburi-haya",
-            "name": "haya",
+            "name": "Haya",
             "quantities": {
               "repetitions": 100,
               "sets": 2
@@ -397,7 +397,7 @@
       },
       {
         "id": "junior-high-kendo-club-do-kirikaeshi-do-kirikaeshi",
-        "name": "dō-kirikaeshi",
+        "name": "Do-kirikaeshi",
         "quantities": {
           "repetitions": 3
         },
@@ -405,7 +405,7 @@
       },
       {
         "id": "junior-high-kendo-club-ai-kirikaeshi-ai-kirikaeshi",
-        "name": "ai kirikaeshi",
+        "name": "Ai kirikaeshi",
         "quantities": {
           "repetitions": 3
         },
@@ -417,7 +417,7 @@
         "exercises": [
           {
             "id": "junior-high-kendo-club-kihon-waza-big-men",
-            "name": "big men",
+            "name": "Big men",
             "quantities": {
               "repetitions": 5,
               "sets": 4
@@ -425,7 +425,7 @@
           },
           {
             "id": "junior-high-kendo-club-kihon-waza-big-kote-men",
-            "name": "big kote-men",
+            "name": "Big kote-men",
             "quantities": {
               "repetitions": 5,
               "sets": 4
@@ -435,11 +435,11 @@
       },
       {
         "id": "junior-high-kendo-club-match-speed-strikes",
-        "name": "Match-speed strikes",
+        "name": "\"Match-speed\" strikes",
         "exercises": [
           {
             "id": "junior-high-kendo-club-match-speed-strikes-men",
-            "name": "men",
+            "name": "Men",
             "quantities": {
               "repetitions": 5,
               "sets": 2
@@ -447,7 +447,7 @@
           },
           {
             "id": "junior-high-kendo-club-match-speed-strikes-kote",
-            "name": "kote",
+            "name": "Kote",
             "quantities": {
               "repetitions": 5,
               "sets": 2
@@ -455,7 +455,7 @@
           },
           {
             "id": "junior-high-kendo-club-match-speed-strikes-do",
-            "name": "dō",
+            "name": "Do",
             "quantities": {
               "repetitions": 5,
               "sets": 2
@@ -463,7 +463,7 @@
           },
           {
             "id": "junior-high-kendo-club-match-speed-strikes-kote-men",
-            "name": "kote-men",
+            "name": "Kote-men",
             "quantities": {
               "repetitions": 5,
               "sets": 2
@@ -471,7 +471,7 @@
           },
           {
             "id": "junior-high-kendo-club-match-speed-strikes-kote-do",
-            "name": "kote-dō",
+            "name": "Kote-do",
             "quantities": {
               "repetitions": 5,
               "sets": 2
@@ -529,7 +529,7 @@
           },
           {
             "id": "official-znkr-ajkf-kihon-waza-do",
-            "name": "Dō"
+            "name": "Do"
           },
           {
             "id": "official-znkr-ajkf-kihon-waza-tsuki",
@@ -567,7 +567,7 @@
         "exercises": [
           {
             "id": "official-znkr-ajkf-hiki-waza-hiki-do",
-            "name": "Hiki-dō"
+            "name": "Hiki-do"
           }
         ]
       },
@@ -577,7 +577,7 @@
         "exercises": [
           {
             "id": "official-znkr-ajkf-oji-waza-men-nuki-do",
-            "name": "Men-nuki-dō"
+            "name": "Men-nuki-do"
           },
           {
             "id": "official-znkr-ajkf-oji-waza-kote-suriage-men",
@@ -585,11 +585,11 @@
           },
           {
             "id": "official-znkr-ajkf-oji-waza-men-kaeshi-do",
-            "name": "Men-kaeshi-dō"
+            "name": "Men-kaeshi-do"
           },
           {
             "id": "official-znkr-ajkf-oji-waza-do-uchiotoshi-men",
-            "name": "Dō-uchiotoshi-men"
+            "name": "Do-uchiotoshi-men"
           }
         ]
       }
@@ -599,7 +599,7 @@
     "id": "police-dojo-asageiko",
     "sourceId": 5,
     "name": "Police dojo asageiko menu",
-    "description": "Practiced with mostly 5th–8th dan practitioners",
+    "description": "Practiced with mostly 5th–8th dan practitioners, 30 minutes long.",
     "sections": [
       {
         "id": "police-dojo-asageiko-warm-up-warm-up",
@@ -686,6 +686,7 @@
     "id": "police-dojo-asageiko-version-2",
     "sourceId": 6,
     "name": "Police dojo asageiko type 2 menu",
+    "description": "Normally run for small groups, and the menu tends to change depending on practitioners. 45 minutes long.",
     "sections": [
       {
         "id": "police-dojo-asageiko-version-2-kirikaeshi-1-kirikaeshi",
@@ -702,7 +703,7 @@
         "exercises": [
           {
             "id": "police-dojo-asageiko-version-2-renzoku-waza-big-men",
-            "name": "big men",
+            "name": "Big men",
             "quantities": {
               "repetitions": 3,
               "sets": 3
@@ -710,7 +711,7 @@
           },
           {
             "id": "police-dojo-asageiko-version-2-renzoku-waza-small-men",
-            "name": "small men",
+            "name": "Small men",
             "quantities": {
               "repetitions": 3,
               "sets": 3
@@ -724,7 +725,7 @@
         "exercises": [
           {
             "id": "police-dojo-asageiko-version-2-kihon-waza-small-men-1",
-            "name": "small men",
+            "name": "Small men",
             "quantities": {
               "repetitions": 3,
               "sets": 3
@@ -741,7 +742,7 @@
           },
           {
             "id": "police-dojo-asageiko-version-2-kihon-waza-small-men-3",
-            "name": "small men",
+            "name": "Small men",
             "quantities": {
               "repetitions": 3,
               "sets": 3
@@ -766,7 +767,7 @@
           },
           {
             "id": "police-dojo-asageiko-version-2-kihon-waza-katate-kote-morote-men",
-            "name": "katate-kote → morote-men",
+            "name": "Katate-kote → morote-men",
             "quantities": {
               "repetitions": 3,
               "sets": 1
@@ -815,7 +816,8 @@
       },
       {
         "id": "police-dojo-asageiko-version-2-mawari-geiko-mawari-geiko",
-        "name": "Mawari-geiko",
+        "name": "Mawarigeiko",
+        "editableQuantityUnits": ["minutes"],
         "exercises": []
       },
       {
@@ -839,11 +841,11 @@
         "exercises": [
           {
             "id": "senior-high-school-kendo-club-warm-up-stretch",
-            "name": "stretch"
+            "name": "Stretch"
           },
           {
             "id": "senior-high-school-kendo-club-warm-up-ladder-training",
-            "name": "ladder training"
+            "name": "Ladder training"
           }
         ]
       },
@@ -853,27 +855,27 @@
         "exercises": [
           {
             "id": "senior-high-school-kendo-club-suburi-joge",
-            "name": "joge"
+            "name": "Joge"
           },
           {
             "id": "senior-high-school-kendo-club-suburi-shomen",
-            "name": "shomen"
+            "name": "Shomen"
           },
           {
             "id": "senior-high-school-kendo-club-suburi-sayu-men",
-            "name": "sayu-men"
+            "name": "Sayu-men"
           },
           {
             "id": "senior-high-school-kendo-club-suburi-matawari",
-            "name": "matawari"
+            "name": "Matawari"
           },
           {
             "id": "senior-high-school-kendo-club-suburi-fumikomi",
-            "name": "fumikomi"
+            "name": "Fumikomi"
           },
           {
             "id": "senior-high-school-kendo-club-suburi-ikkyodo-one-hand",
-            "name": "ikkyodo (one-hand)"
+            "name": "Ikkyodo (one-hand)"
           }
         ]
       },
@@ -883,7 +885,7 @@
         "exercises": [
           {
             "id": "senior-high-school-kendo-club-ashi-sabaki-suri-ashi-drills",
-            "name": "suri-ashi drills",
+            "name": "Suri-ashi drills",
             "notes": "with and without shinai"
           }
         ]
@@ -895,17 +897,17 @@
       },
       {
         "id": "senior-high-school-kendo-club-one-breath-kirikaeshi-one-breath-kirikaeshi",
-        "name": "one-breath-kirikaeshi",
+        "name": "One-breath-kirikaeshi",
         "exercises": []
       },
       {
         "id": "senior-high-school-kendo-club-ai-kirikaeshi-ai-kirikaeshi",
-        "name": "ai kirikaeshi",
+        "name": "Ai kirikaeshi",
         "exercises": []
       },
       {
         "id": "senior-high-school-kendo-club-do-kirikaeshi-do-kirikaeshi",
-        "name": "do-kirikaeshi",
+        "name": "Do-kirikaeshi",
         "exercises": []
       },
       {
@@ -918,27 +920,27 @@
           },
           {
             "id": "senior-high-school-kendo-club-kihon-waza-sashi-men",
-            "name": "sashi-men"
+            "name": "Sashi-men"
           },
           {
             "id": "senior-high-school-kendo-club-kihon-waza-kote",
-            "name": "kote"
+            "name": "Kote"
           },
           {
             "id": "senior-high-school-kendo-club-kihon-waza-do",
-            "name": "do"
+            "name": "Do"
           },
           {
             "id": "senior-high-school-kendo-club-kihon-waza-morote-tsuki",
-            "name": "morote-tsuki"
+            "name": "Morote-tsuki"
           },
           {
             "id": "senior-high-school-kendo-club-kihon-waza-gyaku-do",
-            "name": "gyaku-do"
+            "name": "Gyaku-do"
           },
           {
             "id": "senior-high-school-kendo-club-kihon-waza-kote-men",
-            "name": "kote-men"
+            "name": "Kote-men"
           }
         ]
       },
@@ -948,19 +950,19 @@
         "exercises": [
           {
             "id": "senior-high-school-kendo-club-hiki-waza-hiki-men",
-            "name": "hiki-men"
+            "name": "Hiki-men"
           },
           {
             "id": "senior-high-school-kendo-club-hiki-waza-hiki-kote",
-            "name": "hiki-kote"
+            "name": "Hiki-kote"
           },
           {
             "id": "senior-high-school-kendo-club-hiki-waza-hiki-do",
-            "name": "hiki-do"
+            "name": "Hiki-do"
           },
           {
             "id": "senior-high-school-kendo-club-hiki-waza-hiki-gyaku-do",
-            "name": "hiki-gyaku-do"
+            "name": "Hiki-gyaku-do"
           }
         ]
       },
@@ -970,27 +972,27 @@
         "exercises": [
           {
             "id": "senior-high-school-kendo-club-waza-geiko-debana-men",
-            "name": "debana-men"
+            "name": "Debana-men"
           },
           {
             "id": "senior-high-school-kendo-club-waza-geiko-debana-kote",
-            "name": "debana-kote"
+            "name": "Debana-kote"
           },
           {
             "id": "senior-high-school-kendo-club-waza-geiko-men-nuki-do",
-            "name": "men-nuki-do"
+            "name": "Men-nuki-do"
           },
           {
             "id": "senior-high-school-kendo-club-waza-geiko-men-suriage-men",
-            "name": "men-suriage-men"
+            "name": "Men-suriage-men"
           },
           {
             "id": "senior-high-school-kendo-club-waza-geiko-ai-kote-men",
-            "name": "ai-kote-men"
+            "name": "Ai-kote-men"
           },
           {
             "id": "senior-high-school-kendo-club-waza-geiko-kote-kaeshi-men",
-            "name": "kote-kaeshi-men"
+            "name": "Kote-kaeshi-men"
           }
         ]
       },
@@ -1000,23 +1002,23 @@
         "exercises": [
           {
             "id": "senior-high-school-kendo-club-oikomi-geiko-big-men",
-            "name": "big men"
+            "name": "Big men"
           },
           {
             "id": "senior-high-school-kendo-club-oikomi-geiko-small-men",
-            "name": "small men"
+            "name": "Small men"
           },
           {
             "id": "senior-high-school-kendo-club-oikomi-geiko-kote-men",
-            "name": "kote-men"
+            "name": "Kote-men"
           },
           {
             "id": "senior-high-school-kendo-club-oikomi-geiko-hiki-men",
-            "name": "hiki-men"
+            "name": "Hiki-men"
           },
           {
             "id": "senior-high-school-kendo-club-oikomi-geiko-kote-men-do-kote-men",
-            "name": "kote-men-do-kote-men"
+            "name": "Kote-men-do-kote-men"
           }
         ]
       },
@@ -1027,8 +1029,8 @@
       },
       {
         "id": "senior-high-school-kendo-club-jigeiko-jigeiko",
-        "name": "jigeiko",
-        "notes": "3 min rounds",
+        "name": "Jigeiko",
+        "notes": "3 minutes rounds",
         "quantities": {
           "duration": {
             "unit": "minutes",
@@ -1039,13 +1041,7 @@
       },
       {
         "id": "senior-high-school-kendo-club-kakarigeiko-kakarigeiko",
-        "name": "kakarigeiko",
-        "exercises": []
-      },
-      {
-        "id": "senior-high-school-kendo-club-core-strength-training-core-strength-training",
-        "name": "Core/strength training",
-        "notes": "seasonal",
+        "name": "Kakarigeiko",
         "exercises": []
       }
     ]
@@ -1255,7 +1251,7 @@
     "sections": [
       {
         "id": "junior-high-school-version-2-warm-up-warm-up",
-        "name": "warm-up",
+        "name": "Warm-up",
         "exercises": []
       },
       {
@@ -1264,42 +1260,42 @@
         "exercises": [
           {
             "id": "junior-high-school-version-2-suburi-sankyodo-shomen",
-            "name": "sankyodo-shomen",
+            "name": "Sankyodo-shomen",
             "quantities": {
               "repetitions": 100
             }
           },
           {
             "id": "junior-high-school-version-2-suburi-sayu-men",
-            "name": "sayu-men",
+            "name": "Sayu-men",
             "quantities": {
               "repetitions": 100
             }
           },
           {
             "id": "junior-high-school-version-2-suburi-shomen-2-step-4-directions",
-            "name": "shomen 2-step 4-directions",
+            "name": "Shomen 2-step 4-directions",
             "quantities": {
               "repetitions": 100
             }
           },
           {
             "id": "junior-high-school-version-2-suburi-sayu-2-step-8-directions",
-            "name": "sayu 2-step 8-directions",
+            "name": "Sayu 2-step 8-directions",
             "quantities": {
               "repetitions": 100
             }
           },
           {
             "id": "junior-high-school-version-2-suburi-zenshin-kotae-shomen",
-            "name": "zenshin-kotae shomen",
+            "name": "Zenshin-kotae shomen",
             "quantities": {
               "repetitions": 100
             }
           },
           {
             "id": "junior-high-school-version-2-suburi-hayasuburi",
-            "name": "hayasuburi",
+            "name": "Haya",
             "quantities": {
               "repetitions": 100,
               "sets": 3
@@ -1313,15 +1309,15 @@
         "exercises": [
           {
             "id": "junior-high-school-version-2-ashi-sabaki-one-step-advances",
-            "name": "one-step advances"
+            "name": "One-step advances"
           },
           {
             "id": "junior-high-school-version-2-ashi-sabaki-position-swap-suri-ashi",
-            "name": "position-swap suri-ashi"
+            "name": "Position-swap suri-ashi"
           },
           {
             "id": "junior-high-school-version-2-ashi-sabaki-one-leg-suburi",
-            "name": "one-leg suburi"
+            "name": "One-leg suburi"
           },
           {
             "id": "junior-high-school-version-2-ashi-sabaki-3-direction-fumikomi",
@@ -1329,9 +1325,14 @@
           },
           {
             "id": "junior-high-school-version-2-ashi-sabaki-fumikomi-into-strike-drills",
-            "name": "fumikomi-into-strike drills"
+            "name": "Fumikomi-into-strike drills"
           }
         ]
+      },
+      {
+        "id": "junior-high-school-version-2-kihon-waza-kihon-waza",
+        "name": "Kihon-waza",
+        "exercises": []
       },
       {
         "id": "junior-high-school-version-2-mawarigeiko-mawarigeiko",
@@ -1363,25 +1364,25 @@
       {
         "id": "university-version-2-dojo-length-drills",
         "name": "Dojo-length drills",
-        "notes": "The following three Kirikaeshi exercises are performed over the length of the dojo",
+        "notes": "The following three Kirikaeshi exercises are performed over the length of the dojo:",
         "exercises": [
           {
             "id": "university-version-2-dojo-length-drills-slow-kirikaeshi",
-            "name": "slow kirikaeshi",
+            "name": "Slow kirikaeshi",
             "quantities": {
               "repetitions": 2
             }
           },
           {
             "id": "university-version-2-dojo-length-drills-kirikaeshi",
-            "name": "kirikaeshi",
+            "name": "Kirikaeshi",
             "quantities": {
               "repetitions": 2
             }
           },
           {
             "id": "university-version-2-dojo-length-drills-kirikaeshi-suriashi",
-            "name": "kirikaeshi + suriashi",
+            "name": "Kirikaeshi + suri-ashi",
             "quantities": {
               "repetitions": 2
             }
@@ -1394,14 +1395,14 @@
         "exercises": [
           {
             "id": "university-version-2-oikomi-geiko-men",
-            "name": "men",
+            "name": "Men",
             "quantities": {
               "repetitions": 3
             }
           },
           {
             "id": "university-version-2-oikomi-geiko-kote-men",
-            "name": "kote-men",
+            "name": "Kote-men",
             "quantities": {
               "repetitions": 3
             }
@@ -1410,47 +1411,47 @@
       },
       {
         "id": "university-version-2-kihon-waza",
-        "name": "kihon-waza",
+        "name": "Kihon-waza",
         "exercises": [
           {
             "id": "university-version-2-kihon-waza-men",
-            "name": "men"
+            "name": "Men"
           },
           {
             "id": "university-version-2-kihon-waza-kote",
-            "name": "kote"
+            "name": "Kote"
           },
           {
             "id": "university-version-2-kihon-waza-do",
-            "name": "do"
+            "name": "Do"
           },
           {
             "id": "university-version-2-kihon-waza-tsuki",
-            "name": "tsuki"
+            "name": "Tsuki"
           }
         ]
       },
       {
         "id": "university-version-2-shikake-waza",
-        "name": "shikake-waza",
+        "name": "Shikake-waza",
         "exercises": [
           {
             "id": "university-version-2-shikake-waza-men",
-            "name": "men",
+            "name": "Men",
             "quantities": {
               "repetitions": 2
             }
           },
           {
             "id": "university-version-2-shikake-waza-kote",
-            "name": "kote",
+            "name": "Kote",
             "quantities": {
               "repetitions": 2
             }
           },
           {
             "id": "university-version-2-shikake-waza-do",
-            "name": "do",
+            "name": "Do",
             "quantities": {
               "repetitions": 2
             }
@@ -1459,18 +1460,18 @@
       },
       {
         "id": "university-version-2-debana-waza",
-        "name": "debana-waza",
+        "name": "Debana-waza",
         "exercises": [
           {
             "id": "university-version-2-debana-waza-debana-men",
-            "name": "debana men",
+            "name": "Debana men",
             "quantities": {
               "repetitions": 3
             }
           },
           {
             "id": "university-version-2-debana-waza-debana-kote",
-            "name": "debana kote",
+            "name": "Debana kote",
             "quantities": {
               "repetitions": 3
             }
@@ -1479,25 +1480,25 @@
       },
       {
         "id": "university-version-2-hiki-waza",
-        "name": "hiki-waza",
+        "name": "Hiki-waza",
         "exercises": [
           {
             "id": "university-version-2-hiki-waza-hiki-men",
-            "name": "hiki men",
+            "name": "Hiki men",
             "quantities": {
               "repetitions": 4
             }
           },
           {
             "id": "university-version-2-hiki-waza-hiki-kote",
-            "name": "hiki kote",
+            "name": "Hiki kote",
             "quantities": {
               "repetitions": 4
             }
           },
           {
             "id": "university-version-2-hiki-waza-hiki-do",
-            "name": "hiki do",
+            "name": "Hiki do",
             "quantities": {
               "repetitions": 4
             }
@@ -1506,7 +1507,7 @@
       },
       {
         "id": "university-version-2-jigeiko-jigeiko",
-        "name": "jigeiko",
+        "name": "Jigeiko",
         "quantities": {
           "duration": {
             "unit": "minutes",
@@ -1517,7 +1518,7 @@
       },
       {
         "id": "university-version-2-kakarigeijo-kakarigeijo",
-        "name": "kakarigeijo",
+        "name": "Kakarigeiko",
         "quantities": {
           "duration": {
             "unit": "minutes",
@@ -1528,7 +1529,7 @@
       },
       {
         "id": "university-version-2-shiaigeiko-shiaigeiko",
-        "name": "shiaigeiko",
+        "name": "Shiaigeiko",
         "quantities": {
           "duration": {
             "unit": "minutes",

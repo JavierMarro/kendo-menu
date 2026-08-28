@@ -26,6 +26,7 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-08-28 — non-complex curated session synchronization](./2026-08-28-non-complex-session-sync.md)
 - [2026-08-28 — recursive activity web rendering](./2026-08-28-recursive-activity-web-rendering.md)
 - [2026-08-28 — recursive training activity contract](./2026-08-28-recursive-training-activity-contract.md)
 - [2026-08-27 — session terminology and library-detail refinement](./2026-08-27-session-terminology-refinement.md)

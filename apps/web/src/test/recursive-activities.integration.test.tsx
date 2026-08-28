@@ -299,7 +299,7 @@ describe('recursive activity web consumers', () => {
     expect(closeButton).toHaveFocus();
   });
 
-  it('hydrates a deep nested override from the existing version-six storage shape', () => {
+  it('hydrates a deep nested override from the unchanged version-seven storage shape', () => {
     const storage = new TestMemoryStorage();
     const first = renderDashboardFixture(storage);
     const firstEntry = first.store.getState().dashboardEntries[0];
