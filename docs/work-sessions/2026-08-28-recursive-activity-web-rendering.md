@@ -1,0 +1,8 @@
+- Session: recursive activity web rendering
+- Date/duration: 2026-08-28; not recorded
+- Scope/start: Job 3 built on the committed recursive Job 2 contract; canonical PDF-derived data and persistence v6 remained unchanged.
+- Changes: Added one recursive React tree seam, nested library disclosures, deep dashboard editors, focus-aware dialog trapping, responsive hierarchy styles, and synthetic Vitest/Playwright fixtures.
+- Decisions: Stable activity IDs remain React and override keys; pure containers have no quantity UI, while explicit quantities, editable metadata, and compatible leaf fallback determine presentation.
+- Roadblocks: Review found hidden nested summaries in the focus trap and override-only pure-container editors; screenshot QA found mobile unit-word wrapping, and all three were corrected.
+- Verification: Sol review and delta review passed; 57 web tests, strict web typecheck, 12 dialog/recursive Playwright cases across Chromium and Pixel 5, axe checks, and desktop/mobile screenshots passed before the final gate.
+- Follow-up: Synchronize the audited PDF-derived recursive hierarchy and metadata only in the separately scoped content job; activity-specific user notes remain deferred.

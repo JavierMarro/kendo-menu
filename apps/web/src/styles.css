@@ -1713,6 +1713,69 @@ a {
   border-bottom: 0;
 }
 
+/* Recursive activity rows keep their semantic list structure without adding
+   a new grid column at every depth. */
+.training-step--nested-container {
+  display: block;
+  padding: 0;
+}
+
+.training-step--nested-container > .detail-section {
+  width: 100%;
+}
+
+.detail-section--nested {
+  border-radius: var(--radius-md);
+}
+
+.detail-section--nested .detail-section-summary {
+  padding: var(--space-3) var(--space-4);
+}
+
+.detail-section--nested .detail-section-label {
+  font-size: var(--type-16);
+}
+
+/* An open ancestor must not make a closed descendant look expanded. */
+.detail-section:not([open]) > .detail-section-summary .detail-section-indicator::before {
+  content: '+';
+}
+
+.detail-section[open] > .detail-section-summary .detail-section-indicator::before {
+  content: '−';
+}
+
+.detail-section--nested .detail-section > .training-step-list,
+.detail-section--nested > .training-step-list {
+  padding-inline: var(--space-4);
+}
+
+.training-nested-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.training-nested-heading h4 {
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  font-size: var(--type-16);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.training-step--nested-container > .training-step--standalone {
+  border-bottom: 1px solid var(--line);
+}
+
+.training-step--nested-container > .training-step-list {
+  padding-inline: var(--space-3);
+}
+
 .step-number {
   min-width: 1.5rem;
   font-size: var(--type-12);
@@ -1786,6 +1849,12 @@ a {
   color: var(--text);
   background: transparent;
   font-variant-numeric: tabular-nums;
+}
+
+.quantity-input-wrap > span {
+  flex: 0 0 auto;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 .quantity-input-wrap input::placeholder {

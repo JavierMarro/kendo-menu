@@ -21,10 +21,27 @@ const FOCUSABLE_SELECTOR = [
 ].join(',');
 
 function getFocusableElements(dialog: HTMLElement): readonly HTMLElement[] {
-  return [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(
-    (element) =>
-      element.getAttribute('aria-hidden') !== 'true' && element.closest('[hidden]') === null,
-  );
+  return [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)]
+    .filter(
+      (element) =>
+        element.getAttribute('aria-hidden') !== 'true' && element.closest('[hidden]') === null,
+    )
+    .filter((element) => !isHiddenByClosedDetails(element));
+}
+
+function isHiddenByClosedDetails(element: HTMLElement): boolean {
+  let ancestor = element.parentElement;
+  while (ancestor !== null) {
+    if (ancestor instanceof HTMLDetailsElement && !ancestor.open) {
+      const isOwnSummary = element.tagName === 'SUMMARY' && element.parentElement === ancestor;
+      if (!isOwnSummary) {
+        return true;
+      }
+    }
+    ancestor = ancestor.parentElement;
+  }
+
+  return false;
 }
 
 function restoreAttribute(element: HTMLElement, name: string, previousValue: string | null): void {

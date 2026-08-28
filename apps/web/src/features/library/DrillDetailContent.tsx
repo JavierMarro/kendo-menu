@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 
 import type { TrainingActivity, TrainingSet } from '@kendo-menu/domain';
@@ -13,6 +13,10 @@ import {
   getTrainingSetDescription,
 } from '../../lib/training-data';
 import { useTrainingStore } from '../../lib/training-store-context';
+import {
+  TrainingActivityTree,
+  type TrainingActivityRenderContext,
+} from '../training-activities/TrainingActivityTree';
 
 interface DrillDetailContentProps {
   readonly titleId: string;
@@ -41,6 +45,131 @@ function TrainingActivityQuantities({ activity, parentActivity }: TrainingActivi
         <li key={quantity.unit}>{formatTrainingQuantity(quantity)}</li>
       ))}
     </ul>
+  );
+}
+
+function hasVisibleParentDetails(activity: TrainingActivity): boolean {
+  return hasText(activity.notes) || getSpecifiedTrainingQuantities(activity).length > 0;
+}
+
+function getChildCountLabel(activity: TrainingActivity, childCount: number): string {
+  const containsContainer = activity.children.some((child) => child.children.length > 0);
+  if (containsContainer) {
+    return `${childCount} activit${childCount === 1 ? 'y' : 'ies'}`;
+  }
+  return `${childCount} exercis${childCount === 1 ? 'e' : 'es'}`;
+}
+
+function toggleDisclosureWithKeyboard(event: KeyboardEvent<HTMLElement>): void {
+  if (event.key !== 'Enter' && event.key !== ' ') {
+    return;
+  }
+
+  const details = event.currentTarget.parentElement;
+  if (!(details instanceof HTMLDetailsElement)) {
+    return;
+  }
+
+  event.preventDefault();
+  details.open = !details.open;
+}
+
+interface LibraryActivityRenderOptions {
+  readonly titleId: string;
+}
+
+function renderLibraryActivity(
+  context: TrainingActivityRenderContext,
+  { titleId }: LibraryActivityRenderOptions,
+) {
+  const { activity, parentActivity, depth, index, childCount, isLeaf, children } = context;
+  const activityNumber = index + 1;
+  const activityHeadingId = `${titleId}-activity-${activity.id}`;
+  const activityDataAttributes = { 'data-activity-id': activity.id };
+
+  if (isLeaf) {
+    if (depth === 0) {
+      return (
+        <section
+          className="detail-section detail-standalone-activity"
+          aria-labelledby={activityHeadingId}
+          {...activityDataAttributes}
+        >
+          <span className="section-number" aria-hidden="true">
+            {activityNumber}
+          </span>
+          <div className="detail-standalone-copy">
+            <h2 className="detail-section-label" id={activityHeadingId}>
+              {activity.name}
+            </h2>
+            {hasText(activity.notes) ? <p className="step-description">{activity.notes}</p> : null}
+          </div>
+          <TrainingActivityQuantities activity={activity} />
+        </section>
+      );
+    }
+
+    return (
+      <li className="training-step" {...activityDataAttributes}>
+        <span className="step-number" aria-hidden="true">
+          {activityNumber}
+        </span>
+        <div className="step-copy">
+          <span className="step-label">{activity.name}</span>
+          {hasText(activity.notes) ? (
+            <span className="step-description">{activity.notes}</span>
+          ) : null}
+        </div>
+        <TrainingActivityQuantities
+          activity={activity}
+          {...(parentActivity === undefined ? {} : { parentActivity })}
+        />
+      </li>
+    );
+  }
+
+  const summary = (
+    <summary className="detail-section-summary" onKeyDown={toggleDisclosureWithKeyboard}>
+      <span className="detail-section-summary-content">
+        <span className="detail-section-indicator" aria-hidden="true" />
+        <span className="section-number" aria-hidden="true">
+          {activityNumber}
+        </span>
+        <span className="detail-section-label">{activity.name}</span>
+        <span className="detail-section-count">{getChildCountLabel(activity, childCount)}</span>
+      </span>
+    </summary>
+  );
+  const detailContent = (
+    <>
+      {hasVisibleParentDetails(activity) ? (
+        <div className="detail-section-parent">
+          {hasText(activity.notes) ? <p className="step-description">{activity.notes}</p> : null}
+          {getSpecifiedTrainingQuantities(activity).length > 0 ? (
+            <TrainingActivityQuantities activity={activity} />
+          ) : null}
+        </div>
+      ) : null}
+      <ol className="training-step-list">{children}</ol>
+    </>
+  );
+
+  if (depth === 0) {
+    return (
+      <details className="detail-section" {...activityDataAttributes}>
+        {summary}
+        {detailContent}
+      </details>
+    );
+  }
+
+  return (
+    <li className="training-step training-step--nested-container" {...activityDataAttributes}>
+      <details className="detail-section detail-section--nested">
+        {summary}
+        {detailContent}
+      </details>
+    </li>
   );
 }
 
@@ -87,77 +216,10 @@ export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentP
       ) : null}
 
       <div className="detail-sections">
-        {trainingSet.activities.map((activity, activityIndex) => {
-          const activityNumber = activityIndex + 1;
-          const activityHeadingId = `${titleId}-activity-${activity.id}`;
-
-          if (activity.children.length === 0) {
-            return (
-              <section
-                className="detail-section detail-standalone-activity"
-                aria-labelledby={activityHeadingId}
-                key={activity.id}
-              >
-                <span className="section-number" aria-hidden="true">
-                  {activityNumber}
-                </span>
-                <div className="detail-standalone-copy">
-                  <h2 className="detail-section-label" id={activityHeadingId}>
-                    {activity.name}
-                  </h2>
-                  {hasText(activity.notes) ? (
-                    <p className="step-description">{activity.notes}</p>
-                  ) : null}
-                </div>
-                <TrainingActivityQuantities activity={activity} />
-              </section>
-            );
-          }
-
-          const childCount = activity.children.length;
-          const hasParentActivity = activity.quantities !== undefined;
-
-          return (
-            <details className="detail-section" key={activity.id}>
-              <summary className="detail-section-summary">
-                <span className="detail-section-summary-content">
-                  <span className="detail-section-indicator" aria-hidden="true" />
-                  <span className="section-number" aria-hidden="true">
-                    {activityNumber}
-                  </span>
-                  <span className="detail-section-label">{activity.name}</span>
-                  <span className="detail-section-count">
-                    {childCount} {childCount === 1 ? 'exercise' : 'exercises'}
-                  </span>
-                </span>
-              </summary>
-              {hasText(activity.notes) || hasParentActivity ? (
-                <div className="detail-section-parent">
-                  {hasText(activity.notes) ? (
-                    <p className="step-description">{activity.notes}</p>
-                  ) : null}
-                  {hasParentActivity ? <TrainingActivityQuantities activity={activity} /> : null}
-                </div>
-              ) : null}
-              <ol className="training-step-list">
-                {activity.children.map((child, childIndex) => (
-                  <li className="training-step" key={child.id}>
-                    <span className="step-number" aria-hidden="true">
-                      {childIndex + 1}
-                    </span>
-                    <div className="step-copy">
-                      <span className="step-label">{child.name}</span>
-                      {hasText(child.notes) ? (
-                        <span className="step-description">{child.notes}</span>
-                      ) : null}
-                    </div>
-                    <TrainingActivityQuantities activity={child} parentActivity={activity} />
-                  </li>
-                ))}
-              </ol>
-            </details>
-          );
-        })}
+        <TrainingActivityTree
+          activities={trainingSet.activities}
+          renderActivity={(context) => renderLibraryActivity(context, { titleId })}
+        />
       </div>
     </div>
   );

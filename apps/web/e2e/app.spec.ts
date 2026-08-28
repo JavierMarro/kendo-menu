@@ -229,7 +229,7 @@ test.describe('routed training flows', () => {
       .locator('xpath=ancestor::article');
     await expect(card).toContainText('Intense session');
     await expect(card).toContainText('Set for a 2 hours long session.');
-    await expect(card).toContainText('20 activities');
+    await expect(card).toContainText('25 activities');
     const viewDrill = card.getByRole('link', { name: 'View session' });
     await expect(viewDrill).toHaveAttribute(
       'href',

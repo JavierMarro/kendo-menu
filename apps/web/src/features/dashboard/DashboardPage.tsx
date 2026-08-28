@@ -29,6 +29,10 @@ import {
   getPersistenceUpdateLabel,
   usePersistenceStatus,
 } from '../persistence/persistence-context';
+import {
+  TrainingActivityTree,
+  type TrainingActivityRenderContext,
+} from '../training-activities/TrainingActivityTree';
 
 function getQuantityDraftValue(
   entry: DashboardEntry,
@@ -196,7 +200,7 @@ interface DashboardTrainingSetProps {
   readonly onClearQuantity: (activityId: string, unit: TrainingQuantityUnit) => void;
 }
 
-function DashboardTrainingSet({
+export function DashboardTrainingSet({
   entry,
   index,
   trainingSet,
@@ -245,59 +249,16 @@ function DashboardTrainingSet({
       </div>
 
       <div className="dashboard-sections">
-        {activities.map((activity, activityIndex) => (
-          <section
-            className="training-section"
-            key={activity.id}
-            aria-labelledby={`${entry.id}-${activity.id}`}
-          >
-            <div className="training-section-heading">
-              <span className="section-number" aria-hidden="true">
-                {activityIndex + 1}
-              </span>
-              <h3 id={`${entry.id}-${activity.id}`}>{activity.name}</h3>
-            </div>
-            {activity.children.length === 0 || activity.quantities !== undefined ? (
-              <div className="training-step training-step--standalone">
-                {activity.notes !== undefined && activity.notes.length > 0 ? (
-                  <span className="step-description">{activity.notes}</span>
-                ) : null}
-                <QuantityEditors
-                  entry={entry}
-                  activity={activity}
-                  onSet={onSetQuantity}
-                  onClear={onClearQuantity}
-                />
-              </div>
-            ) : activity.notes !== undefined && activity.notes.length > 0 ? (
-              <p className="step-description">{activity.notes}</p>
-            ) : null}
-            {activity.children.length > 0 ? (
-              <ol className="training-step-list">
-                {activity.children.map((child, childIndex) => (
-                  <li className="training-step" key={child.id}>
-                    <span className="step-number" aria-hidden="true">
-                      {childIndex + 1}
-                    </span>
-                    <div className="step-copy">
-                      <span className="step-label">{child.name}</span>
-                      {child.notes !== undefined && child.notes.length > 0 ? (
-                        <span className="step-description">{child.notes}</span>
-                      ) : null}
-                    </div>
-                    <QuantityEditors
-                      entry={entry}
-                      activity={child}
-                      parentActivity={activity}
-                      onSet={onSetQuantity}
-                      onClear={onClearQuantity}
-                    />
-                  </li>
-                ))}
-              </ol>
-            ) : null}
-          </section>
-        ))}
+        <TrainingActivityTree
+          activities={activities}
+          renderActivity={(context) =>
+            renderDashboardActivity(context, {
+              entry,
+              onSetQuantity,
+              onClearQuantity,
+            })
+          }
+        />
       </div>
 
       <div className="notes-field">
@@ -318,6 +279,89 @@ function DashboardTrainingSet({
   );
 }
 
+interface DashboardActivityRenderOptions {
+  readonly entry: DashboardEntry;
+  readonly onSetQuantity: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
+  readonly onClearQuantity: (activityId: string, unit: TrainingQuantityUnit) => void;
+}
+
+function renderDashboardActivity(
+  context: TrainingActivityRenderContext,
+  options: DashboardActivityRenderOptions,
+) {
+  const { activity, parentActivity, depth, index, isLeaf, children } = context;
+  const { entry, onSetQuantity, onClearQuantity } = options;
+  const activityUnits = getEditableTrainingQuantityUnits(entry, activity, parentActivity);
+  const hasNotes = activity.notes !== undefined && activity.notes.length > 0;
+  const activityDataAttributes = { 'data-activity-id': activity.id };
+  const headingId = `${entry.id}-${activity.id}`;
+  const editors =
+    activityUnits.length === 0 ? null : (
+      <QuantityEditors
+        entry={entry}
+        activity={activity}
+        {...(parentActivity === undefined ? {} : { parentActivity })}
+        onSet={onSetQuantity}
+        onClear={onClearQuantity}
+      />
+    );
+
+  if (depth === 0) {
+    return (
+      <section className="training-section" aria-labelledby={headingId} {...activityDataAttributes}>
+        <div className="training-section-heading">
+          <span className="section-number" aria-hidden="true">
+            {index + 1}
+          </span>
+          <h3 id={headingId}>{activity.name}</h3>
+        </div>
+        {isLeaf || activityUnits.length > 0 ? (
+          <div className="training-step training-step--standalone">
+            {hasNotes ? <span className="step-description">{activity.notes}</span> : null}
+            {editors}
+          </div>
+        ) : hasNotes ? (
+          <p className="step-description">{activity.notes}</p>
+        ) : null}
+        {isLeaf ? null : <ol className="training-step-list">{children}</ol>}
+      </section>
+    );
+  }
+
+  if (isLeaf) {
+    return (
+      <li className="training-step" {...activityDataAttributes}>
+        <span className="step-number" aria-hidden="true">
+          {index + 1}
+        </span>
+        <div className="step-copy">
+          <span className="step-label">{activity.name}</span>
+          {hasNotes ? <span className="step-description">{activity.notes}</span> : null}
+        </div>
+        {editors}
+      </li>
+    );
+  }
+
+  return (
+    <li className="training-step training-step--nested-container" {...activityDataAttributes}>
+      <div className="training-nested-heading">
+        <span className="step-number" aria-hidden="true">
+          {index + 1}
+        </span>
+        <h4 id={headingId}>{activity.name}</h4>
+      </div>
+      {hasNotes || activityUnits.length > 0 ? (
+        <div className="training-step training-step--standalone">
+          {hasNotes ? <span className="step-description">{activity.notes}</span> : null}
+          {editors}
+        </div>
+      ) : null}
+      <ol className="training-step-list">{children}</ol>
+    </li>
+  );
+}
+
 interface QuantityEditorsProps {
   readonly entry: DashboardEntry;
   readonly activity: TrainingActivity;
@@ -334,6 +378,10 @@ function QuantityEditors({
   onClear,
 }: QuantityEditorsProps) {
   const units = getEditableTrainingQuantityUnits(entry, activity, parentActivity);
+
+  if (units.length === 0) {
+    return null;
+  }
 
   return (
     <div className="quantity-editor-group">

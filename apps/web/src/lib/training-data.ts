@@ -152,11 +152,15 @@ export function getEditableTrainingQuantityUnits(
   parentActivity?: TrainingActivity,
 ): readonly TrainingQuantityUnit[] {
   const overrides = entry.quantityOverrides[activity.id];
-  const explicitUnits = getDomainEditableTrainingQuantityUnits(activity, overrides);
   const hasExplicitQuantityUnits = getDefaultTrainingQuantityUnits(activity).length > 0;
   const hasEditableUnitMetadata = (activity.editableQuantityUnits?.length ?? 0) > 0;
+  const isEligibleContainer = hasExplicitQuantityUnits || hasEditableUnitMetadata;
+  const explicitUnits =
+    activity.children.length === 0 || isEligibleContainer
+      ? getDomainEditableTrainingQuantityUnits(activity, overrides)
+      : [];
   const fallbackUnit =
-    !hasExplicitQuantityUnits && !hasEditableUnitMetadata
+    activity.children.length === 0 && !hasExplicitQuantityUnits && !hasEditableUnitMetadata
       ? getInferredTrainingQuantityUnit(activity, parentActivity)
       : undefined;
 
