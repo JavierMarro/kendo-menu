@@ -23,14 +23,14 @@ import {
   type StorageValue,
 } from 'zustand/middleware';
 
-export const TRAINING_STORE_PERSISTENCE_VERSION = 7;
+export const TRAINING_STORE_PERSISTENCE_VERSION = 8;
 
 export interface PersistedTrainingState {
   readonly dashboardEntries: readonly DashboardEntry[];
   readonly customTrainingSets: readonly TrainingSet[];
 }
 
-/** The v5-v7 storage DTO retained for the on-disk two-level sections/exercises shape. */
+/** The v5-v8 storage DTO retained for the on-disk two-level sections/exercises shape. */
 export interface PersistedTrainingExercise {
   readonly id: string;
   readonly name: string;
@@ -63,6 +63,7 @@ export interface PersistedTrainingWireState {
 
 export type PersistedTrainingStateV5 = PersistedTrainingWireState;
 export type PersistedTrainingStateV6 = PersistedTrainingWireState;
+export type PersistedTrainingStateV7 = PersistedTrainingWireState;
 
 export interface TrainingOverrideMigrationConflict {
   readonly dashboardEntryId: string;
@@ -219,7 +220,7 @@ export type TrainingStorageInspection =
   | {
       readonly status: 'migrated';
       readonly kind: 'migrated';
-      readonly fromVersion: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+      readonly fromVersion: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
       readonly version: typeof TRAINING_STORE_PERSISTENCE_VERSION;
       readonly state: PersistedTrainingState;
     }
@@ -1493,6 +1494,83 @@ export function migratePersistedTrainingStateV6ToV7(value: unknown): PersistedTr
 
 export const migrateV6ToV7 = migratePersistedTrainingStateV6ToV7;
 
+const TOP_UNIVERSITY_CORRECTED_HIKI_SEQUENCE_ACTIVITY_ID =
+  'top-university-yakusoku-geiko-hiki-do-men-kirikaeshi';
+const TOP_UNIVERSITY_FREE_UCHIKOMI_ACTIVITY_ID = 'top-university-fee-version-uchikomi-geiko';
+const TOP_UNIVERSITY_FREE_KAKARIGEIKO_ACTIVITY_ID = 'top-university-fee-version-kakari-geiko';
+const TOP_UNIVERSITY_FINAL_KAKARIGEIKO_ACTIVITY_ID = 'top-university-kakarigeiko-kakarigeiko';
+const TOP_UNIVERSITY_SECONDS_ONLY_ACTIVITY_IDS = new Set<string>([
+  TOP_UNIVERSITY_FREE_UCHIKOMI_ACTIVITY_ID,
+  TOP_UNIVERSITY_FREE_KAKARIGEIKO_ACTIVITY_ID,
+  TOP_UNIVERSITY_FINAL_KAKARIGEIKO_ACTIVITY_ID,
+]);
+
+function migrateDashboardEntryV7ToV8(entry: DashboardEntry): DashboardEntry {
+  let changed = false;
+  const quantityOverrides: Record<string, TrainingQuantityOverrides> = {};
+
+  for (const [activityId, overrides] of Object.entries(entry.quantityOverrides)) {
+    if (activityId === TOP_UNIVERSITY_CORRECTED_HIKI_SEQUENCE_ACTIVITY_ID) {
+      if (!Object.hasOwn(overrides, 'repetitions')) {
+        quantityOverrides[activityId] = overrides;
+        continue;
+      }
+
+      const migratedValues = new Map<TrainingQuantityUnit, number>();
+      for (const [unit, value] of Object.entries(overrides)) {
+        if (unit !== 'repetitions') {
+          if (!isTrainingQuantityUnit(unit) || !isValidTrainingQuantityValue(unit, value)) {
+            throw new Error('Training-store version 7 state is invalid.');
+          }
+          migratedValues.set(unit, value);
+        }
+      }
+      const migratedOverrides = createQuantityOverridesFromMap(migratedValues);
+      changed = true;
+      if (Object.keys(migratedOverrides).length > 0) {
+        quantityOverrides[activityId] = migratedOverrides;
+      }
+      continue;
+    }
+
+    if (TOP_UNIVERSITY_SECONDS_ONLY_ACTIVITY_IDS.has(activityId)) {
+      const seconds = overrides.seconds;
+      if (seconds === undefined) {
+        changed = true;
+        continue;
+      }
+      quantityOverrides[activityId] = { seconds };
+      if (Object.keys(overrides).length !== 1) {
+        changed = true;
+      }
+      continue;
+    }
+
+    quantityOverrides[activityId] = overrides;
+  }
+
+  return changed ? { ...entry, quantityOverrides } : entry;
+}
+
+export function migratePersistedTrainingStateV7ToV8(value: unknown): PersistedTrainingState {
+  const parsed = parsePersistedTrainingState(value);
+  if (parsed === null) {
+    throw new Error('Training-store version 7 state is invalid.');
+  }
+
+  const migrated = {
+    dashboardEntries: parsed.dashboardEntries.map(migrateDashboardEntryV7ToV8),
+    customTrainingSets: parsed.customTrainingSets,
+  };
+  const result = parsePersistedTrainingState(migrated);
+  if (result === null) {
+    throw new Error('Training-store version 7 migration produced invalid state.');
+  }
+  return result;
+}
+
+export const migrateV7ToV8 = migratePersistedTrainingStateV7ToV8;
+
 export function migratePersistedTrainingState(
   persistedState: unknown,
   version: number,
@@ -1505,7 +1583,8 @@ export function migratePersistedTrainingState(
       const stateV4 = migratePersistedTrainingStateV3ToV4(stateV3);
       const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
       const stateV6 = migratePersistedTrainingStateV5ToV6(stateV5);
-      return migratePersistedTrainingStateV6ToV7(stateV6);
+      const stateV7 = migratePersistedTrainingStateV6ToV7(stateV6);
+      return migratePersistedTrainingStateV7ToV8(stateV7);
     }
     case 1: {
       const stateV2 = migratePersistedTrainingStateV1ToV2(persistedState);
@@ -1513,38 +1592,47 @@ export function migratePersistedTrainingState(
       const stateV4 = migratePersistedTrainingStateV3ToV4(stateV3);
       const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
       const stateV6 = migratePersistedTrainingStateV5ToV6(stateV5);
-      return migratePersistedTrainingStateV6ToV7(stateV6);
+      const stateV7 = migratePersistedTrainingStateV6ToV7(stateV6);
+      return migratePersistedTrainingStateV7ToV8(stateV7);
     }
     case 2: {
       const stateV3 = migratePersistedTrainingStateV2ToV3(persistedState);
       const stateV4 = migratePersistedTrainingStateV3ToV4(stateV3);
       const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
       const stateV6 = migratePersistedTrainingStateV5ToV6(stateV5);
-      return migratePersistedTrainingStateV6ToV7(stateV6);
+      const stateV7 = migratePersistedTrainingStateV6ToV7(stateV6);
+      return migratePersistedTrainingStateV7ToV8(stateV7);
     }
     case 3: {
       const stateV4 = migratePersistedTrainingStateV3ToV4(persistedState);
       const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
       const stateV6 = migratePersistedTrainingStateV5ToV6(stateV5);
-      return migratePersistedTrainingStateV6ToV7(stateV6);
+      const stateV7 = migratePersistedTrainingStateV6ToV7(stateV6);
+      return migratePersistedTrainingStateV7ToV8(stateV7);
     }
     case 4: {
       const stateV5 = migratePersistedTrainingStateV4ToV5(persistedState);
       const stateV6 = migratePersistedTrainingStateV5ToV6(stateV5);
-      return migratePersistedTrainingStateV6ToV7(stateV6);
+      const stateV7 = migratePersistedTrainingStateV6ToV7(stateV6);
+      return migratePersistedTrainingStateV7ToV8(stateV7);
     }
     case 5: {
       const stateV6 = migratePersistedTrainingStateV5ToV6(persistedState);
-      return migratePersistedTrainingStateV6ToV7(stateV6);
+      const stateV7 = migratePersistedTrainingStateV6ToV7(stateV6);
+      return migratePersistedTrainingStateV7ToV8(stateV7);
     }
-    case 6:
-      return migratePersistedTrainingStateV6ToV7(persistedState);
+    case 6: {
+      const stateV7 = migratePersistedTrainingStateV6ToV7(persistedState);
+      return migratePersistedTrainingStateV7ToV8(stateV7);
+    }
+    case 7:
+      return migratePersistedTrainingStateV7ToV8(persistedState);
     case TRAINING_STORE_PERSISTENCE_VERSION: {
-      const stateV7 = parsePersistedTrainingState(persistedState);
-      if (stateV7 === null) {
-        throw new Error('Training-store version 7 state is invalid.');
+      const stateV8 = parsePersistedTrainingState(persistedState);
+      if (stateV8 === null) {
+        throw new Error('Training-store version 8 state is invalid.');
       }
-      return stateV7;
+      return stateV8;
     }
     default:
       throw new Error(`Unsupported training-store persistence version: ${String(version)}`);
@@ -1553,7 +1641,7 @@ export function migratePersistedTrainingState(
 
 function assertStorageCompatibleActivity(activity: TrainingActivity, path: string): void {
   if (activity.editableQuantityUnits !== undefined || activity.allowsSessionNotes !== undefined) {
-    throw new Error(`${path} contains activity metadata unsupported by v7 custom-set storage.`);
+    throw new Error(`${path} contains activity metadata unsupported by v8 custom-set storage.`);
   }
 }
 
@@ -1615,7 +1703,7 @@ function encodePersistedCustomTrainingSet(
   };
 }
 
-/** Encode canonical state into the unchanged v7 two-level sections/exercises storage DTO. */
+/** Encode canonical state into the unchanged v8 two-level sections/exercises storage DTO. */
 export function encodePersistedTrainingState(value: unknown): PersistedTrainingWireState {
   const parsed = parsePersistedTrainingState(value);
   if (parsed === null) {
@@ -1691,10 +1779,11 @@ function parseStorageValue(value: unknown): StorageValue<PersistedStorageState> 
       }
       return { state, version };
     }
-    case 6: {
+    case 6:
+    case 7: {
       const state = parsePersistedTrainingWireState(value['state']);
       if (state === null) {
-        throw new Error('Training-store version 6 persistence data is invalid.');
+        throw new Error(`Training-store version ${String(version)} persistence data is invalid.`);
       }
       return { state, version };
     }
@@ -1753,7 +1842,7 @@ function classifyParsedEnvelope(value: unknown): TrainingStorageInspection {
 
   try {
     const persistedState =
-      version === 5 || version === 6
+      version === 5 || version === 6 || version === 7
         ? parsePersistedTrainingWireState(value['state'])
         : value['state'];
     if (persistedState === null) {
@@ -1768,6 +1857,7 @@ function classifyParsedEnvelope(value: unknown): TrainingStorageInspection {
       case 4:
       case 5:
       case 6:
+      case 7:
         return {
           status: 'migrated',
           kind: 'migrated',

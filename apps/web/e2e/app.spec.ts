@@ -546,7 +546,7 @@ test.describe('routed training flows', () => {
     page,
   }) => {
     const description =
-      "Weekly rotation: Monday self-directed practice; Tuesday 'Ken-tore' circuits; Wednesday is a running/stair sprints plus suburi and suri-ashi; Thursday is kihon and waza-geiko; Friday is kihon plus shiaigeiko; weekends are tournaments or shiaigeiko.";
+      'Weekly rotation: Monday is self-directed practice; Tuesday centers on "Ken-tore" circuit (muscle training); Wednesday running/stair sprints plus suburi and suri-ashi; Thursday is kihon plus ji-geiko; Friday is kihon plus shiaigeiko; weekends are tournaments or shiaigeiko (defaulting to normal kihon/Ken-tore when there are none).';
     await page.goto('/app/library');
 
     const card = page

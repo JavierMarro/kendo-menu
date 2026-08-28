@@ -57,6 +57,8 @@ const IN_SCOPE_SESSION_SMOKE_CASES = [
     activityCount: 16,
   },
   { id: 'university-version-2', name: 'University dojo menu', activityCount: 29 },
+  { id: 'university-high-school', name: 'University High School dojo menu', activityCount: 31 },
+  { id: 'top-university', name: 'Top university dojo menu', activityCount: 17 },
 ] as const;
 
 describe('KendoMenu application flows', () => {
@@ -604,7 +606,7 @@ describe('KendoMenu application flows', () => {
   it('shows the complete University High School description on its detail page', async () => {
     const user = userEvent.setup();
     const description =
-      "Weekly rotation: Monday self-directed practice; Tuesday 'Ken-tore' circuits; Wednesday is a running/stair sprints plus suburi and suri-ashi; Thursday is kihon and waza-geiko; Friday is kihon plus shiaigeiko; weekends are tournaments or shiaigeiko.";
+      'Weekly rotation: Monday is self-directed practice; Tuesday centers on "Ken-tore" circuit (muscle training); Wednesday running/stair sprints plus suburi and suri-ashi; Thursday is kihon plus ji-geiko; Friday is kihon plus shiaigeiko; weekends are tournaments or shiaigeiko (defaulting to normal kihon/Ken-tore when there are none).';
     renderApp(createTestStore(), { initialEntries: ['/app/library'] });
 
     const heading = screen.getByRole('heading', { name: 'University High School dojo menu' });
@@ -1044,7 +1046,13 @@ describe('KendoMenu application flows', () => {
     store.getState().addToDashboard(TOP_UNIVERSITY_ID);
     renderApp(store);
 
-    const seconds = screen.getByLabelText('Seconds for Kakarigeiko');
+    const finalKakarigeiko = document.querySelector<HTMLElement>(
+      `[data-activity-id="${TOP_UNIVERSITY_KAKARIGEIKO_ID}"]`,
+    );
+    if (finalKakarigeiko === null) {
+      throw new Error('Expected the final Kakarigeiko activity.');
+    }
+    const seconds = within(finalKakarigeiko).getByLabelText('Seconds for Kakarigeiko');
     expect(seconds).toHaveValue(null);
     await user.type(seconds, '30');
     await user.tab();

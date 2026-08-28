@@ -180,10 +180,10 @@ export class TrainingValidationError extends Error {
 
 /** Canonical curated collection counts, asserted at the default-data adapter seam. */
 export const RESEARCHED_TRAINING_SESSION_COUNT = 11;
-export const RESEARCHED_TOP_LEVEL_ACTIVITY_COUNT = 90;
-export const RESEARCHED_ACTIVITY_COUNT = 255;
+export const RESEARCHED_TOP_LEVEL_ACTIVITY_COUNT = 88;
+export const RESEARCHED_ACTIVITY_COUNT = 257;
 export const RESEARCHED_LEAF_EXERCISE_COUNT = 211;
-export const RESEARCHED_ID_COUNT = 266;
+export const RESEARCHED_ID_COUNT = 268;
 
 /** Compatibility aliases for callers that still use the source DTO terminology. */
 export const RESEARCHED_DRILL_COUNT = RESEARCHED_TRAINING_SESSION_COUNT;

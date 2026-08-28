@@ -304,6 +304,55 @@ const IN_SCOPE_ACTIVITY_NAME_TREES = {
     'Kakarigeiko',
     'Shiaigeiko',
   ],
+  'university-high-school': [
+    [
+      'Kirikaeshi',
+      [
+        'Men + kirikaeshi',
+        'Tsuki + kirikaeshi',
+        'Fast kirikaeshi',
+        'One-breath kirikaeshi',
+        'Ai kirikaeshi',
+      ],
+    ],
+    [
+      'Kihon-waza',
+      ['Big men', 'Small men', 'Seme ashi men', 'Seme men', 'Kote', 'Tsuki', 'Do', 'Gyaku-do'],
+    ],
+    ['Renzoku-waza', ['Kote-men', 'Kote-do', 'Tsuki-men', 'Tsuki-kote']],
+    [
+      'Ken-tore circuit',
+      [
+        [
+          'Station A',
+          ['Kirikaeshi', 'Hayasuburi', 'Stationary Kote-men', 'Left-right Dō-kirikaeshi'],
+        ],
+        ['Station B', ['Men', 'Kote', 'Kote-men', 'Dō']],
+      ],
+    ],
+  ],
+  'top-university': [
+    'Warm-up',
+    [
+      'Sandan-geiko',
+      [
+        'Kirikaeshi',
+        [
+          'Yakusoku-geiko',
+          [
+            'Men → Kote',
+            'Men → Kukan-datotsu-men',
+            'Men → Kote-Men → Taiatari',
+            'Hiki-dō → Men → 100 Kirikaeshi strikes',
+          ],
+        ],
+        ['Free version', ['Uchikomi', 'Kakarigeiko']],
+      ],
+    ],
+    ['Kubun-geiko', ['Uchikomi (Men only)', 'Kakari-geiko', 'Kirikaeshi']],
+    'Jigeiko',
+    'Kakarigeiko',
+  ],
 } satisfies Readonly<Record<string, readonly ActivityNameTree[]>>;
 
 const IN_SCOPE_DESCRIPTIONS = {
@@ -318,6 +367,9 @@ const IN_SCOPE_DESCRIPTIONS = {
   'senior-high-school-kendo-club': undefined,
   'junior-high-school-version-2': undefined,
   'university-version-2': undefined,
+  'university-high-school':
+    'Weekly rotation: Monday is self-directed practice; Tuesday centers on "Ken-tore" circuit (muscle training); Wednesday running/stair sprints plus suburi and suri-ashi; Thursday is kihon plus ji-geiko; Friday is kihon plus shiaigeiko; weekends are tournaments or shiaigeiko (defaulting to normal kihon/Ken-tore when there are none).',
+  'top-university': undefined,
 } satisfies Readonly<Record<string, string | undefined>>;
 
 const RESEARCHED_SESSION_COUNTS = {
@@ -328,10 +380,10 @@ const RESEARCHED_SESSION_COUNTS = {
   'police-dojo-asageiko': { topLevel: 5, activities: 10, leaves: 8 },
   'police-dojo-asageiko-version-2': { topLevel: 6, activities: 18, leaves: 15 },
   'senior-high-school-kendo-club': { topLevel: 14, activities: 45, leaves: 38 },
-  'university-high-school': { topLevel: 4, activities: 29, leaves: 25 },
+  'university-high-school': { topLevel: 4, activities: 31, leaves: 25 },
   'junior-high-school-version-2': { topLevel: 5, activities: 16, leaves: 14 },
   'university-version-2': { topLevel: 12, activities: 29, leaves: 23 },
-  'top-university': { topLevel: 7, activities: 17, leaves: 13 },
+  'top-university': { topLevel: 5, activities: 17, leaves: 13 },
 } as const;
 
 describe('canonical default drills', () => {
@@ -354,17 +406,17 @@ describe('canonical default drills', () => {
     ]);
 
     expect(DEFAULT_TRAINING_SETS).toHaveLength(11);
-    expect(sections).toHaveLength(90);
-    expect(childExercises).toHaveLength(165);
+    expect(sections).toHaveLength(88);
+    expect(childExercises).toHaveLength(155);
     expect(standaloneSections).toHaveLength(46);
-    expect(activities).toHaveLength(255);
+    expect(activities).toHaveLength(257);
     expect(
       DEFAULT_TRAINING_SETS.reduce(
         (total, trainingSet) => total + getTrainingSetLeafExerciseCount(trainingSet),
         0,
       ),
     ).toBe(211);
-    expect(ids).toHaveLength(266);
+    expect(ids).toHaveLength(268);
     expect(new Set(ids).size).toBe(ids.length);
     expect(DEFAULT_TRAINING_SETS.map((trainingSet) => trainingSet.sourceId)).toEqual([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
@@ -604,6 +656,19 @@ describe('canonical default drills', () => {
     for (const trainingSet of DEFAULT_TRAINING_SETS) {
       expect(Object.isFrozen(trainingSet)).toBe(true);
       expect(Object.isFrozen(trainingSet.activities)).toBe(true);
+      for (const activity of getTrainingSetActivities(trainingSet)) {
+        expect(Object.isFrozen(activity)).toBe(true);
+        expect(Object.isFrozen(activity.children)).toBe(true);
+        if (activity.quantities !== undefined) {
+          expect(Object.isFrozen(activity.quantities)).toBe(true);
+          if (activity.quantities.duration !== undefined) {
+            expect(Object.isFrozen(activity.quantities.duration)).toBe(true);
+          }
+        }
+        if (activity.editableQuantityUnits !== undefined) {
+          expect(Object.isFrozen(activity.editableQuantityUnits)).toBe(true);
+        }
+      }
       for (const section of trainingSet.activities) {
         expect(Object.isFrozen(section)).toBe(true);
         expect(Object.isFrozen(section.children)).toBe(true);
@@ -691,41 +756,52 @@ describe('canonical default drills', () => {
     });
   });
 
-  it('keeps the eight Ken-tore station exercises timed and independently editable', () => {
+  it('keeps the eight Ken-tore station exercises timed under pure ordered containers', () => {
     const section = requireSection(
       'university-high-school',
       'university-high-school-ken-tore-circuit',
     );
 
-    expect(section.notes).toBe(
-      'Station A: Kirikaeshi, Hayasuburi, Stationary kote-men, Left-right do-kirikaeshi\n' +
-        'Station B: Men, Kote, Kote-men, Do',
-    );
-    expect(section.children.map(({ id, name }) => ({ id, name }))).toEqual([
-      {
-        id: 'university-high-school-ken-tore-circuit-kirikaeshi',
-        name: 'kirikaeshi',
-      },
-      {
-        id: 'university-high-school-ken-tore-circuit-hayasuburi',
-        name: 'hayasuburi',
-      },
+    expect(section.notes).toBe('30 seconds per exercise in each station:');
+    expect(section.quantities).toBeUndefined();
+    expect(section.editableQuantityUnits).toBeUndefined();
+    expect(section.allowsSessionNotes).toBeUndefined();
+
+    const stationA = section.children[0];
+    const stationB = section.children[1];
+    expect(stationA?.id).toBe('university-high-school-ken-tore-circuit-station-a');
+    expect(stationA?.name).toBe('Station A');
+    expect(stationB?.id).toBe('university-high-school-ken-tore-circuit-station-b');
+    expect(stationB?.name).toBe('Station B');
+    expect(stationA?.quantities).toBeUndefined();
+    expect(stationA?.editableQuantityUnits).toBeUndefined();
+    expect(stationA?.allowsSessionNotes).toBeUndefined();
+    expect(stationB?.quantities).toBeUndefined();
+    expect(stationB?.editableQuantityUnits).toBeUndefined();
+    expect(stationB?.allowsSessionNotes).toBeUndefined();
+    expect(stationA?.children.map(({ id, name }) => ({ id, name }))).toEqual([
+      { id: 'university-high-school-ken-tore-circuit-kirikaeshi', name: 'Kirikaeshi' },
+      { id: 'university-high-school-ken-tore-circuit-hayasuburi', name: 'Hayasuburi' },
       {
         id: 'university-high-school-ken-tore-circuit-stationary-kote-men',
-        name: 'stationary kote-men',
+        name: 'Stationary Kote-men',
       },
       {
         id: 'university-high-school-ken-tore-circuit-left-right-do-kirikaeshi',
-        name: 'left-right do-kirikaeshi',
+        name: 'Left-right Dō-kirikaeshi',
       },
-      { id: 'university-high-school-ken-tore-circuit-men', name: 'men' },
-      { id: 'university-high-school-ken-tore-circuit-kote', name: 'kote' },
-      { id: 'university-high-school-ken-tore-circuit-kote-men', name: 'kote-men' },
-      { id: 'university-high-school-ken-tore-circuit-do', name: 'do' },
     ]);
-    expect(section.children.map((exercise) => exercise.quantities)).toEqual(
-      Array.from({ length: 8 }, () => ({ duration: { unit: 'seconds', value: 30 } })),
-    );
+    expect(stationB?.children.map(({ id, name }) => ({ id, name }))).toEqual([
+      { id: 'university-high-school-ken-tore-circuit-men', name: 'Men' },
+      { id: 'university-high-school-ken-tore-circuit-kote', name: 'Kote' },
+      { id: 'university-high-school-ken-tore-circuit-kote-men', name: 'Kote-men' },
+      { id: 'university-high-school-ken-tore-circuit-do', name: 'Dō' },
+    ]);
+    expect(
+      [...(stationA?.children ?? []), ...(stationB?.children ?? [])].map(
+        (exercise) => exercise.quantities,
+      ),
+    ).toEqual(Array.from({ length: 8 }, () => ({ duration: { unit: 'seconds', value: 30 } })));
   });
 
   it('scopes the dojo-length instruction to its three source exercises', () => {
@@ -785,27 +861,27 @@ describe('canonical default drills', () => {
     ).toEqual([
       {
         id: 'university-high-school-kirikaeshi-5-men-kirikaeshi',
-        name: 'men + kirikaeshi',
+        name: 'Men + kirikaeshi',
         quantities: { repetitions: 5 },
       },
       {
         id: 'university-high-school-kirikaeshi-5-tsuki-kirikaeshi',
-        name: 'tsuki + kirikaeshi',
+        name: 'Tsuki + kirikaeshi',
         quantities: { repetitions: 5 },
       },
       {
         id: 'university-high-school-kirikaeshi-fast-kirikaeshi',
-        name: 'fast kirikaeshi',
+        name: 'Fast kirikaeshi',
         quantities: { repetitions: 1 },
       },
       {
         id: 'university-high-school-kirikaeshi-one-breath-kirikaeshi',
-        name: 'one-breath kirikaeshi',
+        name: 'One-breath kirikaeshi',
         quantities: { repetitions: 1 },
       },
       {
         id: 'university-high-school-kirikaeshi-ai-kirikaeshi',
-        name: 'ai kirikaeshi',
+        name: 'Ai kirikaeshi',
         quantities: { repetitions: 1 },
       },
     ]);
@@ -814,8 +890,8 @@ describe('canonical default drills', () => {
       requireActivity('top-university', 'top-university-yakusoku-geiko-hiki-do-men-kirikaeshi'),
     ).toEqual({
       id: 'top-university-yakusoku-geiko-hiki-do-men-kirikaeshi',
-      name: 'Hiki-dō → Men → Kirikaeshi',
-      quantities: { repetitions: 100 },
+      name: 'Hiki-dō → Men → 100 Kirikaeshi strikes',
+      quantities: { repetitions: 1 },
       children: [],
     });
     expect(
@@ -847,21 +923,70 @@ describe('canonical default drills', () => {
     );
   });
 
-  it('keeps the two Fee version methods as stable-ID options', () => {
-    const feeVersion = requireSection('top-university', 'top-university-fee-version');
+  it('keeps the two Free version methods as stable-ID options', () => {
+    const sandan = requireSection('top-university', 'top-university-sandan-geiko');
+    const freeVersion = sandan.children[2];
+
+    expect(freeVersion).toMatchObject({
+      id: 'top-university-fee-version',
+      name: 'Free version',
+      notes: 'These two methods are options, not sequential mandatory exercises.',
+    });
+    expect(freeVersion?.children.map(({ id, name }) => ({ id, name }))).toEqual([
+      {
+        id: 'top-university-fee-version-uchikomi-geiko',
+        name: 'Uchikomi',
+      },
+      {
+        id: 'top-university-fee-version-kakari-geiko',
+        name: 'Kakarigeiko',
+      },
+    ]);
+    expect(freeVersion?.children.map((activity) => activity.notes)).toEqual([
+      'A method of keiko in which one learns basic striking techniques by responding to striking opportunities provided by the motodachi (instructor). Motodachi-focused.',
+      'A method in which the trainee, for a short time, strikes the motodachi with full energy using all techniques learned, without hesitation or concern about being struck. Kakarite-focused.',
+    ]);
+    expect(freeVersion?.children.map((activity) => activity.editableQuantityUnits)).toEqual([
+      ['seconds'],
+      ['seconds'],
+    ]);
+    expect(freeVersion?.children.map((activity) => activity.quantities)).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it('keeps the final Kakarigeiko editable in seconds without a prescribed default', () => {
+    const kakarigeiko = requireActivity('top-university', 'top-university-kakarigeiko-kakarigeiko');
+
+    expect(kakarigeiko).toMatchObject({
+      id: 'top-university-kakarigeiko-kakarigeiko',
+      name: 'Kakarigeiko',
+      editableQuantityUnits: ['seconds'],
+    });
+    expect(kakarigeiko.quantities).toBeUndefined();
+  });
+
+  it('preserves the Sandan-geiko order and the legacy Free version ID', () => {
+    const sandan = requireSection('top-university', 'top-university-sandan-geiko');
+
+    expect(sandan.children.map(({ id, name }) => ({ id, name }))).toEqual([
+      { id: 'top-university-sandan-geiko-kirikaeshi', name: 'Kirikaeshi' },
+      { id: 'top-university-yakusoku-geiko', name: 'Yakusoku-geiko' },
+      { id: 'top-university-fee-version', name: 'Free version' },
+    ]);
+    expect(sandan.notes).toBe('Three motodachi. Kakarite cycle through each of them with no rest.');
+  });
+
+  it('retains the canonical Free version notes', () => {
+    const feeVersion = requireActivity('top-university', 'top-university-fee-version');
 
     expect(feeVersion.notes).toBe(
       'These two methods are options, not sequential mandatory exercises.',
     );
-    expect(feeVersion.children.map(({ id, name }) => ({ id, name }))).toEqual([
-      {
-        id: 'top-university-fee-version-uchikomi-geiko',
-        name: 'Uchikomi-geiko',
-      },
-      {
-        id: 'top-university-fee-version-kakari-geiko',
-        name: 'Kakari-geiko',
-      },
+    expect(feeVersion.children.map(({ id }) => id)).toEqual([
+      'top-university-fee-version-uchikomi-geiko',
+      'top-university-fee-version-kakari-geiko',
     ]);
   });
 

@@ -23,6 +23,7 @@ import {
   migratePersistedTrainingStateV4ToV5,
   migratePersistedTrainingStateV5ToV6,
   migratePersistedTrainingStateV6ToV7,
+  migratePersistedTrainingStateV7ToV8,
   parsePersistedTrainingState,
   parsePersistedTrainingStateV4,
   type LegacyDashboardEntry,
@@ -131,6 +132,10 @@ const UNIVERSITY_VERSION_TWO_KAKARIGEIJO_ID = 'university-version-2-kakarigeijo-
 const POLICE_TYPE_TWO_MAWARIGEIKO_ID = 'police-dojo-asageiko-version-2-mawari-geiko-mawari-geiko';
 const REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ID =
   'senior-high-school-kendo-club-core-strength-training-core-strength-training';
+const TOP_UNIVERSITY_HIKI_SEQUENCE_ID = 'top-university-yakusoku-geiko-hiki-do-men-kirikaeshi';
+const TOP_UNIVERSITY_FREE_UCHIKOMI_ID = 'top-university-fee-version-uchikomi-geiko';
+const TOP_UNIVERSITY_FREE_KAKARIGEIKO_ID = 'top-university-fee-version-kakari-geiko';
+const TOP_UNIVERSITY_FINAL_KAKARIGEIKO_ID = 'top-university-kakarigeiko-kakarigeiko';
 const LEGACY_UCHIKOMI_IDS = [
   'international-dojo-2-hour-session-uchikomi-men-1',
   'international-dojo-2-hour-session-uchikomi-kote',
@@ -814,7 +819,7 @@ describe('version 6 to version 7 curated-data correction migration', () => {
     expect(inspection).toMatchObject({
       status: 'migrated',
       fromVersion: 6,
-      version: 7,
+      version: 8,
     });
     if (inspection.status !== 'migrated') {
       throw new Error('Expected the version 6 envelope to migrate.');
@@ -824,6 +829,102 @@ describe('version 6 to version 7 curated-data correction migration', () => {
     });
     expect(inspection.state.dashboardEntries[0]?.quantityOverrides).toEqual({
       [POLICE_TYPE_TWO_MAWARIGEIKO_ID]: { minutes: 9 },
+    });
+  });
+});
+
+describe('version 7 to version 8 complex-session correction migration', () => {
+  it('removes incompatible overrides while retaining valid seconds and unrelated state', () => {
+    const state = {
+      dashboardEntries: [
+        {
+          id: 'top-university-entry',
+          trainingSetId: asTrainingSetId('top-university'),
+          quantityOverrides: {
+            [TOP_UNIVERSITY_HIKI_SEQUENCE_ID]: { repetitions: 100, seconds: 20 },
+            [TOP_UNIVERSITY_FREE_UCHIKOMI_ID]: {
+              repetitions: 5,
+              minutes: 2,
+              seconds: 45,
+            },
+            [TOP_UNIVERSITY_FREE_KAKARIGEIKO_ID]: { seconds: 30, rounds: 2 },
+            [TOP_UNIVERSITY_FINAL_KAKARIGEIKO_ID]: { minutes: 3 },
+            'unrelated-activity': { repetitions: 12, seconds: 30 },
+          },
+          notes: 'Preserve this session note.',
+          createdAt: '2026-08-28T10:00:00.000Z',
+        },
+      ],
+      customTrainingSets: [],
+    } as const;
+
+    const migrated = migratePersistedTrainingStateV7ToV8(state);
+
+    expect(migrated.dashboardEntries).toEqual([
+      {
+        ...state.dashboardEntries[0],
+        quantityOverrides: {
+          [TOP_UNIVERSITY_HIKI_SEQUENCE_ID]: { seconds: 20 },
+          [TOP_UNIVERSITY_FREE_UCHIKOMI_ID]: { seconds: 45 },
+          [TOP_UNIVERSITY_FREE_KAKARIGEIKO_ID]: { seconds: 30 },
+          'unrelated-activity': { repetitions: 12, seconds: 30 },
+        },
+      },
+    ]);
+    expect(parsePersistedTrainingState(migrated)).toEqual(migrated);
+  });
+
+  it('removes a corrected repetition-only override and drops seconds-less target entries', () => {
+    const state = {
+      dashboardEntries: [
+        {
+          id: 'top-university-entry',
+          trainingSetId: asTrainingSetId('top-university'),
+          quantityOverrides: {
+            [TOP_UNIVERSITY_HIKI_SEQUENCE_ID]: { repetitions: 100 },
+            [TOP_UNIVERSITY_FREE_UCHIKOMI_ID]: { repetitions: 5 },
+            [TOP_UNIVERSITY_FINAL_KAKARIGEIKO_ID]: { rounds: 2 },
+          },
+          notes: '',
+          createdAt: '',
+        },
+      ],
+      customTrainingSets: [],
+    };
+
+    const migrated = migratePersistedTrainingStateV7ToV8(state);
+
+    expect(migrated.dashboardEntries[0]?.quantityOverrides).toEqual({});
+  });
+
+  it('classifies a version 7 envelope as migrated to version 8', () => {
+    const state = {
+      dashboardEntries: [
+        {
+          id: 'version-seven-entry',
+          trainingSetId: asTrainingSetId('top-university'),
+          quantityOverrides: {
+            [TOP_UNIVERSITY_FINAL_KAKARIGEIKO_ID]: { seconds: 90, minutes: 2 },
+          },
+          notes: 'Keep me.',
+          createdAt: '',
+        },
+      ],
+      customTrainingSets: [],
+    };
+
+    const inspection = classifyTrainingStorageValue(serializeState(state, 7));
+
+    expect(inspection).toMatchObject({
+      status: 'migrated',
+      fromVersion: 7,
+      version: 8,
+    });
+    if (inspection.status !== 'migrated') {
+      throw new Error('Expected the version 7 envelope to migrate.');
+    }
+    expect(inspection.state.dashboardEntries[0]?.quantityOverrides).toEqual({
+      [TOP_UNIVERSITY_FINAL_KAKARIGEIKO_ID]: { seconds: 90 },
     });
   });
 });
@@ -862,7 +963,7 @@ describe('older migration chain', () => {
 });
 
 describe('persistence lifecycle', () => {
-  it('round-trips version 7 custom sets, notes, seconds, and independent units', () => {
+  it('round-trips version 8 custom sets, notes, seconds, and independent units', () => {
     const storage = new MemoryStorage();
     const first = createTrainingStore({ storage, storageKey: STORAGE_KEY });
     const customId = first.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
@@ -893,7 +994,7 @@ describe('persistence lifecycle', () => {
     });
   });
 
-  it('decodes the v7 wire tree and rejects deeper canonical trees on encode', () => {
+  it('decodes the v8 wire tree and rejects deeper canonical trees on encode', () => {
     const wireState = {
       dashboardEntries: [],
       customTrainingSets: [
@@ -948,7 +1049,7 @@ describe('persistence lifecycle', () => {
     );
   });
 
-  it('loads a v4 envelope through Zustand and persists migrated v7 state', () => {
+  it('loads a v4 envelope through Zustand and persists migrated v8 state', () => {
     const storage = new MemoryStorage(serializeState(LEGACY_V4_STATE, 4));
     const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
 
@@ -1047,11 +1148,11 @@ describe('untrusted persistence classification', () => {
           TRAINING_STORE_PERSISTENCE_VERSION,
         ),
       ),
-    ).toMatchObject({ status: 'ready', version: 7 });
+    ).toMatchObject({ status: 'ready', version: 8 });
     expect(classifyTrainingStorageValue(serializeState(LEGACY_V4_STATE, 4))).toMatchObject({
       status: 'migrated',
       fromVersion: 4,
-      version: 7,
+      version: 8,
     });
     expect(
       classifyTrainingStorageValue(
@@ -1060,7 +1161,7 @@ describe('untrusted persistence classification', () => {
     ).toEqual({ status: 'unsupported-future', kind: 'unsupported-future', version: 999 });
   });
 
-  it('rejects canonical runtime trees at the v7 storage boundary', () => {
+  it('rejects canonical runtime trees at the v8 storage boundary', () => {
     const deepCanonicalState = {
       dashboardEntries: [],
       customTrainingSets: [

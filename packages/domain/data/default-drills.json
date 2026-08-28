@@ -1050,7 +1050,7 @@
     "id": "university-high-school",
     "sourceId": 8,
     "name": "University High School dojo menu",
-    "description": "Weekly rotation: Monday self-directed practice; Tuesday 'Ken-tore' circuits; Wednesday is a running/stair sprints plus suburi and suri-ashi; Thursday is kihon and waza-geiko; Friday is kihon plus shiaigeiko; weekends are tournaments or shiaigeiko.",
+    "description": "Weekly rotation: Monday is self-directed practice; Tuesday centers on \"Ken-tore\" circuit (muscle training); Wednesday running/stair sprints plus suburi and suri-ashi; Thursday is kihon plus ji-geiko; Friday is kihon plus shiaigeiko; weekends are tournaments or shiaigeiko (defaulting to normal kihon/Ken-tore when there are none).",
     "sections": [
       {
         "id": "university-high-school-kirikaeshi",
@@ -1058,35 +1058,35 @@
         "exercises": [
           {
             "id": "university-high-school-kirikaeshi-5-men-kirikaeshi",
-            "name": "men + kirikaeshi",
+            "name": "Men + kirikaeshi",
             "quantities": {
               "repetitions": 5
             }
           },
           {
             "id": "university-high-school-kirikaeshi-5-tsuki-kirikaeshi",
-            "name": "tsuki + kirikaeshi",
+            "name": "Tsuki + kirikaeshi",
             "quantities": {
               "repetitions": 5
             }
           },
           {
             "id": "university-high-school-kirikaeshi-fast-kirikaeshi",
-            "name": "fast kirikaeshi",
+            "name": "Fast kirikaeshi",
             "quantities": {
               "repetitions": 1
             }
           },
           {
             "id": "university-high-school-kirikaeshi-one-breath-kirikaeshi",
-            "name": "one-breath kirikaeshi",
+            "name": "One-breath kirikaeshi",
             "quantities": {
               "repetitions": 1
             }
           },
           {
             "id": "university-high-school-kirikaeshi-ai-kirikaeshi",
-            "name": "ai kirikaeshi",
+            "name": "Ai kirikaeshi",
             "quantities": {
               "repetitions": 1
             }
@@ -1095,41 +1095,41 @@
       },
       {
         "id": "university-high-school-kihon-waza",
-        "name": "Kihon waza",
+        "name": "Kihon-waza",
         "exercises": [
           {
             "id": "university-high-school-kihon-waza-big-men",
-            "name": "big men"
+            "name": "Big men"
           },
           {
             "id": "university-high-school-kihon-waza-small-men",
-            "name": "small men"
+            "name": "Small men"
           },
           {
             "id": "university-high-school-kihon-waza-seme-ashi-men",
-            "name": "seme ashi men"
+            "name": "Seme ashi men"
           },
           {
             "id": "university-high-school-kihon-waza-seme-men",
-            "name": "seme men"
+            "name": "Seme men"
           },
           {
             "id": "university-high-school-kihon-waza-kote",
-            "name": "kote",
+            "name": "Kote",
             "notes": "above/below/omote/ura"
           },
           {
             "id": "university-high-school-kihon-waza-tsuki",
-            "name": "tsuki",
+            "name": "Tsuki",
             "notes": "omote/ura"
           },
           {
             "id": "university-high-school-kihon-waza-do",
-            "name": "do"
+            "name": "Do"
           },
           {
             "id": "university-high-school-kihon-waza-gyaku-do",
-            "name": "gyaku-do"
+            "name": "Gyaku-do"
           }
         ]
       },
@@ -1139,106 +1139,118 @@
         "exercises": [
           {
             "id": "university-high-school-renzoku-waza-kote-men",
-            "name": "kote-men"
+            "name": "Kote-men"
           },
           {
             "id": "university-high-school-renzoku-waza-kote-do",
-            "name": "kote-do"
+            "name": "Kote-do"
           },
           {
             "id": "university-high-school-renzoku-waza-tsuki-men",
-            "name": "tsuki-men"
+            "name": "Tsuki-men"
           },
           {
             "id": "university-high-school-renzoku-waza-tsuki-kote",
-            "name": "tsuki-kote"
+            "name": "Tsuki-kote"
           }
         ]
       },
       {
         "id": "university-high-school-ken-tore-circuit",
         "name": "Ken-tore circuit",
-        "notes": "Station A: Kirikaeshi, Hayasuburi, Stationary kote-men, Left-right do-kirikaeshi\nStation B: Men, Kote, Kote-men, Do",
+        "notes": "30 seconds per exercise in each station:",
         "exercises": [
           {
-            "id": "university-high-school-ken-tore-circuit-kirikaeshi",
-            "name": "kirikaeshi",
-            "quantities": {
-              "duration": {
-                "unit": "seconds",
-                "value": 30
+            "id": "university-high-school-ken-tore-circuit-station-a",
+            "name": "Station A",
+            "exercises": [
+              {
+                "id": "university-high-school-ken-tore-circuit-kirikaeshi",
+                "name": "Kirikaeshi",
+                "quantities": {
+                  "duration": {
+                    "unit": "seconds",
+                    "value": 30
+                  }
+                }
+              },
+              {
+                "id": "university-high-school-ken-tore-circuit-hayasuburi",
+                "name": "Hayasuburi",
+                "quantities": {
+                  "duration": {
+                    "unit": "seconds",
+                    "value": 30
+                  }
+                }
+              },
+              {
+                "id": "university-high-school-ken-tore-circuit-stationary-kote-men",
+                "name": "Stationary Kote-men",
+                "quantities": {
+                  "duration": {
+                    "unit": "seconds",
+                    "value": 30
+                  }
+                }
+              },
+              {
+                "id": "university-high-school-ken-tore-circuit-left-right-do-kirikaeshi",
+                "name": "Left-right Dō-kirikaeshi",
+                "quantities": {
+                  "duration": {
+                    "unit": "seconds",
+                    "value": 30
+                  }
+                }
               }
-            }
+            ]
           },
           {
-            "id": "university-high-school-ken-tore-circuit-hayasuburi",
-            "name": "hayasuburi",
-            "quantities": {
-              "duration": {
-                "unit": "seconds",
-                "value": 30
+            "id": "university-high-school-ken-tore-circuit-station-b",
+            "name": "Station B",
+            "exercises": [
+              {
+                "id": "university-high-school-ken-tore-circuit-men",
+                "name": "Men",
+                "quantities": {
+                  "duration": {
+                    "unit": "seconds",
+                    "value": 30
+                  }
+                }
+              },
+              {
+                "id": "university-high-school-ken-tore-circuit-kote",
+                "name": "Kote",
+                "quantities": {
+                  "duration": {
+                    "unit": "seconds",
+                    "value": 30
+                  }
+                }
+              },
+              {
+                "id": "university-high-school-ken-tore-circuit-kote-men",
+                "name": "Kote-men",
+                "quantities": {
+                  "duration": {
+                    "unit": "seconds",
+                    "value": 30
+                  }
+                }
+              },
+              {
+                "id": "university-high-school-ken-tore-circuit-do",
+                "name": "Dō",
+                "quantities": {
+                  "duration": {
+                    "unit": "seconds",
+                    "value": 30
+                  }
+                }
               }
-            }
-          },
-          {
-            "id": "university-high-school-ken-tore-circuit-stationary-kote-men",
-            "name": "stationary kote-men",
-            "quantities": {
-              "duration": {
-                "unit": "seconds",
-                "value": 30
-              }
-            }
-          },
-          {
-            "id": "university-high-school-ken-tore-circuit-left-right-do-kirikaeshi",
-            "name": "left-right do-kirikaeshi",
-            "quantities": {
-              "duration": {
-                "unit": "seconds",
-                "value": 30
-              }
-            }
-          },
-          {
-            "id": "university-high-school-ken-tore-circuit-men",
-            "name": "men",
-            "quantities": {
-              "duration": {
-                "unit": "seconds",
-                "value": 30
-              }
-            }
-          },
-          {
-            "id": "university-high-school-ken-tore-circuit-kote",
-            "name": "kote",
-            "quantities": {
-              "duration": {
-                "unit": "seconds",
-                "value": 30
-              }
-            }
-          },
-          {
-            "id": "university-high-school-ken-tore-circuit-kote-men",
-            "name": "kote-men",
-            "quantities": {
-              "duration": {
-                "unit": "seconds",
-                "value": 30
-              }
-            }
-          },
-          {
-            "id": "university-high-school-ken-tore-circuit-do",
-            "name": "do",
-            "quantities": {
-              "duration": {
-                "unit": "seconds",
-                "value": 30
-              }
-            }
+            ]
           }
         ]
       }
@@ -1552,55 +1564,58 @@
       },
       {
         "id": "top-university-sandan-geiko",
-        "name": "Sandan geiko",
+        "name": "Sandan-geiko",
+        "notes": "Three motodachi. Kakarite cycle through each of them with no rest.",
         "exercises": [
           {
             "id": "top-university-sandan-geiko-kirikaeshi",
             "name": "Kirikaeshi",
             "notes": "50/40/30 pattern or 100/100/100 pattern"
-          }
-        ]
-      },
-      {
-        "id": "top-university-yakusoku-geiko",
-        "name": "Yakusoku-geiko",
-        "exercises": [
-          {
-            "id": "top-university-yakusoku-geiko-men-kote",
-            "name": "Men → Kote"
           },
           {
-            "id": "top-university-yakusoku-geiko-men-kukan-datotsu-men",
-            "name": "Men → Kukan-datotsu-men",
-            "notes": "striking through empty space"
+            "id": "top-university-yakusoku-geiko",
+            "name": "Yakusoku-geiko",
+            "exercises": [
+              {
+                "id": "top-university-yakusoku-geiko-men-kote",
+                "name": "Men → Kote"
+              },
+              {
+                "id": "top-university-yakusoku-geiko-men-kukan-datotsu-men",
+                "name": "Men → Kukan-datotsu-men",
+                "notes": "striking through empty space"
+              },
+              {
+                "id": "top-university-yakusoku-geiko-men-kote-men-taiatari",
+                "name": "Men → Kote-Men → Taiatari"
+              },
+              {
+                "id": "top-university-yakusoku-geiko-hiki-do-men-kirikaeshi",
+                "name": "Hiki-dō → Men → 100 Kirikaeshi strikes",
+                "quantities": {
+                  "repetitions": 1
+                }
+              }
+            ]
           },
           {
-            "id": "top-university-yakusoku-geiko-men-kote-men-taiatari",
-            "name": "Men → Kote-Men → Taiatari"
-          },
-          {
-            "id": "top-university-yakusoku-geiko-hiki-do-men-kirikaeshi",
-            "name": "Hiki-dō → Men → Kirikaeshi",
-            "quantities": {
-              "repetitions": 100
-            }
-          }
-        ]
-      },
-      {
-        "id": "top-university-fee-version",
-        "name": "Fee version",
-        "notes": "These two methods are options, not sequential mandatory exercises.",
-        "exercises": [
-          {
-            "id": "top-university-fee-version-uchikomi-geiko",
-            "name": "Uchikomi-geiko",
-            "notes": "A method of keiko in which one learns basic striking techniques by responding to striking opportunities provided by the motodachi (instructor). Motodachi-focused."
-          },
-          {
-            "id": "top-university-fee-version-kakari-geiko",
-            "name": "Kakari-geiko",
-            "notes": "A method in which the trainee, for a short time, strikes the motodachi with full energy using all techniques learned, without hesitation or concern about being struck. Kakarite-focused."
+            "id": "top-university-fee-version",
+            "name": "Free version",
+            "notes": "These two methods are options, not sequential mandatory exercises.",
+            "exercises": [
+              {
+                "id": "top-university-fee-version-uchikomi-geiko",
+                "name": "Uchikomi",
+                "notes": "A method of keiko in which one learns basic striking techniques by responding to striking opportunities provided by the motodachi (instructor). Motodachi-focused.",
+                "editableQuantityUnits": ["seconds"]
+              },
+              {
+                "id": "top-university-fee-version-kakari-geiko",
+                "name": "Kakarigeiko",
+                "notes": "A method in which the trainee, for a short time, strikes the motodachi with full energy using all techniques learned, without hesitation or concern about being struck. Kakarite-focused.",
+                "editableQuantityUnits": ["seconds"]
+              }
+            ]
           }
         ]
       },
@@ -1662,6 +1677,7 @@
       {
         "id": "top-university-kakarigeiko-kakarigeiko",
         "name": "Kakarigeiko",
+        "editableQuantityUnits": ["seconds"],
         "exercises": []
       }
     ]
