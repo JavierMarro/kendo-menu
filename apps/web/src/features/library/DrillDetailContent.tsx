@@ -25,15 +25,15 @@ function hasText(value: string | undefined): value is string {
 
 interface TrainingActivityQuantitiesProps {
   readonly activity: TrainingActivity;
-  readonly parentSection?: TrainingSet['sections'][number];
+  readonly parentActivity?: TrainingActivity;
 }
 
-function TrainingActivityQuantities({ activity, parentSection }: TrainingActivityQuantitiesProps) {
+function TrainingActivityQuantities({ activity, parentActivity }: TrainingActivityQuantitiesProps) {
   const quantities = getSpecifiedTrainingQuantities(activity);
 
   return quantities.length === 0 ? (
     <span className="quantity-not-specified">
-      {getMissingTrainingQuantityLabel(activity, parentSection)}
+      {getMissingTrainingQuantityLabel(activity, parentActivity)}
     </span>
   ) : (
     <ul className="quantity-list" aria-label={`Quantities for ${activity.name}`}>
@@ -87,71 +87,71 @@ export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentP
       ) : null}
 
       <div className="detail-sections">
-        {trainingSet.sections.map((section, sectionIndex) => {
-          const sectionNumber = sectionIndex + 1;
-          const sectionHeadingId = `${titleId}-section-${section.id}`;
+        {trainingSet.activities.map((activity, activityIndex) => {
+          const activityNumber = activityIndex + 1;
+          const activityHeadingId = `${titleId}-activity-${activity.id}`;
 
-          if (section.exercises.length === 0) {
+          if (activity.children.length === 0) {
             return (
               <section
                 className="detail-section detail-standalone-activity"
-                aria-labelledby={sectionHeadingId}
-                key={section.id}
+                aria-labelledby={activityHeadingId}
+                key={activity.id}
               >
                 <span className="section-number" aria-hidden="true">
-                  {sectionNumber}
+                  {activityNumber}
                 </span>
                 <div className="detail-standalone-copy">
-                  <h2 className="detail-section-label" id={sectionHeadingId}>
-                    {section.name}
+                  <h2 className="detail-section-label" id={activityHeadingId}>
+                    {activity.name}
                   </h2>
-                  {hasText(section.notes) ? (
-                    <p className="step-description">{section.notes}</p>
+                  {hasText(activity.notes) ? (
+                    <p className="step-description">{activity.notes}</p>
                   ) : null}
                 </div>
-                <TrainingActivityQuantities activity={section} />
+                <TrainingActivityQuantities activity={activity} />
               </section>
             );
           }
 
-          const exerciseCount = section.exercises.length;
-          const hasSectionActivity = section.quantities !== undefined;
+          const childCount = activity.children.length;
+          const hasParentActivity = activity.quantities !== undefined;
 
           return (
-            <details className="detail-section" key={section.id}>
+            <details className="detail-section" key={activity.id}>
               <summary className="detail-section-summary">
                 <span className="detail-section-summary-content">
                   <span className="detail-section-indicator" aria-hidden="true" />
                   <span className="section-number" aria-hidden="true">
-                    {sectionNumber}
+                    {activityNumber}
                   </span>
-                  <span className="detail-section-label">{section.name}</span>
+                  <span className="detail-section-label">{activity.name}</span>
                   <span className="detail-section-count">
-                    {exerciseCount} {exerciseCount === 1 ? 'exercise' : 'exercises'}
+                    {childCount} {childCount === 1 ? 'exercise' : 'exercises'}
                   </span>
                 </span>
               </summary>
-              {hasText(section.notes) || hasSectionActivity ? (
+              {hasText(activity.notes) || hasParentActivity ? (
                 <div className="detail-section-parent">
-                  {hasText(section.notes) ? (
-                    <p className="step-description">{section.notes}</p>
+                  {hasText(activity.notes) ? (
+                    <p className="step-description">{activity.notes}</p>
                   ) : null}
-                  {hasSectionActivity ? <TrainingActivityQuantities activity={section} /> : null}
+                  {hasParentActivity ? <TrainingActivityQuantities activity={activity} /> : null}
                 </div>
               ) : null}
               <ol className="training-step-list">
-                {section.exercises.map((exercise, exerciseIndex) => (
-                  <li className="training-step" key={exercise.id}>
+                {activity.children.map((child, childIndex) => (
+                  <li className="training-step" key={child.id}>
                     <span className="step-number" aria-hidden="true">
-                      {exerciseIndex + 1}
+                      {childIndex + 1}
                     </span>
                     <div className="step-copy">
-                      <span className="step-label">{exercise.name}</span>
-                      {hasText(exercise.notes) ? (
-                        <span className="step-description">{exercise.notes}</span>
+                      <span className="step-label">{child.name}</span>
+                      {hasText(child.notes) ? (
+                        <span className="step-description">{child.notes}</span>
                       ) : null}
                     </div>
-                    <TrainingActivityQuantities activity={exercise} parentSection={section} />
+                    <TrainingActivityQuantities activity={child} parentActivity={activity} />
                   </li>
                 ))}
               </ol>

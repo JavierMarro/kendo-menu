@@ -1,15 +1,24 @@
 import defaultDrillsSource from '../data/default-drills.json';
 
 import {
+  RESEARCHED_ACTIVITY_COUNT,
+  RESEARCHED_ID_COUNT,
+  RESEARCHED_LEAF_EXERCISE_COUNT,
+  RESEARCHED_TOP_LEVEL_ACTIVITY_COUNT,
+  RESEARCHED_TRAINING_SESSION_COUNT,
   TrainingValidationError,
   asTrainingSetId,
+  getTrainingSetActivities,
+  getTrainingSetLeafExerciseCount,
   validateCuratedDrills,
   type CuratedDrill,
+  type CuratedActivity,
   type DrillCategory,
   type TrainingDuration,
-  type TrainingExercise,
+  type TrainingActivity,
   type TrainingQuantities,
-  type TrainingSection,
+  type TrainingQuantityUnit,
+  type TrainingQuantityUnits,
   type TrainingSet,
 } from './types';
 
@@ -62,37 +71,42 @@ function freezeQuantities(quantities: TrainingQuantities): TrainingQuantities {
   });
 }
 
-function freezeExercise(exercise: TrainingExercise): TrainingExercise {
-  return Object.freeze({
-    id: exercise.id,
-    name: exercise.name,
-    ...(exercise.quantities === undefined
-      ? {}
-      : { quantities: freezeQuantities(exercise.quantities) }),
-    ...(exercise.notes === undefined ? {} : { notes: exercise.notes }),
-  });
+function freezeEditableQuantityUnits(units: TrainingQuantityUnits): TrainingQuantityUnits {
+  const copy: [TrainingQuantityUnit, ...TrainingQuantityUnit[]] = [units[0], ...units.slice(1)];
+  return Object.freeze(copy);
 }
 
-function freezeSection(section: TrainingSection): TrainingSection {
+function freezeActivity(activity: CuratedActivity): TrainingActivity {
+  const children = Object.freeze((activity.exercises ?? []).map(freezeActivity));
+  const editableQuantityUnits =
+    activity.editableQuantityUnits === undefined
+      ? undefined
+      : freezeEditableQuantityUnits(activity.editableQuantityUnits);
+
   return Object.freeze({
-    id: section.id,
-    name: section.name,
-    ...(section.quantities === undefined
+    id: activity.id,
+    name: activity.name,
+    ...(activity.quantities === undefined
       ? {}
-      : { quantities: freezeQuantities(section.quantities) }),
-    ...(section.notes === undefined ? {} : { notes: section.notes }),
-    exercises: Object.freeze(section.exercises.map(freezeExercise)),
+      : { quantities: freezeQuantities(activity.quantities) }),
+    ...(activity.notes === undefined ? {} : { notes: activity.notes }),
+    children,
+    ...(editableQuantityUnits === undefined ? {} : { editableQuantityUnits }),
+    ...(activity.allowsSessionNotes === undefined
+      ? {}
+      : { allowsSessionNotes: activity.allowsSessionNotes }),
   });
 }
 
 function createBuiltInTrainingSet(drill: CuratedDrill): TrainingSet {
+  const activities = Object.freeze(drill.sections.map(freezeActivity));
   return Object.freeze({
     id: asTrainingSetId(drill.id),
     ...(drill.sourceId === undefined ? {} : { sourceId: drill.sourceId }),
     name: drill.name,
     ...(drill.description === undefined ? {} : { description: drill.description }),
     category: getBuiltInDrillCategory(drill.id),
-    sections: Object.freeze(drill.sections.map(freezeSection)),
+    activities,
     isBuiltIn: true,
   });
 }
@@ -102,6 +116,26 @@ if (!validatedSource.success) {
   throw new TrainingValidationError(validatedSource.issues);
 }
 
-export const DEFAULT_TRAINING_SETS: readonly TrainingSet[] = Object.freeze(
-  validatedSource.value.map(createBuiltInTrainingSet),
-);
+const adaptedTrainingSets = validatedSource.value.map(createBuiltInTrainingSet);
+const adaptedActivities = adaptedTrainingSets.flatMap(getTrainingSetActivities);
+const adaptedIds = new Set([
+  ...adaptedTrainingSets.map((trainingSet) => trainingSet.id),
+  ...adaptedActivities.map((activity) => activity.id),
+]);
+if (
+  adaptedTrainingSets.length !== RESEARCHED_TRAINING_SESSION_COUNT ||
+  adaptedTrainingSets.flatMap((trainingSet) => trainingSet.activities).length !==
+    RESEARCHED_TOP_LEVEL_ACTIVITY_COUNT ||
+  adaptedActivities.length !== RESEARCHED_ACTIVITY_COUNT ||
+  adaptedTrainingSets.reduce(
+    (total, trainingSet) => total + getTrainingSetLeafExerciseCount(trainingSet),
+    0,
+  ) !== RESEARCHED_LEAF_EXERCISE_COUNT ||
+  adaptedIds.size !== RESEARCHED_ID_COUNT
+) {
+  throw new TrainingValidationError([
+    { path: '', message: 'default training-set counts do not match the researched collection' },
+  ]);
+}
+
+export const DEFAULT_TRAINING_SETS: readonly TrainingSet[] = Object.freeze(adaptedTrainingSets);

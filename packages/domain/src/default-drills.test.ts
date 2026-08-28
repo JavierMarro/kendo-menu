@@ -5,13 +5,32 @@ import kendoDrillsSchema from '../schema/kendo-drills.schema.json';
 import {
   DEFAULT_TRAINING_SETS,
   getTrainingSetActivities,
+  getTrainingSetLeafExerciseCount,
   validateCuratedDrills,
   validateTrainingSet,
   type CuratedDrill,
+  type CuratedActivity,
   type TrainingActivity,
-  type TrainingSection,
   type TrainingSet,
 } from './index';
+
+function projectCuratedActivity(activity: TrainingActivity): CuratedActivity {
+  return {
+    id: activity.id,
+    name: activity.name,
+    ...(activity.quantities === undefined ? {} : { quantities: activity.quantities }),
+    ...(activity.notes === undefined ? {} : { notes: activity.notes }),
+    ...(activity.editableQuantityUnits === undefined
+      ? {}
+      : { editableQuantityUnits: [...activity.editableQuantityUnits] }),
+    ...(activity.allowsSessionNotes === undefined
+      ? {}
+      : { allowsSessionNotes: activity.allowsSessionNotes }),
+    ...(activity.children.length === 0
+      ? {}
+      : { exercises: activity.children.map(projectCuratedActivity) }),
+  };
+}
 
 function projectTrainingSet(trainingSet: TrainingSet): CuratedDrill {
   return {
@@ -19,17 +38,9 @@ function projectTrainingSet(trainingSet: TrainingSet): CuratedDrill {
     ...(trainingSet.sourceId === undefined ? {} : { sourceId: trainingSet.sourceId }),
     name: trainingSet.name,
     ...(trainingSet.description === undefined ? {} : { description: trainingSet.description }),
-    sections: trainingSet.sections.map((section) => ({
-      id: section.id,
-      name: section.name,
-      ...(section.quantities === undefined ? {} : { quantities: section.quantities }),
-      ...(section.notes === undefined ? {} : { notes: section.notes }),
-      exercises: section.exercises.map((exercise) => ({
-        id: exercise.id,
-        name: exercise.name,
-        ...(exercise.quantities === undefined ? {} : { quantities: exercise.quantities }),
-        ...(exercise.notes === undefined ? {} : { notes: exercise.notes }),
-      })),
+    sections: trainingSet.activities.map((activity) => ({
+      ...projectCuratedActivity(activity),
+      exercises: activity.children.map(projectCuratedActivity),
     })),
   };
 }
@@ -42,8 +53,8 @@ function requireTrainingSet(id: string): TrainingSet {
   return trainingSet;
 }
 
-function requireSection(trainingSetId: string, sectionId: string): TrainingSection {
-  const section = requireTrainingSet(trainingSetId).sections.find(
+function requireSection(trainingSetId: string, sectionId: string): TrainingActivity {
+  const section = requireTrainingSet(trainingSetId).activities.find(
     (candidate) => candidate.id === sectionId,
   );
   if (section === undefined) {
@@ -62,6 +73,86 @@ function requireActivity(trainingSetId: string, activityId: string): TrainingAct
   return activity;
 }
 
+const RECURSIVE_SCHEMA_VALID_FIXTURE: unknown = [
+  {
+    id: 'recursive-session',
+    sourceId: 99,
+    name: 'Recursive session',
+    description: 'A schema fixture with four activity levels.',
+    sections: [
+      {
+        id: 'recursive-root',
+        name: 'Root activity',
+        exercises: [
+          {
+            id: 'recursive-child',
+            name: 'Child activity',
+            exercises: [
+              {
+                id: 'recursive-grandchild',
+                name: 'Grandchild activity',
+                quantities: { duration: { unit: 'seconds', min: 5, max: 10 } },
+                editableQuantityUnits: ['seconds', 'minutes'],
+                allowsSessionNotes: true,
+                exercises: [{ id: 'recursive-leaf', name: 'Leaf activity' }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+];
+
+const RECURSIVE_SCHEMA_INVALID_FIXTURES: readonly unknown[] = [
+  [
+    {
+      id: 'recursive-session',
+      name: 'Duplicate nested ID',
+      sections: [
+        {
+          id: 'recursive-root',
+          name: 'Root activity',
+          exercises: [{ id: 'recursive-root', name: 'Duplicate child' }],
+        },
+      ],
+    },
+  ],
+  [
+    {
+      id: 'recursive-session',
+      name: 'Malformed nested children',
+      sections: [
+        {
+          id: 'recursive-root',
+          name: 'Root activity',
+          exercises: [{ id: 'recursive-child', name: 'Child activity', exercises: 'not-an-array' }],
+        },
+      ],
+    },
+  ],
+  [
+    {
+      id: 'recursive-session',
+      name: 'Invalid activity metadata',
+      sections: [
+        {
+          id: 'recursive-root',
+          name: 'Root activity',
+          exercises: [
+            {
+              id: 'recursive-child',
+              name: 'Child activity',
+              editableQuantityUnits: ['seconds', 'seconds'],
+              allowsSessionNotes: false,
+            },
+          ],
+        },
+      ],
+    },
+  ],
+];
+
 describe('canonical default drills', () => {
   it('validates the canonical source and preserves it exactly in the runtime adapter', () => {
     expect(validateCuratedDrills(defaultDrillsSource)).toEqual({
@@ -72,14 +163,14 @@ describe('canonical default drills', () => {
   });
 
   it('keeps all authoritative order, counts, provenance values, and unique stable IDs', () => {
-    const sections = DEFAULT_TRAINING_SETS.flatMap((trainingSet) => trainingSet.sections);
-    const childExercises = sections.flatMap((section) => section.exercises);
-    const standaloneSections = sections.filter((section) => section.exercises.length === 0);
+    const sections = DEFAULT_TRAINING_SETS.flatMap((trainingSet) => trainingSet.activities);
+    const childExercises = sections.flatMap((section) => section.children);
+    const standaloneSections = sections.filter((section) => section.children.length === 0);
     const ids = DEFAULT_TRAINING_SETS.flatMap((trainingSet) => [
       trainingSet.id,
-      ...trainingSet.sections.flatMap((section) => [
+      ...trainingSet.activities.flatMap((section) => [
         section.id,
-        ...section.exercises.map((exercise) => exercise.id),
+        ...section.children.map((exercise) => exercise.id),
       ]),
     ]);
 
@@ -87,7 +178,13 @@ describe('canonical default drills', () => {
     expect(sections).toHaveLength(90);
     expect(childExercises).toHaveLength(165);
     expect(standaloneSections).toHaveLength(46);
-    expect(DEFAULT_TRAINING_SETS.flatMap(getTrainingSetActivities)).toHaveLength(211);
+    expect(DEFAULT_TRAINING_SETS.flatMap(getTrainingSetActivities)).toHaveLength(255);
+    expect(
+      DEFAULT_TRAINING_SETS.reduce(
+        (total, trainingSet) => total + getTrainingSetLeafExerciseCount(trainingSet),
+        0,
+      ),
+    ).toBe(211);
     expect(ids).toHaveLength(266);
     expect(new Set(ids).size).toBe(ids.length);
     expect(DEFAULT_TRAINING_SETS.map((trainingSet) => trainingSet.sourceId)).toEqual([
@@ -219,16 +316,16 @@ describe('canonical default drills', () => {
     expect(internationalSuburi.quantities).toEqual({
       duration: { unit: 'minutes', value: 15 },
     });
-    expect(internationalSuburi.exercises).toEqual([]);
+    expect(internationalSuburi.children).toEqual([]);
     expect(universitySuburi.quantities).toBeUndefined();
-    expect(universitySuburi.exercises).toEqual([]);
-    expect(japaneseSuburi.exercises.map((exercise) => exercise.quantities)).toEqual([
+    expect(universitySuburi.children).toEqual([]);
+    expect(japaneseSuburi.children.map((exercise) => exercise.quantities)).toEqual([
       undefined,
       undefined,
       undefined,
       undefined,
     ]);
-    expect(seniorHighSuburi.exercises.every((exercise) => exercise.quantities === undefined)).toBe(
+    expect(seniorHighSuburi.children.every((exercise) => exercise.quantities === undefined)).toBe(
       true,
     );
     expect(
@@ -252,7 +349,7 @@ describe('canonical default drills', () => {
       'top-university-kubun-geiko-uchikomi-men-only',
     );
 
-    expect(standalone.exercises).toEqual([]);
+    expect(standalone.children).toEqual([]);
     expect(standalone.quantities).toEqual({ duration: { unit: 'minutes', value: 10 } });
     expect(ranged.quantities).toEqual({ duration: { unit: 'seconds', min: 30, max: 60 } });
     expect(
@@ -261,17 +358,17 @@ describe('canonical default drills', () => {
     expect(Object.isFrozen(DEFAULT_TRAINING_SETS)).toBe(true);
     for (const trainingSet of DEFAULT_TRAINING_SETS) {
       expect(Object.isFrozen(trainingSet)).toBe(true);
-      expect(Object.isFrozen(trainingSet.sections)).toBe(true);
-      for (const section of trainingSet.sections) {
+      expect(Object.isFrozen(trainingSet.activities)).toBe(true);
+      for (const section of trainingSet.activities) {
         expect(Object.isFrozen(section)).toBe(true);
-        expect(Object.isFrozen(section.exercises)).toBe(true);
+        expect(Object.isFrozen(section.children)).toBe(true);
         if (section.quantities !== undefined) {
           expect(Object.isFrozen(section.quantities)).toBe(true);
           if (section.quantities.duration !== undefined) {
             expect(Object.isFrozen(section.quantities.duration)).toBe(true);
           }
         }
-        for (const exercise of section.exercises) {
+        for (const exercise of section.children) {
           expect(Object.isFrozen(exercise)).toBe(true);
           if (exercise.quantities !== undefined) {
             expect(Object.isFrozen(exercise.quantities)).toBe(true);
@@ -290,11 +387,12 @@ describe('canonical default drills', () => {
       'international-dojo-2-hour-session-uchikomi',
     );
 
-    expect(uchikomi.exercises).toEqual([
+    expect(uchikomi.children).toEqual([
       {
         id: 'international-dojo-2-hour-session-uchikomi-men-kote-kote-men-men',
         name: 'Men → Kote → Kote-men → Men',
         quantities: { repetitions: 5 },
+        children: [],
       },
     ]);
   });
@@ -358,7 +456,7 @@ describe('canonical default drills', () => {
       'Station A: Kirikaeshi, Hayasuburi, Stationary kote-men, Left-right do-kirikaeshi\n' +
         'Station B: Men, Kote, Kote-men, Do',
     );
-    expect(section.exercises.map(({ id, name }) => ({ id, name }))).toEqual([
+    expect(section.children.map(({ id, name }) => ({ id, name }))).toEqual([
       {
         id: 'university-high-school-ken-tore-circuit-kirikaeshi',
         name: 'kirikaeshi',
@@ -380,7 +478,7 @@ describe('canonical default drills', () => {
       { id: 'university-high-school-ken-tore-circuit-kote-men', name: 'kote-men' },
       { id: 'university-high-school-ken-tore-circuit-do', name: 'do' },
     ]);
-    expect(section.exercises.map((exercise) => exercise.quantities)).toEqual(
+    expect(section.children.map((exercise) => exercise.quantities)).toEqual(
       Array.from({ length: 8 }, () => ({ duration: { unit: 'seconds', value: 30 } })),
     );
   });
@@ -394,14 +492,12 @@ describe('canonical default drills', () => {
     expect(section.notes).toBe(
       'The following three Kirikaeshi exercises are performed over the length of the dojo',
     );
-    expect(section.exercises.map((exercise) => exercise.id)).toEqual([
+    expect(section.children.map((exercise) => exercise.id)).toEqual([
       'university-version-2-dojo-length-drills-slow-kirikaeshi',
       'university-version-2-dojo-length-drills-kirikaeshi',
       'university-version-2-dojo-length-drills-kirikaeshi-suriashi',
     ]);
-    expect(section.exercises.map((exercise) => exercise.quantities?.repetitions)).toEqual([
-      2, 2, 2,
-    ]);
+    expect(section.children.map((exercise) => exercise.quantities?.repetitions)).toEqual([2, 2, 2]);
   });
 
   it('preserves the current source repetition scopes without changing stable IDs', () => {
@@ -436,7 +532,7 @@ describe('canonical default drills', () => {
       'university-high-school-kirikaeshi',
     );
     expect(
-      universityHighKirikaeshi.exercises.map(({ id, name, quantities }) => ({
+      universityHighKirikaeshi.children.map(({ id, name, quantities }) => ({
         id,
         name,
         quantities,
@@ -475,6 +571,7 @@ describe('canonical default drills', () => {
       id: 'top-university-yakusoku-geiko-hiki-do-men-kirikaeshi',
       name: 'Hiki-dō → Men → Kirikaeshi',
       quantities: { repetitions: 100 },
+      children: [],
     });
     expect(
       requireActivity('top-university', 'top-university-yakusoku-geiko-men-kote-men-taiatari')
@@ -493,12 +590,12 @@ describe('canonical default drills', () => {
 
     const kubun = requireSection('top-university', 'top-university-kubun-geiko');
     expect(kubun.notes).toBe('Classification-geiko');
-    expect(kubun.exercises.map((exercise) => exercise.notes)).toEqual([
+    expect(kubun.children.map((exercise) => exercise.notes)).toEqual([
       '1st person',
       '2nd person',
       '3rd person',
     ]);
-    expect(kubun.exercises.map((exercise) => exercise.quantities)).toEqual(
+    expect(kubun.children.map((exercise) => exercise.quantities)).toEqual(
       Array.from({ length: 3 }, () => ({
         duration: { unit: 'seconds', min: 30, max: 60 },
       })),
@@ -511,7 +608,7 @@ describe('canonical default drills', () => {
     expect(feeVersion.notes).toBe(
       'These two methods are options, not sequential mandatory exercises.',
     );
-    expect(feeVersion.exercises.map(({ id, name }) => ({ id, name }))).toEqual([
+    expect(feeVersion.children.map(({ id, name }) => ({ id, name }))).toEqual([
       {
         id: 'top-university-fee-version-uchikomi-geiko',
         name: 'Uchikomi-geiko',
@@ -587,6 +684,20 @@ describe('canonical default drills', () => {
 });
 
 describe('canonical schema role and constraints', () => {
+  it('covers default and recursive source fixtures through the domain validator', () => {
+    /*
+     * This workspace does not declare a Draft-07 validator. Ajv is only present transitively
+     * in tooling, so importing it here would make the test depend on an undeclared package.
+     * Keep executable fixture coverage in the domain validator and assert the schema recursion
+     * contract below until a first-party validator is declared.
+     */
+    expect(validateCuratedDrills(defaultDrillsSource).success).toBe(true);
+    expect(validateCuratedDrills(RECURSIVE_SCHEMA_VALID_FIXTURE).success).toBe(true);
+    for (const fixture of RECURSIVE_SCHEMA_INVALID_FIXTURES) {
+      expect(validateCuratedDrills(fixture).success).toBe(false);
+    }
+  });
+
   it('defines a strict Draft-07 Kendo collection schema that covers corrected data', () => {
     expect(kendoDrillsSchema).toMatchObject({
       $schema: 'http://json-schema.org/draft-07/schema#',
@@ -602,13 +713,12 @@ describe('canonical schema role and constraints', () => {
         duration: {
           oneOf: [{ $ref: '#/definitions/fixedDuration' }, { $ref: '#/definitions/durationRange' }],
         },
-        exercise: {
+        activity: {
           required: ['id', 'name'],
           additionalProperties: false,
         },
         section: {
-          required: ['id', 'name', 'exercises'],
-          additionalProperties: false,
+          allOf: [{ $ref: '#/definitions/activity' }, { type: 'object', required: ['exercises'] }],
         },
         drill: {
           required: ['id', 'name', 'sections'],
@@ -623,14 +733,24 @@ describe('canonical schema role and constraints', () => {
     });
     expect(kendoDrillsSchema.definitions.durationUnit.enum).toEqual(['seconds', 'minutes']);
     expect(kendoDrillsSchema.definitions.durationRange.required).toEqual(['unit', 'min', 'max']);
-    expect(kendoDrillsSchema.definitions.section.properties.quantities).toEqual({
+    expect(kendoDrillsSchema.definitions.activity.properties.quantities).toEqual({
       $ref: '#/definitions/quantities',
     });
-    expect(kendoDrillsSchema.definitions.exercise.properties.quantities).toEqual({
-      $ref: '#/definitions/quantities',
+    expect(kendoDrillsSchema.definitions.activity.required).not.toContain('quantities');
+    expect(kendoDrillsSchema.definitions.activity.properties.notes).toEqual({ type: 'string' });
+    expect(kendoDrillsSchema.definitions.activity.properties.exercises).toEqual({
+      type: 'array',
+      items: { $ref: '#/definitions/activity' },
     });
-    expect(kendoDrillsSchema.definitions.exercise.required).not.toContain('quantities');
-    expect(kendoDrillsSchema.definitions.section.properties.notes).toEqual({ type: 'string' });
-    expect(kendoDrillsSchema.definitions.exercise.properties.notes).toEqual({ type: 'string' });
+    expect(kendoDrillsSchema.definitions.activity.properties.editableQuantityUnits).toEqual({
+      $ref: '#/definitions/editableQuantityUnits',
+    });
+    expect(kendoDrillsSchema.definitions.activity.properties.allowsSessionNotes).toEqual({
+      const: true,
+    });
+    expect(kendoDrillsSchema.definitions.editableQuantityUnits).toMatchObject({
+      minItems: 1,
+      uniqueItems: true,
+    });
   });
 });

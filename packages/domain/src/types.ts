@@ -29,6 +29,9 @@ export const DURATION_UNITS = ['seconds', 'minutes'] as const;
 export type TrainingQuantityUnit = (typeof TRAINING_QUANTITY_UNITS)[number];
 export type DurationUnit = (typeof DURATION_UNITS)[number];
 
+/** A validated, nonempty ordered collection of units an activity may expose for editing. */
+export type TrainingQuantityUnits = readonly [TrainingQuantityUnit, ...TrainingQuantityUnit[]];
+
 export const MIN_REPETITIONS = 0;
 export const MAX_REPETITIONS = 500;
 
@@ -63,22 +66,45 @@ export type TrainingQuantityOverrides = Readonly<Partial<Record<TrainingQuantity
 
 export type DashboardQuantityOverrides = Readonly<Record<string, TrainingQuantityOverrides>>;
 
-export interface TrainingExercise {
+/**
+ * The canonical recursive runtime node. Every activity owns an ordered child collection;
+ * an empty collection makes the activity a leaf exercise.
+ */
+export interface TrainingActivity {
   readonly id: string;
   readonly name: string;
   readonly quantities?: TrainingQuantities;
   readonly notes?: string;
+  readonly children: readonly TrainingActivity[];
+  readonly editableQuantityUnits?: TrainingQuantityUnits;
+  readonly allowsSessionNotes?: true;
 }
 
-export interface TrainingSection {
+/**
+ * Source-only recursive activity DTO. Curated JSON calls child activities `exercises` and
+ * requires that property only on top-level sections.
+ */
+export interface CuratedActivity {
   readonly id: string;
   readonly name: string;
   readonly quantities?: TrainingQuantities;
   readonly notes?: string;
-  readonly exercises: readonly TrainingExercise[];
+  readonly exercises?: readonly CuratedActivity[];
+  readonly editableQuantityUnits?: TrainingQuantityUnits;
+  readonly allowsSessionNotes?: true;
 }
 
-export type TrainingActivity = TrainingSection | TrainingExercise;
+/** Source-only top-level curated activity DTO, where `exercises` remains required. */
+export interface CuratedSection extends CuratedActivity {
+  readonly exercises: readonly CuratedActivity[];
+}
+
+/**
+ * Legacy source DTO names retained for callers that consume curated `sections`/`exercises`.
+ * They are not runtime training-set node types; use `TrainingActivity` for runtime values.
+ */
+export type TrainingExercise = CuratedActivity;
+export type TrainingSection = CuratedSection;
 
 export interface TrainingSet {
   readonly id: TrainingSetId;
@@ -86,7 +112,7 @@ export interface TrainingSet {
   readonly name: string;
   readonly description?: string;
   readonly category: DrillCategory;
-  readonly sections: readonly TrainingSection[];
+  readonly activities: readonly TrainingActivity[];
   readonly isBuiltIn: boolean;
 }
 
@@ -95,7 +121,7 @@ export interface CuratedDrill {
   readonly sourceId?: number;
   readonly name: string;
   readonly description?: string;
-  readonly sections: readonly TrainingSection[];
+  readonly sections: readonly CuratedSection[];
 }
 
 /** Input for a user-authored exercise. Its generated id is deliberately not accepted. */
@@ -152,12 +178,25 @@ export class TrainingValidationError extends Error {
   }
 }
 
-export const RESEARCHED_DRILL_COUNT = 11;
-export const RESEARCHED_SECTION_COUNT = 90;
-export const RESEARCHED_ACTIVITY_COUNT = 211;
+/** Canonical curated collection counts, asserted at the default-data adapter seam. */
+export const RESEARCHED_TRAINING_SESSION_COUNT = 11;
+export const RESEARCHED_TOP_LEVEL_ACTIVITY_COUNT = 90;
+export const RESEARCHED_ACTIVITY_COUNT = 255;
+export const RESEARCHED_LEAF_EXERCISE_COUNT = 211;
+export const RESEARCHED_ID_COUNT = 266;
+
+/** Compatibility aliases for callers that still use the source DTO terminology. */
+export const RESEARCHED_DRILL_COUNT = RESEARCHED_TRAINING_SESSION_COUNT;
+export const RESEARCHED_SECTION_COUNT = RESEARCHED_TOP_LEVEL_ACTIVITY_COUNT;
+export const RESEARCHED_TOP_LEVEL_SECTION_COUNT = RESEARCHED_TOP_LEVEL_ACTIVITY_COUNT;
+export const RESEARCHED_LEAF_ACTIVITY_COUNT = RESEARCHED_LEAF_EXERCISE_COUNT;
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isUnknownArray(value: unknown): value is readonly unknown[] {
+  return Array.isArray(value);
 }
 
 function isNonBlankString(value: unknown): value is string {
@@ -264,6 +303,21 @@ export function isValidTrainingQuantities(value: unknown): value is TrainingQuan
   return !Object.hasOwn(value, 'duration') || isTrainingDuration(value['duration']);
 }
 
+export function isValidEditableQuantityUnits(value: unknown): value is TrainingQuantityUnits {
+  if (!isUnknownArray(value) || value.length < 1) {
+    return false;
+  }
+
+  const seenUnits = new Set<TrainingQuantityUnit>();
+  for (const unit of value) {
+    if (!isTrainingQuantityUnit(unit) || seenUnits.has(unit)) {
+      return false;
+    }
+    seenUnits.add(unit);
+  }
+  return true;
+}
+
 export function validateRepetitionCount(value: unknown, path = 'reps'): ValidationResult<number> {
   return isValidRepetitionCount(value)
     ? { success: true, value }
@@ -331,6 +385,26 @@ function validateOptionalQuantities(
   }
 }
 
+function validateOptionalActivityMetadata(
+  value: Readonly<Record<string, unknown>>,
+  path: string,
+  issues: ValidationIssue[],
+): void {
+  if (
+    Object.hasOwn(value, 'editableQuantityUnits') &&
+    !isValidEditableQuantityUnits(value['editableQuantityUnits'])
+  ) {
+    pushIssue(
+      issues,
+      `${path}.editableQuantityUnits`,
+      'must be a nonempty array of unique supported quantity units',
+    );
+  }
+  if (Object.hasOwn(value, 'allowsSessionNotes') && value['allowsSessionNotes'] !== true) {
+    pushIssue(issues, `${path}.allowsSessionNotes`, 'must be true when provided');
+  }
+}
+
 function validateActivityId(
   id: unknown,
   path: string,
@@ -346,75 +420,165 @@ function validateActivityId(
   }
 }
 
-function validateTrainingExercise(
+const CANONICAL_ACTIVITY_PROPERTIES = new Set([
+  'id',
+  'name',
+  'quantities',
+  'notes',
+  'children',
+  'editableQuantityUnits',
+  'allowsSessionNotes',
+]);
+
+const CURATED_ACTIVITY_PROPERTIES = new Set([
+  'id',
+  'name',
+  'quantities',
+  'notes',
+  'exercises',
+  'editableQuantityUnits',
+  'allowsSessionNotes',
+]);
+
+function validateTrainingActivity(
   value: unknown,
   path: string,
   issues: ValidationIssue[],
   seenIds: Set<string>,
-): value is TrainingExercise {
+  ancestors: Set<object>,
+): value is TrainingActivity {
   if (!isRecord(value)) {
     pushIssue(issues, path, 'must be an object');
     return false;
   }
-  if (!hasOnlyProperties(value, new Set(['id', 'name', 'quantities', 'notes']))) {
+  if (ancestors.has(value)) {
+    pushIssue(issues, path, 'must not contain cyclic children');
+    return false;
+  }
+  ancestors.add(value);
+
+  if (!hasOnlyProperties(value, CANONICAL_ACTIVITY_PROPERTIES)) {
     pushIssue(issues, path, 'contains unsupported properties');
   }
-
   validateActivityId(value['id'], `${path}.id`, issues, seenIds);
   if (!isNonBlankString(value['name'])) {
     pushIssue(issues, `${path}.name`, 'must be a nonblank string');
   }
   validateOptionalQuantities(value, `${path}.quantities`, issues);
   validateOptionalText(value, 'notes', `${path}.notes`, issues);
+  validateOptionalActivityMetadata(value, path, issues);
+
+  const children = value['children'];
+  if (!Array.isArray(children)) {
+    pushIssue(issues, `${path}.children`, 'must be an array');
+    ancestors.delete(value);
+    return false;
+  }
+  for (let index = 0; index < children.length; index += 1) {
+    validateTrainingActivity(
+      children[index],
+      `${path}.children[${index}]`,
+      issues,
+      seenIds,
+      ancestors,
+    );
+  }
+  ancestors.delete(value);
   return true;
 }
 
-function validateTrainingSection(
+function validateTrainingActivities(
   value: unknown,
   path: string,
   issues: ValidationIssue[],
   seenIds: Set<string>,
-): value is TrainingSection {
+): value is readonly TrainingActivity[] {
+  if (!isUnknownArray(value) || value.length < 1) {
+    pushIssue(issues, path, 'must contain at least one activity');
+    return false;
+  }
+  const ancestors = new Set<object>();
+  for (let index = 0; index < value.length; index += 1) {
+    validateTrainingActivity(value[index], `${path}[${index}]`, issues, seenIds, ancestors);
+  }
+  return true;
+}
+
+function cloneTrainingDuration(duration: TrainingDuration): TrainingDuration {
+  return Object.freeze(
+    'value' in duration
+      ? { unit: duration.unit, value: duration.value }
+      : { unit: duration.unit, min: duration.min, max: duration.max },
+  );
+}
+
+function cloneTrainingQuantities(quantities: TrainingQuantities): TrainingQuantities {
+  return Object.freeze({
+    ...(quantities.repetitions === undefined ? {} : { repetitions: quantities.repetitions }),
+    ...(quantities.sets === undefined ? {} : { sets: quantities.sets }),
+    ...(quantities.rounds === undefined ? {} : { rounds: quantities.rounds }),
+    ...(quantities.duration === undefined
+      ? {}
+      : { duration: cloneTrainingDuration(quantities.duration) }),
+  });
+}
+
+function cloneEditableQuantityUnits(units: TrainingQuantityUnits): TrainingQuantityUnits {
+  const copy: [TrainingQuantityUnit, ...TrainingQuantityUnit[]] = [units[0], ...units.slice(1)];
+  return Object.freeze(copy);
+}
+
+function cloneCanonicalActivity(value: unknown): TrainingActivity {
   if (!isRecord(value)) {
-    pushIssue(issues, path, 'must be an object');
-    return false;
+    throw new Error('Validated training activity is not an object.');
   }
-  if (!hasOnlyProperties(value, new Set(['id', 'name', 'quantities', 'notes', 'exercises']))) {
-    pushIssue(issues, path, 'contains unsupported properties');
+  const id = value['id'];
+  const name = value['name'];
+  const childrenValue = value['children'];
+  if (!isNonBlankString(id) || !isNonBlankString(name) || !Array.isArray(childrenValue)) {
+    throw new Error('Validated training activity contains invalid required fields.');
   }
 
-  validateActivityId(value['id'], `${path}.id`, issues, seenIds);
-  if (!isNonBlankString(value['name'])) {
-    pushIssue(issues, `${path}.name`, 'must be a nonblank string');
-  }
-  validateOptionalQuantities(value, `${path}.quantities`, issues);
-  validateOptionalText(value, 'notes', `${path}.notes`, issues);
-
-  const exercises = value['exercises'];
-  if (!Array.isArray(exercises)) {
-    pushIssue(issues, `${path}.exercises`, 'must be an array');
-    return false;
-  }
-  exercises.forEach((exercise, index) => {
-    validateTrainingExercise(exercise, `${path}.exercises[${index}]`, issues, seenIds);
+  const quantitiesValue = value['quantities'];
+  const editableUnitsValue = value['editableQuantityUnits'];
+  const children = Object.freeze(childrenValue.map(cloneCanonicalActivity));
+  return Object.freeze({
+    id,
+    name,
+    ...(isValidTrainingQuantities(quantitiesValue)
+      ? { quantities: cloneTrainingQuantities(quantitiesValue) }
+      : {}),
+    ...(typeof value['notes'] === 'string' ? { notes: value['notes'] } : {}),
+    children,
+    ...(isValidEditableQuantityUnits(editableUnitsValue)
+      ? { editableQuantityUnits: cloneEditableQuantityUnits(editableUnitsValue) }
+      : {}),
+    ...(value['allowsSessionNotes'] === true ? { allowsSessionNotes: true as const } : {}),
   });
-  return true;
 }
 
-function validateTrainingSections(
-  value: unknown,
-  path: string,
-  issues: ValidationIssue[],
-  seenIds: Set<string>,
-): value is readonly TrainingSection[] {
-  if (!Array.isArray(value) || value.length < 1) {
-    pushIssue(issues, path, 'must contain at least one section');
-    return false;
+function cloneCanonicalTrainingSet(
+  value: Readonly<Record<string, unknown>>,
+  id: string,
+  sourceId: number | undefined,
+  name: string,
+  category: DrillCategory,
+  isBuiltIn: boolean,
+): TrainingSet {
+  const activitiesValue = value['activities'];
+  if (!Array.isArray(activitiesValue)) {
+    throw new Error('Validated training set activities are not an array.');
   }
-  value.forEach((section, index) => {
-    validateTrainingSection(section, `${path}[${index}]`, issues, seenIds);
+  const activities = Object.freeze(activitiesValue.map(cloneCanonicalActivity));
+  return Object.freeze({
+    id: asTrainingSetId(id),
+    ...(sourceId === undefined ? {} : { sourceId }),
+    name,
+    ...(typeof value['description'] === 'string' ? { description: value['description'] } : {}),
+    category,
+    activities,
+    isBuiltIn,
   });
-  return true;
 }
 
 export function validateTrainingSet(value: unknown): ValidationResult<TrainingSet> {
@@ -425,7 +589,7 @@ export function validateTrainingSet(value: unknown): ValidationResult<TrainingSe
   if (
     !hasOnlyProperties(
       value,
-      new Set(['id', 'sourceId', 'name', 'description', 'category', 'sections', 'isBuiltIn']),
+      new Set(['id', 'sourceId', 'name', 'description', 'category', 'activities', 'isBuiltIn']),
     )
   ) {
     pushIssue(issues, '', 'contains unsupported properties');
@@ -455,8 +619,12 @@ export function validateTrainingSet(value: unknown): ValidationResult<TrainingSe
   if (isBuiltIn === false && category !== 'custom') {
     pushIssue(issues, 'category', 'custom sets must use the custom category');
   }
-  const sections = value['sections'];
-  const sectionsAreValid = validateTrainingSections(sections, 'sections', issues, seenIds);
+  const activitiesAreValid = validateTrainingActivities(
+    value['activities'],
+    'activities',
+    issues,
+    seenIds,
+  );
 
   if (
     issues.length > 0 ||
@@ -465,7 +633,7 @@ export function validateTrainingSet(value: unknown): ValidationResult<TrainingSe
     !isNonBlankString(name) ||
     !isDrillCategory(category) ||
     typeof isBuiltIn !== 'boolean' ||
-    !sectionsAreValid
+    !activitiesAreValid
   ) {
     return {
       success: false,
@@ -473,16 +641,17 @@ export function validateTrainingSet(value: unknown): ValidationResult<TrainingSe
     };
   }
 
-  const trainingSet: TrainingSet = {
-    id: asTrainingSetId(id),
-    ...(isValidCount(sourceId) ? { sourceId } : {}),
-    name,
-    ...(typeof value['description'] === 'string' ? { description: value['description'] } : {}),
-    category,
-    sections,
-    isBuiltIn,
+  return {
+    success: true,
+    value: cloneCanonicalTrainingSet(
+      value,
+      id,
+      isValidCount(sourceId) ? sourceId : undefined,
+      name,
+      category,
+      isBuiltIn,
+    ),
   };
-  return { success: true, value: trainingSet };
 }
 
 function validateTrainingExerciseInput(
@@ -538,9 +707,9 @@ function validateTrainingSectionInput(
     pushIssue(issues, `${path}.exercises`, 'must be an array');
     return false;
   }
-  value['exercises'].forEach((exercise, index) => {
-    validateTrainingExerciseInput(exercise, `${path}.exercises[${index}]`, issues);
-  });
+  for (let index = 0; index < value['exercises'].length; index += 1) {
+    validateTrainingExerciseInput(value['exercises'][index], `${path}.exercises[${index}]`, issues);
+  }
   return true;
 }
 
@@ -567,9 +736,9 @@ export function validateTrainingSetInput(value: unknown): ValidationResult<Train
   if (!Array.isArray(sections) || sections.length < 1) {
     pushIssue(issues, 'sections', 'must contain at least one section');
   } else {
-    sections.forEach((section, index) => {
-      validateTrainingSectionInput(section, `sections[${index}]`, issues);
-    });
+    for (let index = 0; index < sections.length; index += 1) {
+      validateTrainingSectionInput(sections[index], `sections[${index}]`, issues);
+    }
   }
 
   if (
@@ -598,23 +767,97 @@ export function validateTrainingSetInput(value: unknown): ValidationResult<Train
   return { success: true, value: input };
 }
 
+function validateCuratedActivity(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+  seenIds: Set<string>,
+  requireExercises: boolean,
+  ancestors: Set<object>,
+): value is CuratedActivity {
+  if (!isRecord(value)) {
+    pushIssue(issues, path, 'must be an object');
+    return false;
+  }
+  if (ancestors.has(value)) {
+    pushIssue(issues, path, 'must not contain cyclic exercises');
+    return false;
+  }
+  ancestors.add(value);
+  if (!hasOnlyProperties(value, CURATED_ACTIVITY_PROPERTIES)) {
+    pushIssue(issues, path, 'contains unsupported properties');
+  }
+  validateActivityId(value['id'], `${path}.id`, issues, seenIds);
+  if (!isNonBlankString(value['name'])) {
+    pushIssue(issues, `${path}.name`, 'must be a nonblank string');
+  }
+  validateOptionalQuantities(value, `${path}.quantities`, issues);
+  validateOptionalText(value, 'notes', `${path}.notes`, issues);
+  validateOptionalActivityMetadata(value, path, issues);
+
+  const hasExercises = Object.hasOwn(value, 'exercises');
+  const exercises = value['exercises'];
+  if (requireExercises && !hasExercises) {
+    pushIssue(issues, `${path}.exercises`, 'must be an array');
+    ancestors.delete(value);
+    return false;
+  }
+  if (hasExercises && !Array.isArray(exercises)) {
+    pushIssue(issues, `${path}.exercises`, 'must be an array when provided');
+    ancestors.delete(value);
+    return false;
+  }
+  if (Array.isArray(exercises)) {
+    for (let index = 0; index < exercises.length; index += 1) {
+      validateCuratedActivity(
+        exercises[index],
+        `${path}.exercises[${index}]`,
+        issues,
+        seenIds,
+        false,
+        ancestors,
+      );
+    }
+  }
+  ancestors.delete(value);
+  return true;
+}
+
+function validateCuratedSections(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+  seenIds: Set<string>,
+): value is readonly CuratedSection[] {
+  if (!isUnknownArray(value) || value.length < 1) {
+    pushIssue(issues, path, 'must contain at least one section');
+    return false;
+  }
+  const ancestors = new Set<object>();
+  for (let index = 0; index < value.length; index += 1) {
+    validateCuratedActivity(value[index], `${path}[${index}]`, issues, seenIds, true, ancestors);
+  }
+  return true;
+}
+
 export function validateCuratedDrills(value: unknown): ValidationResult<readonly CuratedDrill[]> {
   const issues: ValidationIssue[] = [];
-  if (!Array.isArray(value)) {
+  if (!isUnknownArray(value)) {
     return { success: false, issues: [{ path: '', message: 'must be an array' }] };
   }
-  if (value.length !== RESEARCHED_DRILL_COUNT) {
-    pushIssue(issues, '', `must contain exactly ${RESEARCHED_DRILL_COUNT} researched drills`);
+  if (value.length < 1) {
+    return { success: false, issues: [{ path: '', message: 'must contain at least one drill' }] };
   }
 
   const seenIds = new Set<string>();
   const seenSourceIds = new Set<number>();
   const drills: CuratedDrill[] = [];
-  value.forEach((item, drillIndex) => {
+  for (let drillIndex = 0; drillIndex < value.length; drillIndex += 1) {
+    const item = value[drillIndex];
     const path = `[${drillIndex}]`;
     if (!isRecord(item)) {
       pushIssue(issues, path, 'must be an object');
-      return;
+      continue;
     }
     if (!hasOnlyProperties(item, new Set(['id', 'sourceId', 'name', 'description', 'sections']))) {
       pushIssue(issues, path, 'contains unsupported properties');
@@ -637,9 +880,8 @@ export function validateCuratedDrills(value: unknown): ValidationResult<readonly
       pushIssue(issues, `${path}.name`, 'must be a nonblank string');
     }
     validateOptionalText(item, 'description', `${path}.description`, issues);
-    const sections = item['sections'];
-    const sectionsAreValid = validateTrainingSections(
-      sections,
+    const sectionsAreValid = validateCuratedSections(
+      item['sections'],
       `${path}.sections`,
       issues,
       seenIds,
@@ -647,34 +889,21 @@ export function validateCuratedDrills(value: unknown): ValidationResult<readonly
 
     if (
       isNonBlankString(id) &&
-      (sourceId === undefined || isValidCount(sourceId)) &&
+      (!Object.hasOwn(item, 'sourceId') || isValidCount(sourceId)) &&
       isNonBlankString(name) &&
       sectionsAreValid
     ) {
-      drills.push({
-        id,
-        ...(isValidCount(sourceId) ? { sourceId } : {}),
-        name,
-        ...(typeof item['description'] === 'string' ? { description: item['description'] } : {}),
-        sections,
-      });
+      const sections = item['sections'];
+      if (Array.isArray(sections)) {
+        drills.push({
+          id,
+          ...(isValidCount(sourceId) ? { sourceId } : {}),
+          name,
+          ...(typeof item['description'] === 'string' ? { description: item['description'] } : {}),
+          sections,
+        });
+      }
     }
-  });
-
-  const sectionCount = drills.flatMap((drill) => drill.sections).length;
-  if (drills.length === RESEARCHED_DRILL_COUNT && sectionCount !== RESEARCHED_SECTION_COUNT) {
-    pushIssue(issues, '', `must contain exactly ${RESEARCHED_SECTION_COUNT} researched sections`);
-  }
-  const activityCount = drills.reduce(
-    (total, drill) => total + getTrainingSetActivityCount(drill),
-    0,
-  );
-  if (drills.length === RESEARCHED_DRILL_COUNT && activityCount !== RESEARCHED_ACTIVITY_COUNT) {
-    pushIssue(
-      issues,
-      '',
-      `must contain exactly ${RESEARCHED_ACTIVITY_COUNT} researched activities`,
-    );
   }
 
   return issues.length > 0 ? { success: false, issues } : { success: true, value: drills };
@@ -694,27 +923,67 @@ export function assertValidTrainingSet(value: unknown): asserts value is Trainin
   }
 }
 
-export function getTrainingSectionActivities(
-  section: TrainingSection,
-): readonly TrainingActivity[] {
-  return section.exercises.length === 0 || section.quantities !== undefined
-    ? [section, ...section.exercises]
-    : section.exercises;
-}
-
+/** Return every canonical activity in stable depth-first pre-order. */
 export function getTrainingSetActivities(
-  trainingSet: Pick<TrainingSet, 'sections'> | Pick<CuratedDrill, 'sections'>,
+  trainingSet: Pick<TrainingSet, 'activities'>,
 ): readonly TrainingActivity[] {
-  return trainingSet.sections.flatMap(getTrainingSectionActivities);
+  const result: TrainingActivity[] = [];
+  const pending = [...trainingSet.activities].reverse();
+  while (pending.length > 0) {
+    const activity = pending.pop();
+    if (activity === undefined) {
+      continue;
+    }
+    result.push(activity);
+    for (let index = activity.children.length - 1; index >= 0; index -= 1) {
+      const child = activity.children[index];
+      if (child !== undefined) {
+        pending.push(child);
+      }
+    }
+  }
+  return result;
 }
 
-export function getTrainingSetActivityCount(
-  trainingSet: Pick<TrainingSet, 'sections'> | Pick<CuratedDrill, 'sections'>,
+/** Count every canonical activity, including roots, parents, and leaf exercises. */
+export function getTrainingSetActivityCount(trainingSet: Pick<TrainingSet, 'activities'>): number {
+  return getTrainingSetActivities(trainingSet).length;
+}
+
+/** Count canonical leaf exercises, namely activities whose child collection is empty. */
+export function getTrainingSetLeafExerciseCount(
+  trainingSet: Pick<TrainingSet, 'activities'>,
 ): number {
-  return trainingSet.sections.reduce(
-    (total, section) => total + getTrainingSectionActivities(section).length,
-    0,
-  );
+  return getTrainingSetActivities(trainingSet).filter((activity) => activity.children.length === 0)
+    .length;
+}
+
+/** Alias for callers that describe leaves as leaf activities rather than exercises. */
+export const getTrainingSetLeafActivityCount = getTrainingSetLeafExerciseCount;
+
+/** Return quantity units backed by explicit defaults, editable metadata, or existing overrides. */
+export function getEditableTrainingQuantityUnits(
+  activity: TrainingActivity,
+  overrides?: TrainingQuantityOverrides,
+): readonly TrainingQuantityUnit[] {
+  const units: TrainingQuantityUnit[] = [];
+  const addUnit = (unit: TrainingQuantityUnit): void => {
+    if (!units.includes(unit)) {
+      units.push(unit);
+    }
+  };
+  for (const unit of getDefaultTrainingQuantityUnits(activity)) {
+    addUnit(unit);
+  }
+  for (const unit of activity.editableQuantityUnits ?? []) {
+    addUnit(unit);
+  }
+  for (const unit of TRAINING_QUANTITY_UNITS) {
+    if (overrides !== undefined && Object.hasOwn(overrides, unit)) {
+      addUnit(unit);
+    }
+  }
+  return units;
 }
 
 export function getDefaultTrainingQuantity(

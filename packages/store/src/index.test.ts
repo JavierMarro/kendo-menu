@@ -14,6 +14,7 @@ import {
   classifyTrainingStorageValue,
   createTrainingStore,
   createTrainingStoreAsync,
+  encodePersistedTrainingState,
   getDashboardEffectiveTrainingQuantity,
   inspectTrainingStorage,
   migratePersistedTrainingState,
@@ -283,11 +284,11 @@ describe('custom training sets', () => {
       category: 'custom',
       isBuiltIn: false,
     });
-    expect(trainingSet?.sections.map((section) => section.name)).toEqual([
+    expect(trainingSet?.activities.map((section) => section.name)).toEqual([
       'Preparation',
       'Closing',
     ]);
-    expect(trainingSet?.sections[0]?.exercises[0]).toMatchObject({
+    expect(trainingSet?.activities[0]?.children[0]).toMatchObject({
       name: 'Okuri-ashi',
       quantities: { repetitions: 0 },
       notes: 'Keep the feet quiet.',
@@ -298,9 +299,9 @@ describe('custom training sets', () => {
         ? []
         : [
             trainingSet.id,
-            ...trainingSet.sections.flatMap((section) => [
+            ...trainingSet.activities.flatMap((section) => [
               section.id,
-              ...section.exercises.map((exercise) => exercise.id),
+              ...section.children.map((exercise) => exercise.id),
             ]),
           ];
     expect(new Set(ids).size).toBe(ids.length);
@@ -397,6 +398,7 @@ describe('dashboard quantity override APIs', () => {
         sets: 4,
         duration: { unit: 'seconds', min: 30, max: 60 },
       },
+      children: [],
     };
     const original = activity.quantities;
 
@@ -441,9 +443,9 @@ describe('version 4 to version 5 migration', () => {
   it('converts null-filled arrays to sparse quantities and preserves every ID and value', () => {
     const migrated = migratePersistedTrainingStateV4ToV5(LEGACY_V4_STATE);
     const trainingSet = migrated.customTrainingSets[0];
-    const section = trainingSet?.sections[0];
-    const firstExercise = section?.exercises[0];
-    const secondExercise = section?.exercises[1];
+    const section = trainingSet?.activities[0];
+    const firstExercise = section?.children[0];
+    const secondExercise = section?.children[1];
 
     expect(trainingSet).toMatchObject({
       id: 'custom-legacy',
@@ -461,11 +463,13 @@ describe('version 4 to version 5 migration', () => {
         rounds: 3,
         duration: { unit: 'minutes', value: 1.5 },
       },
+      children: [],
     });
     expect(secondExercise).toEqual({
       id: 'unknown-exercise',
       name: 'Unknown exercise',
       quantities: { repetitions: 24 },
+      children: [],
     });
     expect(migrated.dashboardEntries).toEqual(LEGACY_V4_STATE.dashboardEntries);
     expect(firstExercise === undefined ? true : Object.hasOwn(firstExercise, 'defaultReps')).toBe(
@@ -478,9 +482,9 @@ describe('version 4 to version 5 migration', () => {
 
   it('mechanically moves exercise descriptions to notes, including blank text', () => {
     const migrated = migratePersistedTrainingStateV4ToV5(LEGACY_V4_STATE);
-    expect(migrated.customTrainingSets[0]?.sections[0]?.exercises[0]?.notes).toBe('');
+    expect(migrated.customTrainingSets[0]?.activities[0]?.children[0]?.notes).toBe('');
     expect(
-      Object.hasOwn(migrated.customTrainingSets[0]?.sections[0]?.exercises[1] ?? {}, 'notes'),
+      Object.hasOwn(migrated.customTrainingSets[0]?.activities[0]?.children[1] ?? {}, 'notes'),
     ).toBe(false);
   });
 
@@ -510,9 +514,9 @@ describe('version 4 to version 5 migration', () => {
     expect(migrated.dashboardEntries[0]?.quantityOverrides).toEqual({
       [standaloneId]: { minutes: 5 },
     });
-    expect(DEFAULT_TRAINING_SETS[0]?.sections.some((section) => section.id === standaloneId)).toBe(
-      true,
-    );
+    expect(
+      DEFAULT_TRAINING_SETS[0]?.activities.some((section) => section.id === standaloneId),
+    ).toBe(true);
   });
 
   it('rejects malformed, duplicate, unsupported, and unrepaired v4 data', () => {
@@ -700,11 +704,12 @@ describe('older migration chain', () => {
 
     const stateV4 = migratePersistedTrainingStateV3ToV4(stateV3);
     const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
-    expect(stateV5.customTrainingSets[0]?.sections[0]?.exercises[0]).toEqual({
+    expect(stateV5.customTrainingSets[0]?.activities[0]?.children[0]).toEqual({
       id: 'legacy-exercise',
       name: 'Legacy exercise',
       notes: 'Mechanical note',
       quantities: { repetitions: 20 },
+      children: [],
     });
     expect(stateV5.dashboardEntries[0]?.quantityOverrides).toEqual({
       'legacy-exercise': { repetitions: 0 },
@@ -715,8 +720,8 @@ describe('older migration chain', () => {
     const migrated = migratePersistedTrainingState(legacyVersionOneState(), 1);
     expect(migrated.dashboardEntries[0]?.id).toBe('entry-legacy');
     expect(migrated.customTrainingSets[0]?.id).toBe('custom-legacy');
-    expect(migrated.customTrainingSets[0]?.sections[0]?.id).toBe('custom-legacy-exercises');
-    expect(migrated.customTrainingSets[0]?.sections[0]?.exercises[0]?.id).toBe('legacy-exercise');
+    expect(migrated.customTrainingSets[0]?.activities[0]?.id).toBe('custom-legacy-exercises');
+    expect(migrated.customTrainingSets[0]?.activities[0]?.children[0]?.id).toBe('legacy-exercise');
   });
 });
 
@@ -726,7 +731,7 @@ describe('persistence lifecycle', () => {
     const first = createTrainingStore({ storage, storageKey: STORAGE_KEY });
     const customId = first.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
     const entryId = first.getState().addToDashboard(customId);
-    const activityId = first.getState().customTrainingSets[0]?.sections[0]?.exercises[0]?.id;
+    const activityId = first.getState().customTrainingSets[0]?.activities[0]?.children[0]?.id;
     if (activityId === undefined) {
       throw new Error('Expected a generated custom activity ID.');
     }
@@ -737,6 +742,9 @@ describe('persistence lifecycle', () => {
 
     const envelope: unknown = JSON.parse(requireString(storage.read()));
     expect(envelope).toMatchObject({ version: TRAINING_STORE_PERSISTENCE_VERSION });
+    expect(envelope).toHaveProperty('state.customTrainingSets.0.sections');
+    expect(envelope).not.toHaveProperty('state.customTrainingSets.0.activities');
+    expect(envelope).toHaveProperty('state.customTrainingSets.0.sections.0.exercises');
 
     const second = createTrainingStore({ storage, storageKey: STORAGE_KEY });
     expect(second.getState().customTrainingSets[0]?.id).toBe(customId);
@@ -749,11 +757,66 @@ describe('persistence lifecycle', () => {
     });
   });
 
+  it('decodes the v6 wire tree and rejects deeper canonical trees on encode', () => {
+    const wireState = {
+      dashboardEntries: [],
+      customTrainingSets: [
+        {
+          id: 'wire-set',
+          name: 'Wire set',
+          category: 'custom',
+          sections: [
+            {
+              id: 'wire-section',
+              name: 'Wire section',
+              exercises: [{ id: 'wire-exercise', name: 'Wire exercise' }],
+            },
+          ],
+          isBuiltIn: false,
+        },
+      ],
+    };
+    const decoded = parsePersistedTrainingState(wireState);
+    expect(decoded?.customTrainingSets[0]?.activities[0]?.children[0]).toEqual({
+      id: 'wire-exercise',
+      name: 'Wire exercise',
+      children: [],
+    });
+
+    const deepState = {
+      dashboardEntries: [],
+      customTrainingSets: [
+        {
+          id: asTrainingSetId('deep-set'),
+          name: 'Deep set',
+          category: 'custom',
+          activities: [
+            {
+              id: 'deep-root',
+              name: 'Deep root',
+              children: [
+                {
+                  id: 'deep-child',
+                  name: 'Deep child',
+                  children: [{ id: 'deep-leaf', name: 'Deep leaf', children: [] }],
+                },
+              ],
+            },
+          ],
+          isBuiltIn: false,
+        },
+      ],
+    };
+    expect(() => encodePersistedTrainingState(deepState)).toThrow(
+      'unsupported nested custom activities',
+    );
+  });
+
   it('loads a v4 envelope through Zustand and persists migrated v6 state', () => {
     const storage = new MemoryStorage(serializeState(LEGACY_V4_STATE, 4));
     const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
 
-    expect(store.getState().customTrainingSets[0]?.sections[0]?.exercises[0]?.name).toBe(
+    expect(store.getState().customTrainingSets[0]?.activities[0]?.children[0]?.name).toBe(
       'Legacy exercise',
     );
     expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
@@ -855,6 +918,64 @@ describe('untrusted persistence classification', () => {
     ).toEqual({ status: 'unsupported-future', kind: 'unsupported-future', version: 999 });
   });
 
+  it('rejects canonical runtime trees at the v6 storage boundary', () => {
+    const deepCanonicalState = {
+      dashboardEntries: [],
+      customTrainingSets: [
+        {
+          id: 'deep-set',
+          name: 'Deep set',
+          category: 'custom',
+          activities: [
+            {
+              id: 'deep-root',
+              name: 'Deep root',
+              children: [
+                {
+                  id: 'deep-child',
+                  name: 'Deep child',
+                  children: [{ id: 'deep-leaf', name: 'Deep leaf', children: [] }],
+                },
+              ],
+            },
+          ],
+          isBuiltIn: false,
+        },
+      ],
+    };
+    const metadataCanonicalState = {
+      dashboardEntries: [],
+      customTrainingSets: [
+        {
+          id: 'metadata-set',
+          name: 'Metadata set',
+          category: 'custom',
+          activities: [
+            {
+              id: 'metadata-root',
+              name: 'Metadata root',
+              editableQuantityUnits: ['repetitions'],
+              allowsSessionNotes: true,
+              children: [],
+            },
+          ],
+          isBuiltIn: false,
+        },
+      ],
+    };
+
+    expect(classifyTrainingStorageValue(serializeState(deepCanonicalState, 6))).toEqual({
+      status: 'corrupt',
+      kind: 'corrupt',
+      reason: 'invalid-domain',
+    });
+    expect(classifyTrainingStorageValue(serializeState(metadataCanonicalState, 6))).toEqual({
+      status: 'corrupt',
+      kind: 'corrupt',
+      reason: 'invalid-domain',
+    });
+  });
+
   it('rejects duplicate current IDs, malformed ranges, and curated-ID collisions', () => {
     const validCurrent = migratePersistedTrainingStateV4ToV5(LEGACY_V4_STATE);
     const duplicateEntries = {
@@ -866,16 +987,17 @@ describe('untrusted persistence classification', () => {
       customTrainingSets: [
         {
           ...validCurrent.customTrainingSets[0],
-          sections: [
+          activities: [
             {
-              ...validCurrent.customTrainingSets[0]?.sections[0],
-              exercises: [
+              ...validCurrent.customTrainingSets[0]?.activities[0],
+              children: [
                 {
                   id: 'range',
                   name: 'Range',
                   quantities: {
                     duration: { unit: 'seconds', min: 60, max: 30 },
                   },
+                  children: [],
                 },
               ],
             },

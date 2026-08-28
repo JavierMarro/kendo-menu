@@ -268,7 +268,7 @@ export function LandingPage(): ReactElement {
                   <strong>A TOTAL OF</strong>
                 </dt>
                 <dd
-                  aria-label={`${CURATED_EXERCISE_COUNT} child exercises across all training sessions`}
+                  aria-label={`${CURATED_EXERCISE_COUNT} leaf activities across all training sessions`}
                 >
                   <span className="landing-stat-value">{CURATED_EXERCISE_COUNT}</span>
                   <span className="landing-stat-note">exercises across all training sessions</span>

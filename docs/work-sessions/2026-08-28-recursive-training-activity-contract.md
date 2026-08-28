@@ -1,0 +1,8 @@
+- Session: recursive training activity contract
+- Date/duration: 2026-08-28; not recorded
+- Scope/start: Job 2 began from a clean tree and the corrected read-only PDF reconciliation audit; curated PDF content remained unchanged.
+- Changes: Added recursive runtime activities, strict recursive source/schema validation, deep traversal/freezing, quantity metadata, note capability, adapters, tests, terminology, and an ADR.
+- Decisions: Runtime uses required `children`; curated JSON and persistence v6 retain `sections`/`exercises` behind strict adapters, with no version bump.
+- Roadblocks: A first review found a ready-but-unwritable v6 boundary; strict wire-only classification fixed it. No declared Draft-07 validator was available without adding a dependency.
+- Verification: Two independent review passes completed; `pnpm check` passed with 115 tests and two pre-existing Fast Refresh warnings.
+- Follow-up: Synchronize audited PDF content and add recursive library/dashboard rendering in later scoped jobs.

@@ -2,7 +2,11 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_TRAINING_SETS, asTrainingSetId } from '@kendo-menu/domain';
+import {
+  DEFAULT_TRAINING_SETS,
+  asTrainingSetId,
+  getTrainingSetLeafExerciseCount,
+} from '@kendo-menu/domain';
 
 import {
   CURATED_EXERCISE_COUNT,
@@ -183,11 +187,7 @@ describe('KendoMenu application flows', () => {
 
     const canonicalExerciseCount = DEFAULT_TRAINING_SETS.reduce(
       (trainingSetTotal, trainingSet) =>
-        trainingSetTotal +
-        trainingSet.sections.reduce(
-          (sectionTotal, section) => sectionTotal + section.exercises.length,
-          0,
-        ),
+        trainingSetTotal + getTrainingSetLeafExerciseCount(trainingSet),
       0,
     );
     expect(CURATED_TRAINING_SET_COUNT).toBe(DEFAULT_TRAINING_SETS.length);
@@ -197,7 +197,7 @@ describe('KendoMenu application flows', () => {
     });
     expect(exerciseCount.closest('dd')).toHaveAttribute(
       'aria-label',
-      `${canonicalExerciseCount} child exercises across all training sessions`,
+      `${canonicalExerciseCount} leaf activities across all training sessions`,
     );
     expect(screen.queryByText('~150')).not.toBeInTheDocument();
 
@@ -445,7 +445,7 @@ describe('KendoMenu application flows', () => {
 
     expect(within(card).getByText('Intense session')).toBeVisible();
     expect(within(card).getByText('Set for a 2 hours long session.')).toBeVisible();
-    expect(within(card).getByText('20 activities')).toBeVisible();
+    expect(within(card).getByText('25 activities')).toBeVisible();
     expect(within(card).getByRole('link', { name: 'View session' })).toHaveAttribute(
       'href',
       '/app/library?drill=international-dojo-2-hour-session',
@@ -1087,7 +1087,7 @@ describe('KendoMenu application flows', () => {
     const entry = store.getState().dashboardEntries[0];
     expect(customSet?.id).toBe(entry?.trainingSetId);
     expect(customSet?.isBuiltIn).toBe(false);
-    expect(customSet?.sections[0]?.exercises[0]?.quantities?.repetitions).toBe(24);
+    expect(customSet?.activities[0]?.children[0]?.quantities?.repetitions).toBe(24);
   });
 
   it('does not partially create a custom drill when a repetition is outside the allowed range', async () => {

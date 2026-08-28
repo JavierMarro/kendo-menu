@@ -2,17 +2,16 @@ import {
   DEFAULT_TRAINING_SETS,
   getDefaultTrainingQuantity,
   getDefaultTrainingQuantityUnits,
+  getEditableTrainingQuantityUnits as getDomainEditableTrainingQuantityUnits,
   getEffectiveTrainingQuantity as calculateEffectiveTrainingQuantity,
-  getTrainingSectionActivities,
   getTrainingSetActivities as getDomainTrainingSetActivities,
   getTrainingSetActivityCount as getDomainTrainingSetActivityCount,
+  getTrainingSetLeafExerciseCount as getDomainTrainingSetLeafExerciseCount,
   isValidTrainingQuantityValue,
-  TRAINING_QUANTITY_UNITS,
   type DashboardEntry,
   type TrainingActivity,
   type TrainingQuantityUnit,
   type TrainingQuantityValue,
-  type TrainingSection,
   type TrainingSet,
 } from '@kendo-menu/domain';
 
@@ -40,16 +39,12 @@ export const CURATED_TRAINING_SET_COUNT = DEFAULT_TRAINING_SETS.length;
 
 export const CURATED_EXERCISE_COUNT = DEFAULT_TRAINING_SETS.reduce(
   (trainingSetTotal, trainingSet) =>
-    trainingSetTotal +
-    trainingSet.sections.reduce(
-      (sectionTotal, section) => sectionTotal + section.exercises.length,
-      0,
-    ),
+    trainingSetTotal + getDomainTrainingSetLeafExerciseCount(trainingSet),
   0,
 );
 
-export function getTrainingSetSections(trainingSet: TrainingSet): readonly TrainingSection[] {
-  return trainingSet.sections;
+export function getTrainingSetSections(trainingSet: TrainingSet): readonly TrainingActivity[] {
+  return trainingSet.activities;
 }
 
 export function getTrainingSetActivities(trainingSet: TrainingSet): readonly TrainingActivity[] {
@@ -60,8 +55,8 @@ export function getTrainingSetActivityCount(trainingSet: TrainingSet): number {
   return getDomainTrainingSetActivityCount(trainingSet);
 }
 
-export function getSectionActivityCount(section: TrainingSection): number {
-  return getTrainingSectionActivities(section).length;
+export function getSectionActivityCount(activity: TrainingActivity): number {
+  return getDomainTrainingSetActivityCount({ activities: [activity] });
 }
 
 export function getAllTrainingSets(
@@ -113,17 +108,17 @@ function normalizeTrainingActivityName(value: string): string {
 
 export function getInferredTrainingQuantityUnit(
   activity: TrainingActivity,
-  parentSection?: TrainingSection,
+  parentActivity?: TrainingActivity,
 ): TrainingQuantityUnit {
   const activityName = normalizeTrainingActivityName(activity.name);
-  const sectionName =
-    parentSection === undefined ? undefined : normalizeTrainingActivityName(parentSection.name);
+  const parentActivityName =
+    parentActivity === undefined ? undefined : normalizeTrainingActivityName(parentActivity.name);
 
-  if (sectionName?.includes('suburi') === true) {
+  if (parentActivityName?.includes('suburi') === true) {
     return 'repetitions';
   }
 
-  const name = `${sectionName ?? ''}${activityName}`;
+  const name = `${parentActivityName ?? ''}${activityName}`;
   if (name.includes('kakari') || name.includes('butsukari')) {
     return 'seconds';
   }
@@ -143,30 +138,31 @@ export function getInferredTrainingQuantityUnit(
 
 export function getMissingTrainingQuantityLabel(
   activity: TrainingActivity,
-  parentSection?: TrainingSection,
+  parentActivity?: TrainingActivity,
 ): 'Reps not set' | 'Time not set' {
-  const inferredUnit = getInferredTrainingQuantityUnit(activity, parentSection);
-  return inferredUnit === 'seconds' || inferredUnit === 'minutes' ? 'Time not set' : 'Reps not set';
+  const configuredUnit =
+    getDefaultTrainingQuantityUnits(activity)[0] ?? activity.editableQuantityUnits?.[0];
+  const unit = configuredUnit ?? getInferredTrainingQuantityUnit(activity, parentActivity);
+  return unit === 'seconds' || unit === 'minutes' ? 'Time not set' : 'Reps not set';
 }
 
 export function getEditableTrainingQuantityUnits(
   entry: DashboardEntry,
   activity: TrainingActivity,
-  parentSection?: TrainingSection,
+  parentActivity?: TrainingActivity,
 ): readonly TrainingQuantityUnit[] {
   const overrides = entry.quantityOverrides[activity.id];
-  const defaultUnits = getDefaultTrainingQuantityUnits(activity);
+  const explicitUnits = getDomainEditableTrainingQuantityUnits(activity, overrides);
+  const hasExplicitQuantityUnits = getDefaultTrainingQuantityUnits(activity).length > 0;
+  const hasEditableUnitMetadata = (activity.editableQuantityUnits?.length ?? 0) > 0;
   const fallbackUnit =
-    defaultUnits.length === 0
-      ? getInferredTrainingQuantityUnit(activity, parentSection)
+    !hasExplicitQuantityUnits && !hasEditableUnitMetadata
+      ? getInferredTrainingQuantityUnit(activity, parentActivity)
       : undefined;
 
-  return TRAINING_QUANTITY_UNITS.filter(
-    (unit) =>
-      defaultUnits.includes(unit) ||
-      (overrides !== undefined && Object.hasOwn(overrides, unit)) ||
-      unit === fallbackUnit,
-  );
+  return fallbackUnit === undefined || explicitUnits.includes(fallbackUnit)
+    ? explicitUnits
+    : [...explicitUnits, fallbackUnit];
 }
 
 export function isValidQuantityValue(unit: TrainingQuantityUnit, value: number): boolean {

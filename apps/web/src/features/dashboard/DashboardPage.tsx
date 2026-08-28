@@ -5,7 +5,6 @@ import type {
   DashboardEntry,
   TrainingActivity,
   TrainingQuantityUnit,
-  TrainingSection,
   TrainingSet,
 } from '@kendo-menu/domain';
 import type { RemovedDashboardEntry } from '@kendo-menu/store';
@@ -22,7 +21,6 @@ import {
   getTrainingQuantityValue,
   getTrainingSetActivityCount,
   getTrainingSetDescription,
-  getTrainingSetSections,
   isTrainingQuantityRange,
   isValidQuantityValue,
 } from '../../lib/training-data';
@@ -210,7 +208,7 @@ function DashboardTrainingSet({
   const [notesDraft, setNotesDraft] = useState(entry.notes);
   const [notesStatus, setNotesStatus] = useState<'idle' | 'updated'>('idle');
   const persistenceStatus = usePersistenceStatus();
-  const sections = getTrainingSetSections(trainingSet);
+  const activities = trainingSet.activities;
   const activityCount = getTrainingSetActivityCount(trainingSet);
   const description = getTrainingSetDescription(trainingSet);
 
@@ -247,50 +245,50 @@ function DashboardTrainingSet({
       </div>
 
       <div className="dashboard-sections">
-        {sections.map((section, sectionIndex) => (
+        {activities.map((activity, activityIndex) => (
           <section
             className="training-section"
-            key={section.id}
-            aria-labelledby={`${entry.id}-${section.id}`}
+            key={activity.id}
+            aria-labelledby={`${entry.id}-${activity.id}`}
           >
             <div className="training-section-heading">
               <span className="section-number" aria-hidden="true">
-                {sectionIndex + 1}
+                {activityIndex + 1}
               </span>
-              <h3 id={`${entry.id}-${section.id}`}>{section.name}</h3>
+              <h3 id={`${entry.id}-${activity.id}`}>{activity.name}</h3>
             </div>
-            {section.exercises.length === 0 || section.quantities !== undefined ? (
+            {activity.children.length === 0 || activity.quantities !== undefined ? (
               <div className="training-step training-step--standalone">
-                {section.notes !== undefined && section.notes.length > 0 ? (
-                  <span className="step-description">{section.notes}</span>
+                {activity.notes !== undefined && activity.notes.length > 0 ? (
+                  <span className="step-description">{activity.notes}</span>
                 ) : null}
                 <QuantityEditors
                   entry={entry}
-                  activity={section}
+                  activity={activity}
                   onSet={onSetQuantity}
                   onClear={onClearQuantity}
                 />
               </div>
-            ) : section.notes !== undefined && section.notes.length > 0 ? (
-              <p className="step-description">{section.notes}</p>
+            ) : activity.notes !== undefined && activity.notes.length > 0 ? (
+              <p className="step-description">{activity.notes}</p>
             ) : null}
-            {section.exercises.length > 0 ? (
+            {activity.children.length > 0 ? (
               <ol className="training-step-list">
-                {section.exercises.map((exercise, exerciseIndex) => (
-                  <li className="training-step" key={exercise.id}>
+                {activity.children.map((child, childIndex) => (
+                  <li className="training-step" key={child.id}>
                     <span className="step-number" aria-hidden="true">
-                      {exerciseIndex + 1}
+                      {childIndex + 1}
                     </span>
                     <div className="step-copy">
-                      <span className="step-label">{exercise.name}</span>
-                      {exercise.notes !== undefined && exercise.notes.length > 0 ? (
-                        <span className="step-description">{exercise.notes}</span>
+                      <span className="step-label">{child.name}</span>
+                      {child.notes !== undefined && child.notes.length > 0 ? (
+                        <span className="step-description">{child.notes}</span>
                       ) : null}
                     </div>
                     <QuantityEditors
                       entry={entry}
-                      activity={exercise}
-                      parentSection={section}
+                      activity={child}
+                      parentActivity={activity}
                       onSet={onSetQuantity}
                       onClear={onClearQuantity}
                     />
@@ -323,13 +321,19 @@ function DashboardTrainingSet({
 interface QuantityEditorsProps {
   readonly entry: DashboardEntry;
   readonly activity: TrainingActivity;
-  readonly parentSection?: TrainingSection;
+  readonly parentActivity?: TrainingActivity;
   readonly onSet: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
   readonly onClear: (activityId: string, unit: TrainingQuantityUnit) => void;
 }
 
-function QuantityEditors({ entry, activity, parentSection, onSet, onClear }: QuantityEditorsProps) {
-  const units = getEditableTrainingQuantityUnits(entry, activity, parentSection);
+function QuantityEditors({
+  entry,
+  activity,
+  parentActivity,
+  onSet,
+  onClear,
+}: QuantityEditorsProps) {
+  const units = getEditableTrainingQuantityUnits(entry, activity, parentActivity);
 
   return (
     <div className="quantity-editor-group">

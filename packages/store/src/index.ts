@@ -2,21 +2,22 @@ import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import { persist, type StateStorage } from 'zustand/middleware';
 
 import {
+  DEFAULT_TRAINING_SETS,
   asTrainingSetId,
   getEffectiveTrainingQuantity,
+  getTrainingSetActivities,
   isTrainingQuantityUnit,
   isValidTrainingQuantityValue,
   TrainingValidationError,
+  validateTrainingSet,
   validateTrainingSetInput,
   type DashboardEntry,
   type DashboardQuantityOverrides,
   type TrainingActivity,
-  type TrainingExercise,
   type TrainingQuantities,
   type TrainingQuantityOverrides,
   type TrainingQuantityUnit,
   type TrainingQuantityValue,
-  type TrainingSection,
   type TrainingSet,
   type TrainingSetId,
   type TrainingSetInput,
@@ -39,6 +40,7 @@ export {
   classifyTrainingStorage,
   classifyTrainingStorageValue,
   createTrainingJSONStorage,
+  encodePersistedTrainingState,
   inspectTrainingRawValue,
   inspectPersistedTrainingStorage,
   inspectTrainingStorage,
@@ -78,6 +80,10 @@ export type {
   LegacyTrainingStepV4,
   PersistedStorageState,
   PersistedTrainingState,
+  PersistedTrainingExercise,
+  PersistedTrainingSection,
+  PersistedCustomTrainingSet,
+  PersistedTrainingWireState,
   PersistedTrainingStateV5,
   TrainingDurationOverrideMigrationConflict,
   TrainingOverrideMigrationConflict,
@@ -189,13 +195,10 @@ function collectUsedIds(
   state: Pick<TrainingStore, 'dashboardEntries' | 'customTrainingSets'>,
 ): Set<string> {
   const usedIds = new Set<string>();
-  for (const trainingSet of state.customTrainingSets) {
+  for (const trainingSet of [...DEFAULT_TRAINING_SETS, ...state.customTrainingSets]) {
     usedIds.add(trainingSet.id);
-    for (const section of trainingSet.sections) {
-      usedIds.add(section.id);
-      for (const exercise of section.exercises) {
-        usedIds.add(exercise.id);
-      }
+    for (const activity of getTrainingSetActivities(trainingSet)) {
+      usedIds.add(activity.id);
     }
   }
   for (const entry of state.dashboardEntries) {
@@ -326,9 +329,9 @@ function buildCustomTrainingSet(input: TrainingSetInput, usedIds: Set<string>): 
 
   const validatedInput = validation.value;
   const setId = asTrainingSetId(createUniqueId('custom-set', usedIds));
-  const sections: TrainingSection[] = validatedInput.sections.map((sectionInput) => {
+  const activities: TrainingActivity[] = validatedInput.sections.map((sectionInput) => {
     const sectionId = createUniqueId('custom-section', usedIds);
-    const exercises: TrainingExercise[] = sectionInput.exercises.map((exerciseInput) => {
+    const children: TrainingActivity[] = sectionInput.exercises.map((exerciseInput) => {
       const exerciseId = createUniqueId('custom-exercise', usedIds);
       return {
         id: exerciseId,
@@ -337,6 +340,7 @@ function buildCustomTrainingSet(input: TrainingSetInput, usedIds: Set<string>): 
           ? {}
           : { quantities: copyQuantities(exerciseInput.quantities) }),
         ...(exerciseInput.notes === undefined ? {} : { notes: exerciseInput.notes }),
+        children: [],
       };
     });
     return {
@@ -346,20 +350,25 @@ function buildCustomTrainingSet(input: TrainingSetInput, usedIds: Set<string>): 
         ? {}
         : { quantities: copyQuantities(sectionInput.quantities) }),
       ...(sectionInput.notes === undefined ? {} : { notes: sectionInput.notes }),
-      exercises,
+      children,
     };
   });
 
-  return {
+  const candidate: unknown = {
     id: setId,
     name: validatedInput.name,
     ...(validatedInput.description === undefined
       ? {}
       : { description: validatedInput.description }),
     category: 'custom',
-    sections,
+    activities,
     isBuiltIn: false,
   };
+  const result = validateTrainingSet(candidate);
+  if (!result.success) {
+    throw new TrainingValidationError(result.issues);
+  }
+  return result.value;
 }
 
 function createDashboardEntry(trainingSetId: TrainingSetId, usedIds: Set<string>): DashboardEntry {
