@@ -35,10 +35,26 @@ packages/
 ```bash
 pnpm install
 pnpm dev
+pnpm test:domain
+pnpm test:store
+pnpm test:web
+pnpm check:domain
+pnpm check:store
+pnpm check:web
 pnpm test
 pnpm check
+pnpm test:e2e
+pnpm test:e2e:chromium
+pnpm test:e2e:mobile
+pnpm test:e2e:a11y
+pnpm verify:full
+pnpm session:new -- --slug <short-slug> --duration "<duration>"
+pnpm session:check
 pnpm format
 ```
+
+Use `pnpm check` as the normal code gate and `pnpm verify:full` as the final code-plus-browser gate.
+The package-specific and Playwright aliases avoid direct workspace filters for routine validation.
 
 Curated drill content is authored in `packages/domain/data/default-drills.json`, with
 `packages/domain/schema/kendo-drills.schema.json` as its validation contract, and normalized by
