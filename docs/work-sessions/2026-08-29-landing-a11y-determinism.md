@@ -1,0 +1,8 @@
+- Session: landing reveal accessibility and deterministic axe coverage
+- Date/duration: 2026-08-29; about 1 hour
+- Scope/start: Follow-up to Job 7's transient landing contrast failure and monolithic Pixel 5 route-scan timeout; the worktree began clean.
+- Changes: Kept text-bearing reveal layers at opacity 1 with transform-only motion; split seven route axe cases; added reveal lifecycle, reduced-motion, and isolated keyboard-focus coverage.
+- Decisions: IntersectionObserver, focus revelation, progressive enhancement, layout, and product contracts remain unchanged; geometry tests render without motion so they measure layout only.
+- Roadblocks: Local server binding required sandbox approval; the in-app Browser had no backend, so installed Playwright supplied the bounded desktop and Pixel 5 visual evidence.
+- Verification: Focused accessibility 30/30, Pixel route repeats 35/35, layout repeats 10/10, full E2E 88/88, `pnpm check`, and `git diff --check` passed.
+- Follow-up: None; no canonical data, domain, persistence, library, dashboard, or activity-note files changed.
