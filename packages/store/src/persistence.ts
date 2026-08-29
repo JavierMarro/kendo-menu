@@ -960,12 +960,14 @@ function sanitizeDashboardActivityNotes(
   const trainingSet = [...DEFAULT_TRAINING_SETS, ...customTrainingSets].find(
     (candidate) => candidate.id === entry.trainingSetId,
   );
+  if (trainingSet === undefined) {
+    return entry;
+  }
+
   const eligibleActivityIds = new Set(
-    trainingSet === undefined
-      ? []
-      : getTrainingSetActivities(trainingSet)
-          .filter((activity) => activity.allowsSessionNotes === true)
-          .map((activity) => activity.id),
+    getTrainingSetActivities(trainingSet)
+      .filter((activity) => activity.allowsSessionNotes === true)
+      .map((activity) => activity.id),
   );
   const activityNotesEntries: [string, string][] = [];
   for (const [activityId, note] of Object.entries(entry.activityNotes)) {
@@ -1527,16 +1529,18 @@ function migrateDashboardEntryV5ToV6(entry: PersistedDashboardEntryV8): Persiste
     }
   }
 
-  const quantityOverrides: Record<string, TrainingQuantityOverrides> = {};
+  const quantityOverrideEntries: [string, TrainingQuantityOverrides][] = [];
   for (const [activityId, overrides] of Object.entries(entry.quantityOverrides)) {
     if (!INTERNATIONAL_UCHIKOMI_MIGRATION_ACTIVITY_ID_SET.has(activityId)) {
-      quantityOverrides[activityId] = overrides;
+      quantityOverrideEntries.push([activityId, overrides]);
     }
   }
-  quantityOverrides[CORRECTED_INTERNATIONAL_UCHIKOMI_ACTIVITY_ID] =
-    createQuantityOverridesFromMap(mergedValues);
+  quantityOverrideEntries.push([
+    CORRECTED_INTERNATIONAL_UCHIKOMI_ACTIVITY_ID,
+    createQuantityOverridesFromMap(mergedValues),
+  ]);
 
-  return { ...entry, quantityOverrides };
+  return { ...entry, quantityOverrides: Object.fromEntries(quantityOverrideEntries) };
 }
 
 function migrateKakarigeijoDurationOverrideV5ToV6(
@@ -1609,37 +1613,47 @@ export const migrateV5ToV6 = migratePersistedTrainingStateV5ToV6;
 
 const POLICE_TYPE_TWO_MAWARIGEIKO_ACTIVITY_ID =
   'police-dojo-asageiko-version-2-mawari-geiko-mawari-geiko';
+const POLICE_TYPE_TWO_ID = asTrainingSetId('police-dojo-asageiko-version-2');
 const REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ACTIVITY_ID =
   'senior-high-school-kendo-club-core-strength-training-core-strength-training';
+const SENIOR_HIGH_SCHOOL_ID = asTrainingSetId('senior-high-school-kendo-club');
 
 function migrateDashboardEntryV6ToV7(entry: PersistedDashboardEntryV8): PersistedDashboardEntryV8 {
   let changed = false;
-  const quantityOverrides: Record<string, TrainingQuantityOverrides> = {};
+  const quantityOverrideEntries: [string, TrainingQuantityOverrides][] = [];
 
   for (const [activityId, overrides] of Object.entries(entry.quantityOverrides)) {
-    if (activityId === REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ACTIVITY_ID) {
+    if (
+      entry.trainingSetId === SENIOR_HIGH_SCHOOL_ID &&
+      activityId === REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ACTIVITY_ID
+    ) {
       changed = true;
       continue;
     }
 
-    if (activityId === POLICE_TYPE_TWO_MAWARIGEIKO_ACTIVITY_ID) {
+    if (
+      entry.trainingSetId === POLICE_TYPE_TWO_ID &&
+      activityId === POLICE_TYPE_TWO_MAWARIGEIKO_ACTIVITY_ID
+    ) {
       const minutes = overrides.minutes;
       if (minutes === undefined) {
         changed = true;
         continue;
       }
 
-      quantityOverrides[activityId] = { minutes };
+      quantityOverrideEntries.push([activityId, { minutes }]);
       if (Object.keys(overrides).length !== 1) {
         changed = true;
       }
       continue;
     }
 
-    quantityOverrides[activityId] = overrides;
+    quantityOverrideEntries.push([activityId, overrides]);
   }
 
-  return changed ? { ...entry, quantityOverrides } : entry;
+  return changed
+    ? { ...entry, quantityOverrides: Object.fromEntries(quantityOverrideEntries) }
+    : entry;
 }
 
 export function migratePersistedTrainingStateV6ToV7(value: unknown): PersistedTrainingStateV8 {
@@ -1666,6 +1680,7 @@ const TOP_UNIVERSITY_CORRECTED_HIKI_SEQUENCE_ACTIVITY_ID =
 const TOP_UNIVERSITY_FREE_UCHIKOMI_ACTIVITY_ID = 'top-university-fee-version-uchikomi-geiko';
 const TOP_UNIVERSITY_FREE_KAKARIGEIKO_ACTIVITY_ID = 'top-university-fee-version-kakari-geiko';
 const TOP_UNIVERSITY_FINAL_KAKARIGEIKO_ACTIVITY_ID = 'top-university-kakarigeiko-kakarigeiko';
+const TOP_UNIVERSITY_ID = asTrainingSetId('top-university');
 const TOP_UNIVERSITY_SECONDS_ONLY_ACTIVITY_IDS = new Set<string>([
   TOP_UNIVERSITY_FREE_UCHIKOMI_ACTIVITY_ID,
   TOP_UNIVERSITY_FREE_KAKARIGEIKO_ACTIVITY_ID,
@@ -1673,13 +1688,17 @@ const TOP_UNIVERSITY_SECONDS_ONLY_ACTIVITY_IDS = new Set<string>([
 ]);
 
 function migrateDashboardEntryV7ToV8(entry: PersistedDashboardEntryV8): PersistedDashboardEntryV8 {
+  if (entry.trainingSetId !== TOP_UNIVERSITY_ID) {
+    return entry;
+  }
+
   let changed = false;
-  const quantityOverrides: Record<string, TrainingQuantityOverrides> = {};
+  const quantityOverrideEntries: [string, TrainingQuantityOverrides][] = [];
 
   for (const [activityId, overrides] of Object.entries(entry.quantityOverrides)) {
     if (activityId === TOP_UNIVERSITY_CORRECTED_HIKI_SEQUENCE_ACTIVITY_ID) {
       if (!Object.hasOwn(overrides, 'repetitions')) {
-        quantityOverrides[activityId] = overrides;
+        quantityOverrideEntries.push([activityId, overrides]);
         continue;
       }
 
@@ -1695,7 +1714,7 @@ function migrateDashboardEntryV7ToV8(entry: PersistedDashboardEntryV8): Persiste
       const migratedOverrides = createQuantityOverridesFromMap(migratedValues);
       changed = true;
       if (Object.keys(migratedOverrides).length > 0) {
-        quantityOverrides[activityId] = migratedOverrides;
+        quantityOverrideEntries.push([activityId, migratedOverrides]);
       }
       continue;
     }
@@ -1706,17 +1725,19 @@ function migrateDashboardEntryV7ToV8(entry: PersistedDashboardEntryV8): Persiste
         changed = true;
         continue;
       }
-      quantityOverrides[activityId] = { seconds };
+      quantityOverrideEntries.push([activityId, { seconds }]);
       if (Object.keys(overrides).length !== 1) {
         changed = true;
       }
       continue;
     }
 
-    quantityOverrides[activityId] = overrides;
+    quantityOverrideEntries.push([activityId, overrides]);
   }
 
-  return changed ? { ...entry, quantityOverrides } : entry;
+  return changed
+    ? { ...entry, quantityOverrides: Object.fromEntries(quantityOverrideEntries) }
+    : entry;
 }
 
 export function migratePersistedTrainingStateV7ToV8(value: unknown): PersistedTrainingStateV8 {

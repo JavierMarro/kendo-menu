@@ -434,6 +434,20 @@ test.describe('routed training flows', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
+  test('preserves URL hashes when direct drill queries close or normalize', async ({ page }) => {
+    await page.goto(
+      '/app/library?source=direct&drill=international-dojo-2-hour-session#source-note',
+    );
+    const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Close International dojo menu details.' }).click();
+    await expect(page).toHaveURL(/\/app\/library\?source=direct#source-note$/);
+
+    await page.goto('/app/library?source=direct&drill=unavailable-drill#source-note');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/app\/library\?source=direct#source-note$/);
+  });
+
   test('traps modal focus, blocks the background, and uses responsive internal scrolling', async ({
     page,
   }) => {

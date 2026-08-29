@@ -167,11 +167,11 @@ const IN_SCOPE_ACTIVITY_NAME_TREES = {
     'Suburi',
     'Ashi sabaki',
     'Kirikaeshi',
-    ['Kihon-waza', ['men', 'kote', 'do', 'tsuki']],
+    ['Kihon-waza', ['Men', 'Kote', 'Do', 'Tsuki']],
     ['Uchikomi', ['Men → Kote → Kote-men → Men']],
-    ['Shikake-waza', ['men', 'kote', 'do']],
-    ['Oji-waza', ['kaeshi do', 'kaeshi men']],
-    ['Hiki-waza', ['hiki men', 'hiki kote', 'hiki do']],
+    ['Shikake-waza', ['Men', 'Kote', 'Do']],
+    ['Oji-waza', ['Kaeshi do', 'Kaeshi men']],
+    ['Hiki-waza', ['Hiki men', 'Hiki kote', 'Hiki do']],
     'Butsukarigeiko',
     'Kakarigeiko',
     'Jigeiko',
@@ -784,7 +784,7 @@ describe('canonical default drills', () => {
       quantities: { duration: { unit: 'minutes', value: 3 } },
     });
     expect(requireActivity('top-university', 'top-university-jigeiko-jigeiko')).toMatchObject({
-      notes: '2 min per round',
+      notes: '2 minutes per round',
       quantities: { duration: { unit: 'minutes', value: 2 } },
     });
   });

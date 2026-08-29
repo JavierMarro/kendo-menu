@@ -18,6 +18,8 @@ import {
   getDashboardEffectiveTrainingQuantity,
   inspectTrainingStorage,
   migratePersistedTrainingState,
+  migratePersistedTrainingStateV0ToV1,
+  migratePersistedTrainingStateV1ToV2,
   migratePersistedTrainingStateV2ToV3,
   migratePersistedTrainingStateV3ToV4,
   migratePersistedTrainingStateV4ToV5,
@@ -34,6 +36,8 @@ import {
 } from './index';
 
 const STORAGE_KEY = 'test-kendo-menu';
+const STATE_SEQUENCE_STRESS_SEED = 0x4b454e44;
+const STATE_SEQUENCE_STRESS_ITERATIONS = 300;
 
 const CUSTOM_SET_INPUT = {
   name: 'Footwork basics',
@@ -227,6 +231,17 @@ function requireFirstDashboardEntry(entries: readonly DashboardEntry[]): Dashboa
     throw new Error('Expected a dashboard entry.');
   }
   return entry;
+}
+
+function createDeterministicIndexGenerator(seed: number): (limit: number) => number {
+  let state = seed >>> 0;
+  return (limit: number) => {
+    if (!Number.isInteger(limit) || limit <= 0) {
+      throw new Error('Deterministic index limits must be positive integers.');
+    }
+    state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0;
+    return state % limit;
+  };
 }
 
 function legacyVersionTwoState(): unknown {
@@ -724,6 +739,21 @@ describe('version 5 to version 6 canonical correction migration', () => {
     expect(migrated.customTrainingSets).toEqual([]);
   });
 
+  it('preserves prototype-named unrelated activity IDs while rebuilding override maps', () => {
+    const quantityOverrides = Object.fromEntries([
+      ['__proto__', { seconds: 45 }],
+      [LEGACY_UCHIKOMI_IDS[0], { repetitions: 5 }],
+    ]);
+    const migrated = migratePersistedTrainingStateV5ToV6(
+      versionFiveUchikomiState(quantityOverrides),
+    );
+    const migratedOverrides = migrated.dashboardEntries[0]?.quantityOverrides;
+
+    expect(Object.hasOwn(migratedOverrides ?? {}, '__proto__')).toBe(true);
+    expect(migratedOverrides?.['__proto__']).toEqual({ seconds: 45 });
+    expect(migratedOverrides?.[CORRECTED_UCHIKOMI_ID]).toEqual({ repetitions: 5 });
+  });
+
   it('converts University dojo kakarigeijo overrides to the corrected minutes unit', () => {
     const state = {
       dashboardEntries: [
@@ -854,6 +884,16 @@ describe('version 6 to version 7 curated-data correction migration', () => {
           createdAt: '2026-08-19T10:00:00.000Z',
         },
         {
+          id: 'senior-entry',
+          trainingSetId: asTrainingSetId('senior-high-school-kendo-club'),
+          quantityOverrides: {
+            [REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ID]: { minutes: 5 },
+            'unrelated-senior-activity': { repetitions: 7 },
+          },
+          notes: 'Preserve the senior entry note.',
+          createdAt: '2026-08-28T11:00:00.000Z',
+        },
+        {
           id: 'zero-entry',
           trainingSetId: asTrainingSetId('police-dojo-asageiko-version-2'),
           quantityOverrides: {
@@ -873,17 +913,26 @@ describe('version 6 to version 7 curated-data correction migration', () => {
         ...state.dashboardEntries[0],
         quantityOverrides: {
           [POLICE_TYPE_TWO_MAWARIGEIKO_ID]: { minutes: 8 },
+          [REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ID]: { minutes: 5 },
           'unrelated-activity': { repetitions: 12, seconds: 30 },
         },
       },
       {
         ...state.dashboardEntries[1],
         quantityOverrides: {
+          [POLICE_TYPE_TWO_MAWARIGEIKO_ID]: { repetitions: 4 },
+          [REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ID]: { repetitions: 10 },
           'legacy-exercise': { repetitions: 0, sets: 4, seconds: 30 },
         },
       },
       {
         ...state.dashboardEntries[2],
+        quantityOverrides: {
+          'unrelated-senior-activity': { repetitions: 7 },
+        },
+      },
+      {
+        ...state.dashboardEntries[3],
         quantityOverrides: {
           [POLICE_TYPE_TWO_MAWARIGEIKO_ID]: { minutes: 0 },
         },
@@ -950,6 +999,7 @@ describe('version 6 to version 7 curated-data correction migration', () => {
     });
     expect(inspection.state.dashboardEntries[0]?.quantityOverrides).toEqual({
       [POLICE_TYPE_TWO_MAWARIGEIKO_ID]: { minutes: 9 },
+      [REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ID]: { repetitions: 3 },
     });
   });
 });
@@ -975,6 +1025,17 @@ describe('version 7 to version 8 complex-session correction migration', () => {
           notes: 'Preserve this session note.',
           createdAt: '2026-08-28T10:00:00.000Z',
         },
+        {
+          id: 'unrelated-entry',
+          trainingSetId: asTrainingSetId('custom-collision'),
+          quantityOverrides: {
+            [TOP_UNIVERSITY_HIKI_SEQUENCE_ID]: { repetitions: 100, seconds: 20 },
+            [TOP_UNIVERSITY_FREE_UCHIKOMI_ID]: { repetitions: 5, minutes: 2 },
+            [TOP_UNIVERSITY_FINAL_KAKARIGEIKO_ID]: { rounds: 2 },
+          },
+          notes: 'Preserve all coincident custom overrides.',
+          createdAt: '2026-08-28T11:00:00.000Z',
+        },
       ],
       customTrainingSets: [],
     } as const;
@@ -991,6 +1052,7 @@ describe('version 7 to version 8 complex-session correction migration', () => {
           'unrelated-activity': { repetitions: 12, seconds: 30 },
         },
       },
+      state.dashboardEntries[1],
     ]);
     expect(parsePersistedTrainingStateV8(migrated)).toEqual(migrated);
   });
@@ -1080,6 +1142,80 @@ describe('older migration chain', () => {
     expect(migrated.customTrainingSets[0]?.id).toBe('custom-legacy');
     expect(migrated.customTrainingSets[0]?.activities[0]?.id).toBe('custom-legacy-exercises');
     expect(migrated.customTrainingSets[0]?.activities[0]?.children[0]?.id).toBe('legacy-exercise');
+  });
+
+  it('migrates every supported historical start version from 0 through 8 to version 9', () => {
+    const stateV0 = legacyVersionOneState();
+    const stateV1 = migratePersistedTrainingStateV0ToV1(stateV0);
+    const stateV2 = migratePersistedTrainingStateV1ToV2(stateV1);
+    const stateV3 = migratePersistedTrainingStateV2ToV3(stateV2);
+    const stateV4 = migratePersistedTrainingStateV3ToV4(stateV3);
+    const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
+    const stateV5Wire = {
+      dashboardEntries: stateV5.dashboardEntries,
+      customTrainingSets: [
+        {
+          id: 'custom-legacy',
+          name: 'Legacy custom set',
+          description: '',
+          category: 'custom',
+          sections: [
+            {
+              id: 'custom-legacy-exercises',
+              name: 'Exercises',
+              exercises: [
+                {
+                  id: 'legacy-exercise',
+                  name: 'Legacy exercise',
+                  quantities: { repetitions: 20 },
+                  notes: 'Mechanical note',
+                },
+              ],
+            },
+          ],
+          isBuiltIn: false,
+        },
+      ],
+    };
+    const historicalStates: readonly (readonly [number, unknown])[] = [
+      [0, stateV0],
+      [1, stateV1],
+      [2, stateV2],
+      [3, stateV3],
+      [4, stateV4],
+      [5, stateV5Wire],
+      [6, stateV5Wire],
+      [7, stateV5Wire],
+      [8, stateV5Wire],
+    ];
+
+    for (const [version, state] of historicalStates) {
+      const inspection = classifyTrainingStorageValue(serializeState(state, version));
+      expect(inspection, `historical version ${version}`).toMatchObject({
+        status: 'migrated',
+        fromVersion: version,
+        version: TRAINING_STORE_PERSISTENCE_VERSION,
+      });
+      if (inspection.status !== 'migrated') {
+        throw new Error(`Expected historical version ${version} to migrate.`);
+      }
+
+      const entry = inspection.state.dashboardEntries[0];
+      const trainingSet = inspection.state.customTrainingSets[0];
+      expect(entry?.id, `entry id from version ${version}`).toBe('entry-legacy');
+      expect(entry?.notes, `session note from version ${version}`).toBe('Stay relaxed.');
+      expect(entry?.quantityOverrides, `overrides from version ${version}`).toEqual({
+        'legacy-exercise': { repetitions: 0 },
+      });
+      expect(entry?.activityNotes, `activity notes from version ${version}`).toEqual({});
+      expect(trainingSet?.id, `set id from version ${version}`).toBe('custom-legacy');
+      expect(trainingSet?.activities[0]?.id, `root id from version ${version}`).toBe(
+        'custom-legacy-exercises',
+      );
+      expect(trainingSet?.activities[0]?.children[0]?.id, `leaf id from version ${version}`).toBe(
+        'legacy-exercise',
+      );
+    }
   });
 });
 
@@ -1298,6 +1434,87 @@ describe('persistence lifecycle', () => {
       store.getState().dashboardEntries[1]?.id,
     ]);
   });
+
+  it(`survives ${STATE_SEQUENCE_STRESS_ITERATIONS} deterministic public state operations (seed ${STATE_SEQUENCE_STRESS_SEED})`, () => {
+    const storage = new MemoryStorage();
+    const nextIndex = createDeterministicIndexGenerator(STATE_SEQUENCE_STRESS_SEED);
+    let store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+    const quantityActivityId = 'international-dojo-2-hour-session-kirikaeshi-kirikaeshi';
+    const noteActivityId = 'international-dojo-2-hour-session-warm-up-warm-up';
+
+    for (let iteration = 0; iteration < STATE_SEQUENCE_STRESS_ITERATIONS; iteration += 1) {
+      const operation = nextIndex(8);
+      const entries = store.getState().dashboardEntries;
+      if (entries.length === 0 || operation === 0 || operation === 7) {
+        store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+      } else {
+        const entry = entries[nextIndex(entries.length)];
+        if (entry === undefined) {
+          throw new Error(`Seed ${STATE_SEQUENCE_STRESS_SEED} lost an entry at ${iteration}.`);
+        }
+
+        switch (operation) {
+          case 1:
+            store
+              .getState()
+              .setQuantityOverride(entry.id, quantityActivityId, 'repetitions', nextIndex(51));
+            break;
+          case 2:
+            store.getState().clearQuantityOverride(entry.id, quantityActivityId, 'repetitions');
+            break;
+          case 3:
+            store.getState().setActivityNote(entry.id, noteActivityId, `Seeded note ${iteration}`);
+            break;
+          case 4:
+            store.getState().setActivityNote(entry.id, noteActivityId, '  ');
+            break;
+          case 5: {
+            const removed = store.getState().removeFromDashboard(entry.id);
+            if (removed === null) {
+              throw new Error(
+                `Seed ${STATE_SEQUENCE_STRESS_SEED} could not remove at ${iteration}.`,
+              );
+            }
+            if (nextIndex(2) === 0) {
+              store.getState().restoreDashboardEntry(removed);
+            }
+            break;
+          }
+          case 6:
+            store.getState().updateDashboardEntry(entry.id, { notes: `Session note ${iteration}` });
+            break;
+        }
+      }
+
+      const currentEntries = store.getState().dashboardEntries;
+      const currentIds = currentEntries.map((entry) => entry.id);
+      expect(
+        new Set(currentIds).size,
+        `unique entry ids for seed ${STATE_SEQUENCE_STRESS_SEED} at iteration ${iteration}`,
+      ).toBe(currentIds.length);
+
+      const persisted = requireString(storage.read());
+      const inspection = classifyTrainingStorageValue(persisted);
+      expect(
+        inspection.status,
+        `valid envelope for seed ${STATE_SEQUENCE_STRESS_SEED} at iteration ${iteration}`,
+      ).toBe('ready');
+      if (inspection.status !== 'ready') {
+        throw new Error(
+          `Seed ${STATE_SEQUENCE_STRESS_SEED} produced ${inspection.status} at ${iteration}.`,
+        );
+      }
+      expect(inspection.state.dashboardEntries).toEqual(currentEntries);
+
+      if (operation === 6) {
+        store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+      }
+    }
+
+    const beforeFinalReload = store.getState().dashboardEntries;
+    store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+    expect(store.getState().dashboardEntries).toEqual(beforeFinalReload);
+  });
 });
 
 describe('untrusted persistence classification', () => {
@@ -1354,6 +1571,31 @@ describe('untrusted persistence classification', () => {
       activityNotes: { [activityId]: '  Keep this spacing.\n' },
       notes: 'Keep this session note.',
     });
+  });
+
+  it('preserves activity notes while their referenced session is unavailable', () => {
+    const state = {
+      dashboardEntries: [
+        {
+          id: 'unavailable-entry',
+          trainingSetId: asTrainingSetId('temporarily-unavailable-session'),
+          quantityOverrides: { 'unavailable-activity': { repetitions: 6 } },
+          activityNotes: {
+            'unavailable-activity': '  Preserve this note for recovery.\n',
+          },
+          notes: 'Preserve this session note too.',
+          createdAt: '2026-08-29T08:00:00.000Z',
+        },
+      ],
+      customTrainingSets: [],
+    };
+    const parsed = parsePersistedTrainingState(state);
+    if (parsed === null) {
+      throw new Error('Expected unavailable-session state to remain recoverable.');
+    }
+
+    expect(parsed.dashboardEntries[0]).toEqual(state.dashboardEntries[0]);
+    expect(parsePersistedTrainingState(encodePersistedTrainingState(parsed))).toEqual(parsed);
   });
 
   it('rejects malformed activity-note records and keys', () => {

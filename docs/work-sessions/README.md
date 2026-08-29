@@ -26,6 +26,7 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-08-29 — final integrated verification](./2026-08-29-final-integrated-verification.md)
 - [2026-08-29 — activity-specific dashboard notes](./2026-08-29-activity-session-notes.md)
 - [2026-08-28 — complex curated session synchronization](./2026-08-28-complex-session-sync.md)
 - [2026-08-28 — non-complex curated session synchronization](./2026-08-28-non-complex-session-sync.md)

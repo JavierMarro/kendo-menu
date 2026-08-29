@@ -55,28 +55,28 @@
         "exercises": [
           {
             "id": "international-dojo-2-hour-session-kihon-waza-men",
-            "name": "men",
+            "name": "Men",
             "quantities": {
               "repetitions": 4
             }
           },
           {
             "id": "international-dojo-2-hour-session-kihon-waza-kote",
-            "name": "kote",
+            "name": "Kote",
             "quantities": {
               "repetitions": 4
             }
           },
           {
             "id": "international-dojo-2-hour-session-kihon-waza-do",
-            "name": "do",
+            "name": "Do",
             "quantities": {
               "repetitions": 4
             }
           },
           {
             "id": "international-dojo-2-hour-session-kihon-waza-tsuki",
-            "name": "tsuki",
+            "name": "Tsuki",
             "quantities": {
               "repetitions": 4
             }
@@ -102,21 +102,21 @@
         "exercises": [
           {
             "id": "international-dojo-2-hour-session-shikake-waza-men",
-            "name": "men",
+            "name": "Men",
             "quantities": {
               "repetitions": 3
             }
           },
           {
             "id": "international-dojo-2-hour-session-shikake-waza-kote",
-            "name": "kote",
+            "name": "Kote",
             "quantities": {
               "repetitions": 3
             }
           },
           {
             "id": "international-dojo-2-hour-session-shikake-waza-do",
-            "name": "do",
+            "name": "Do",
             "quantities": {
               "repetitions": 3
             }
@@ -129,14 +129,14 @@
         "exercises": [
           {
             "id": "international-dojo-2-hour-session-oji-waza-kaeshi-do",
-            "name": "kaeshi do",
+            "name": "Kaeshi do",
             "quantities": {
               "repetitions": 3
             }
           },
           {
             "id": "international-dojo-2-hour-session-oji-waza-kaeshi-men",
-            "name": "kaeshi men",
+            "name": "Kaeshi men",
             "quantities": {
               "repetitions": 3
             }
@@ -149,21 +149,21 @@
         "exercises": [
           {
             "id": "international-dojo-2-hour-session-hiki-waza-hiki-men",
-            "name": "hiki men",
+            "name": "Hiki men",
             "quantities": {
               "repetitions": 3
             }
           },
           {
             "id": "international-dojo-2-hour-session-hiki-waza-hiki-kote",
-            "name": "hiki kote",
+            "name": "Hiki kote",
             "quantities": {
               "repetitions": 3
             }
           },
           {
             "id": "international-dojo-2-hour-session-hiki-waza-hiki-do",
-            "name": "hiki do",
+            "name": "Hiki do",
             "quantities": {
               "repetitions": 3
             }
@@ -1679,7 +1679,7 @@
       {
         "id": "top-university-jigeiko-jigeiko",
         "name": "Jigeiko",
-        "notes": "2 min per round",
+        "notes": "2 minutes per round",
         "quantities": {
           "duration": {
             "unit": "minutes",
