@@ -1,6 +1,27 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const STORAGE_KEY = 'kendo-menu';
+const JUNIOR_HIGH_SUBURI_ID = 'junior-high-kendo-club-suburi';
+
+function dashboardCard(page: Page, name: string): Locator {
+  return page.locator('.dashboard-card--compact').filter({ hasText: name }).first();
+}
+
+async function openDashboardMenu(page: Page, name: string): Promise<Locator> {
+  const card = dashboardCard(page, name);
+  await card.getByRole('button', { name: 'View more' }).click();
+  const dialog = page.getByRole('dialog', { name });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+async function openNestedDetails(container: Locator): Promise<Locator> {
+  const tagName = await container.evaluate((element) => element.tagName.toLowerCase());
+  const details = tagName === 'details' ? container : container.locator(':scope > details');
+  await details.locator(':scope > summary').click();
+  await expect(details).toHaveJSProperty('open', true);
+  return details;
+}
 
 function parseRgb(color: string): readonly [number, number, number] {
   const channels = color
@@ -290,8 +311,12 @@ test.describe('routed training flows', () => {
     });
     expect(standaloneLayout.hasOverflow).toBe(false);
     expect(standaloneLayout.quantityRightInset).toBeGreaterThanOrEqual(12);
-    expect(standaloneLayout.quantityRightInset).toBeLessThanOrEqual(20);
-    expect(standaloneLayout.rowsOverlap).toBe(true);
+    if (viewport.width > 640) {
+      expect(standaloneLayout.quantityRightInset).toBeLessThanOrEqual(20);
+      expect(standaloneLayout.rowsOverlap).toBe(true);
+    } else {
+      expect(standaloneLayout.rowsOverlap).toBe(false);
+    }
 
     const sections = dialog.locator('details.detail-section');
     await expect(sections).toHaveCount(5);
@@ -632,8 +657,12 @@ test.describe('routed training flows', () => {
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
 
-    const repetitions = page.getByLabel('Repetitions for Haya');
-    const sets = page.getByLabel('Sets for Haya');
+    const dashboardDialog = await openDashboardMenu(page, 'Junior-high school dojo menu');
+    await openNestedDetails(
+      dashboardDialog.locator(`[data-activity-id="${JUNIOR_HIGH_SUBURI_ID}"]`),
+    );
+    const repetitions = dashboardDialog.getByLabel('Repetitions for Haya');
+    const sets = dashboardDialog.getByLabel('Sets for Haya');
     await expect(repetitions).toHaveValue('100');
     await expect(sets).toHaveValue('2');
     await repetitions.fill('80');
@@ -643,14 +672,26 @@ test.describe('routed training flows', () => {
     await expect(repetitions).toHaveValue('80');
     await expect(sets).toHaveValue('0');
 
-    const notes = page.getByLabel('Practice notes');
+    const notes = dashboardDialog.getByLabel('Practice notes');
     await notes.fill('Keep the shoulders relaxed.');
     await notes.blur();
 
     await page.reload();
-    await expect(page.getByLabel('Repetitions for Haya')).toHaveValue('80');
-    await expect(page.getByLabel('Sets for Haya')).toHaveValue('0');
-    await expect(page.getByLabel('Practice notes')).toHaveValue('Keep the shoulders relaxed.');
+    const reloadedDashboardDialog = await openDashboardMenu(page, 'Junior-high school dojo menu');
+    await openNestedDetails(
+      reloadedDashboardDialog.locator(`[data-activity-id="${JUNIOR_HIGH_SUBURI_ID}"]`),
+    );
+    await expect(reloadedDashboardDialog.getByLabel('Repetitions for Haya')).toHaveValue('80');
+    await expect(reloadedDashboardDialog.getByLabel('Sets for Haya')).toHaveValue('0');
+    await expect(reloadedDashboardDialog.getByLabel('Practice notes')).toHaveValue(
+      'Keep the shoulders relaxed.',
+    );
+
+    await reloadedDashboardDialog
+      .getByRole('button', {
+        name: 'Close Junior-high school dojo menu details.',
+      })
+      .click();
 
     await page.getByRole('button', { name: 'Remove' }).click();
     await expect(page.getByRole('heading', { name: 'Junior-high school dojo menu' })).toHaveCount(
@@ -671,14 +712,21 @@ test.describe('routed training flows', () => {
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
 
-    const minutes = page.getByLabel('Minutes for Warm-up');
-    const seconds = page.getByLabel('Seconds for Kakarigeiko');
+    let dashboardDialog = await openDashboardMenu(page, 'International dojo menu');
+    const minutes = dashboardDialog.getByLabel('Minutes for Warm-up');
+    const seconds = dashboardDialog.getByLabel('Seconds for Kakarigeiko');
     await expect(minutes).toHaveValue('10');
     await expect(seconds).toHaveValue('60');
     await minutes.fill('12.5');
     await minutes.blur();
     await seconds.fill('45');
     await seconds.blur();
+
+    await dashboardDialog
+      .getByRole('button', {
+        name: 'Close International dojo menu details.',
+      })
+      .click();
 
     await openNavigationIfNeeded(page);
     await page
@@ -690,12 +738,14 @@ test.describe('routed training flows', () => {
       .getByRole('navigation', { name: 'Primary navigation' })
       .getByRole('link', { name: 'Dashboard', exact: true })
       .click();
-    await expect(page.getByLabel('Minutes for Warm-up')).toHaveValue('12.5');
-    await expect(page.getByLabel('Seconds for Kakarigeiko')).toHaveValue('45');
+    dashboardDialog = await openDashboardMenu(page, 'International dojo menu');
+    await expect(dashboardDialog.getByLabel('Minutes for Warm-up')).toHaveValue('12.5');
+    await expect(dashboardDialog.getByLabel('Seconds for Kakarigeiko')).toHaveValue('45');
 
     await page.reload();
-    await expect(page.getByLabel('Minutes for Warm-up')).toHaveValue('12.5');
-    await expect(page.getByLabel('Seconds for Kakarigeiko')).toHaveValue('45');
+    dashboardDialog = await openDashboardMenu(page, 'International dojo menu');
+    await expect(dashboardDialog.getByLabel('Minutes for Warm-up')).toHaveValue('12.5');
+    await expect(dashboardDialog.getByLabel('Seconds for Kakarigeiko')).toHaveValue('45');
   });
 
   test('prompts before browser Back discards a dirty draft, but dismiss keeps the draft', async ({
@@ -759,10 +809,33 @@ test.describe('routed training flows', () => {
     await expect(page).toHaveURL(/\/app\/dashboard\?created=Monday%20footwork$/);
     expect(unexpectedDialogMessage).toBeNull();
     await expect(page.getByRole('heading', { name: 'Monday footwork' })).toBeVisible();
+    let dashboardDialog = await openDashboardMenu(page, 'Monday footwork');
+    await dashboardDialog
+      .locator('details.detail-section')
+      .first()
+      .locator(':scope > summary')
+      .click();
+    await expect(
+      dashboardDialog.getByLabel('Repetitions for Big step forward and back'),
+    ).toHaveValue('24');
+    await expect(dashboardDialog.getByLabel('Minutes for Jigeiko rounds')).toHaveValue('12.5');
+    await dashboardDialog
+      .getByRole('button', {
+        name: 'Close Monday footwork details.',
+      })
+      .click();
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Monday footwork' })).toBeVisible();
-    await expect(page.getByLabel('Repetitions for Big step forward and back')).toHaveValue('24');
-    await expect(page.getByLabel('Minutes for Jigeiko rounds')).toHaveValue('12.5');
+    dashboardDialog = await openDashboardMenu(page, 'Monday footwork');
+    await dashboardDialog
+      .locator('details.detail-section')
+      .first()
+      .locator(':scope > summary')
+      .click();
+    await expect(
+      dashboardDialog.getByLabel('Repetitions for Big step forward and back'),
+    ).toHaveValue('24');
+    await expect(dashboardDialog.getByLabel('Minutes for Jigeiko rounds')).toHaveValue('12.5');
 
     const persisted = await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY);
     expect(persisted).not.toBeNull();

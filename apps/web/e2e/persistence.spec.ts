@@ -124,15 +124,28 @@ test.describe('local persistence recovery', () => {
     await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
     await expect(page.getByRole('status', { name: 'Changes are not being saved' })).toBeVisible();
 
-    const minutes = page.getByLabel(/minutes for stretch/i);
+    const dashboardCard = page
+      .locator('.dashboard-card--compact')
+      .filter({ hasText: 'Senior High School dojo menu' })
+      .first();
+    await dashboardCard.getByRole('button', { name: 'View more' }).click();
+    const dashboardDialog = page.getByRole('dialog', {
+      name: 'Senior High School dojo menu',
+    });
+    await dashboardDialog
+      .locator('details.detail-section')
+      .first()
+      .locator(':scope > summary')
+      .click();
+    const minutes = dashboardDialog.getByLabel(/minutes for stretch/i);
     await minutes.fill('12');
     await minutes.blur();
     await expect(page.getByText('Not saved to this device.')).toBeVisible();
-    const appBanner = page.getByRole('banner');
+    const appBanner = page.locator('.top-bar');
     await expect(
-      appBanner.getByRole('status', { name: 'Changes are not being saved' }),
+      appBanner.locator('[role="status"]').filter({ hasText: 'Changes are not being saved' }),
     ).toBeVisible();
-    const notes = page.getByLabel('Practice notes');
+    const notes = dashboardDialog.getByLabel('Practice notes');
     await notes.fill('Quota test note.');
     await notes.blur();
     await expect(page.getByText('Not saved to this device.')).toHaveCount(2);

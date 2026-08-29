@@ -1,0 +1,8 @@
+- Session: dashboard menu overview
+- Date/duration: 2026-08-30; about 2 hours
+- Scope/start: Refined the populated dashboard after preserving the existing empty state; selected menus previously rendered every editor inline.
+- Changes: Added compact library-style dashboard cards, shared recursive activity rows, a reusable dashboard detail dialog, aligned editable controls, and “Any extra details?” note disclosures.
+- Decisions: Reused existing DashboardEntry actions, activity configuration, descriptions, note fields, persistence, and dialog focus/inert behavior; made no domain, store, schema, or persistence-format changes.
+- Roadblocks: Playwright needed escalated local-server permission in the sandbox; no product blocker remained.
+- Verification: `pnpm test:web` (80/80), web typecheck, lint (0 errors; 2 existing warnings), format check, build, Chromium 46/46, mobile Chromium 46/46, accessibility Chromium/mobile 34/34, detector clean.
+- Follow-up: None.

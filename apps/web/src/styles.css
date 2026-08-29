@@ -1471,6 +1471,11 @@ a {
   gap: var(--space-4);
 }
 
+.dashboard-list {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+  grid-auto-rows: 1fr;
+}
+
 .dashboard-card,
 .library-card,
 .builder-section,
@@ -1482,6 +1487,21 @@ a {
 
 .dashboard-card {
   padding: var(--space-5);
+}
+
+.dashboard-card--compact {
+  display: flex;
+  min-height: 11rem;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.drill-dialog-scroll > .dashboard-card--expanded {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .dashboard-card--missing {
@@ -1647,6 +1667,12 @@ a {
   justify-self: end;
 }
 
+.detail-standalone-activity > .training-activity-controls,
+.training-step > .training-activity-controls,
+.detail-section-parent > .training-activity-controls {
+  justify-self: end;
+}
+
 .training-step.training-step--standalone {
   display: flex;
   align-items: center;
@@ -1804,6 +1830,7 @@ a {
 
 .training-activity-controls {
   display: grid;
+  width: min(100%, 20rem);
   min-width: 0;
   gap: var(--space-3);
 }
@@ -1888,26 +1915,25 @@ a {
 
 .activity-notes-toggle {
   min-height: 2.75rem;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  color: var(--muted-strong);
-  background: var(--surface);
+  padding: var(--space-2) 0;
+  color: var(--accent-hover);
+  background: transparent;
   font-size: var(--type-14);
   font-weight: 650;
   line-height: 1.3;
   text-align: left;
+  text-decoration-line: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.2em;
   transition:
     color 160ms ease-out,
-    border-color 160ms ease-out,
-    background-color 160ms ease-out;
+    text-decoration-color 160ms ease-out;
 }
 
 .activity-notes-toggle:hover,
 .activity-notes-toggle[aria-expanded='true'] {
-  border-color: var(--accent);
   color: var(--text);
-  background: var(--accent-soft);
+  text-decoration-color: var(--accent-hover);
 }
 
 .activity-notes-indicator {
@@ -2913,6 +2939,11 @@ textarea[aria-invalid='true'] {
     width: min(100%, 20rem);
   }
 
+  .detail-section-parent > .training-activity-controls {
+    grid-column: 2;
+    justify-self: stretch;
+  }
+
   .training-step .quantity-list {
     justify-content: flex-start;
   }
@@ -3038,8 +3069,23 @@ textarea[aria-invalid='true'] {
     flex-direction: column;
   }
 
+  .detail-standalone-activity {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .detail-standalone-activity > .training-activity-controls {
+    grid-column: 2;
+    justify-self: stretch;
+  }
+
   .detail-section-parent {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-section-parent > .training-activity-controls {
+    grid-column: 1;
+    justify-self: stretch;
   }
 
   .detail-section-parent > .quantity-list,
@@ -3116,6 +3162,10 @@ textarea[aria-invalid='true'] {
     justify-self: start;
     justify-content: flex-start;
     text-align: left;
+  }
+
+  .detail-standalone-activity > .training-activity-controls {
+    grid-column: 2;
   }
 
   .detail-section > .training-step-list {

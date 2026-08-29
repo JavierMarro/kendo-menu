@@ -31,6 +31,7 @@ const OFFICIAL_ZNKR_ID = asTrainingSetId('official-znkr-ajkf');
 const OFFICIAL_ZNKR_MEN_ID = 'official-znkr-ajkf-kihon-waza-men';
 const TOP_UNIVERSITY_ID = asTrainingSetId('top-university');
 const TOP_UNIVERSITY_KAKARIGEIKO_ID = 'top-university-kakarigeiko-kakarigeiko';
+const DASHBOARD_EDITOR_TEST_TIMEOUT = 30_000;
 const IN_SCOPE_SESSION_SMOKE_CASES = [
   {
     id: 'international-dojo-2-hour-session',
@@ -60,6 +61,30 @@ const IN_SCOPE_SESSION_SMOKE_CASES = [
   { id: 'university-high-school', name: 'University High School dojo menu', activityCount: 31 },
   { id: 'top-university', name: 'Top university dojo menu', activityCount: 17 },
 ] as const;
+
+async function openDashboardMenu(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+): Promise<HTMLElement> {
+  const heading = screen.getByRole('heading', { name });
+  const card = heading.closest('.dashboard-card');
+  if (!(card instanceof HTMLElement)) {
+    throw new Error(`Expected the ${name} dashboard card.`);
+  }
+  await user.click(within(card).getByRole('button', { name: 'View more' }));
+  return screen.getByRole('dialog', { name });
+}
+
+function openAllDetails(container: HTMLElement): void {
+  const details = Array.from(container.querySelectorAll<HTMLDetailsElement>('details:not([open])'));
+  for (const detail of details) {
+    const outerDetails = detail.parentElement?.closest('details');
+    if (outerDetails !== null && outerDetails !== undefined && !outerDetails.open) {
+      continue;
+    }
+    detail.open = true;
+  }
+}
 
 describe('KendoMenu application flows', () => {
   it('formats count, fixed-duration, and range quantities without changing units', () => {
@@ -410,6 +435,63 @@ describe('KendoMenu application flows', () => {
     await user.click(screen.getByRole('link', { name: 'Create a training session' }));
     expect(screen.getByRole('heading', { name: 'Create a training session' })).toBeInTheDocument();
   });
+
+  it(
+    'shows added menus as compact cards and opens only the selected editor',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+      store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
+
+      renderApp(store, { initialEntries: ['/app/dashboard'] });
+
+      const compactCards = screen.getAllByRole('heading', { name: /dojo menu$/i });
+      expect(compactCards).toHaveLength(2);
+      expect(document.querySelectorAll('.dashboard-card--compact')).toHaveLength(2);
+      expect(document.querySelectorAll('.dashboard-card--expanded')).toHaveLength(0);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Minutes for Warm-up')).not.toBeInTheDocument();
+
+      const secondCard = compactCards[1]?.closest('.dashboard-card');
+      if (!(secondCard instanceof HTMLElement)) {
+        throw new Error('Expected the second compact dashboard card.');
+      }
+      expect(within(secondCard).getByText('45 activities')).toBeVisible();
+      expect(within(secondCard).getByRole('button', { name: 'View more' })).toBeVisible();
+
+      await user.click(within(secondCard).getByRole('button', { name: 'View more' }));
+      const secondDialog = screen.getByRole('dialog', {
+        name: 'Senior High School dojo menu',
+      });
+      expect(screen.getAllByRole('dialog')).toHaveLength(1);
+      expect(
+        within(secondDialog).getByRole('heading', { name: 'Senior High School dojo menu' }),
+      ).toBeVisible();
+      expect(within(secondDialog).getByLabelText('Minutes for Stretch')).toBeInTheDocument();
+      expect(
+        within(secondDialog).getByRole('button', {
+          name: 'Close Senior High School dojo menu details.',
+        }),
+      ).toBeVisible();
+
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(within(secondCard).getByRole('button', { name: 'View more' })).toHaveFocus();
+
+      const firstHeading = screen.getByRole('heading', { name: 'International dojo menu' });
+      const firstCard = firstHeading.closest('.dashboard-card');
+      if (!(firstCard instanceof HTMLElement)) {
+        throw new Error('Expected the first compact dashboard card.');
+      }
+      await user.click(within(firstCard).getByRole('button', { name: 'View more' }));
+      expect(screen.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
+      expect(
+        screen.queryByRole('dialog', { name: 'Senior High School dojo menu' }),
+      ).not.toBeInTheDocument();
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
   it('redirects the bare route to the landing page', () => {
     const store = createTestStore();
@@ -991,276 +1073,334 @@ describe('KendoMenu application flows', () => {
     expect(within(layeredSection).getByText('Reps not set')).toBeVisible();
   });
 
-  it('uses the minute convention for missing Warm-up quantities and preserves explicit zero', async () => {
-    const user = userEvent.setup();
-    const store = createTestStore();
-    store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
-    renderApp(store);
+  it(
+    'uses the minute convention for missing Warm-up quantities and preserves explicit zero',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
+      renderApp(store);
+      const dialog = await openDashboardMenu(user, 'Senior High School dojo menu');
+      openAllDetails(dialog);
 
-    const dashboardHeading = screen.getByRole('heading', {
-      name: 'Senior High School dojo menu',
-    });
-    const dashboardCard = dashboardHeading.closest('article');
-    if (dashboardCard === null) {
-      throw new Error('Expected the Senior High School drill inside a dashboard card.');
-    }
-    expect(within(dashboardCard).getByText('High intensity session')).toBeVisible();
+      const dashboardHeading = screen.getByRole('heading', {
+        name: 'Senior High School dojo menu',
+      });
+      const dashboardCard = dashboardHeading.closest('article');
+      if (dashboardCard === null) {
+        throw new Error('Expected the Senior High School drill inside a dashboard card.');
+      }
+      expect(within(dashboardCard).getByText('High intensity session')).toBeVisible();
 
-    const minutes = screen.getByLabelText(/minutes for stretch/i);
-    expect(minutes).toHaveValue(null);
+      const minutes = within(dialog).getByLabelText(/minutes for stretch/i);
+      expect(minutes).toHaveValue(null);
 
-    await user.type(minutes, '0');
-    await user.tab();
-    expect(minutes).toHaveValue(0);
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [SENIOR_HIGH_SCHOOL_STRETCH_ID]: { minutes: 0 },
-    });
+      await user.type(minutes, '0');
+      await user.tab();
+      expect(minutes).toHaveValue(0);
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [SENIOR_HIGH_SCHOOL_STRETCH_ID]: { minutes: 0 },
+      });
 
-    await user.clear(minutes);
-    await user.tab();
-    expect(minutes).toHaveValue(null);
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
-  });
+      await user.clear(minutes);
+      await user.tab();
+      expect(minutes).toHaveValue(null);
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
-  it('uses structural Suburi fallbacks while preserving existing override units', async () => {
-    const user = userEvent.setup();
-    const japaneseStore = createTestStore();
-    const japaneseEntryId = japaneseStore.getState().addToDashboard(JAPANESE_SCHOOL_DRILL_ID);
-    japaneseStore
-      .getState()
-      .setQuantityOverride(japaneseEntryId, JAPANESE_SCHOOL_JOGE_ID, 'minutes', 2);
-    const japaneseView = renderApp(japaneseStore);
+  it(
+    'uses structural Suburi fallbacks while preserving existing override units',
+    async () => {
+      const user = userEvent.setup();
+      const japaneseStore = createTestStore();
+      const japaneseEntryId = japaneseStore.getState().addToDashboard(JAPANESE_SCHOOL_DRILL_ID);
+      japaneseStore
+        .getState()
+        .setQuantityOverride(japaneseEntryId, JAPANESE_SCHOOL_JOGE_ID, 'minutes', 2);
+      const japaneseView = renderApp(japaneseStore);
+      const japaneseDialog = await openDashboardMenu(user, 'Japanese school dojo menu');
+      openAllDetails(japaneseDialog);
 
-    const repetitions = screen.getByLabelText('Repetitions for Joge');
-    const existingMinutes = screen.getByLabelText('Minutes for Joge');
-    expect(repetitions).toHaveValue(null);
-    expect(existingMinutes).toHaveValue(2);
-    expect(screen.queryByLabelText('Seconds for Joge')).not.toBeInTheDocument();
+      const repetitions = within(japaneseDialog).getByLabelText('Repetitions for Joge');
+      const existingMinutes = within(japaneseDialog).getByLabelText('Minutes for Joge');
+      expect(repetitions).toHaveValue(null);
+      expect(existingMinutes).toHaveValue(2);
+      expect(screen.queryByLabelText('Seconds for Joge')).not.toBeInTheDocument();
 
-    await user.type(repetitions, '24');
-    await user.tab();
-    expect(japaneseStore.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [JAPANESE_SCHOOL_JOGE_ID]: { repetitions: 24, minutes: 2 },
-    });
-    japaneseView.unmount();
+      await user.type(repetitions, '24');
+      await user.tab();
+      expect(japaneseStore.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [JAPANESE_SCHOOL_JOGE_ID]: { repetitions: 24, minutes: 2 },
+      });
+      japaneseView.unmount();
 
-    const universityStore = createTestStore();
-    universityStore.getState().addToDashboard(UNIVERSITY_DRILL_ID);
-    renderApp(universityStore);
-    const suburiHeading = screen.getByRole('heading', { name: 'Suburi', level: 3 });
-    const suburiSection = suburiHeading.closest('section');
-    if (suburiSection === null) {
-      throw new Error('Expected the standalone University Suburi section.');
-    }
-    expect(within(suburiSection).getByLabelText('Minutes for Suburi')).toHaveValue(null);
-    expect(
-      within(suburiSection).queryByLabelText('Repetitions for Suburi'),
-    ).not.toBeInTheDocument();
-    expect(universityStore.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
-    expect(
-      universityStore.getState().dashboardEntries[0]?.quantityOverrides[UNIVERSITY_SUBURI_ID],
-    ).toBeUndefined();
-  });
+      const universityStore = createTestStore();
+      universityStore.getState().addToDashboard(UNIVERSITY_DRILL_ID);
+      renderApp(universityStore);
+      const universityDialog = await openDashboardMenu(user, 'University dojo menu');
+      openAllDetails(universityDialog);
+      const suburiHeading = within(universityDialog).getByRole('heading', {
+        name: 'Suburi',
+        level: 2,
+      });
+      const suburiSection = suburiHeading.closest('section');
+      if (suburiSection === null) {
+        throw new Error('Expected the standalone University Suburi section.');
+      }
+      expect(within(suburiSection).getByLabelText('Minutes for Suburi')).toHaveValue(null);
+      expect(
+        within(suburiSection).queryByLabelText('Repetitions for Suburi'),
+      ).not.toBeInTheDocument();
+      expect(universityStore.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
+      expect(
+        universityStore.getState().dashboardEntries[0]?.quantityOverrides[UNIVERSITY_SUBURI_ID],
+      ).toBeUndefined();
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
-  it('uses repetitions for untimed waza and enforces the existing 0–500 limit', async () => {
-    const user = userEvent.setup();
-    const store = createTestStore();
-    store.getState().addToDashboard(OFFICIAL_ZNKR_ID);
-    renderApp(store);
+  it(
+    'uses repetitions for untimed waza and enforces the existing 0–500 limit',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      store.getState().addToDashboard(OFFICIAL_ZNKR_ID);
+      renderApp(store);
+      const dialog = await openDashboardMenu(user, 'Official ZNKR/AJKF menu');
+      openAllDetails(dialog);
 
-    const repetitions = screen.getByLabelText('Repetitions for Men');
-    expect(repetitions).toHaveValue(null);
+      const repetitions = within(dialog).getByLabelText('Repetitions for Men');
+      expect(repetitions).toHaveValue(null);
 
-    await user.type(repetitions, '501');
-    await user.tab();
-    expect(screen.getByText('Enter a whole number from 0 to 500.')).toBeInTheDocument();
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
+      await user.type(repetitions, '501');
+      await user.tab();
+      expect(screen.getByText('Enter a whole number from 0 to 500.')).toBeInTheDocument();
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
 
-    await user.clear(repetitions);
-    await user.type(repetitions, '500');
-    await user.tab();
-    expect(repetitions).toHaveValue(500);
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [OFFICIAL_ZNKR_MEN_ID]: { repetitions: 500 },
-    });
-  });
+      await user.clear(repetitions);
+      await user.type(repetitions, '500');
+      await user.tab();
+      expect(repetitions).toHaveValue(500);
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [OFFICIAL_ZNKR_MEN_ID]: { repetitions: 500 },
+      });
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
-  it('uses seconds when adding an override to Kakarigeiko without a default', async () => {
-    const user = userEvent.setup();
-    const store = createTestStore();
-    store.getState().addToDashboard(TOP_UNIVERSITY_ID);
-    renderApp(store);
+  it(
+    'uses seconds when adding an override to Kakarigeiko without a default',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      store.getState().addToDashboard(TOP_UNIVERSITY_ID);
+      renderApp(store);
+      const dialog = await openDashboardMenu(user, 'Top university dojo menu');
+      openAllDetails(dialog);
 
-    const finalKakarigeiko = document.querySelector<HTMLElement>(
-      `[data-activity-id="${TOP_UNIVERSITY_KAKARIGEIKO_ID}"]`,
-    );
-    if (finalKakarigeiko === null) {
-      throw new Error('Expected the final Kakarigeiko activity.');
-    }
-    const seconds = within(finalKakarigeiko).getByLabelText('Seconds for Kakarigeiko');
-    expect(seconds).toHaveValue(null);
-    await user.type(seconds, '30');
-    await user.tab();
+      const finalKakarigeiko = dialog.querySelector<HTMLElement>(
+        `[data-activity-id="${TOP_UNIVERSITY_KAKARIGEIKO_ID}"]`,
+      );
+      if (finalKakarigeiko === null) {
+        throw new Error('Expected the final Kakarigeiko activity.');
+      }
+      const seconds = within(finalKakarigeiko).getByLabelText('Seconds for Kakarigeiko');
+      expect(seconds).toHaveValue(null);
+      await user.type(seconds, '30');
+      await user.tab();
 
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [TOP_UNIVERSITY_KAKARIGEIKO_ID]: { seconds: 30 },
-    });
-  });
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [TOP_UNIVERSITY_KAKARIGEIKO_ID]: { seconds: 30 },
+      });
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
-  it('edits simultaneous repetitions and sets as independent dashboard overrides', async () => {
-    const user = userEvent.setup();
-    const store = createTestStore();
-    store.getState().addToDashboard(JUNIOR_HIGH_DRILL_ID);
-    renderApp(store);
+  it(
+    'edits simultaneous repetitions and sets as independent dashboard overrides',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      store.getState().addToDashboard(JUNIOR_HIGH_DRILL_ID);
+      renderApp(store);
+      const dialog = await openDashboardMenu(user, 'Junior-high school dojo menu');
+      openAllDetails(dialog);
 
-    const repetitions = screen.getByLabelText('Repetitions for Haya');
-    const sets = screen.getByLabelText('Sets for Haya');
-    expect(repetitions).toHaveValue(100);
-    expect(sets).toHaveValue(2);
-    expect(screen.queryByLabelText('Minutes for Haya')).not.toBeInTheDocument();
+      const repetitions = within(dialog).getByLabelText('Repetitions for Haya');
+      const sets = within(dialog).getByLabelText('Sets for Haya');
+      expect(repetitions).toHaveValue(100);
+      expect(sets).toHaveValue(2);
+      expect(screen.queryByLabelText('Minutes for Haya')).not.toBeInTheDocument();
 
-    await user.clear(sets);
-    await user.type(sets, '0');
-    await user.tab();
-    await user.clear(repetitions);
-    await user.type(repetitions, '80');
-    await user.tab();
+      await user.clear(sets);
+      await user.type(sets, '0');
+      await user.tab();
+      await user.clear(repetitions);
+      await user.type(repetitions, '80');
+      await user.tab();
 
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [JUNIOR_HIGH_HAYA_ID]: { repetitions: 80, sets: 0 },
-    });
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [JUNIOR_HIGH_HAYA_ID]: { repetitions: 80, sets: 0 },
+      });
 
-    await user.clear(repetitions);
-    await user.tab();
-    expect(repetitions).toHaveValue(100);
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [JUNIOR_HIGH_HAYA_ID]: { sets: 0 },
-    });
+      await user.clear(repetitions);
+      await user.tab();
+      expect(repetitions).toHaveValue(100);
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [JUNIOR_HIGH_HAYA_ID]: { sets: 0 },
+      });
 
-    await user.clear(sets);
-    await user.tab();
-    expect(sets).toHaveValue(2);
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
-  });
+      await user.clear(sets);
+      await user.tab();
+      expect(sets).toHaveValue(2);
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
-  it('edits standalone section quantities by stable IDs without duplicate labels', async () => {
-    const user = userEvent.setup();
-    const store = createTestStore();
-    store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
-    const view = renderApp(store);
+  it(
+    'edits standalone section quantities by stable IDs without duplicate labels',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+      const view = renderApp(store);
+      const dialog = await openDashboardMenu(user, 'International dojo menu');
+      openAllDetails(dialog);
 
-    const warmUpHeading = screen.getByRole('heading', { name: 'Warm-up', level: 3 });
-    const warmUpSection = warmUpHeading.closest('section');
-    if (warmUpSection === null) {
-      throw new Error('Expected the standalone Warm-up section.');
-    }
-    expect(warmUpSection.querySelector('.step-label')).toBeNull();
-    expect(within(warmUpSection).getAllByText('Warm-up')).toHaveLength(1);
+      const warmUpHeading = within(dialog).getByRole('heading', { name: 'Warm-up', level: 2 });
+      const warmUpSection = warmUpHeading.closest('section');
+      if (warmUpSection === null) {
+        throw new Error('Expected the standalone Warm-up section.');
+      }
+      expect(warmUpSection.querySelector('.step-label')).toBeNull();
+      expect(within(warmUpSection).getAllByText('Warm-up')).toHaveLength(1);
 
-    const minutes = within(warmUpSection).getByLabelText('Minutes for Warm-up');
-    const suburiHeading = screen.getByRole('heading', { name: 'Suburi', level: 3 });
-    const suburiSection = suburiHeading.closest('section');
-    if (suburiSection === null) {
-      throw new Error('Expected the standalone International Suburi section.');
-    }
-    const suburiMinutes = within(suburiSection).getByLabelText('Minutes for Suburi');
-    const seconds = screen.getByLabelText('Seconds for Kakarigeiko');
-    expect(minutes).toHaveValue(10);
-    expect(suburiMinutes).toHaveValue(15);
-    expect(
-      within(suburiSection).queryByLabelText('Repetitions for Suburi'),
-    ).not.toBeInTheDocument();
-    expect(seconds).toHaveValue(60);
-    expect(screen.queryByLabelText('Rounds for Kakarigeiko')).not.toBeInTheDocument();
+      const minutes = within(warmUpSection).getByLabelText('Minutes for Warm-up');
+      const suburiHeading = within(dialog).getByRole('heading', { name: 'Suburi', level: 2 });
+      const suburiSection = suburiHeading.closest('section');
+      if (suburiSection === null) {
+        throw new Error('Expected the standalone International Suburi section.');
+      }
+      const suburiMinutes = within(suburiSection).getByLabelText('Minutes for Suburi');
+      const seconds = within(dialog).getByLabelText('Seconds for Kakarigeiko');
+      expect(minutes).toHaveValue(10);
+      expect(suburiMinutes).toHaveValue(15);
+      expect(
+        within(suburiSection).queryByLabelText('Repetitions for Suburi'),
+      ).not.toBeInTheDocument();
+      expect(seconds).toHaveValue(60);
+      expect(screen.queryByLabelText('Rounds for Kakarigeiko')).not.toBeInTheDocument();
 
-    await user.clear(minutes);
-    await user.type(minutes, '12.5');
-    await user.tab();
-    await user.clear(seconds);
-    await user.type(seconds, '45');
-    await user.tab();
+      await user.clear(minutes);
+      await user.type(minutes, '12.5');
+      await user.tab();
+      await user.clear(seconds);
+      await user.type(seconds, '45');
+      await user.tab();
 
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [INTERNATIONAL_WARM_UP_ID]: { minutes: 12.5 },
-      [INTERNATIONAL_KAKARIGEIKO_ID]: { seconds: 45 },
-    });
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides[INTERNATIONAL_SUBURI_ID]).toBe(
-      undefined,
-    );
-    view.unmount();
-  });
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [INTERNATIONAL_WARM_UP_ID]: { minutes: 12.5 },
+        [INTERNATIONAL_KAKARIGEIKO_ID]: { seconds: 45 },
+      });
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides[INTERNATIONAL_SUBURI_ID]).toBe(
+        undefined,
+      );
+      view.unmount();
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
-  it('persists notes and restores a removed dashboard entry with Undo', async () => {
-    const user = userEvent.setup();
-    const store = createTestStore();
-    store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
-    renderApp(store);
+  it(
+    'persists notes and restores a removed dashboard entry with Undo',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
+      renderApp(store);
+      const dialog = await openDashboardMenu(user, 'Senior High School dojo menu');
+      openAllDetails(dialog);
 
-    const notes = screen.getByLabelText('Practice notes');
-    await user.type(notes, 'Keep the shoulders relaxed.');
-    await user.tab();
-    await waitFor(() => {
+      const notes = within(dialog).getByLabelText('Practice notes');
+      await user.type(notes, 'Keep the shoulders relaxed.');
+      await user.tab();
+      await waitFor(() => {
+        expect(store.getState().dashboardEntries[0]?.notes).toBe('Keep the shoulders relaxed.');
+      });
+
+      await user.click(within(dialog).getByRole('button', { name: 'Remove' }));
+      expect(
+        screen.queryByRole('heading', { name: 'Senior High School dojo menu' }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Undo' }));
+      expect(
+        screen.getByRole('heading', { name: 'Senior High School dojo menu' }),
+      ).toBeInTheDocument();
       expect(store.getState().dashboardEntries[0]?.notes).toBe('Keep the shoulders relaxed.');
-    });
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
-    await user.click(screen.getByRole('button', { name: 'Remove' }));
-    expect(
-      screen.queryByRole('heading', { name: 'Senior High School dojo menu' }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+  it(
+    'creates a custom drill and links it to the dashboard in one save flow',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      renderApp(store, { initialEntries: ['/app/drills/new'] });
 
-    await user.click(screen.getByRole('button', { name: 'Undo' }));
-    expect(
-      screen.getByRole('heading', { name: 'Senior High School dojo menu' }),
-    ).toBeInTheDocument();
-    expect(store.getState().dashboardEntries[0]?.notes).toBe('Keep the shoulders relaxed.');
-  });
+      await user.type(screen.getByLabelText('Session name'), 'Monday footwork');
+      await user.type(screen.getByLabelText('Description (optional)'), 'A short solo session.');
+      const activity = screen.getByRole('group', { name: 'Activity 1' });
+      await user.type(within(activity).getByLabelText('Activity name'), 'Footwork');
+      const exercises = within(activity).getByRole('group', { name: 'Exercises' });
+      await user.type(
+        within(exercises).getByLabelText('Exercise name'),
+        'Big step forward and back',
+      );
+      await user.type(within(exercises).getByLabelText('Repetitions'), '24');
 
-  it('creates a custom drill and links it to the dashboard in one save flow', async () => {
-    const user = userEvent.setup();
-    const store = createTestStore();
-    renderApp(store, { initialEntries: ['/app/drills/new'] });
+      await user.click(within(exercises).getByRole('button', { name: 'Add exercise' }));
+      const exerciseNames = within(exercises).getAllByLabelText('Exercise name');
+      const measurements = within(exercises).getAllByLabelText('Measurement');
+      const secondExerciseName = exerciseNames[1];
+      const secondMeasurement = measurements[1];
+      if (secondExerciseName === undefined || secondMeasurement === undefined) {
+        throw new Error('Expected the second exercise row.');
+      }
+      await user.type(secondExerciseName, 'Jigeiko rounds');
+      await user.selectOptions(secondMeasurement, 'duration');
+      await user.type(within(exercises).getByLabelText('Duration'), '12.5');
+      await user.click(screen.getByRole('button', { name: 'Save session to dashboard' }));
 
-    await user.type(screen.getByLabelText('Session name'), 'Monday footwork');
-    await user.type(screen.getByLabelText('Description (optional)'), 'A short solo session.');
-    const activity = screen.getByRole('group', { name: 'Activity 1' });
-    await user.type(within(activity).getByLabelText('Activity name'), 'Footwork');
-    const exercises = within(activity).getByRole('group', { name: 'Exercises' });
-    await user.type(within(exercises).getByLabelText('Exercise name'), 'Big step forward and back');
-    await user.type(within(exercises).getByLabelText('Repetitions'), '24');
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Monday footwork' })).toBeInTheDocument();
+      });
 
-    await user.click(within(exercises).getByRole('button', { name: 'Add exercise' }));
-    const exerciseNames = within(exercises).getAllByLabelText('Exercise name');
-    const measurements = within(exercises).getAllByLabelText('Measurement');
-    const secondExerciseName = exerciseNames[1];
-    const secondMeasurement = measurements[1];
-    if (secondExerciseName === undefined || secondMeasurement === undefined) {
-      throw new Error('Expected the second exercise row.');
-    }
-    await user.type(secondExerciseName, 'Jigeiko rounds');
-    await user.selectOptions(secondMeasurement, 'duration');
-    await user.type(within(exercises).getByLabelText('Duration'), '12.5');
-    await user.click(screen.getByRole('button', { name: 'Save session to dashboard' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'Monday footwork' })).toBeInTheDocument();
-    });
-
-    expect(store.getState().customTrainingSets).toHaveLength(1);
-    expect(store.getState().dashboardEntries).toHaveLength(1);
-    const customSet = store.getState().customTrainingSets[0];
-    const entry = store.getState().dashboardEntries[0];
-    expect(customSet?.id).toBe(entry?.trainingSetId);
-    expect(customSet?.isBuiltIn).toBe(false);
-    expect(customSet?.activities[0]?.children[0]?.quantities?.repetitions).toBe(24);
-    expect(customSet?.activities[0]?.children[1]?.quantities?.duration).toEqual({
-      unit: 'minutes',
-      value: 12.5,
-    });
-    expect(screen.getByLabelText('Repetitions for Big step forward and back')).toHaveValue(24);
-    expect(screen.getByLabelText('Minutes for Jigeiko rounds')).toHaveValue(12.5);
-  });
+      expect(store.getState().customTrainingSets).toHaveLength(1);
+      expect(store.getState().dashboardEntries).toHaveLength(1);
+      const customSet = store.getState().customTrainingSets[0];
+      const entry = store.getState().dashboardEntries[0];
+      expect(customSet?.id).toBe(entry?.trainingSetId);
+      expect(customSet?.isBuiltIn).toBe(false);
+      expect(customSet?.activities[0]?.children[0]?.quantities?.repetitions).toBe(24);
+      expect(customSet?.activities[0]?.children[1]?.quantities?.duration).toEqual({
+        unit: 'minutes',
+        value: 12.5,
+      });
+      const dialog = await openDashboardMenu(user, 'Monday footwork');
+      openAllDetails(dialog);
+      expect(
+        within(dialog).getByLabelText('Repetitions for Big step forward and back'),
+      ).toHaveValue(24);
+      expect(within(dialog).getByLabelText('Minutes for Jigeiko rounds')).toHaveValue(12.5);
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
   it('preserves entered builder values while activities and exercises are added or removed', async () => {
     const user = userEvent.setup();

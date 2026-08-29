@@ -35,7 +35,15 @@ async function addInternationalDojoToDashboard(page: Page): Promise<void> {
 }
 
 function firstDashboardCard(page: Page): Locator {
-  return page.locator('.dashboard-card--expanded').first();
+  return page.locator('.dashboard-card--compact').first();
+}
+
+async function openDashboardMenu(page: Page): Promise<Locator> {
+  const card = firstDashboardCard(page);
+  await card.getByRole('button', { name: 'View more' }).click();
+  const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 
 test.describe('Job 6 dashboard activity notes', () => {
@@ -47,9 +55,9 @@ test.describe('Job 6 dashboard activity notes', () => {
     page,
   }) => {
     await page.goto(`/app/library?drill=${INTERNATIONAL_DOJO_ID}`);
-    await expect(page.getByRole('button', { name: 'Any extra notes?' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Any extra details?' })).toHaveCount(0);
     const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
-    await expect(dialog.getByRole('button', { name: 'Any extra notes?' })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Any extra details?' })).toHaveCount(0);
 
     await dialog.getByRole('button', { name: 'Add to dashboard' }).click();
     await dialog.getByRole('link', { name: 'View dashboard' }).click();
@@ -57,18 +65,22 @@ test.describe('Job 6 dashboard activity notes', () => {
 
     const card = firstDashboardCard(page);
     await expect(card).toHaveCount(1);
-    await expect(card.getByRole('button', { name: 'Any extra notes?' })).toHaveCount(3);
+    await expect(card.getByRole('button', { name: 'Any extra details?' })).toHaveCount(0);
+    const dashboardDialog = await openDashboardMenu(page);
+    await expect(dashboardDialog.getByRole('button', { name: 'Any extra details?' })).toHaveCount(
+      3,
+    );
     for (const activityId of [WARM_UP_ID, SUBURI_ID, ASHI_SABAKI_ID]) {
       await expect(
-        activity(card, activityId).getByRole('button', { name: 'Any extra notes?' }),
+        activity(dashboardDialog, activityId).getByRole('button', { name: 'Any extra details?' }),
       ).toHaveCount(1);
     }
     await expect(
-      activity(card, KIRIKAESHI_ID).getByRole('button', { name: 'Any extra notes?' }),
+      activity(dashboardDialog, KIRIKAESHI_ID).getByRole('button', { name: 'Any extra details?' }),
     ).toHaveCount(0);
 
-    const warmUp = activity(card, WARM_UP_ID);
-    const toggle = warmUp.getByRole('button', { name: 'Any extra notes?' });
+    const warmUp = activity(dashboardDialog, WARM_UP_ID);
+    const toggle = warmUp.getByRole('button', { name: 'Any extra details?' });
     await expect(toggle).toHaveAttribute('type', 'button');
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     const panelId = await toggle.getAttribute('aria-controls');
@@ -95,7 +107,7 @@ test.describe('Job 6 dashboard activity notes', () => {
     await quantity.blur();
     await expect(quantity).toHaveValue('12');
 
-    const sessionNotes = card.getByLabel('Practice notes');
+    const sessionNotes = dashboardDialog.getByLabel('Practice notes');
     await sessionNotes.fill('General session note.');
     await sessionNotes.blur();
     await expect(sessionNotes).toHaveValue('General session note.');
@@ -110,16 +122,16 @@ test.describe('Job 6 dashboard activity notes', () => {
     expect(persisted).toContain('"minutes":12');
 
     await page.reload();
-    const reloadedCard = firstDashboardCard(page);
-    const reloadedWarmUp = activity(reloadedCard, WARM_UP_ID);
-    const reloadedToggle = reloadedWarmUp.getByRole('button', { name: 'Any extra notes?' });
+    const reloadedDialog = await openDashboardMenu(page);
+    const reloadedWarmUp = activity(reloadedDialog, WARM_UP_ID);
+    const reloadedToggle = reloadedWarmUp.getByRole('button', { name: 'Any extra details?' });
     await expect(reloadedToggle).toHaveAttribute('aria-expanded', 'true');
     await expect(reloadedWarmUp.getByLabel('Extra notes for Warm-up')).toHaveValue(
       '  Keep the knees soft.\nBreathe.  ',
     );
     await expect(reloadedWarmUp.getByText('Note added')).toBeVisible();
-    await expect(reloadedCard.getByLabel('Minutes for Warm-up')).toHaveValue('12');
-    await expect(reloadedCard.getByLabel('Practice notes')).toHaveValue('General session note.');
+    await expect(reloadedWarmUp.getByLabel('Minutes for Warm-up')).toHaveValue('12');
+    await expect(reloadedDialog.getByLabel('Practice notes')).toHaveValue('General session note.');
     await expectNoBlockingAxeViolations(page);
   });
 
@@ -129,34 +141,56 @@ test.describe('Job 6 dashboard activity notes', () => {
     await addInternationalDojoToDashboard(page);
     await addInternationalDojoToDashboard(page);
 
-    const cards = page.locator('.dashboard-card--expanded');
+    const cards = page.locator('.dashboard-card--compact');
     await expect(cards).toHaveCount(2);
     const firstCard = cards.nth(0);
     const secondCard = cards.nth(1);
 
-    const firstWarmUp = activity(firstCard, WARM_UP_ID);
-    await firstWarmUp.getByRole('button', { name: 'Any extra notes?' }).click();
+    await firstCard.getByRole('button', { name: 'View more' }).click();
+    const firstDialog = page.getByRole('dialog', { name: 'International dojo menu' });
+    const firstWarmUp = activity(firstDialog, WARM_UP_ID);
+    await firstWarmUp.getByRole('button', { name: 'Any extra details?' }).click();
     const firstTextarea = firstWarmUp.getByLabel('Extra notes for Warm-up');
     await firstTextarea.fill('First dashboard entry.');
     await firstTextarea.blur();
+    await expect(firstTextarea).toHaveValue('First dashboard entry.');
+    await firstDialog
+      .getByRole('button', {
+        name: 'Close International dojo menu details.',
+      })
+      .click();
 
-    const secondWarmUp = activity(secondCard, WARM_UP_ID);
-    await secondWarmUp.getByRole('button', { name: 'Any extra notes?' }).click();
+    await secondCard.getByRole('button', { name: 'View more' }).click();
+    const secondDialog = page.getByRole('dialog', { name: 'International dojo menu' });
+    const secondWarmUp = activity(secondDialog, WARM_UP_ID);
+    await secondWarmUp.getByRole('button', { name: 'Any extra details?' }).click();
     const secondTextarea = secondWarmUp.getByLabel('Extra notes for Warm-up');
     await secondTextarea.fill('Second dashboard entry.');
     await secondTextarea.blur();
-
-    await expect(firstTextarea).toHaveValue('First dashboard entry.');
     await expect(secondTextarea).toHaveValue('Second dashboard entry.');
+    await secondDialog
+      .getByRole('button', {
+        name: 'Close International dojo menu details.',
+      })
+      .click();
 
     await firstCard.getByRole('button', { name: 'Remove' }).click();
     await page.getByRole('button', { name: 'Undo' }).click();
     await expect(cards).toHaveCount(2);
+    await cards.nth(0).getByRole('button', { name: 'View more' }).click();
+    const restoredFirstDialog = page.getByRole('dialog', { name: 'International dojo menu' });
     await expect(
-      activity(cards.nth(0), WARM_UP_ID).getByLabel('Extra notes for Warm-up'),
+      activity(restoredFirstDialog, WARM_UP_ID).getByLabel('Extra notes for Warm-up'),
     ).toHaveValue('First dashboard entry.');
+    await restoredFirstDialog
+      .getByRole('button', {
+        name: 'Close International dojo menu details.',
+      })
+      .click();
+    await cards.nth(1).getByRole('button', { name: 'View more' }).click();
+    const restoredSecondDialog = page.getByRole('dialog', { name: 'International dojo menu' });
     await expect(
-      activity(cards.nth(1), WARM_UP_ID).getByLabel('Extra notes for Warm-up'),
+      activity(restoredSecondDialog, WARM_UP_ID).getByLabel('Extra notes for Warm-up'),
     ).toHaveValue('Second dashboard entry.');
   });
 
@@ -164,9 +198,9 @@ test.describe('Job 6 dashboard activity notes', () => {
     page,
   }) => {
     await addInternationalDojoToDashboard(page);
-    const card = firstDashboardCard(page);
-    const warmUp = activity(card, WARM_UP_ID);
-    const toggle = warmUp.getByRole('button', { name: 'Any extra notes?' });
+    const dialog = await openDashboardMenu(page);
+    const warmUp = activity(dialog, WARM_UP_ID);
+    const toggle = warmUp.getByRole('button', { name: 'Any extra details?' });
 
     await toggle.focus();
     await page.keyboard.press('Space');

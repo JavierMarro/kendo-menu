@@ -14,8 +14,12 @@ const TOP_FREE_UCHIKOMI = 'top-university-fee-version-uchikomi-geiko';
 const TOP_FREE_KAKARIGEIKO = 'top-university-fee-version-kakari-geiko';
 const TOP_FINAL_KAKARIGEIKO = 'top-university-kakarigeiko-kakarigeiko';
 
-function activity(page: Page, id: string): Locator {
-  return page.locator(`[data-activity-id="${id}"]`);
+function activity(container: Page | Locator, id: string): Locator {
+  return container.locator(`[data-activity-id="${id}"]`);
+}
+
+function dashboardCard(page: Page, name: string): Locator {
+  return page.locator('.dashboard-card--compact').filter({ hasText: name }).first();
 }
 
 async function expectNoBlockingAxeViolations(page: Page): Promise<void> {
@@ -31,6 +35,14 @@ async function openNestedDetails(container: Locator): Promise<Locator> {
   await details.locator(':scope > summary').click();
   await expect(details).toHaveJSProperty('open', true);
   return details;
+}
+
+async function openDashboardMenu(page: Page, name: string): Promise<Locator> {
+  const card = dashboardCard(page, name);
+  await card.getByRole('button', { name: 'View more' }).click();
+  const dialog = page.getByRole('dialog', { name });
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 
 test.describe('Job 5 complex curated sessions', () => {
@@ -52,8 +64,12 @@ test.describe('Job 5 complex curated sessions', () => {
     await expect(stationBDetails.locator(':scope > summary')).toHaveAccessibleName(
       'Station B 4 exercises',
     );
-    await expect(stationA.locator('input')).toHaveCount(0);
-    await expect(stationB.locator('input')).toHaveCount(0);
+    await expect(
+      stationA.locator(':scope > details > .detail-section-parent .training-activity-controls'),
+    ).toHaveCount(0);
+    await expect(
+      stationB.locator(':scope > details > .detail-section-parent .training-activity-controls'),
+    ).toHaveCount(0);
     await openNestedDetails(stationA);
     await openNestedDetails(stationB);
     await expect(stationA).toContainText('Left-right Dō-kirikaeshi');
@@ -96,15 +112,19 @@ test.describe('Job 5 complex curated sessions', () => {
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
 
-    const stationA = activity(page, UNIVERSITY_STATION_A);
-    const stationB = activity(page, UNIVERSITY_STATION_B);
+    const universityDialog = await openDashboardMenu(page, 'University High School dojo menu');
+    const kenTore = activity(universityDialog, UNIVERSITY_KEN_TORE);
+    await openNestedDetails(kenTore);
+    const stationA = activity(universityDialog, UNIVERSITY_STATION_A);
+    const stationB = activity(universityDialog, UNIVERSITY_STATION_B);
     await expect(
-      stationA.locator(':scope > .training-step--standalone .quantity-editor-group'),
+      stationA.locator(':scope > details > .detail-section-parent .training-activity-controls'),
     ).toHaveCount(0);
     await expect(
-      stationB.locator(':scope > .training-step--standalone .quantity-editor-group'),
+      stationB.locator(':scope > details > .detail-section-parent .training-activity-controls'),
     ).toHaveCount(0);
-    const stationLeaf = activity(page, UNIVERSITY_STATION_A_KIRIKAESHI);
+    await openNestedDetails(stationA);
+    const stationLeaf = activity(universityDialog, UNIVERSITY_STATION_A_KIRIKAESHI);
     const stationSeconds = stationLeaf.getByLabel('Seconds for Kirikaeshi');
     await expect(stationSeconds).toHaveValue('30');
     await stationSeconds.fill('45');
@@ -115,9 +135,12 @@ test.describe('Job 5 complex curated sessions', () => {
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
 
-    const freeUchikomi = activity(page, TOP_FREE_UCHIKOMI);
-    const freeKakarigeiko = activity(page, TOP_FREE_KAKARIGEIKO);
-    const finalKakarigeiko = activity(page, TOP_FINAL_KAKARIGEIKO);
+    const topDialog = await openDashboardMenu(page, 'Top university dojo menu');
+    await openNestedDetails(activity(topDialog, TOP_SANDAN));
+    await openNestedDetails(activity(topDialog, TOP_FREE));
+    const freeUchikomi = activity(topDialog, TOP_FREE_UCHIKOMI);
+    const freeKakarigeiko = activity(topDialog, TOP_FREE_KAKARIGEIKO);
+    const finalKakarigeiko = activity(topDialog, TOP_FINAL_KAKARIGEIKO);
     const uchikomiSeconds = freeUchikomi.getByLabel('Seconds for Uchikomi');
     const freeKakarigeikoSeconds = freeKakarigeiko.getByLabel('Seconds for Kakarigeiko');
     const finalKakarigeikoSeconds = finalKakarigeiko.getByLabel('Seconds for Kakarigeiko');
@@ -136,18 +159,17 @@ test.describe('Job 5 complex curated sessions', () => {
     await expect(finalKakarigeikoSeconds).toHaveValue('60');
 
     await page.reload();
+    const reloadedTopDialog = await openDashboardMenu(page, 'Top university dojo menu');
+    await openNestedDetails(activity(reloadedTopDialog, TOP_SANDAN));
+    await openNestedDetails(activity(reloadedTopDialog, TOP_FREE));
     await expect(
-      page.locator(`[data-activity-id="${TOP_FREE_UCHIKOMI}"]`).getByLabel('Seconds for Uchikomi'),
+      activity(reloadedTopDialog, TOP_FREE_UCHIKOMI).getByLabel('Seconds for Uchikomi'),
     ).toHaveValue('20');
     await expect(
-      page
-        .locator(`[data-activity-id="${TOP_FREE_KAKARIGEIKO}"]`)
-        .getByLabel('Seconds for Kakarigeiko'),
+      activity(reloadedTopDialog, TOP_FREE_KAKARIGEIKO).getByLabel('Seconds for Kakarigeiko'),
     ).toHaveValue('30');
     await expect(
-      page
-        .locator(`[data-activity-id="${TOP_FINAL_KAKARIGEIKO}"]`)
-        .getByLabel('Seconds for Kakarigeiko'),
+      activity(reloadedTopDialog, TOP_FINAL_KAKARIGEIKO).getByLabel('Seconds for Kakarigeiko'),
     ).toHaveValue('60');
     await expectNoBlockingAxeViolations(page);
   });

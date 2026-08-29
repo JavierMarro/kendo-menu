@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { TrainingSet } from '@kendo-menu/domain';
@@ -6,7 +6,9 @@ import type { TrainingSet } from '@kendo-menu/domain';
 import { DrillDetailContent } from './DrillDetailContent';
 
 interface DrillDetailDialogProps {
+  readonly children?: ReactNode;
   readonly onClose: () => void;
+  readonly titleId?: string;
   readonly trainingSet: TrainingSet;
 }
 
@@ -53,10 +55,15 @@ function restoreAttribute(element: HTMLElement, name: string, previousValue: str
   element.setAttribute(name, previousValue);
 }
 
-export function DrillDetailDialog({ onClose, trainingSet }: DrillDetailDialogProps) {
+export function DrillDetailDialog({
+  children,
+  onClose,
+  titleId,
+  trainingSet,
+}: DrillDetailDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const titleId = `drill-dialog-title-${trainingSet.id}`;
+  const dialogTitleId = titleId ?? `drill-dialog-title-${trainingSet.id}`;
   const closeLabel = `Close ${trainingSet.name} details.`;
 
   useEffect(() => {
@@ -133,7 +140,7 @@ export function DrillDetailDialog({ onClose, trainingSet }: DrillDetailDialogPro
         className="drill-dialog-panel"
         role="dialog"
         aria-modal="true"
-        aria-labelledby={titleId}
+        aria-labelledby={dialogTitleId}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
       >
@@ -151,7 +158,7 @@ export function DrillDetailDialog({ onClose, trainingSet }: DrillDetailDialogPro
           </button>
         </div>
         <div className="drill-dialog-scroll">
-          <DrillDetailContent titleId={titleId} trainingSet={trainingSet} />
+          {children ?? <DrillDetailContent titleId={dialogTitleId} trainingSet={trainingSet} />}
         </div>
       </div>
     </div>,

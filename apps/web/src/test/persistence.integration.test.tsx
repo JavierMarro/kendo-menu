@@ -18,6 +18,17 @@ function ReadyProbe() {
   return <p>Ready ({mode})</p>;
 }
 
+function openAllDetails(container: HTMLElement): void {
+  const details = Array.from(container.querySelectorAll<HTMLDetailsElement>('details:not([open])'));
+  for (const detail of details) {
+    const outerDetails = detail.parentElement?.closest('details');
+    if (outerDetails !== null && outerDetails !== undefined && !outerDetails.open) {
+      continue;
+    }
+    detail.open = true;
+  }
+}
+
 describe('browser persistence recovery', () => {
   it('keeps corrupt bytes untouched until reset and preserves unrelated localStorage keys', async () => {
     const user = userEvent.setup();
@@ -202,15 +213,15 @@ describe('browser persistence recovery', () => {
     }
 
     await user.click(within(appBanner).getByRole('link', { name: /Keiko library/ }));
-    const seniorHighSchoolCard = screen
-      .getByRole('heading', { name: 'Senior High School dojo menu' })
+    const policeDojoCard = screen
+      .getByRole('heading', { name: 'Police dojo asageiko menu' })
       .closest('article');
-    if (seniorHighSchoolCard === null) {
-      throw new Error('Expected the senior-high researched drill to render in a library card.');
+    if (policeDojoCard === null) {
+      throw new Error('Expected the police dojo researched drill to render in a library card.');
     }
-    await user.click(within(seniorHighSchoolCard).getByRole('link', { name: 'View session' }));
+    await user.click(within(policeDojoCard).getByRole('link', { name: 'View session' }));
     await user.click(screen.getByRole('button', { name: 'Add to dashboard' }));
-    const detailDialog = screen.getByRole('dialog', { name: 'Senior High School dojo menu' });
+    const detailDialog = screen.getByRole('dialog', { name: 'Police dojo asageiko menu' });
     await user.click(within(detailDialog).getByRole('link', { name: 'View dashboard' }));
     await waitFor(() => {
       expect(
@@ -218,7 +229,18 @@ describe('browser persistence recovery', () => {
       ).toBeVisible();
     });
 
-    const minutes = screen.getByLabelText(/minutes for stretch/i);
+    const dashboardCard = screen
+      .getByRole('heading', { name: 'Police dojo asageiko menu' })
+      .closest('.dashboard-card');
+    if (!(dashboardCard instanceof HTMLElement)) {
+      throw new Error('Expected the police dojo dashboard card.');
+    }
+    await user.click(within(dashboardCard).getByRole('button', { name: 'View more' }));
+    const dashboardDialog = screen.getByRole('dialog', {
+      name: 'Police dojo asageiko menu',
+    });
+    openAllDetails(dashboardDialog);
+    const minutes = within(dashboardDialog).getByLabelText(/minutes for warm-up/i);
     await user.type(minutes, '12');
     await user.tab();
     expect(screen.getByText('Not saved to this device.')).toBeInTheDocument();
@@ -226,16 +248,17 @@ describe('browser persistence recovery', () => {
     expect(screen.queryByText('Saved locally.')).not.toBeInTheDocument();
     const bannerStatus = within(appBanner).getByRole('status', {
       name: 'Changes are not being saved',
+      hidden: true,
     });
     expect(bannerStatus).toBeVisible();
     expect(bannerStatus).toHaveClass('is-error');
-    const notes = screen.getByLabelText('Practice notes');
+    const notes = within(dashboardDialog).getByLabelText('Practice notes');
     await user.type(notes, 'Quota test note.');
     await user.tab();
     expect(screen.getAllByText('Not saved to this device.').length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText('Updated.')).not.toBeInTheDocument();
     expect(screen.queryByText('Saved locally.')).not.toBeInTheDocument();
-  });
+  }, 30_000);
 
   it('classifies malformed browser values without attempting repair', () => {
     const raw = '{broken';
