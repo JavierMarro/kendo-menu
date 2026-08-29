@@ -151,7 +151,15 @@ test.describe('routed training flows', () => {
 
   test('supports direct URLs, navigation, browser history, and reload', async ({ page }) => {
     await expect(page).toHaveURL(/\/app\/dashboard$/);
-    await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+    const dashboardHeading = page.getByRole('heading', { name: 'Your dashboard', exact: true });
+    await expect(dashboardHeading).toBeVisible();
+    await expect(page.getByText('Shape today’s keiko to fit the practice ahead.')).toBeVisible();
+    const dashboardHeader = dashboardHeading.locator('xpath=ancestor::header');
+    await expect(
+      dashboardHeader.getByRole('link', { name: 'Create session', exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Browse Keiko library' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Create a training session' })).toBeVisible();
 
     await openNavigationIfNeeded(page);
     await page
@@ -693,10 +701,7 @@ test.describe('routed training flows', () => {
   test('prompts before browser Back discards a dirty draft, but dismiss keeps the draft', async ({
     page,
   }) => {
-    const dashboardHeader = page
-      .getByRole('heading', { name: 'Your dashboard', exact: true })
-      .locator('xpath=ancestor::header');
-    await dashboardHeader.getByRole('link', { name: 'Create session', exact: true }).click();
+    await page.getByRole('link', { name: 'Create a training session' }).click();
     await expect(page).toHaveURL(/\/app\/drills\/new$/);
     const name = page.getByLabel('Session name');
     await name.fill('Unfinished draft');
@@ -729,7 +734,7 @@ test.describe('routed training flows', () => {
     await expect(page).toHaveURL(/\/app\/dashboard$/);
   });
 
-  test('creates a custom drill atomically and keeps it on the dashboard after reload', async ({
+  test('creates both measurement types atomically and keeps them on the dashboard after reload', async ({
     page,
   }) => {
     let unexpectedDialogMessage: string | null = null;
@@ -740,9 +745,15 @@ test.describe('routed training flows', () => {
     await page.goto('/app/drills/new');
     await page.getByLabel('Session name').fill('Monday footwork');
     await page.getByLabel('Description (optional)').fill('A short solo session.');
-    await page.getByLabel('Exercise name', { exact: true }).fill('Footwork');
-    await page.getByLabel('Subexercise name', { exact: true }).fill('Big step forward and back');
-    await page.getByLabel('Repetitions', { exact: true }).fill('24');
+    const activity = page.getByRole('group', { name: 'Activity 1' });
+    await activity.getByLabel('Activity name').fill('Footwork');
+    const exercises = activity.getByRole('group', { name: 'Exercises' });
+    await exercises.getByLabel('Exercise name').fill('Big step forward and back');
+    await exercises.getByLabel('Repetitions', { exact: true }).fill('24');
+    await exercises.getByRole('button', { name: 'Add exercise' }).click();
+    await exercises.getByLabel('Exercise name').nth(1).fill('Jigeiko rounds');
+    await exercises.getByLabel('Measurement').nth(1).selectOption('duration');
+    await exercises.getByLabel('Duration', { exact: true }).fill('12.5');
     await page.getByRole('button', { name: 'Save session to dashboard' }).click();
 
     await expect(page).toHaveURL(/\/app\/dashboard\?created=Monday%20footwork$/);
@@ -751,6 +762,7 @@ test.describe('routed training flows', () => {
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Monday footwork' })).toBeVisible();
     await expect(page.getByLabel('Repetitions for Big step forward and back')).toHaveValue('24');
+    await expect(page.getByLabel('Minutes for Jigeiko rounds')).toHaveValue('12.5');
 
     const persisted = await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY);
     expect(persisted).not.toBeNull();

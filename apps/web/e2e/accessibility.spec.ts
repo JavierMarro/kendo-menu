@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+const STORAGE_KEY = 'kendo-menu';
+
 async function getElementBox(locator: Locator) {
   const box = await locator.boundingBox();
   if (box === null) {
@@ -115,6 +117,82 @@ test.describe('accessibility and responsive layout', () => {
     await expect(
       page.getByRole('heading', { name: 'Create a training session', exact: true }),
     ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Session details' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Activities' })).toBeVisible();
+
+    const backLink = page.getByRole('link', { name: 'Back to keiko library' });
+    await expect(backLink).toHaveText('← Back to keiko library');
+    await expect(backLink).toHaveAttribute('href', '/app/library');
+    await expect(backLink).toHaveCSS('text-decoration-line', 'underline');
+    await backLink.focus();
+    await expect(backLink).toBeFocused();
+    await expect(backLink).toHaveCSS('outline-style', 'solid');
+    await expectNoBlockingAxeViolations(page);
+
+    await page.getByLabel('Session name').fill('Accessible mixed session');
+    const firstActivity = page.getByRole('group', { name: 'Activity 1' });
+    await firstActivity.getByLabel('Activity name').fill('Main practice');
+    const firstExercises = firstActivity.getByRole('group', { name: 'Exercises' });
+    await firstExercises.getByLabel('Exercise name').fill('Suburi');
+    await firstExercises.getByLabel('Repetitions', { exact: true }).fill('30');
+    await firstExercises.getByRole('button', { name: 'Add exercise' }).click();
+    await firstExercises.getByLabel('Exercise name').nth(1).fill('Jigeiko');
+    await firstExercises.getByLabel('Measurement').nth(1).selectOption('duration');
+    await firstExercises.getByLabel('Duration unit').selectOption('seconds');
+    await firstExercises.getByLabel('Duration', { exact: true }).fill('45');
+
+    await page.getByRole('button', { name: 'Add activity' }).click();
+    const secondActivity = page.getByRole('group', { name: 'Activity 2' });
+    await secondActivity.getByLabel('Activity name').fill('Finish');
+    await secondActivity.getByLabel('Exercise name').fill('Kirikaeshi');
+    await secondActivity.getByLabel('Repetitions', { exact: true }).fill('8');
+    await expectNoBlockingAxeViolations(page);
+
+    await secondActivity.getByLabel('Repetitions', { exact: true }).fill('501');
+    await page.getByRole('button', { name: 'Save session to dashboard' }).click();
+    const errorSummary = page.getByRole('alert', { name: 'Check the highlighted fields.' });
+    await expect(errorSummary).toBeFocused();
+    await expect(secondActivity.getByLabel('Repetitions', { exact: true })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    await expectNoBlockingAxeViolations(page);
+  });
+
+  test('keeps the builder keyboard order and layout usable at 200% text size', async ({ page }) => {
+    await page.goto('/app/drills/new');
+    const backLink = page.getByRole('link', { name: 'Back to keiko library' });
+    await backLink.focus();
+    await page.keyboard.press('Tab');
+    await expect(page.getByLabel('Session name')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(page.getByLabel('Description (optional)')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'Add activity' })).toBeFocused();
+
+    await page.getByLabel('Session name').fill('Long zoomed session name for keyboard practice');
+    const activity = page.getByRole('group', { name: 'Activity 1' });
+    await activity
+      .getByLabel('Activity name')
+      .fill('Warm-up and jigeiko preparation with a deliberately long name');
+    await activity
+      .getByLabel('Exercise name')
+      .fill('Continuous jigeiko with rotating partners and deliberate recovery');
+    await activity.getByLabel('Measurement').selectOption('duration');
+    await activity.getByLabel('Duration', { exact: true }).fill('12.5');
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = '200%';
+    });
+
+    const viewport = page.viewportSize();
+    if (viewport === null) {
+      throw new Error('Expected a viewport for text-size verification.');
+    }
+    const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(scrollWidth, 'builder overflow at 200% text size').toBeLessThanOrEqual(viewport.width);
+    const activityBox = await getElementBox(activity);
+    expect(activityBox.x).toBeGreaterThanOrEqual(0);
+    expect(activityBox.x + activityBox.width).toBeLessThanOrEqual(viewport.width);
     await expectNoBlockingAxeViolations(page);
   });
 
@@ -147,6 +225,61 @@ test.describe('accessibility and responsive layout', () => {
       await page.goto('/app/sources');
       const sourcesScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(sourcesScrollWidth, `sources overflow at ${width}px`).toBeLessThanOrEqual(width);
+    }
+  });
+
+  test('keeps the empty dashboard and session builder within target viewport widths', async ({
+    page,
+  }) => {
+    test.setTimeout(75_000);
+
+    for (const width of [320, 375, 393, 1440]) {
+      const height = width <= 393 ? 812 : 900;
+      await page.setViewportSize({ width, height });
+
+      await page.goto('/app/dashboard');
+      await page.evaluate((key) => window.localStorage.removeItem(key), STORAGE_KEY);
+      await page.reload();
+      const dashboardScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      expect(dashboardScrollWidth, `/app/dashboard overflow at ${width}px`).toBeLessThanOrEqual(
+        width,
+      );
+
+      await page.goto('/app/drills/new');
+      await page
+        .getByLabel('Session name')
+        .fill('A deliberately long session name for responsive builder verification');
+      const firstActivity = page.getByRole('group', { name: 'Activity 1' });
+      await firstActivity
+        .getByLabel('Activity name')
+        .fill('Warm-up, suburi, footwork, and partner preparation');
+      const firstExercises = firstActivity.getByRole('group', { name: 'Exercises' });
+      await firstExercises
+        .getByLabel('Exercise name')
+        .fill('A very long exercise name that must remain within the activity card');
+      await firstExercises.getByLabel('Repetitions', { exact: true }).fill('501');
+      await firstExercises.getByRole('button', { name: 'Add exercise' }).click();
+      await firstExercises.getByLabel('Exercise name').nth(1).fill('Jigeiko rounds');
+      await firstExercises.getByLabel('Measurement').nth(1).selectOption('duration');
+      await firstExercises.getByLabel('Duration', { exact: true }).fill('12.5');
+      await page.getByRole('button', { name: 'Add activity' }).click();
+      const secondActivity = page.getByRole('group', { name: 'Activity 2' });
+      await secondActivity.getByLabel('Activity name').fill('Closing practice');
+      await secondActivity.getByLabel('Exercise name').fill('Kirikaeshi');
+      await secondActivity.getByLabel('Repetitions', { exact: true }).fill('8');
+      await page.getByRole('button', { name: 'Save session to dashboard' }).click();
+      await expect(
+        page.getByRole('alert', { name: 'Check the highlighted fields.' }),
+      ).toBeFocused();
+
+      const builderScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      expect(builderScrollWidth, `/app/drills/new overflow at ${width}px`).toBeLessThanOrEqual(
+        width,
+      );
+
+      await firstExercises.getByLabel('Repetitions', { exact: true }).fill('50');
+      await page.getByRole('button', { name: 'Save session to dashboard' }).click();
+      await expect(page).toHaveURL(/\/app\/dashboard/);
     }
   });
 

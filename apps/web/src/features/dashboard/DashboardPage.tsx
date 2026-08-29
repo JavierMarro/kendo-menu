@@ -93,13 +93,8 @@ export function DashboardPage() {
         <div>
           <p className="eyebrow">Today&apos;s keiko</p>
           <h1>Your dashboard</h1>
-          <p className="page-intro">
-            Shape a focused session, then adjust the work to match the practice in front of you.
-          </p>
+          <p className="page-intro">Shape today’s keiko to fit the practice ahead.</p>
         </div>
-        <Link className="primary-button" to="/app/drills/new">
-          Create session
-        </Link>
       </header>
 
       <p className="sr-only" role="status" aria-live="polite">
@@ -115,7 +110,10 @@ export function DashboardPage() {
       ) : null}
 
       {dashboardEntries.length === 0 ? (
-        <section className="empty-state" aria-labelledby="empty-dashboard-title">
+        <section
+          className="empty-state empty-state--dashboard"
+          aria-labelledby="empty-dashboard-title"
+        >
           <p className="eyebrow">A clean starting line</p>
           <h2 id="empty-dashboard-title">Your dashboard is ready.</h2>
           <p>

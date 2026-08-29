@@ -1,9 +1,17 @@
-import type { TrainingSetInput } from '@kendo-menu/domain';
+import {
+  isValidTrainingQuantityValue,
+  type DurationUnit,
+  type TrainingSetInput,
+} from '@kendo-menu/domain';
+
+export type StepMeasurement = 'repetitions' | 'duration';
 
 export interface StepDraft {
   readonly id: string;
   readonly label: string;
   readonly reps: string;
+  readonly measurement: StepMeasurement;
+  readonly durationUnit: DurationUnit;
 }
 
 export interface SectionDraft {
@@ -24,6 +32,16 @@ export type BuilderAction =
   | { readonly type: 'set-section-label'; readonly sectionId: string; readonly value: string }
   | { readonly type: 'set-step-label'; readonly stepId: string; readonly value: string }
   | { readonly type: 'set-step-reps'; readonly stepId: string; readonly value: string }
+  | {
+      readonly type: 'set-step-measurement';
+      readonly stepId: string;
+      readonly value: StepMeasurement;
+    }
+  | {
+      readonly type: 'set-step-duration-unit';
+      readonly stepId: string;
+      readonly value: DurationUnit;
+    }
   | { readonly type: 'add-section' }
   | { readonly type: 'remove-section'; readonly sectionId: string }
   | { readonly type: 'add-step'; readonly sectionId: string }
@@ -37,7 +55,13 @@ function createDraftId(prefix: string): string {
 }
 
 function createStepDraft(): StepDraft {
-  return { id: createDraftId('draft-step'), label: '', reps: '' };
+  return {
+    id: createDraftId('draft-step'),
+    label: '',
+    reps: '',
+    measurement: 'repetitions',
+    durationUnit: 'minutes',
+  };
 }
 
 function createSectionDraft(): SectionDraft {
@@ -78,6 +102,26 @@ export function builderReducer(state: BuilderState, action: BuilderAction): Buil
           ...section,
           steps: section.steps.map((step) =>
             step.id === action.stepId ? { ...step, reps: action.value } : step,
+          ),
+        })),
+      };
+    case 'set-step-measurement':
+      return {
+        ...state,
+        sections: state.sections.map((section) => ({
+          ...section,
+          steps: section.steps.map((step) =>
+            step.id === action.stepId ? { ...step, measurement: action.value } : step,
+          ),
+        })),
+      };
+    case 'set-step-duration-unit':
+      return {
+        ...state,
+        sections: state.sections.map((section) => ({
+          ...section,
+          steps: section.steps.map((step) =>
+            step.id === action.stepId ? { ...step, durationUnit: action.value } : step,
           ),
         })),
       };
@@ -122,22 +166,24 @@ export function validateBuilderState(state: BuilderState): BuilderErrors {
 
   state.sections.forEach((section) => {
     if (section.label.trim().length === 0) {
-      errors[`section-${section.id}`] = 'Name this exercise section.';
+      errors[`section-${section.id}`] = 'Name this activity.';
     }
 
     section.steps.forEach((step) => {
       if (step.label.trim().length === 0) {
-        errors[`step-label-${step.id}`] = 'Name this subexercise.';
+        errors[`step-label-${step.id}`] = 'Name this exercise.';
       }
 
-      if (!/^\d+$/.test(step.reps.trim())) {
-        errors[`step-reps-${step.id}`] = 'Enter a whole number from 0 to 500.';
-        return;
-      }
-
-      const reps = Number(step.reps);
-      if (!Number.isInteger(reps) || reps < 0 || reps > 500) {
-        errors[`step-reps-${step.id}`] = 'Enter a whole number from 0 to 500.';
+      const quantityValue = step.reps.trim();
+      const quantityUnit = step.measurement === 'repetitions' ? 'repetitions' : step.durationUnit;
+      if (
+        quantityValue.length === 0 ||
+        !isValidTrainingQuantityValue(quantityUnit, Number(quantityValue))
+      ) {
+        errors[`step-reps-${step.id}`] =
+          step.measurement === 'repetitions'
+            ? 'Enter a whole number from 0 to 500.'
+            : `Enter a number of ${step.durationUnit}, 0 or more.`;
       }
     });
   });
@@ -154,7 +200,10 @@ export function toTrainingSetInput(state: BuilderState): TrainingSetInput {
       name: section.label.trim(),
       exercises: section.steps.map((step) => ({
         name: step.label.trim(),
-        quantities: { repetitions: Number(step.reps) },
+        quantities:
+          step.measurement === 'repetitions'
+            ? { repetitions: Number(step.reps) }
+            : { duration: { unit: step.durationUnit, value: Number(step.reps) } },
       })),
     })),
   };
