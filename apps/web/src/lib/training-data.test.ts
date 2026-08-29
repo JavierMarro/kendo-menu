@@ -24,6 +24,7 @@ const EMPTY_ENTRY = {
   id: 'entry',
   trainingSetId: asTrainingSetId('set'),
   quantityOverrides: {},
+  activityNotes: {},
   notes: '',
   createdAt: '',
 } satisfies DashboardEntry;

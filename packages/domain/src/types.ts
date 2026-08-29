@@ -66,6 +66,9 @@ export type TrainingQuantityOverrides = Readonly<Partial<Record<TrainingQuantity
 
 export type DashboardQuantityOverrides = Readonly<Record<string, TrainingQuantityOverrides>>;
 
+/** Practitioner-entered notes keyed by the stable activity id within one dashboard entry. */
+export type DashboardActivityNotes = Readonly<Record<string, string>>;
+
 /**
  * The canonical recursive runtime node. Every activity owns an ordered child collection;
  * an empty collection makes the activity a leaf exercise.
@@ -155,6 +158,7 @@ export interface DashboardEntry {
   readonly id: string;
   readonly trainingSetId: TrainingSetId;
   readonly quantityOverrides: DashboardQuantityOverrides;
+  readonly activityNotes: DashboardActivityNotes;
   readonly notes: string;
   readonly createdAt: string;
 }

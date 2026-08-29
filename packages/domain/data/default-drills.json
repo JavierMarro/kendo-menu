@@ -8,6 +8,7 @@
       {
         "id": "international-dojo-2-hour-session-warm-up-warm-up",
         "name": "Warm-up",
+        "allowsSessionNotes": true,
         "quantities": {
           "duration": {
             "unit": "minutes",
@@ -19,6 +20,7 @@
       {
         "id": "international-dojo-2-hour-session-suburi-suburi",
         "name": "Suburi",
+        "allowsSessionNotes": true,
         "quantities": {
           "duration": {
             "unit": "minutes",
@@ -30,6 +32,7 @@
       {
         "id": "international-dojo-2-hour-session-ashi-sabaki-ashi-sabaki",
         "name": "Ashi sabaki",
+        "allowsSessionNotes": true,
         "quantities": {
           "duration": {
             "unit": "minutes",
@@ -212,6 +215,7 @@
       {
         "id": "japanese-school-club-warm-up-warm-up",
         "name": "Warm-up",
+        "allowsSessionNotes": true,
         "exercises": []
       },
       {
@@ -239,6 +243,7 @@
       {
         "id": "japanese-school-club-ashi-sabaki-ashi-sabaki",
         "name": "Ashi sabaki",
+        "allowsSessionNotes": true,
         "exercises": []
       },
       {
@@ -249,6 +254,7 @@
       {
         "id": "japanese-school-club-kihon-waza-kihon-waza",
         "name": "Kihon-waza",
+        "allowsSessionNotes": true,
         "exercises": []
       },
       {
@@ -513,6 +519,7 @@
       {
         "id": "official-znkr-ajkf-warm-up-warm-up",
         "name": "Warm-up",
+        "allowsSessionNotes": true,
         "exercises": []
       },
       {
@@ -604,6 +611,7 @@
       {
         "id": "police-dojo-asageiko-warm-up-warm-up",
         "name": "Warm-up",
+        "allowsSessionNotes": true,
         "quantities": {
           "duration": {
             "unit": "minutes",
@@ -1025,6 +1033,7 @@
       {
         "id": "senior-high-school-kendo-club-pattern-geiko-pattern-geiko",
         "name": "Pattern-geiko",
+        "allowsSessionNotes": true,
         "exercises": []
       },
       {
@@ -1264,6 +1273,7 @@
       {
         "id": "junior-high-school-version-2-warm-up-warm-up",
         "name": "Warm-up",
+        "allowsSessionNotes": true,
         "exercises": []
       },
       {
@@ -1361,16 +1371,19 @@
       {
         "id": "university-version-2-warm-up-warm-up",
         "name": "Warm-up",
+        "allowsSessionNotes": true,
         "exercises": []
       },
       {
         "id": "university-version-2-suburi-suburi",
         "name": "Suburi",
+        "allowsSessionNotes": true,
         "exercises": []
       },
       {
         "id": "university-version-2-ashi-sabaki-ashi-sabaki",
         "name": "Ashi sabaki",
+        "allowsSessionNotes": true,
         "exercises": []
       },
       {
@@ -1560,6 +1573,7 @@
       {
         "id": "top-university-warm-up-warm-up",
         "name": "Warm-up",
+        "allowsSessionNotes": true,
         "exercises": []
       },
       {

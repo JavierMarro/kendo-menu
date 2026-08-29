@@ -58,6 +58,9 @@ function RecursiveDashboardFixture() {
       onClearQuantity={(activityId, unit) =>
         store.getState().clearQuantityOverride(entry.id, activityId, unit)
       }
+      onSetActivityNote={(activityId, note) =>
+        store.getState().setActivityNote(entry.id, activityId, note)
+      }
     />
   );
 }

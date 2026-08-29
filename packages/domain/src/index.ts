@@ -44,6 +44,7 @@ export type {
   CuratedActivity,
   CuratedSection,
   DashboardEntry,
+  DashboardActivityNotes,
   DashboardQuantityOverrides,
   CustomTrainingExerciseInput,
   CustomTrainingSectionInput,

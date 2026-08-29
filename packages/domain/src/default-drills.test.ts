@@ -386,6 +386,23 @@ const RESEARCHED_SESSION_COUNTS = {
   'top-university': { topLevel: 5, activities: 17, leaves: 13 },
 } as const;
 
+const SESSION_NOTE_ACTIVITY_IDS = [
+  'international-dojo-2-hour-session-warm-up-warm-up',
+  'international-dojo-2-hour-session-suburi-suburi',
+  'international-dojo-2-hour-session-ashi-sabaki-ashi-sabaki',
+  'japanese-school-club-warm-up-warm-up',
+  'japanese-school-club-ashi-sabaki-ashi-sabaki',
+  'japanese-school-club-kihon-waza-kihon-waza',
+  'official-znkr-ajkf-warm-up-warm-up',
+  'police-dojo-asageiko-warm-up-warm-up',
+  'senior-high-school-kendo-club-pattern-geiko-pattern-geiko',
+  'junior-high-school-version-2-warm-up-warm-up',
+  'university-version-2-warm-up-warm-up',
+  'university-version-2-suburi-suburi',
+  'university-version-2-ashi-sabaki-ashi-sabaki',
+  'top-university-warm-up-warm-up',
+] as const;
+
 describe('canonical default drills', () => {
   it('validates the canonical source and preserves it exactly in the runtime adapter', () => {
     expect(validateCuratedDrills(defaultDrillsSource)).toEqual({
@@ -421,6 +438,22 @@ describe('canonical default drills', () => {
     expect(DEFAULT_TRAINING_SETS.map((trainingSet) => trainingSet.sourceId)).toEqual([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
     ]);
+  });
+
+  it('enables session notes only for the explicitly curated activities', () => {
+    const eligibleIds = DEFAULT_TRAINING_SETS.flatMap(getTrainingSetActivities)
+      .filter((activity) => activity.allowsSessionNotes === true)
+      .map((activity) => activity.id);
+
+    expect(eligibleIds).toEqual(SESSION_NOTE_ACTIVITY_IDS);
+    expect(new Set(eligibleIds).size).toBe(SESSION_NOTE_ACTIVITY_IDS.length);
+    for (const activityId of SESSION_NOTE_ACTIVITY_IDS) {
+      const activity = DEFAULT_TRAINING_SETS.flatMap(getTrainingSetActivities).find(
+        (candidate) => candidate.id === activityId,
+      );
+      expect(activity?.allowsSessionNotes).toBe(true);
+      expect(activity === undefined ? false : Object.isFrozen(activity)).toBe(true);
+    }
   });
 
   it('matches the final PDF name, hierarchy, and order projection for every in-scope session', () => {

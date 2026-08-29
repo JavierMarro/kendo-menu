@@ -50,6 +50,7 @@ export function DashboardPage() {
   const updateDashboardEntry = useTrainingStore((state) => state.updateDashboardEntry);
   const setQuantityOverride = useTrainingStore((state) => state.setQuantityOverride);
   const clearQuantityOverride = useTrainingStore((state) => state.clearQuantityOverride);
+  const setActivityNote = useTrainingStore((state) => state.setActivityNote);
   const store = useTrainingStoreApi();
   const [removedEntry, setRemovedEntry] = useState<RemovedDashboardEntry | null>(null);
   const [searchParams] = useSearchParams();
@@ -157,6 +158,9 @@ export function DashboardPage() {
                 onClearQuantity={(activityId, unit) =>
                   clearQuantityOverride(entry.id, activityId, unit)
                 }
+                onSetActivityNote={(activityId, note) =>
+                  setActivityNote(entry.id, activityId, note)
+                }
               />
             );
           })}
@@ -198,6 +202,7 @@ interface DashboardTrainingSetProps {
   readonly onUpdate: (patch: { readonly notes?: string }) => void;
   readonly onSetQuantity: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
   readonly onClearQuantity: (activityId: string, unit: TrainingQuantityUnit) => void;
+  readonly onSetActivityNote: (activityId: string, note: string) => void;
 }
 
 export function DashboardTrainingSet({
@@ -208,6 +213,7 @@ export function DashboardTrainingSet({
   onUpdate,
   onSetQuantity,
   onClearQuantity,
+  onSetActivityNote,
 }: DashboardTrainingSetProps) {
   const [notesDraft, setNotesDraft] = useState(entry.notes);
   const [notesStatus, setNotesStatus] = useState<'idle' | 'updated'>('idle');
@@ -256,6 +262,7 @@ export function DashboardTrainingSet({
               entry,
               onSetQuantity,
               onClearQuantity,
+              onSetActivityNote,
             })
           }
         />
@@ -283,6 +290,7 @@ interface DashboardActivityRenderOptions {
   readonly entry: DashboardEntry;
   readonly onSetQuantity: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
   readonly onClearQuantity: (activityId: string, unit: TrainingQuantityUnit) => void;
+  readonly onSetActivityNote: (activityId: string, note: string) => void;
 }
 
 function renderDashboardActivity(
@@ -290,9 +298,13 @@ function renderDashboardActivity(
   options: DashboardActivityRenderOptions,
 ) {
   const { activity, parentActivity, depth, index, isLeaf, children } = context;
-  const { entry, onSetQuantity, onClearQuantity } = options;
+  const { entry, onSetQuantity, onClearQuantity, onSetActivityNote } = options;
   const activityUnits = getEditableTrainingQuantityUnits(entry, activity, parentActivity);
   const hasNotes = activity.notes !== undefined && activity.notes.length > 0;
+  const activityNoteEditor =
+    activity.allowsSessionNotes === true ? (
+      <ActivityNotesEditor entry={entry} activity={activity} onSet={onSetActivityNote} />
+    ) : null;
   const activityDataAttributes = { 'data-activity-id': activity.id };
   const headingId = `${entry.id}-${activity.id}`;
   const editors =
@@ -305,6 +317,13 @@ function renderDashboardActivity(
         onClear={onClearQuantity}
       />
     );
+  const activityControls =
+    editors === null && activityNoteEditor === null ? null : (
+      <div className="training-activity-controls">
+        {editors}
+        {activityNoteEditor}
+      </div>
+    );
 
   if (depth === 0) {
     return (
@@ -315,10 +334,10 @@ function renderDashboardActivity(
           </span>
           <h3 id={headingId}>{activity.name}</h3>
         </div>
-        {isLeaf || activityUnits.length > 0 ? (
+        {isLeaf || activityUnits.length > 0 || activityNoteEditor !== null ? (
           <div className="training-step training-step--standalone">
             {hasNotes ? <span className="step-description">{activity.notes}</span> : null}
-            {editors}
+            {activityControls}
           </div>
         ) : hasNotes ? (
           <p className="step-description">{activity.notes}</p>
@@ -338,7 +357,7 @@ function renderDashboardActivity(
           <span className="step-label">{activity.name}</span>
           {hasNotes ? <span className="step-description">{activity.notes}</span> : null}
         </div>
-        {editors}
+        {activityControls}
       </li>
     );
   }
@@ -351,14 +370,90 @@ function renderDashboardActivity(
         </span>
         <h4 id={headingId}>{activity.name}</h4>
       </div>
-      {hasNotes || activityUnits.length > 0 ? (
+      {hasNotes || activityUnits.length > 0 || activityNoteEditor !== null ? (
         <div className="training-step training-step--standalone">
           {hasNotes ? <span className="step-description">{activity.notes}</span> : null}
-          {editors}
+          {activityControls}
         </div>
       ) : null}
       <ol className="training-step-list">{children}</ol>
     </li>
+  );
+}
+
+interface ActivityNotesEditorProps {
+  readonly entry: DashboardEntry;
+  readonly activity: TrainingActivity;
+  readonly onSet: (activityId: string, note: string) => void;
+}
+
+function ActivityNotesEditor({ entry, activity, onSet }: ActivityNotesEditorProps) {
+  const savedNote = entry.activityNotes[activity.id] ?? '';
+  const [draft, setDraft] = useState(savedNote);
+  const [isOpen, setIsOpen] = useState(savedNote.trim().length > 0);
+  const [noteStatus, setNoteStatus] = useState<'idle' | 'updated'>('idle');
+  const persistenceStatus = usePersistenceStatus();
+  const baseId = `activity-notes-${entry.id}-${activity.id}`;
+  const panelId = `${baseId}-panel`;
+  const textareaId = `${baseId}-input`;
+  const indicatorId = `${baseId}-indicator`;
+  const statusId = `${baseId}-status`;
+  const hasSavedNote = savedNote.trim().length > 0;
+
+  const commit = (event: FocusEvent<HTMLTextAreaElement>) => {
+    const nextNote = event.currentTarget.value;
+    if (nextNote === savedNote) {
+      setNoteStatus('idle');
+      return;
+    }
+    onSet(activity.id, nextNote);
+    if (nextNote.trim().length === 0) {
+      setDraft('');
+    }
+    setNoteStatus('updated');
+  };
+
+  const statusMessage =
+    noteStatus === 'updated' ? getPersistenceUpdateLabel(persistenceStatus) : '';
+
+  return (
+    <div className="activity-notes-editor">
+      <div className="activity-notes-heading">
+        <button
+          className="activity-notes-toggle"
+          type="button"
+          aria-expanded={isOpen}
+          aria-controls={panelId}
+          aria-describedby={hasSavedNote ? indicatorId : undefined}
+          onClick={() => setIsOpen((open) => !open)}
+        >
+          Any extra notes?
+        </button>
+        {hasSavedNote ? (
+          <span id={indicatorId} className="activity-notes-indicator">
+            Note added
+          </span>
+        ) : null}
+      </div>
+      <div id={panelId} hidden={!isOpen} className="activity-notes-panel">
+        <label htmlFor={textareaId}>Extra notes for {activity.name}</label>
+        <textarea
+          id={textareaId}
+          value={draft}
+          rows={2}
+          aria-describedby={statusMessage.length > 0 ? statusId : undefined}
+          placeholder="Add a note for this activity."
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setNoteStatus('idle');
+          }}
+          onBlur={commit}
+        />
+        <span id={statusId} className="field-status" role="status" aria-live="polite">
+          {statusMessage}
+        </span>
+      </div>
+    </div>
   );
 }
 
