@@ -1,0 +1,8 @@
+- Session: activity-specific dashboard notes
+- Date/duration: 2026-08-29; not recorded
+- Scope/start: Job 6 began from the committed recursive hierarchy, authoritative stable IDs, immutable curated content, and persistence version 8.
+- Changes: Enabled 14 curated activities and added entry-scoped activityNotes, the setActivityNote action, persistence version 9, recursive dashboard disclosure editors, and focused domain/store/web/browser coverage.
+- Decisions: Canonical notes remain immutable; practitioner notes are exact nonblank strings keyed by stable activity ID, restricted to eligible built-ins, and independent per dashboard entry.
+- Roadblocks: Focused Playwright required an escalated local port; the in-app browser was unavailable, so Desktop Chrome and Pixel 5 Playwright supplied the browser, responsive, keyboard, and accessibility evidence.
+- Verification: `pnpm check` passed with 41 domain, 45 store, and 74 web tests plus production build; all 70 Playwright tests passed across Desktop Chrome and Pixel 5, including axe scans.
+- Follow-up: None for Job 6; custom-session and Keiko-library activity note controls remain deliberately excluded.

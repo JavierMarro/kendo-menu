@@ -2,21 +2,23 @@ import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import { persist, type StateStorage } from 'zustand/middleware';
 
 import {
+  DEFAULT_TRAINING_SETS,
   asTrainingSetId,
   getEffectiveTrainingQuantity,
+  getTrainingSetActivities,
   isTrainingQuantityUnit,
   isValidTrainingQuantityValue,
   TrainingValidationError,
+  validateTrainingSet,
   validateTrainingSetInput,
+  type DashboardActivityNotes,
   type DashboardEntry,
   type DashboardQuantityOverrides,
   type TrainingActivity,
-  type TrainingExercise,
   type TrainingQuantities,
   type TrainingQuantityOverrides,
   type TrainingQuantityUnit,
   type TrainingQuantityValue,
-  type TrainingSection,
   type TrainingSet,
   type TrainingSetId,
   type TrainingSetInput,
@@ -39,6 +41,7 @@ export {
   classifyTrainingStorage,
   classifyTrainingStorageValue,
   createTrainingJSONStorage,
+  encodePersistedTrainingState,
   inspectTrainingRawValue,
   inspectPersistedTrainingStorage,
   inspectTrainingStorage,
@@ -49,18 +52,25 @@ export {
   migratePersistedTrainingStateV3ToV4,
   migratePersistedTrainingStateV4ToV5,
   migratePersistedTrainingStateV5ToV6,
+  migratePersistedTrainingStateV6ToV7,
+  migratePersistedTrainingStateV7ToV8,
+  migratePersistedTrainingStateV8ToV9,
   migrateV0ToV1,
   migrateV1ToV2,
   migrateV2ToV3,
   migrateV3ToV4,
   migrateV4ToV5,
   migrateV5ToV6,
+  migrateV6ToV7,
+  migrateV7ToV8,
+  migrateV8ToV9,
   parsePersistedTrainingState,
   parsePersistedTrainingStateV0,
   parsePersistedTrainingStateV1,
   parsePersistedTrainingStateV2,
   parsePersistedTrainingStateV3,
   parsePersistedTrainingStateV4,
+  parsePersistedTrainingStateV8,
   TrainingDurationOverrideMigrationConflictError,
   TrainingOverrideMigrationConflictError,
   TRAINING_STORE_PERSISTENCE_VERSION,
@@ -78,7 +88,16 @@ export type {
   LegacyTrainingStepV4,
   PersistedStorageState,
   PersistedTrainingState,
+  PersistedTrainingExercise,
+  PersistedTrainingSection,
+  PersistedCustomTrainingSet,
+  PersistedTrainingWireState,
   PersistedTrainingStateV5,
+  PersistedTrainingStateV6,
+  PersistedTrainingStateV7,
+  PersistedDashboardEntryV8,
+  PersistedTrainingStateV8,
+  PersistedTrainingWireStateV8,
   TrainingDurationOverrideMigrationConflict,
   TrainingOverrideMigrationConflict,
   TrainingStorageInspection,
@@ -117,6 +136,7 @@ export interface TrainingStore {
     activityId: string,
     unit: TrainingQuantityUnit,
   ) => void;
+  readonly setActivityNote: (entryId: string, activityId: string, note: string) => void;
   readonly removeFromDashboard: (entryId: string) => RemovedDashboardEntry | null;
   readonly restoreDashboardEntry: (removed: RemovedDashboardEntry) => void;
   readonly undoRemoveFromDashboard: (removed: RemovedDashboardEntry) => void;
@@ -170,6 +190,10 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 function ensureWritableInspection(
   inspection: TrainingStorageInspection,
 ): asserts inspection is Extract<
@@ -189,13 +213,10 @@ function collectUsedIds(
   state: Pick<TrainingStore, 'dashboardEntries' | 'customTrainingSets'>,
 ): Set<string> {
   const usedIds = new Set<string>();
-  for (const trainingSet of state.customTrainingSets) {
+  for (const trainingSet of [...DEFAULT_TRAINING_SETS, ...state.customTrainingSets]) {
     usedIds.add(trainingSet.id);
-    for (const section of trainingSet.sections) {
-      usedIds.add(section.id);
-      for (const exercise of section.exercises) {
-        usedIds.add(exercise.id);
-      }
+    for (const activity of getTrainingSetActivities(trainingSet)) {
+      usedIds.add(activity.id);
     }
   }
   for (const entry of state.dashboardEntries) {
@@ -246,6 +267,20 @@ function normalizeQuantityOverrides(value: unknown): DashboardQuantityOverrides 
     entries.push([activityId, Object.fromEntries(unitEntries)]);
   }
   return Object.fromEntries(entries);
+}
+
+function setDashboardActivityNote(
+  activityNotes: DashboardActivityNotes,
+  activityId: string,
+  note: string,
+): DashboardActivityNotes {
+  const next: Record<string, string> = { ...activityNotes };
+  if (note.trim().length === 0) {
+    delete next[activityId];
+  } else {
+    next[activityId] = note;
+  }
+  return Object.freeze(next);
 }
 
 export function setDashboardQuantityOverride(
@@ -326,9 +361,9 @@ function buildCustomTrainingSet(input: TrainingSetInput, usedIds: Set<string>): 
 
   const validatedInput = validation.value;
   const setId = asTrainingSetId(createUniqueId('custom-set', usedIds));
-  const sections: TrainingSection[] = validatedInput.sections.map((sectionInput) => {
+  const activities: TrainingActivity[] = validatedInput.sections.map((sectionInput) => {
     const sectionId = createUniqueId('custom-section', usedIds);
-    const exercises: TrainingExercise[] = sectionInput.exercises.map((exerciseInput) => {
+    const children: TrainingActivity[] = sectionInput.exercises.map((exerciseInput) => {
       const exerciseId = createUniqueId('custom-exercise', usedIds);
       return {
         id: exerciseId,
@@ -337,6 +372,7 @@ function buildCustomTrainingSet(input: TrainingSetInput, usedIds: Set<string>): 
           ? {}
           : { quantities: copyQuantities(exerciseInput.quantities) }),
         ...(exerciseInput.notes === undefined ? {} : { notes: exerciseInput.notes }),
+        children: [],
       };
     });
     return {
@@ -346,20 +382,25 @@ function buildCustomTrainingSet(input: TrainingSetInput, usedIds: Set<string>): 
         ? {}
         : { quantities: copyQuantities(sectionInput.quantities) }),
       ...(sectionInput.notes === undefined ? {} : { notes: sectionInput.notes }),
-      exercises,
+      children,
     };
   });
 
-  return {
+  const candidate: unknown = {
     id: setId,
     name: validatedInput.name,
     ...(validatedInput.description === undefined
       ? {}
       : { description: validatedInput.description }),
     category: 'custom',
-    sections,
+    activities,
     isBuiltIn: false,
   };
+  const result = validateTrainingSet(candidate);
+  if (!result.success) {
+    throw new TrainingValidationError(result.issues);
+  }
+  return result.value;
 }
 
 function createDashboardEntry(trainingSetId: TrainingSetId, usedIds: Set<string>): DashboardEntry {
@@ -367,6 +408,7 @@ function createDashboardEntry(trainingSetId: TrainingSetId, usedIds: Set<string>
     id: createUniqueId('dashboard-entry', usedIds),
     trainingSetId,
     quantityOverrides: {},
+    activityNotes: Object.freeze({}),
     notes: '',
     createdAt: new Date().toISOString(),
   };
@@ -380,7 +422,7 @@ function createValidatedTrainingStore(
 
   return create<TrainingStore>()(
     persist(
-      (set) => ({
+      (set, get) => ({
         dashboardEntries: [],
         customTrainingSets: [],
         addToDashboard: (trainingSetId) => {
@@ -444,6 +486,41 @@ function createValidatedTrainingStore(
                     ),
                   }
                 : entry,
+            ),
+          }));
+        },
+        setActivityNote: (entryId, activityId, note) => {
+          if (!isNonBlankString(entryId)) {
+            throw new Error('Dashboard entry ids must not be blank.');
+          }
+          if (!isNonBlankString(activityId)) {
+            throw new Error('Dashboard activity note ids must not be blank.');
+          }
+          if (typeof note !== 'string') {
+            throw new Error('Dashboard activity notes must be strings.');
+          }
+
+          const entry = get().dashboardEntries.find((candidate) => candidate.id === entryId);
+          if (entry === undefined) {
+            throw new Error(`Dashboard entry ${entryId} does not exist.`);
+          }
+          const trainingSet = DEFAULT_TRAINING_SETS.find(
+            (candidate) => candidate.id === entry.trainingSetId,
+          );
+          if (trainingSet === undefined) {
+            throw new Error(`Dashboard entry ${entryId} is not a built-in training session.`);
+          }
+          const activity = getTrainingSetActivities(trainingSet).find(
+            (candidate) => candidate.id === activityId,
+          );
+          if (activity === undefined || activity.allowsSessionNotes !== true) {
+            throw new Error(`Activity ${activityId} does not allow dashboard notes.`);
+          }
+
+          const activityNotes = setDashboardActivityNote(entry.activityNotes, activityId, note);
+          set((state) => ({
+            dashboardEntries: state.dashboardEntries.map((candidate) =>
+              candidate.id === entryId ? { ...candidate, activityNotes } : candidate,
             ),
           }));
         },

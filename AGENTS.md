@@ -67,10 +67,20 @@ keep one `pnpm-lock.yaml`, and do not mix Bun/npm/Yarn commands into the reposit
 
 ## Commands and verification
 
-Use the narrowest relevant checks first; run `pnpm check` for meaningful cross-package changes or
-before delivery. Available root commands include `pnpm dev`, `pnpm typecheck`, `pnpm lint`,
-`pnpm format:check`, `pnpm test`, `pnpm build`, and `pnpm check`. Add or update tests for behavior
-and persistence migrations; a successful build does not prove user flows work.
+Use the narrowest relevant root alias first and prefer these aliases over raw `pnpm --filter`
+validation commands:
+
+- Package tests: `pnpm test:domain`, `pnpm test:store`, and `pnpm test:web`.
+- Package gates: `pnpm check:domain`, `pnpm check:store`, and `pnpm check:web`.
+- Browser tests: `pnpm test:e2e`, `pnpm test:e2e:chromium`, `pnpm test:e2e:mobile`, and
+  `pnpm test:e2e:a11y`.
+- Work-session history: `pnpm session:new` and `pnpm session:check`.
+
+`pnpm check` is the normal code gate; it validates work-session history, types, lint, formatting,
+unit tests, and the build. `pnpm verify:full` is the final code-plus-browser gate and adds the full
+Playwright suite. Other root commands include `pnpm dev`, `pnpm typecheck`, `pnpm lint`,
+`pnpm format:check`, `pnpm test`, and `pnpm build`. Add or update tests for behavior and persistence
+migrations; a successful build does not prove user flows work.
 
 ## Change workflow
 

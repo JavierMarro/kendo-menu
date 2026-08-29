@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Locator } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 async function getElementBox(locator: Locator) {
   const box = await locator.boundingBox();
@@ -10,6 +10,49 @@ async function getElementBox(locator: Locator) {
   return box;
 }
 
+async function expectNoBlockingAxeViolations(page: Page): Promise<void> {
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(
+    results.violations.filter(({ impact }) => impact === 'critical' || impact === 'serious'),
+  ).toEqual([]);
+}
+
+async function getLandingRevealOpacities(page: Page): Promise<readonly string[]> {
+  return page
+    .locator(
+      '[data-landing-reveal], [data-landing-reveal] > .landing-reveal-left, [data-landing-reveal] > .landing-reveal-right, .landing-step, .landing-stat',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.textContent?.trim() !== '')
+        .map((element) => getComputedStyle(element).opacity),
+    );
+}
+
+async function getLandingRevealTransforms(page: Page): Promise<readonly string[]> {
+  return page
+    .locator(
+      '[data-landing-reveal], [data-landing-reveal] > .landing-reveal-left, [data-landing-reveal] > .landing-reveal-right, .landing-step, .landing-stat',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.textContent?.trim() !== '')
+        .map((element) => getComputedStyle(element).transform),
+    );
+}
+
+async function getLandingRevealTransitionProperties(page: Page): Promise<readonly string[]> {
+  return page
+    .locator(
+      '.landing-motion-ready [data-landing-reveal]:not([data-landing-reveal="split"]), .landing-motion-ready [data-landing-reveal="split"] > .landing-reveal-left, .landing-motion-ready [data-landing-reveal="split"] > .landing-reveal-right, .landing-motion-ready .landing-step, .landing-motion-ready .landing-stat',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.textContent?.trim() !== '')
+        .map((element) => getComputedStyle(element).transitionProperty),
+    );
+}
+
 test.describe('accessibility and responsive layout', () => {
   test('has no blocking axe violations with the library dialog closed or open', async ({
     page,
@@ -17,12 +60,7 @@ test.describe('accessibility and responsive layout', () => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/app/library');
 
-    const closedResults = await new AxeBuilder({ page }).analyze();
-    expect(
-      closedResults.violations.filter(
-        ({ impact }) => impact === 'critical' || impact === 'serious',
-      ),
-    ).toEqual([]);
+    await expectNoBlockingAxeViolations(page);
 
     const card = page
       .getByRole('heading', { name: 'International dojo menu' })
@@ -32,72 +70,65 @@ test.describe('accessibility and responsive layout', () => {
     await expect(dialog).toBeVisible();
     await dialog.locator('details.detail-section').first().locator('summary').click();
 
-    const openResults = await new AxeBuilder({ page }).analyze();
-    expect(
-      openResults.violations.filter(({ impact }) => impact === 'critical' || impact === 'serious'),
-    ).toEqual([]);
+    await expectNoBlockingAxeViolations(page);
   });
 
-  test('has no critical or serious axe violations on the main routes', async ({ page }) => {
+  test('has no critical or serious axe violations on the landing route', async ({ page }) => {
     await page.goto('/app');
     const viewport = page.viewportSize();
     if (viewport !== null && viewport.width <= 760) {
       await page.getByRole('button', { name: 'Open navigation' }).click();
       await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
     }
-    const landingResults = await new AxeBuilder({ page }).analyze();
-    const landingBlockingViolations = landingResults.violations.filter(
-      ({ impact }) => impact === 'critical' || impact === 'serious',
-    );
-    expect(landingBlockingViolations).toEqual([]);
+    await expect(
+      page.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+    ).toBeVisible();
+    await expectNoBlockingAxeViolations(page);
+  });
 
+  test('has no critical or serious axe violations on the dashboard route', async ({ page }) => {
     await page.goto('/app/dashboard');
-    const dashboardResults = await new AxeBuilder({ page }).analyze();
-    const dashboardBlockingViolations = dashboardResults.violations.filter(
-      ({ impact }) => impact === 'critical' || impact === 'serious',
-    );
-    expect(dashboardBlockingViolations).toEqual([]);
+    await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+    await expectNoBlockingAxeViolations(page);
+  });
 
+  test('has no critical or serious axe violations on the library route', async ({ page }) => {
     await page.goto('/app/library');
-    const libraryResults = await new AxeBuilder({ page }).analyze();
-    const libraryBlockingViolations = libraryResults.violations.filter(
-      ({ impact }) => impact === 'critical' || impact === 'serious',
-    );
-    expect(libraryBlockingViolations).toEqual([]);
+    await expect(page.getByRole('heading', { name: 'Keiko library', exact: true })).toBeVisible();
+    await expectNoBlockingAxeViolations(page);
+  });
 
+  test('has no critical or serious axe violations on the library detail route', async ({
+    page,
+  }) => {
     await page.goto('/app/library?drill=international-dojo-2-hour-session');
-    await expect(page.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
+    const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
+    await expect(dialog).toBeVisible();
     const firstSection = page.locator('details.detail-section').first();
     await expect(firstSection).not.toHaveAttribute('open', '');
     await firstSection.locator('summary').click();
-    const detailResults = await new AxeBuilder({ page }).analyze();
-    const detailBlockingViolations = detailResults.violations.filter(
-      ({ impact }) => impact === 'critical' || impact === 'serious',
-    );
-    expect(detailBlockingViolations).toEqual([]);
+    await expectNoBlockingAxeViolations(page);
+  });
 
+  test('has no critical or serious axe violations on the drill builder route', async ({ page }) => {
     await page.goto('/app/drills/new');
-    const builderResults = await new AxeBuilder({ page }).analyze();
-    const builderBlockingViolations = builderResults.violations.filter(
-      ({ impact }) => impact === 'critical' || impact === 'serious',
-    );
-    expect(builderBlockingViolations).toEqual([]);
+    await expect(
+      page.getByRole('heading', { name: 'Create a training session', exact: true }),
+    ).toBeVisible();
+    await expectNoBlockingAxeViolations(page);
+  });
 
+  test('has no critical or serious axe violations on the sources route', async ({ page }) => {
     await page.goto('/app/sources');
     await expect(page.getByRole('heading', { name: 'Sources', level: 1 })).toBeVisible();
-    const sourcesResults = await new AxeBuilder({ page }).analyze();
-    const sourcesBlockingViolations = sourcesResults.violations.filter(
-      ({ impact }) => impact === 'critical' || impact === 'serious',
-    );
-    expect(sourcesBlockingViolations).toEqual([]);
+    await expectNoBlockingAxeViolations(page);
+  });
 
+  test('has no critical or serious axe violations on the cookie policy route', async ({ page }) => {
     await page.goto('/cookies');
     await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toBeVisible();
-    const cookiePolicyResults = await new AxeBuilder({ page }).analyze();
-    const cookiePolicyBlockingViolations = cookiePolicyResults.violations.filter(
-      ({ impact }) => impact === 'critical' || impact === 'serious',
-    );
-    expect(cookiePolicyBlockingViolations).toEqual([]);
+    await expect(page.getByRole('heading', { name: 'Cookie Policy', exact: true })).toBeVisible();
+    await expectNoBlockingAxeViolations(page);
   });
 
   test('does not overflow horizontally at 320px or desktop width', async ({ page }) => {
@@ -186,34 +217,92 @@ test.describe('accessibility and responsive layout', () => {
     }
   });
 
-  test('progressively reveals landing groups and honours reduced motion', async ({ page }) => {
+  test('keeps text-bearing landing reveals opaque before and after normal-motion reveal', async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto('/app');
 
     const sections = page.locator('.landing-sections');
-    const introductionHeading = page.getByRole('heading', {
-      name: 'A keiko menu for the day in front of you.',
-    });
     const steps = page.locator('.landing-steps');
 
     await expect(sections).toHaveClass(/landing-motion-ready/);
-    await expect(introductionHeading).toHaveCSS('opacity', '1');
     await expect(steps).not.toHaveClass(/is-revealed/);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    const initialRevealOpacities = await getLandingRevealOpacities(page);
+    expect(initialRevealOpacities).not.toEqual([]);
+    expect(initialRevealOpacities.every((opacity) => opacity === '1')).toBe(true);
+    const transitionProperties = await getLandingRevealTransitionProperties(page);
+    expect(transitionProperties).not.toEqual([]);
+    expect(transitionProperties.every((property) => property === 'transform')).toBe(true);
+    await expectNoBlockingAxeViolations(page);
 
     await steps.scrollIntoViewIfNeeded();
+    const duringRevealOpacities = await getLandingRevealOpacities(page);
+    expect(duringRevealOpacities.every((opacity) => opacity === '1')).toBe(true);
     await expect(steps).toHaveClass(/is-revealed/);
     await expect(steps).toHaveCSS('opacity', '1');
+    await expect(steps.locator('.landing-step').last()).toHaveCSS(
+      'transform',
+      'matrix(1, 0, 0, 1, 0, 0)',
+    );
+    const finalRevealOpacities = await getLandingRevealOpacities(page);
+    expect(finalRevealOpacities.every((opacity) => opacity === '1')).toBe(true);
+    await expectNoBlockingAxeViolations(page);
+  });
 
+  test('reveals a landing group when keyboard focus enters it', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.addInitScript(() => {
+      class NonIntersectingObserver {
+        disconnect() {}
+
+        observe() {}
+
+        takeRecords() {
+          return [];
+        }
+
+        unobserve() {}
+      }
+
+      Object.defineProperty(window, 'IntersectionObserver', {
+        configurable: true,
+        value: NonIntersectingObserver,
+      });
+    });
+    await page.goto('/app');
+
+    const faqGrid = page.locator('.landing-faq-grid[data-landing-reveal]');
+    const firstQuestion = faqGrid.getByRole('button', { name: 'What is KendoMenu?' });
+    await expect(faqGrid).not.toHaveClass(/is-revealed/);
+
+    const heroCta = page.getByRole('link', { name: 'Browse Keiko library' });
+    await heroCta.focus();
+    await expect(heroCta).toBeFocused();
+    await page.keyboard.press('Tab');
+
+    await expect(firstQuestion).toBeFocused();
+    await expect(faqGrid).toHaveClass(/is-revealed/);
+    expect(await faqGrid.evaluate((element) => getComputedStyle(element).opacity)).toBe('1');
+  });
+
+  test('honours reduced motion without hiding landing content', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.reload();
+    await page.goto('/app');
 
+    const sections = page.locator('.landing-sections');
     await expect(sections).not.toHaveClass(/landing-motion-ready/);
-    const revealOpacities = await page
-      .locator('[data-landing-reveal]')
-      .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).opacity));
+    const revealOpacities = await getLandingRevealOpacities(page);
+    expect(revealOpacities).not.toEqual([]);
     expect(revealOpacities.every((opacity) => opacity === '1')).toBe(true);
+    const revealTransforms = await getLandingRevealTransforms(page);
+    expect(revealTransforms).not.toEqual([]);
+    expect(revealTransforms.every((transform) => transform === 'none')).toBe(true);
   });
 
   test('alternates the desktop rhythm and restores heading-first mobile flow', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/app');
 
     const viewport = page.viewportSize();

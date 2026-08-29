@@ -1,0 +1,8 @@
+- Session: complex curated session synchronization
+- Date/duration: 2026-08-28; not recorded
+- Scope/start: Job 5 synchronized the University High School dojo menu and Top University dojo menu against the final PDF on top of the recursive Jobs 2–4 implementation.
+- Changes: Reparented eight retained Ken-tore leaves under the two authorized Station A/B containers; nested Sandan-geiko with Kirikaeshi, Yakusoku-geiko, and Free version while correcting the Hiki sequence quantity and display spelling.
+- Decisions: Bumped persistence v7→v8 with validated incompatible-override cleanup, preserving IDs, valid seconds overrides, unrelated entries, session notes, custom sessions, and the earlier migration chain.
+- Verification: Final counts are 88 top-level activities, 257 all activity nodes, 211 leaves, and 268 globally unique IDs; domain/store/web checks passed, including Desktop Chromium and Pixel 5 Playwright plus accessibility scans.
+- Roadblocks: `pnpm session:check` is not configured; manual filename/index-target and line-count validation was used. No unresolved source discrepancy; activity-specific user-entered note controls and allowsSessionNotes population were not added.
+- Follow-up: None for this slice.

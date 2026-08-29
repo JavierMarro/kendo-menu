@@ -4,16 +4,17 @@ import {
   getTrainingSetActivities,
   isTrainingQuantityUnit,
   isValidRepetitionCount,
+  isValidTrainingQuantities,
   isValidTrainingQuantityValue,
   validateTrainingSet,
+  type DashboardActivityNotes,
   type DashboardEntry,
   type DashboardQuantityOverrides,
   type DrillCategory,
-  type TrainingExercise,
+  type TrainingActivity,
   type TrainingQuantities,
   type TrainingQuantityOverrides,
   type TrainingQuantityUnit,
-  type TrainingSection,
   type TrainingSet,
 } from '@kendo-menu/domain';
 import {
@@ -23,14 +24,68 @@ import {
   type StorageValue,
 } from 'zustand/middleware';
 
-export const TRAINING_STORE_PERSISTENCE_VERSION = 6;
+export const TRAINING_STORE_PERSISTENCE_VERSION = 9;
 
 export interface PersistedTrainingState {
   readonly dashboardEntries: readonly DashboardEntry[];
   readonly customTrainingSets: readonly TrainingSet[];
 }
 
-export type PersistedTrainingStateV5 = PersistedTrainingState;
+/** The v5-v9 storage DTO retained for the on-disk two-level sections/exercises shape. */
+export interface PersistedTrainingExercise {
+  readonly id: string;
+  readonly name: string;
+  readonly quantities?: TrainingQuantities;
+  readonly notes?: string;
+}
+
+export interface PersistedTrainingSection {
+  readonly id: string;
+  readonly name: string;
+  readonly quantities?: TrainingQuantities;
+  readonly notes?: string;
+  readonly exercises: readonly PersistedTrainingExercise[];
+}
+
+export interface PersistedCustomTrainingSet {
+  readonly id: string;
+  readonly sourceId?: never;
+  readonly name: string;
+  readonly description?: string;
+  readonly category: 'custom';
+  readonly sections: readonly PersistedTrainingSection[];
+  readonly isBuiltIn: false;
+}
+
+export interface PersistedTrainingWireState {
+  readonly dashboardEntries: readonly DashboardEntry[];
+  readonly customTrainingSets: readonly PersistedCustomTrainingSet[];
+}
+
+/** Dashboard entries as persisted by versions 5 through 8, before activity notes existed. */
+export interface PersistedDashboardEntryV8 {
+  readonly id: string;
+  readonly trainingSetId: TrainingSet['id'];
+  readonly quantityOverrides: DashboardQuantityOverrides;
+  readonly notes: string;
+  readonly createdAt: string;
+}
+
+/** Runtime-shaped state produced by the v8 parser, before the v8→v9 note migration. */
+export interface PersistedTrainingStateV8 {
+  readonly dashboardEntries: readonly PersistedDashboardEntryV8[];
+  readonly customTrainingSets: readonly TrainingSet[];
+}
+
+/** The v5-v8 on-disk wire DTO, retained for the complete migration chain. */
+export interface PersistedTrainingWireStateV8 {
+  readonly dashboardEntries: readonly PersistedDashboardEntryV8[];
+  readonly customTrainingSets: readonly PersistedCustomTrainingSet[];
+}
+
+export type PersistedTrainingStateV5 = PersistedTrainingWireStateV8;
+export type PersistedTrainingStateV6 = PersistedTrainingWireStateV8;
+export type PersistedTrainingStateV7 = PersistedTrainingWireStateV8;
 
 export interface TrainingOverrideMigrationConflict {
   readonly dashboardEntryId: string;
@@ -161,12 +216,15 @@ export interface LegacyPersistedTrainingStateV3 {
 }
 
 export interface LegacyPersistedTrainingStateV4 {
-  readonly dashboardEntries: readonly DashboardEntry[];
+  readonly dashboardEntries: readonly PersistedDashboardEntryV8[];
   readonly customTrainingSets: readonly LegacyTrainingSetV4[];
 }
 
 export type PersistedStorageState =
   | PersistedTrainingState
+  | PersistedTrainingWireState
+  | PersistedTrainingStateV8
+  | PersistedTrainingWireStateV8
   | LegacyPersistedTrainingStateV4
   | LegacyPersistedTrainingStateV3
   | LegacyPersistedTrainingStateV2
@@ -186,7 +244,7 @@ export type TrainingStorageInspection =
   | {
       readonly status: 'migrated';
       readonly kind: 'migrated';
-      readonly fromVersion: 0 | 1 | 2 | 3 | 4 | 5;
+      readonly fromVersion: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
       readonly version: typeof TRAINING_STORE_PERSISTENCE_VERSION;
       readonly state: PersistedTrainingState;
     }
@@ -521,7 +579,58 @@ function parseDashboardQuantityOverrides(value: unknown): DashboardQuantityOverr
   return Object.fromEntries(entries);
 }
 
+function parseDashboardActivityNotes(value: unknown): DashboardActivityNotes | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const entries: [string, string][] = [];
+  for (const [activityId, note] of Object.entries(value)) {
+    if (!isNonBlankString(activityId) || typeof note !== 'string') {
+      return null;
+    }
+    entries.push([activityId, note]);
+  }
+  return Object.freeze(Object.fromEntries(entries));
+}
+
 function parseDashboardEntry(value: unknown): DashboardEntry | null {
+  if (
+    !isRecord(value) ||
+    !hasOnlyProperties(
+      value,
+      new Set(['id', 'trainingSetId', 'quantityOverrides', 'activityNotes', 'notes', 'createdAt']),
+    )
+  ) {
+    return null;
+  }
+  const id = value['id'];
+  const trainingSetId = value['trainingSetId'];
+  const quantityOverrides = parseDashboardQuantityOverrides(value['quantityOverrides']);
+  const activityNotes = parseDashboardActivityNotes(value['activityNotes']);
+  const notes = value['notes'];
+  const createdAt = value['createdAt'];
+  if (
+    !isNonBlankString(id) ||
+    !isNonBlankString(trainingSetId) ||
+    quantityOverrides === null ||
+    activityNotes === null ||
+    typeof notes !== 'string' ||
+    typeof createdAt !== 'string'
+  ) {
+    return null;
+  }
+  return {
+    id,
+    trainingSetId: asTrainingSetId(trainingSetId),
+    quantityOverrides,
+    activityNotes,
+    notes,
+    createdAt,
+  };
+}
+
+function parsePersistedDashboardEntryV8(value: unknown): PersistedDashboardEntryV8 | null {
   if (
     !isRecord(value) ||
     !hasOnlyProperties(
@@ -699,17 +808,248 @@ function validateUniqueNestedIds(
   return true;
 }
 
-function parseCustomTrainingSet(value: unknown): TrainingSet | null {
-  const validation = validateTrainingSet(value);
-  if (!validation.success) {
+function parsePersistedTrainingExercise(value: unknown): PersistedTrainingExercise | null {
+  if (
+    !isRecord(value) ||
+    !hasOnlyProperties(value, new Set(['id', 'name', 'quantities', 'notes'])) ||
+    !isNonBlankString(value['id']) ||
+    !isNonBlankString(value['name']) ||
+    (Object.hasOwn(value, 'quantities') && !isValidTrainingQuantities(value['quantities'])) ||
+    (Object.hasOwn(value, 'notes') && typeof value['notes'] !== 'string')
+  ) {
     return null;
   }
-  const trainingSet = validation.value;
-  return trainingSet.isBuiltIn === false &&
-    trainingSet.category === 'custom' &&
-    trainingSet.sourceId === undefined
-    ? trainingSet
-    : null;
+  return {
+    id: value['id'],
+    name: value['name'],
+    ...(isValidTrainingQuantities(value['quantities']) ? { quantities: value['quantities'] } : {}),
+    ...(typeof value['notes'] === 'string' ? { notes: value['notes'] } : {}),
+  };
+}
+
+function parsePersistedTrainingSection(value: unknown): PersistedTrainingSection | null {
+  if (
+    !isRecord(value) ||
+    !hasOnlyProperties(value, new Set(['id', 'name', 'quantities', 'notes', 'exercises'])) ||
+    !isNonBlankString(value['id']) ||
+    !isNonBlankString(value['name']) ||
+    (Object.hasOwn(value, 'quantities') && !isValidTrainingQuantities(value['quantities'])) ||
+    (Object.hasOwn(value, 'notes') && typeof value['notes'] !== 'string')
+  ) {
+    return null;
+  }
+  const exercises = parseArray(value['exercises'], parsePersistedTrainingExercise);
+  if (exercises === null) {
+    return null;
+  }
+  return {
+    id: value['id'],
+    name: value['name'],
+    ...(isValidTrainingQuantities(value['quantities']) ? { quantities: value['quantities'] } : {}),
+    ...(typeof value['notes'] === 'string' ? { notes: value['notes'] } : {}),
+    exercises,
+  };
+}
+
+function validateUniquePersistedNestedIds(
+  trainingSetId: string,
+  sections: readonly PersistedTrainingSection[],
+): boolean {
+  const ids = new Set<string>([trainingSetId]);
+  for (const section of sections) {
+    if (ids.has(section.id)) {
+      return false;
+    }
+    ids.add(section.id);
+    for (const exercise of section.exercises) {
+      if (ids.has(exercise.id)) {
+        return false;
+      }
+      ids.add(exercise.id);
+    }
+  }
+  return true;
+}
+
+function parsePersistedCustomTrainingSetWire(value: unknown): PersistedCustomTrainingSet | null {
+  if (
+    !isRecord(value) ||
+    !hasOnlyProperties(
+      value,
+      new Set(['id', 'name', 'description', 'category', 'sections', 'isBuiltIn']),
+    ) ||
+    !isNonBlankString(value['id']) ||
+    !isNonBlankString(value['name']) ||
+    (Object.hasOwn(value, 'description') && typeof value['description'] !== 'string') ||
+    value['category'] !== 'custom' ||
+    value['isBuiltIn'] !== false
+  ) {
+    return null;
+  }
+  const sections = parseArray(value['sections'], parsePersistedTrainingSection);
+  if (
+    sections === null ||
+    sections.length < 1 ||
+    !validateUniquePersistedNestedIds(value['id'], sections)
+  ) {
+    return null;
+  }
+  return {
+    id: value['id'],
+    name: value['name'],
+    ...(typeof value['description'] === 'string' ? { description: value['description'] } : {}),
+    category: 'custom',
+    sections,
+    isBuiltIn: false,
+  };
+}
+
+function decodePersistedCustomTrainingSet(
+  trainingSet: PersistedCustomTrainingSet,
+): TrainingSet | null {
+  const candidate: unknown = {
+    id: asTrainingSetId(trainingSet.id),
+    name: trainingSet.name,
+    ...(trainingSet.description === undefined ? {} : { description: trainingSet.description }),
+    category: 'custom',
+    activities: trainingSet.sections.map((section) => ({
+      id: section.id,
+      name: section.name,
+      ...(section.quantities === undefined ? {} : { quantities: section.quantities }),
+      ...(section.notes === undefined ? {} : { notes: section.notes }),
+      children: section.exercises.map((exercise) => ({
+        id: exercise.id,
+        name: exercise.name,
+        ...(exercise.quantities === undefined ? {} : { quantities: exercise.quantities }),
+        ...(exercise.notes === undefined ? {} : { notes: exercise.notes }),
+        children: [],
+      })),
+    })),
+    isBuiltIn: false,
+  };
+  const validation = validateTrainingSet(candidate);
+  return validation.success ? validation.value : null;
+}
+
+function parseCustomTrainingSet(value: unknown): TrainingSet | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (Object.hasOwn(value, 'activities')) {
+    const validation = validateTrainingSet(value);
+    if (!validation.success) {
+      return null;
+    }
+    const trainingSet = validation.value;
+    return trainingSet.isBuiltIn === false &&
+      trainingSet.category === 'custom' &&
+      trainingSet.sourceId === undefined
+      ? trainingSet
+      : null;
+  }
+
+  const wireTrainingSet = parsePersistedCustomTrainingSetWire(value);
+  return wireTrainingSet === null ? null : decodePersistedCustomTrainingSet(wireTrainingSet);
+}
+
+function sanitizeDashboardActivityNotes(
+  entry: DashboardEntry,
+  customTrainingSets: readonly TrainingSet[],
+): DashboardEntry {
+  const trainingSet = [...DEFAULT_TRAINING_SETS, ...customTrainingSets].find(
+    (candidate) => candidate.id === entry.trainingSetId,
+  );
+  if (trainingSet === undefined) {
+    return entry;
+  }
+
+  const eligibleActivityIds = new Set(
+    getTrainingSetActivities(trainingSet)
+      .filter((activity) => activity.allowsSessionNotes === true)
+      .map((activity) => activity.id),
+  );
+  const activityNotesEntries: [string, string][] = [];
+  for (const [activityId, note] of Object.entries(entry.activityNotes)) {
+    if (eligibleActivityIds.has(activityId) && note.trim().length > 0) {
+      activityNotesEntries.push([activityId, note]);
+    }
+  }
+  return {
+    ...entry,
+    activityNotes: Object.freeze(Object.fromEntries(activityNotesEntries)),
+  };
+}
+
+function parsePersistedTrainingWireState(value: unknown): PersistedTrainingState | null {
+  if (
+    !isRecord(value) ||
+    !hasOnlyProperties(value, new Set(['dashboardEntries', 'customTrainingSets']))
+  ) {
+    return null;
+  }
+  const dashboardEntries = parseArray(value['dashboardEntries'], parseDashboardEntry);
+  const wireCustomTrainingSets = parseArray(
+    value['customTrainingSets'],
+    parsePersistedCustomTrainingSetWire,
+  );
+  if (
+    dashboardEntries === null ||
+    wireCustomTrainingSets === null ||
+    !validateUniqueEntryIds(dashboardEntries) ||
+    !validateUniqueSetIds(wireCustomTrainingSets) ||
+    !validateNoCuratedSetIdCollisions(wireCustomTrainingSets)
+  ) {
+    return null;
+  }
+
+  const customTrainingSets: TrainingSet[] = [];
+  for (const wireTrainingSet of wireCustomTrainingSets) {
+    const trainingSet = decodePersistedCustomTrainingSet(wireTrainingSet);
+    if (trainingSet === null) {
+      return null;
+    }
+    customTrainingSets.push(trainingSet);
+  }
+  return {
+    dashboardEntries: dashboardEntries.map((entry) =>
+      sanitizeDashboardActivityNotes(entry, customTrainingSets),
+    ),
+    customTrainingSets,
+  };
+}
+
+function parsePersistedTrainingWireStateV8(value: unknown): PersistedTrainingStateV8 | null {
+  if (
+    !isRecord(value) ||
+    !hasOnlyProperties(value, new Set(['dashboardEntries', 'customTrainingSets']))
+  ) {
+    return null;
+  }
+  const dashboardEntries = parseArray(value['dashboardEntries'], parsePersistedDashboardEntryV8);
+  const wireCustomTrainingSets = parseArray(
+    value['customTrainingSets'],
+    parsePersistedCustomTrainingSetWire,
+  );
+  if (
+    dashboardEntries === null ||
+    wireCustomTrainingSets === null ||
+    !validateUniqueEntryIds(dashboardEntries) ||
+    !validateUniqueSetIds(wireCustomTrainingSets) ||
+    !validateNoCuratedSetIdCollisions(wireCustomTrainingSets)
+  ) {
+    return null;
+  }
+
+  const customTrainingSets: TrainingSet[] = [];
+  for (const wireTrainingSet of wireCustomTrainingSets) {
+    const trainingSet = decodePersistedCustomTrainingSet(wireTrainingSet);
+    if (trainingSet === null) {
+      return null;
+    }
+    customTrainingSets.push(trainingSet);
+  }
+  return { dashboardEntries, customTrainingSets };
 }
 
 function validateUniqueEntryIds(entries: readonly { readonly id: string }[]): boolean {
@@ -747,6 +1087,32 @@ export function parsePersistedTrainingState(value: unknown): PersistedTrainingSt
     return null;
   }
   const dashboardEntries = parseArray(value['dashboardEntries'], parseDashboardEntry);
+  const customTrainingSets = parseArray(value['customTrainingSets'], parseCustomTrainingSet);
+  if (
+    dashboardEntries === null ||
+    customTrainingSets === null ||
+    !validateUniqueEntryIds(dashboardEntries) ||
+    !validateUniqueSetIds(customTrainingSets) ||
+    !validateNoCuratedSetIdCollisions(customTrainingSets)
+  ) {
+    return null;
+  }
+  return {
+    dashboardEntries: dashboardEntries.map((entry) =>
+      sanitizeDashboardActivityNotes(entry, customTrainingSets),
+    ),
+    customTrainingSets,
+  };
+}
+
+export function parsePersistedTrainingStateV8(value: unknown): PersistedTrainingStateV8 | null {
+  if (
+    !isRecord(value) ||
+    !hasOnlyProperties(value, new Set(['dashboardEntries', 'customTrainingSets']))
+  ) {
+    return null;
+  }
+  const dashboardEntries = parseArray(value['dashboardEntries'], parsePersistedDashboardEntryV8);
   const customTrainingSets = parseArray(value['customTrainingSets'], parseCustomTrainingSet);
   if (
     dashboardEntries === null ||
@@ -842,7 +1208,7 @@ export function parsePersistedTrainingStateV4(
   ) {
     return null;
   }
-  const dashboardEntries = parseArray(value['dashboardEntries'], parseDashboardEntry);
+  const dashboardEntries = parseArray(value['dashboardEntries'], parsePersistedDashboardEntryV8);
   const customTrainingSets = parseArray(
     value['customTrainingSets'],
     parseLegacyCustomTrainingSetV4,
@@ -975,7 +1341,7 @@ function collectKnownLegacyOverrideUnits(
 function migrateLegacyDashboardEntryV3ToV4(
   entry: LegacyDashboardEntry,
   unitsByActivityId: ReadonlyMap<string, TrainingQuantityUnit>,
-): DashboardEntry {
+): PersistedDashboardEntryV8 {
   const quantityOverrideEntries: [string, TrainingQuantityOverrides][] = Object.entries(
     entry.repOverrides,
   ).map(([activityId, value]) => [
@@ -1034,21 +1400,22 @@ function migrateLegacyQuantitiesV4ToV5(step: LegacyTrainingStepV4): TrainingQuan
   return Object.keys(quantities).length === 0 ? undefined : quantities;
 }
 
-function migrateLegacyExerciseV4ToV5(step: LegacyTrainingStepV4): TrainingExercise {
+function migrateLegacyExerciseV4ToV5(step: LegacyTrainingStepV4): TrainingActivity {
   const quantities = migrateLegacyQuantitiesV4ToV5(step);
   return {
     id: step.id,
     name: step.label,
     ...(quantities === undefined ? {} : { quantities }),
     ...(step.description === undefined ? {} : { notes: step.description }),
+    children: [],
   };
 }
 
-function migrateLegacySectionV4ToV5(section: LegacyTrainingSectionV4): TrainingSection {
+function migrateLegacySectionV4ToV5(section: LegacyTrainingSectionV4): TrainingActivity {
   return {
     id: section.id,
     name: section.label,
-    exercises: section.steps.map(migrateLegacyExerciseV4ToV5),
+    children: section.steps.map(migrateLegacyExerciseV4ToV5),
   };
 }
 
@@ -1058,12 +1425,12 @@ function migrateLegacyTrainingSetV4ToV5(trainingSet: LegacyTrainingSetV4): Train
     name: trainingSet.name,
     description: trainingSet.description,
     category: 'custom',
-    sections: trainingSet.sections.map(migrateLegacySectionV4ToV5),
+    activities: trainingSet.sections.map(migrateLegacySectionV4ToV5),
     isBuiltIn: false,
   };
 }
 
-export function migratePersistedTrainingStateV4ToV5(value: unknown): PersistedTrainingState {
+export function migratePersistedTrainingStateV4ToV5(value: unknown): PersistedTrainingStateV8 {
   const parsed = parsePersistedTrainingStateV4(value);
   if (parsed === null) {
     throw new Error('Training-store version 4 state is invalid.');
@@ -1073,7 +1440,7 @@ export function migratePersistedTrainingStateV4ToV5(value: unknown): PersistedTr
     dashboardEntries: parsed.dashboardEntries,
     customTrainingSets: parsed.customTrainingSets.map(migrateLegacyTrainingSetV4ToV5),
   };
-  const result = parsePersistedTrainingState(migrated);
+  const result = parsePersistedTrainingStateV8(migrated);
   if (result === null) {
     throw new Error('Training-store version 4 migration produced invalid state.');
   }
@@ -1119,7 +1486,7 @@ function createQuantityOverridesFromMap(
   };
 }
 
-function migrateDashboardEntryV5ToV6(entry: DashboardEntry): DashboardEntry {
+function migrateDashboardEntryV5ToV6(entry: PersistedDashboardEntryV8): PersistedDashboardEntryV8 {
   if (entry.trainingSetId !== INTERNATIONAL_DOJO_ID) {
     return entry;
   }
@@ -1162,19 +1529,23 @@ function migrateDashboardEntryV5ToV6(entry: DashboardEntry): DashboardEntry {
     }
   }
 
-  const quantityOverrides: Record<string, TrainingQuantityOverrides> = {};
+  const quantityOverrideEntries: [string, TrainingQuantityOverrides][] = [];
   for (const [activityId, overrides] of Object.entries(entry.quantityOverrides)) {
     if (!INTERNATIONAL_UCHIKOMI_MIGRATION_ACTIVITY_ID_SET.has(activityId)) {
-      quantityOverrides[activityId] = overrides;
+      quantityOverrideEntries.push([activityId, overrides]);
     }
   }
-  quantityOverrides[CORRECTED_INTERNATIONAL_UCHIKOMI_ACTIVITY_ID] =
-    createQuantityOverridesFromMap(mergedValues);
+  quantityOverrideEntries.push([
+    CORRECTED_INTERNATIONAL_UCHIKOMI_ACTIVITY_ID,
+    createQuantityOverridesFromMap(mergedValues),
+  ]);
 
-  return { ...entry, quantityOverrides };
+  return { ...entry, quantityOverrides: Object.fromEntries(quantityOverrideEntries) };
 }
 
-function migrateKakarigeijoDurationOverrideV5ToV6(entry: DashboardEntry): DashboardEntry {
+function migrateKakarigeijoDurationOverrideV5ToV6(
+  entry: PersistedDashboardEntryV8,
+): PersistedDashboardEntryV8 {
   if (entry.trainingSetId !== UNIVERSITY_VERSION_TWO_ID) {
     return entry;
   }
@@ -1219,8 +1590,8 @@ function migrateKakarigeijoDurationOverrideV5ToV6(entry: DashboardEntry): Dashbo
   };
 }
 
-export function migratePersistedTrainingStateV5ToV6(value: unknown): PersistedTrainingState {
-  const parsed = parsePersistedTrainingState(value);
+export function migratePersistedTrainingStateV5ToV6(value: unknown): PersistedTrainingStateV8 {
+  const parsed = parsePersistedTrainingStateV8(value);
   if (parsed === null) {
     throw new Error('Training-store version 5 state is invalid.');
   }
@@ -1231,7 +1602,7 @@ export function migratePersistedTrainingStateV5ToV6(value: unknown): PersistedTr
     ),
     customTrainingSets: parsed.customTrainingSets,
   };
-  const result = parsePersistedTrainingState(migrated);
+  const result = parsePersistedTrainingStateV8(migrated);
   if (result === null) {
     throw new Error('Training-store version 5 migration produced invalid state.');
   }
@@ -1239,6 +1610,176 @@ export function migratePersistedTrainingStateV5ToV6(value: unknown): PersistedTr
 }
 
 export const migrateV5ToV6 = migratePersistedTrainingStateV5ToV6;
+
+const POLICE_TYPE_TWO_MAWARIGEIKO_ACTIVITY_ID =
+  'police-dojo-asageiko-version-2-mawari-geiko-mawari-geiko';
+const POLICE_TYPE_TWO_ID = asTrainingSetId('police-dojo-asageiko-version-2');
+const REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ACTIVITY_ID =
+  'senior-high-school-kendo-club-core-strength-training-core-strength-training';
+const SENIOR_HIGH_SCHOOL_ID = asTrainingSetId('senior-high-school-kendo-club');
+
+function migrateDashboardEntryV6ToV7(entry: PersistedDashboardEntryV8): PersistedDashboardEntryV8 {
+  let changed = false;
+  const quantityOverrideEntries: [string, TrainingQuantityOverrides][] = [];
+
+  for (const [activityId, overrides] of Object.entries(entry.quantityOverrides)) {
+    if (
+      entry.trainingSetId === SENIOR_HIGH_SCHOOL_ID &&
+      activityId === REMOVED_SENIOR_HIGH_SCHOOL_CORE_STRENGTH_ACTIVITY_ID
+    ) {
+      changed = true;
+      continue;
+    }
+
+    if (
+      entry.trainingSetId === POLICE_TYPE_TWO_ID &&
+      activityId === POLICE_TYPE_TWO_MAWARIGEIKO_ACTIVITY_ID
+    ) {
+      const minutes = overrides.minutes;
+      if (minutes === undefined) {
+        changed = true;
+        continue;
+      }
+
+      quantityOverrideEntries.push([activityId, { minutes }]);
+      if (Object.keys(overrides).length !== 1) {
+        changed = true;
+      }
+      continue;
+    }
+
+    quantityOverrideEntries.push([activityId, overrides]);
+  }
+
+  return changed
+    ? { ...entry, quantityOverrides: Object.fromEntries(quantityOverrideEntries) }
+    : entry;
+}
+
+export function migratePersistedTrainingStateV6ToV7(value: unknown): PersistedTrainingStateV8 {
+  const parsed = parsePersistedTrainingStateV8(value);
+  if (parsed === null) {
+    throw new Error('Training-store version 6 state is invalid.');
+  }
+
+  const migrated = {
+    dashboardEntries: parsed.dashboardEntries.map(migrateDashboardEntryV6ToV7),
+    customTrainingSets: parsed.customTrainingSets,
+  };
+  const result = parsePersistedTrainingStateV8(migrated);
+  if (result === null) {
+    throw new Error('Training-store version 6 migration produced invalid state.');
+  }
+  return result;
+}
+
+export const migrateV6ToV7 = migratePersistedTrainingStateV6ToV7;
+
+const TOP_UNIVERSITY_CORRECTED_HIKI_SEQUENCE_ACTIVITY_ID =
+  'top-university-yakusoku-geiko-hiki-do-men-kirikaeshi';
+const TOP_UNIVERSITY_FREE_UCHIKOMI_ACTIVITY_ID = 'top-university-fee-version-uchikomi-geiko';
+const TOP_UNIVERSITY_FREE_KAKARIGEIKO_ACTIVITY_ID = 'top-university-fee-version-kakari-geiko';
+const TOP_UNIVERSITY_FINAL_KAKARIGEIKO_ACTIVITY_ID = 'top-university-kakarigeiko-kakarigeiko';
+const TOP_UNIVERSITY_ID = asTrainingSetId('top-university');
+const TOP_UNIVERSITY_SECONDS_ONLY_ACTIVITY_IDS = new Set<string>([
+  TOP_UNIVERSITY_FREE_UCHIKOMI_ACTIVITY_ID,
+  TOP_UNIVERSITY_FREE_KAKARIGEIKO_ACTIVITY_ID,
+  TOP_UNIVERSITY_FINAL_KAKARIGEIKO_ACTIVITY_ID,
+]);
+
+function migrateDashboardEntryV7ToV8(entry: PersistedDashboardEntryV8): PersistedDashboardEntryV8 {
+  if (entry.trainingSetId !== TOP_UNIVERSITY_ID) {
+    return entry;
+  }
+
+  let changed = false;
+  const quantityOverrideEntries: [string, TrainingQuantityOverrides][] = [];
+
+  for (const [activityId, overrides] of Object.entries(entry.quantityOverrides)) {
+    if (activityId === TOP_UNIVERSITY_CORRECTED_HIKI_SEQUENCE_ACTIVITY_ID) {
+      if (!Object.hasOwn(overrides, 'repetitions')) {
+        quantityOverrideEntries.push([activityId, overrides]);
+        continue;
+      }
+
+      const migratedValues = new Map<TrainingQuantityUnit, number>();
+      for (const [unit, value] of Object.entries(overrides)) {
+        if (unit !== 'repetitions') {
+          if (!isTrainingQuantityUnit(unit) || !isValidTrainingQuantityValue(unit, value)) {
+            throw new Error('Training-store version 7 state is invalid.');
+          }
+          migratedValues.set(unit, value);
+        }
+      }
+      const migratedOverrides = createQuantityOverridesFromMap(migratedValues);
+      changed = true;
+      if (Object.keys(migratedOverrides).length > 0) {
+        quantityOverrideEntries.push([activityId, migratedOverrides]);
+      }
+      continue;
+    }
+
+    if (TOP_UNIVERSITY_SECONDS_ONLY_ACTIVITY_IDS.has(activityId)) {
+      const seconds = overrides.seconds;
+      if (seconds === undefined) {
+        changed = true;
+        continue;
+      }
+      quantityOverrideEntries.push([activityId, { seconds }]);
+      if (Object.keys(overrides).length !== 1) {
+        changed = true;
+      }
+      continue;
+    }
+
+    quantityOverrideEntries.push([activityId, overrides]);
+  }
+
+  return changed
+    ? { ...entry, quantityOverrides: Object.fromEntries(quantityOverrideEntries) }
+    : entry;
+}
+
+export function migratePersistedTrainingStateV7ToV8(value: unknown): PersistedTrainingStateV8 {
+  const parsed = parsePersistedTrainingStateV8(value);
+  if (parsed === null) {
+    throw new Error('Training-store version 7 state is invalid.');
+  }
+
+  const migrated = {
+    dashboardEntries: parsed.dashboardEntries.map(migrateDashboardEntryV7ToV8),
+    customTrainingSets: parsed.customTrainingSets,
+  };
+  const result = parsePersistedTrainingStateV8(migrated);
+  if (result === null) {
+    throw new Error('Training-store version 7 migration produced invalid state.');
+  }
+  return result;
+}
+
+export const migrateV7ToV8 = migratePersistedTrainingStateV7ToV8;
+
+export function migratePersistedTrainingStateV8ToV9(value: unknown): PersistedTrainingState {
+  const parsed = parsePersistedTrainingStateV8(value);
+  if (parsed === null) {
+    throw new Error('Training-store version 8 state is invalid.');
+  }
+
+  const migrated = {
+    dashboardEntries: parsed.dashboardEntries.map((entry) => ({
+      ...entry,
+      activityNotes: {},
+    })),
+    customTrainingSets: parsed.customTrainingSets,
+  };
+  const result = parsePersistedTrainingState(migrated);
+  if (result === null) {
+    throw new Error('Training-store version 8 migration produced invalid state.');
+  }
+  return result;
+}
+
+export const migrateV8ToV9 = migratePersistedTrainingStateV8ToV9;
 
 export function migratePersistedTrainingState(
   persistedState: unknown,
@@ -1251,42 +1792,148 @@ export function migratePersistedTrainingState(
       const stateV3 = migratePersistedTrainingStateV2ToV3(stateV2);
       const stateV4 = migratePersistedTrainingStateV3ToV4(stateV3);
       const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
-      return migratePersistedTrainingStateV5ToV6(stateV5);
+      const stateV6 = migratePersistedTrainingStateV5ToV6(stateV5);
+      const stateV7 = migratePersistedTrainingStateV6ToV7(stateV6);
+      const stateV8 = migratePersistedTrainingStateV7ToV8(stateV7);
+      return migratePersistedTrainingStateV8ToV9(stateV8);
     }
     case 1: {
       const stateV2 = migratePersistedTrainingStateV1ToV2(persistedState);
       const stateV3 = migratePersistedTrainingStateV2ToV3(stateV2);
       const stateV4 = migratePersistedTrainingStateV3ToV4(stateV3);
       const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
-      return migratePersistedTrainingStateV5ToV6(stateV5);
+      const stateV6 = migratePersistedTrainingStateV5ToV6(stateV5);
+      const stateV7 = migratePersistedTrainingStateV6ToV7(stateV6);
+      const stateV8 = migratePersistedTrainingStateV7ToV8(stateV7);
+      return migratePersistedTrainingStateV8ToV9(stateV8);
     }
     case 2: {
       const stateV3 = migratePersistedTrainingStateV2ToV3(persistedState);
       const stateV4 = migratePersistedTrainingStateV3ToV4(stateV3);
       const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
-      return migratePersistedTrainingStateV5ToV6(stateV5);
+      const stateV6 = migratePersistedTrainingStateV5ToV6(stateV5);
+      const stateV7 = migratePersistedTrainingStateV6ToV7(stateV6);
+      const stateV8 = migratePersistedTrainingStateV7ToV8(stateV7);
+      return migratePersistedTrainingStateV8ToV9(stateV8);
     }
     case 3: {
       const stateV4 = migratePersistedTrainingStateV3ToV4(persistedState);
       const stateV5 = migratePersistedTrainingStateV4ToV5(stateV4);
-      return migratePersistedTrainingStateV5ToV6(stateV5);
+      const stateV6 = migratePersistedTrainingStateV5ToV6(stateV5);
+      const stateV7 = migratePersistedTrainingStateV6ToV7(stateV6);
+      const stateV8 = migratePersistedTrainingStateV7ToV8(stateV7);
+      return migratePersistedTrainingStateV8ToV9(stateV8);
     }
     case 4: {
       const stateV5 = migratePersistedTrainingStateV4ToV5(persistedState);
-      return migratePersistedTrainingStateV5ToV6(stateV5);
+      const stateV6 = migratePersistedTrainingStateV5ToV6(stateV5);
+      const stateV7 = migratePersistedTrainingStateV6ToV7(stateV6);
+      const stateV8 = migratePersistedTrainingStateV7ToV8(stateV7);
+      return migratePersistedTrainingStateV8ToV9(stateV8);
     }
-    case 5:
-      return migratePersistedTrainingStateV5ToV6(persistedState);
+    case 5: {
+      const stateV6 = migratePersistedTrainingStateV5ToV6(persistedState);
+      const stateV7 = migratePersistedTrainingStateV6ToV7(stateV6);
+      const stateV8 = migratePersistedTrainingStateV7ToV8(stateV7);
+      return migratePersistedTrainingStateV8ToV9(stateV8);
+    }
+    case 6: {
+      const stateV7 = migratePersistedTrainingStateV6ToV7(persistedState);
+      const stateV8 = migratePersistedTrainingStateV7ToV8(stateV7);
+      return migratePersistedTrainingStateV8ToV9(stateV8);
+    }
+    case 7:
+      return migratePersistedTrainingStateV8ToV9(
+        migratePersistedTrainingStateV7ToV8(persistedState),
+      );
+    case 8:
+      return migratePersistedTrainingStateV8ToV9(persistedState);
     case TRAINING_STORE_PERSISTENCE_VERSION: {
-      const stateV6 = parsePersistedTrainingState(persistedState);
-      if (stateV6 === null) {
-        throw new Error('Training-store version 6 state is invalid.');
+      const stateV9 = parsePersistedTrainingState(persistedState);
+      if (stateV9 === null) {
+        throw new Error('Training-store version 9 state is invalid.');
       }
-      return stateV6;
+      return stateV9;
     }
     default:
       throw new Error(`Unsupported training-store persistence version: ${String(version)}`);
   }
+}
+
+function assertStorageCompatibleActivity(activity: TrainingActivity, path: string): void {
+  if (activity.editableQuantityUnits !== undefined || activity.allowsSessionNotes !== undefined) {
+    throw new Error(`${path} contains activity metadata unsupported by custom-set storage.`);
+  }
+}
+
+function encodePersistedTrainingExercise(
+  activity: TrainingActivity,
+  path: string,
+): PersistedTrainingExercise {
+  assertStorageCompatibleActivity(activity, path);
+  if (activity.children.length > 0) {
+    throw new Error(`${path}.children contains unsupported nested custom activities.`);
+  }
+  return {
+    id: activity.id,
+    name: activity.name,
+    ...(activity.quantities === undefined ? {} : { quantities: activity.quantities }),
+    ...(activity.notes === undefined ? {} : { notes: activity.notes }),
+  };
+}
+
+function encodePersistedTrainingSection(
+  activity: TrainingActivity,
+  path: string,
+): PersistedTrainingSection {
+  assertStorageCompatibleActivity(activity, path);
+  return {
+    id: activity.id,
+    name: activity.name,
+    ...(activity.quantities === undefined ? {} : { quantities: activity.quantities }),
+    ...(activity.notes === undefined ? {} : { notes: activity.notes }),
+    exercises: activity.children.map((child, index) =>
+      encodePersistedTrainingExercise(child, `${path}.children[${index}]`),
+    ),
+  };
+}
+
+function encodePersistedCustomTrainingSet(
+  trainingSet: TrainingSet,
+  index: number,
+): PersistedCustomTrainingSet {
+  if (
+    trainingSet.isBuiltIn !== false ||
+    trainingSet.category !== 'custom' ||
+    trainingSet.sourceId !== undefined
+  ) {
+    throw new Error(`customTrainingSets[${index}] must be a custom user-authored training set.`);
+  }
+  return {
+    id: trainingSet.id,
+    name: trainingSet.name,
+    ...(trainingSet.description === undefined ? {} : { description: trainingSet.description }),
+    category: 'custom',
+    sections: trainingSet.activities.map((activity, activityIndex) =>
+      encodePersistedTrainingSection(
+        activity,
+        `customTrainingSets[${index}].activities[${activityIndex}]`,
+      ),
+    ),
+    isBuiltIn: false,
+  };
+}
+
+/** Encode canonical state into the unchanged two-level sections/exercises storage DTO. */
+export function encodePersistedTrainingState(value: unknown): PersistedTrainingWireState {
+  const parsed = parsePersistedTrainingState(value);
+  if (parsed === null) {
+    throw new Error('Training-store state is invalid and cannot be encoded.');
+  }
+  return {
+    dashboardEntries: parsed.dashboardEntries,
+    customTrainingSets: parsed.customTrainingSets.map(encodePersistedCustomTrainingSet),
+  };
 }
 
 function parseStorageValue(value: unknown): StorageValue<PersistedStorageState> | null {
@@ -1309,7 +1956,7 @@ function parseStorageValue(value: unknown): StorageValue<PersistedStorageState> 
     throw new Error(`Unsupported training-store persistence version: ${String(version)}`);
   }
   if (version === TRAINING_STORE_PERSISTENCE_VERSION) {
-    const state = parsePersistedTrainingState(value['state']);
+    const state = parsePersistedTrainingWireState(value['state']);
     if (state === null) {
       throw new Error('Training-store persistence data is invalid.');
     }
@@ -1346,10 +1993,13 @@ function parseStorageValue(value: unknown): StorageValue<PersistedStorageState> 
       }
       return { state, version };
     }
-    case 5: {
-      const state = parsePersistedTrainingState(value['state']);
+    case 5:
+    case 6:
+    case 7:
+    case 8: {
+      const state = parsePersistedTrainingWireStateV8(value['state']);
       if (state === null) {
-        throw new Error('Training-store version 5 persistence data is invalid.');
+        throw new Error(`Training-store version ${String(version)} persistence data is invalid.`);
       }
       return { state, version };
     }
@@ -1373,7 +2023,12 @@ export function createTrainingJSONStorage(
         ? storedValue.then(parseStorageValue)
         : parseStorageValue(storedValue);
     },
-    setItem: (name, value) => jsonStorage.setItem(name, value),
+    setItem: (name, value) => {
+      const state = encodePersistedTrainingState(value.state);
+      const encodedValue =
+        value.version === undefined ? { state } : { state, version: value.version };
+      return jsonStorage.setItem(name, encodedValue);
+    },
     removeItem: (name) => jsonStorage.removeItem(name),
   };
 }
@@ -1395,14 +2050,21 @@ function classifyParsedEnvelope(value: unknown): TrainingStorageInspection {
     return { status: 'unsupported-future', kind: 'unsupported-future', version };
   }
   if (version === TRAINING_STORE_PERSISTENCE_VERSION) {
-    const state = parsePersistedTrainingState(value['state']);
+    const state = parsePersistedTrainingWireState(value['state']);
     return state === null
       ? { status: 'corrupt', kind: 'corrupt', reason: 'invalid-domain' }
       : { status: 'ready', kind: 'ready', version, state };
   }
 
   try {
-    const state = migratePersistedTrainingState(value['state'], version);
+    const persistedState =
+      version === 5 || version === 6 || version === 7 || version === 8
+        ? parsePersistedTrainingWireStateV8(value['state'])
+        : value['state'];
+    if (persistedState === null) {
+      return { status: 'corrupt', kind: 'corrupt', reason: 'invalid-domain' };
+    }
+    const state = migratePersistedTrainingState(persistedState, version);
     switch (version) {
       case 0:
       case 1:
@@ -1410,6 +2072,9 @@ function classifyParsedEnvelope(value: unknown): TrainingStorageInspection {
       case 3:
       case 4:
       case 5:
+      case 6:
+      case 7:
+      case 8:
         return {
           status: 'migrated',
           kind: 'migrated',

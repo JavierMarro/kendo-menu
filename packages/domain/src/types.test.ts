@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
+import defaultDrillsSource from '../data/default-drills.json';
 import {
   DEFAULT_TRAINING_SETS,
   MAX_REPETITIONS,
   RESEARCHED_ACTIVITY_COUNT,
   RESEARCHED_DRILL_COUNT,
+  RESEARCHED_ID_COUNT,
+  RESEARCHED_LEAF_EXERCISE_COUNT,
   RESEARCHED_SECTION_COUNT,
   TrainingValidationError,
   asTrainingSetId,
@@ -12,40 +15,44 @@ import {
   assertValidTrainingSetInput,
   getDefaultTrainingQuantity,
   getDefaultTrainingQuantityUnits,
+  getEditableTrainingQuantityUnits,
   getEffectiveTrainingQuantity,
-  getTrainingSectionActivities,
+  getTrainingSetActivities,
   getTrainingSetActivityCount,
+  getTrainingSetLeafExerciseCount,
+  isValidEditableQuantityUnits,
   isValidRepetitionCount,
   isValidTrainingQuantities,
   isValidTrainingQuantityValue,
+  validateCuratedDrills,
   validateRepetitionCount,
   validateTrainingSet,
   validateTrainingSetInput,
   type TrainingActivity,
-  type TrainingSection,
   type TrainingSet,
 } from './index';
 
-function requireTrainingSet(id: string): TrainingSet {
-  const trainingSet = DEFAULT_TRAINING_SETS.find((candidate) => candidate.id === id);
-  if (trainingSet === undefined) {
-    throw new Error(`Missing curated training set: ${id}`);
-  }
-  return trainingSet;
+function leaf(id: string, name = id, extras: object = {}): TrainingActivity {
+  return { id, name, ...extras, children: [] };
 }
 
-function requireActivity(trainingSetId: string, activityId: string): TrainingActivity {
-  const trainingSet = requireTrainingSet(trainingSetId);
-  for (const section of trainingSet.sections) {
-    if (section.id === activityId) {
-      return section;
-    }
-    const exercise = section.exercises.find((candidate) => candidate.id === activityId);
-    if (exercise !== undefined) {
-      return exercise;
-    }
-  }
-  throw new Error(`Missing activity: ${activityId}`);
+function activity(
+  id: string,
+  name: string,
+  children: readonly TrainingActivity[],
+  extras: object = {},
+): TrainingActivity {
+  return { id, name, ...extras, children };
+}
+
+function trainingSet(activities: readonly TrainingActivity[]): TrainingSet {
+  return {
+    id: asTrainingSetId('fixture-set'),
+    name: 'Fixture set',
+    category: 'custom',
+    activities,
+    isBuiltIn: false,
+  };
 }
 
 describe('training quantity validation', () => {
@@ -75,7 +82,7 @@ describe('training quantity validation', () => {
     );
   });
 
-  it('supports valid fixed and ranged durations and rejects malformed ranges', () => {
+  it('supports ordered fixed and ranged durations and rejects malformed ranges', () => {
     expect(isValidTrainingQuantities({ duration: { unit: 'seconds', value: 30 } })).toBe(true);
     expect(isValidTrainingQuantities({ duration: { unit: 'minutes', min: 2, max: 5 } })).toBe(true);
     expect(isValidTrainingQuantities({ duration: { unit: 'seconds', min: 60, max: 30 } })).toBe(
@@ -85,14 +92,8 @@ describe('training quantity validation', () => {
       false,
     );
     expect(
-      isValidTrainingQuantities({
-        duration: { unit: 'seconds', value: 30, min: 30, max: 30 },
-      }),
+      isValidTrainingQuantities({ duration: { unit: 'seconds', value: 30, min: 30, max: 30 } }),
     ).toBe(false);
-    expect(isValidTrainingQuantities({ duration: { unit: 'hours', value: 1 } })).toBe(false);
-  });
-
-  it('validates scalar override units without silently converting durations', () => {
     expect(isValidTrainingQuantityValue('seconds', 20.5)).toBe(true);
     expect(isValidTrainingQuantityValue('minutes', 2.5)).toBe(true);
     expect(isValidTrainingQuantityValue('rounds', 3)).toBe(true);
@@ -101,59 +102,241 @@ describe('training quantity validation', () => {
   });
 });
 
-describe('training-set validation', () => {
-  const validTrainingSet: TrainingSet = {
-    id: asTrainingSetId('custom-set'),
-    name: 'Custom set',
-    description: '',
-    category: 'custom',
-    sections: [
-      {
-        id: 'custom-section',
-        name: 'Standalone section',
-        quantities: { repetitions: 0 },
-        notes: '',
-        exercises: [],
-      },
-    ],
-    isBuiltIn: false,
-  };
-
-  it('accepts optional text, section-owned quantities, and empty exercise arrays', () => {
-    expect(validateTrainingSet(validTrainingSet)).toEqual({
-      success: true,
-      value: validTrainingSet,
-    });
-  });
-
-  it.each([
-    ['negative count', { repetitions: -1 }],
-    ['decimal count', { sets: 1.5 }],
-    ['non-finite duration', { duration: { unit: 'seconds', value: Number.POSITIVE_INFINITY } }],
-    ['reversed range', { duration: { unit: 'minutes', min: 10, max: 5 } }],
-    ['empty quantities', {}],
-  ])('rejects %s', (_label, quantities) => {
-    const malformed: unknown = {
-      ...validTrainingSet,
-      sections: [{ ...validTrainingSet.sections[0], quantities }],
-    };
-    expect(validateTrainingSet(malformed).success).toBe(false);
-  });
-
-  it('rejects duplicate activity IDs and unsupported properties', () => {
-    const duplicate: unknown = {
-      ...validTrainingSet,
-      sections: [
-        {
-          id: 'duplicate',
-          name: 'Section',
-          exercises: [{ id: 'duplicate', name: 'Exercise' }],
-        },
+describe('recursive training-set validation and traversal', () => {
+  const recursiveSet = trainingSet([
+    activity(
+      'root',
+      'Root',
+      [
+        activity(
+          'branch',
+          'Branch',
+          [activity('nested', 'Nested', [leaf('leaf', 'Leaf', { notes: 'Keep posture.' })])],
+          { quantities: { rounds: 2 }, editableQuantityUnits: ['rounds', 'minutes'] },
+        ),
+        leaf('sibling', 'Sibling'),
       ],
+      { allowsSessionNotes: true },
+    ),
+  ]);
+
+  it('accepts a valid four-level tree and returns a deeply cloned, frozen value', () => {
+    const result = validateTrainingSet(recursiveSet);
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      return;
+    }
+    expect(result.value).not.toBe(recursiveSet);
+    expect(getTrainingSetActivities(result.value).map((item) => item.id)).toEqual([
+      'root',
+      'branch',
+      'nested',
+      'leaf',
+      'sibling',
+    ]);
+    expect(getTrainingSetActivityCount(result.value)).toBe(5);
+    expect(getTrainingSetLeafExerciseCount(result.value)).toBe(2);
+    expect(result.value.activities[0]?.children[0]?.children[0]?.children[0]?.notes).toBe(
+      'Keep posture.',
+    );
+    expect(Object.isFrozen(result.value)).toBe(true);
+    expect(Object.isFrozen(result.value.activities)).toBe(true);
+    expect(Object.isFrozen(result.value.activities[0]?.children)).toBe(true);
+    expect(Object.isFrozen(result.value.activities[0]?.children[0]?.quantities)).toBe(true);
+    expect(Object.isFrozen(result.value.activities[0]?.children[0]?.editableQuantityUnits)).toBe(
+      true,
+    );
+    expect(Object.isFrozen(result.value.activities[0]?.children[0]?.children)).toBe(true);
+  });
+
+  it('requires children on every runtime activity, including empty leaf collections', () => {
+    expect(
+      validateTrainingSet({
+        ...recursiveSet,
+        activities: [{ id: 'root', name: 'Root', children: [] }],
+      }).success,
+    ).toBe(true);
+    expect(
+      validateTrainingSet({
+        ...recursiveSet,
+        activities: [{ id: 'root', name: 'Root' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      validateTrainingSet({
+        ...recursiveSet,
+        activities: [{ id: 'root', name: 'Root', children: [{ id: 'child', name: 'Child' }] }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects duplicate IDs across depths and unsupported activity properties', () => {
+    const duplicate: unknown = trainingSet([activity('root', 'Root', [leaf('root', 'Duplicate')])]);
+    const unsupported: unknown = {
+      ...recursiveSet,
+      activities: [{ id: 'root', name: 'Root', children: [], exercises: [] }],
     };
-    const unsupported: unknown = { ...validTrainingSet, defaultReps: 10 };
     expect(validateTrainingSet(duplicate).success).toBe(false);
     expect(validateTrainingSet(unsupported).success).toBe(false);
+  });
+
+  it('rejects cyclic children without recursing forever', () => {
+    const cyclic: { id: string; name: string; children: unknown[] } = {
+      id: 'cyclic',
+      name: 'Cyclic',
+      children: [],
+    };
+    cyclic.children.push(cyclic);
+    expect(
+      validateTrainingSet({
+        ...recursiveSet,
+        activities: [cyclic],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('validates literal session-note permission and nonempty unique editable units', () => {
+    expect(isValidEditableQuantityUnits(['seconds'])).toBe(true);
+    expect(isValidEditableQuantityUnits([])).toBe(false);
+    expect(isValidEditableQuantityUnits(['seconds', 'seconds'])).toBe(false);
+    expect(isValidEditableQuantityUnits(['hours'])).toBe(false);
+    expect(
+      validateTrainingSet({
+        ...recursiveSet,
+        activities: [{ id: 'root', name: 'Root', children: [], editableQuantityUnits: [] }],
+      }).success,
+    ).toBe(false);
+    expect(
+      validateTrainingSet({
+        ...recursiveSet,
+        activities: [{ id: 'root', name: 'Root', children: [], allowsSessionNotes: false }],
+      }).success,
+    ).toBe(false);
+    expect(
+      validateTrainingSet({
+        ...recursiveSet,
+        activities: [{ id: 'root', name: 'Root', children: [], allowsSessionNotes: undefined }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('combines explicit quantities, editable metadata, and overrides without fabricating defaults', () => {
+    const activityWithMetadata = leaf('metadata', 'Metadata', {
+      editableQuantityUnits: ['minutes', 'seconds'],
+    });
+    expect(getDefaultTrainingQuantityUnits(activityWithMetadata)).toEqual([]);
+    expect(getDefaultTrainingQuantity(activityWithMetadata, 'minutes')).toBeUndefined();
+    expect(getEditableTrainingQuantityUnits(activityWithMetadata)).toEqual(['minutes', 'seconds']);
+    expect(getEditableTrainingQuantityUnits(activityWithMetadata, { repetitions: 0 })).toEqual([
+      'minutes',
+      'seconds',
+      'repetitions',
+    ]);
+    const explicit = leaf('explicit', 'Explicit', {
+      quantities: { repetitions: 0 },
+    });
+    expect(getEffectiveTrainingQuantity(explicit, undefined, 'repetitions')).toBe(0);
+    expect(getEffectiveTrainingQuantity(activityWithMetadata, undefined, 'repetitions')).toBe(
+      undefined,
+    );
+  });
+});
+
+describe('curated source validation', () => {
+  const fixture = [
+    {
+      id: 'session',
+      name: 'Session',
+      sections: [
+        {
+          id: 'root',
+          name: 'Root',
+          exercises: [
+            {
+              id: 'branch',
+              name: 'Branch',
+              editableQuantityUnits: ['repetitions', 'minutes'],
+              allowsSessionNotes: true,
+              exercises: [
+                {
+                  id: 'leaf',
+                  name: 'Leaf',
+                },
+              ],
+            },
+            { id: 'empty', name: 'Empty', exercises: [] },
+            { id: 'omitted', name: 'Omitted' },
+          ],
+        },
+      ],
+    },
+  ] as const;
+
+  it('accepts nested three-level/four-level source activities and empty child arrays', () => {
+    const result = validateCuratedDrills(fixture);
+    expect(result).toEqual({ success: true, value: fixture });
+  });
+
+  it('rejects malformed nested children, unsupported properties, and duplicate IDs at depth', () => {
+    expect(
+      validateCuratedDrills([
+        {
+          ...fixture[0],
+          sections: [
+            {
+              ...fixture[0].sections[0],
+              exercises: [
+                { id: 'branch', name: 'Branch', exercises: [{ id: 'branch', name: 'Dup' }] },
+              ],
+            },
+          ],
+        },
+      ]).success,
+    ).toBe(false);
+    expect(
+      validateCuratedDrills([
+        {
+          ...fixture[0],
+          sections: [
+            { ...fixture[0].sections[0], exercises: [{ id: 'bad', name: 'Bad', exercises: {} }] },
+          ],
+        },
+      ]).success,
+    ).toBe(false);
+    expect(
+      validateCuratedDrills([
+        {
+          ...fixture[0],
+          sections: [
+            {
+              ...fixture[0].sections[0],
+              exercises: [{ id: 'bad-prop', name: 'Bad prop', unsupported: true }],
+            },
+          ],
+        },
+      ]).success,
+    ).toBe(false);
+  });
+
+  it('validates the unchanged default curated JSON without researched-count coupling', () => {
+    const result = validateCuratedDrills(defaultDrillsSource);
+    expect(result.success).toBe(true);
+    expect(DEFAULT_TRAINING_SETS).toHaveLength(RESEARCHED_DRILL_COUNT);
+    expect(DEFAULT_TRAINING_SETS.flatMap((set) => set.activities)).toHaveLength(
+      RESEARCHED_SECTION_COUNT,
+    );
+    expect(DEFAULT_TRAINING_SETS.flatMap(getTrainingSetActivities)).toHaveLength(
+      RESEARCHED_ACTIVITY_COUNT,
+    );
+    expect(
+      DEFAULT_TRAINING_SETS.reduce((total, set) => total + getTrainingSetLeafExerciseCount(set), 0),
+    ).toBe(RESEARCHED_LEAF_EXERCISE_COUNT);
+    expect(
+      new Set([
+        ...DEFAULT_TRAINING_SETS.map((set) => set.id),
+        ...DEFAULT_TRAINING_SETS.flatMap(getTrainingSetActivities).map((item) => item.id),
+      ]),
+    ).toHaveProperty('size', RESEARCHED_ID_COUNT);
   });
 });
 
@@ -170,7 +353,7 @@ describe('custom training-set input', () => {
     ],
   } as const;
 
-  it('accepts repetition-only builder output and preserves explicit zero', () => {
+  it('accepts existing two-level builder output and preserves explicit zero', () => {
     const result = validateTrainingSetInput(validInput);
     expect(result.success).toBe(true);
     if (result.success) {
@@ -179,7 +362,7 @@ describe('custom training-set input', () => {
     expect(() => assertValidTrainingSetInput(validInput)).not.toThrow();
   });
 
-  it('generalizes inputs to section quantities, notes, and empty exercise arrays', () => {
+  it('accepts section quantities, notes, and empty exercise arrays', () => {
     expect(
       validateTrainingSetInput({
         name: 'Standalone',
@@ -196,22 +379,28 @@ describe('custom training-set input', () => {
     ).toBe(true);
   });
 
-  it.each([
-    ['blank set name', { ...validInput, name: ' ' }],
-    [
-      'blank section name',
-      { ...validInput, sections: [{ name: ' ', exercises: validInput.sections[0].exercises }] },
-    ],
-    [
-      'blank exercise name',
-      {
+  it('rejects blank names, caller IDs, and invalid quantities', () => {
+    expect(validateTrainingSetInput({ ...validInput, name: ' ' }).success).toBe(false);
+    expect(
+      validateTrainingSetInput({
         ...validInput,
-        sections: [{ name: 'Section', exercises: [{ name: ' ', quantities: { repetitions: 1 } }] }],
-      },
-    ],
-    [
-      'repetitions above builder maximum',
-      {
+        sections: [{ name: ' ', exercises: validInput.sections[0].exercises }],
+      }).success,
+    ).toBe(false);
+    expect(
+      validateTrainingSetInput({
+        ...validInput,
+        sections: [{ name: 'Section', exercises: [{ name: ' ' }] }],
+      }).success,
+    ).toBe(false);
+    expect(
+      validateTrainingSetInput({
+        ...validInput,
+        sections: [{ name: 'Section', exercises: [{ name: 'Exercise', quantities: {} }] }],
+      }).success,
+    ).toBe(false);
+    expect(
+      validateTrainingSetInput({
         ...validInput,
         sections: [
           {
@@ -219,132 +408,13 @@ describe('custom training-set input', () => {
             exercises: [{ name: 'Exercise', quantities: { repetitions: MAX_REPETITIONS + 1 } }],
           },
         ],
-      },
-    ],
-    [
-      'caller-supplied id',
-      {
-        ...validInput,
-        sections: [
-          {
-            id: 'caller-id',
-            name: 'Section',
-            exercises: validInput.sections[0].exercises,
-          },
-        ],
-      },
-    ],
-  ])('rejects %s', (_label, input) => {
-    expect(validateTrainingSetInput(input).success).toBe(false);
-  });
-});
-
-describe('curated domain behavior', () => {
-  it('keeps the researched collection counts and stable IDs', () => {
-    const sections = DEFAULT_TRAINING_SETS.flatMap((trainingSet) => trainingSet.sections);
-    const ids = DEFAULT_TRAINING_SETS.flatMap((trainingSet) => [
-      trainingSet.id,
-      ...trainingSet.sections.flatMap((section) => [
-        section.id,
-        ...section.exercises.map((exercise) => exercise.id),
-      ]),
-    ]);
-
-    expect(DEFAULT_TRAINING_SETS).toHaveLength(RESEARCHED_DRILL_COUNT);
-    expect(sections).toHaveLength(RESEARCHED_SECTION_COUNT);
+      }).success,
+    ).toBe(false);
     expect(
-      DEFAULT_TRAINING_SETS.reduce(
-        (total, trainingSet) => total + getTrainingSetActivityCount(trainingSet),
-        0,
-      ),
-    ).toBe(RESEARCHED_ACTIVITY_COUNT);
-    expect(new Set(ids).size).toBe(ids.length);
-  });
-
-  it('deep-freezes every curated built-in object and nested quantity', () => {
-    expect(Object.isFrozen(DEFAULT_TRAINING_SETS)).toBe(true);
-    for (const trainingSet of DEFAULT_TRAINING_SETS) {
-      expect(trainingSet.isBuiltIn).toBe(true);
-      expect(Object.isFrozen(trainingSet)).toBe(true);
-      expect(Object.isFrozen(trainingSet.sections)).toBe(true);
-      for (const section of trainingSet.sections) {
-        expect(Object.isFrozen(section)).toBe(true);
-        expect(Object.isFrozen(section.exercises)).toBe(true);
-        if (section.quantities !== undefined) {
-          expect(Object.isFrozen(section.quantities)).toBe(true);
-          if (section.quantities.duration !== undefined) {
-            expect(Object.isFrozen(section.quantities.duration)).toBe(true);
-          }
-        }
-        for (const exercise of section.exercises) {
-          expect(Object.isFrozen(exercise)).toBe(true);
-          if (exercise.quantities !== undefined) {
-            expect(Object.isFrozen(exercise.quantities)).toBe(true);
-            if (exercise.quantities.duration !== undefined) {
-              expect(Object.isFrozen(exercise.quantities.duration)).toBe(true);
-            }
-          }
-        }
-      }
-    }
-  });
-
-  it('treats standalone sections and quantity-owning parent sections as editable activities', () => {
-    const standalone: TrainingSection = {
-      id: 'jigeiko',
-      name: 'Jigeiko',
-      exercises: [],
-    };
-    const blockWithExercise: TrainingSection = {
-      id: 'circuit',
-      name: 'Circuit',
-      quantities: { rounds: 3 },
-      exercises: [{ id: 'station', name: 'Station', quantities: { repetitions: 5 } }],
-    };
-
-    expect(getTrainingSectionActivities(standalone)).toEqual([standalone]);
-    expect(getTrainingSectionActivities(blockWithExercise)).toEqual([
-      blockWithExercise,
-      blockWithExercise.exercises[0],
-    ]);
-  });
-
-  it('reads fixed and ranged defaults and applies scalar overrides independently', () => {
-    const activity: TrainingActivity = {
-      id: 'activity',
-      name: 'Timed block',
-      quantities: {
-        repetitions: 5,
-        sets: 4,
-        duration: { unit: 'seconds', min: 30, max: 60 },
-      },
-    };
-    const originalQuantities = activity.quantities;
-
-    expect(getDefaultTrainingQuantityUnits(activity)).toEqual(['repetitions', 'sets', 'seconds']);
-    expect(getDefaultTrainingQuantity(activity, 'seconds')).toEqual({ min: 30, max: 60 });
-    expect(getEffectiveTrainingQuantity(activity, { repetitions: 8, seconds: 45 }, 'seconds')).toBe(
-      45,
-    );
-    expect(getEffectiveTrainingQuantity(activity, { repetitions: 8, seconds: 45 }, 'sets')).toBe(4);
-    expect(getEffectiveTrainingQuantity(activity, undefined, 'seconds')).toEqual({
-      min: 30,
-      max: 60,
-    });
-    expect(activity.quantities).toBe(originalQuantities);
-  });
-
-  it('preserves representative stable standalone and exercise IDs', () => {
-    const warmUp = requireActivity(
-      'international-dojo-2-hour-session',
-      'international-dojo-2-hour-session-warm-up-warm-up',
-    );
-    const uchikomiSequence = requireActivity(
-      'international-dojo-2-hour-session',
-      'international-dojo-2-hour-session-uchikomi-men-kote-kote-men-men',
-    );
-
-    expect(warmUp.name).toBe('Warm-up');
-    expect(uchikomiSequence.name).toBe('Men → Kote → Kote-men → Men');
+      validateTrainingSetInput({
+        ...validInput,
+        sections: [{ id: 'caller-id', name: 'Section', exercises: [] }],
+      }).success,
+    ).toBe(false);
   });
 });

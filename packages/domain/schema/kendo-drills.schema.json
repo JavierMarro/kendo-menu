@@ -83,26 +83,16 @@
       },
       "additionalProperties": false
     },
-    "exercise": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/nonblankString"
-        },
-        "name": {
-          "$ref": "#/definitions/nonblankString"
-        },
-        "quantities": {
-          "$ref": "#/definitions/quantities"
-        },
-        "notes": {
-          "type": "string"
-        }
+    "editableQuantityUnits": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["repetitions", "sets", "rounds", "seconds", "minutes"]
       },
-      "required": ["id", "name"],
-      "additionalProperties": false
+      "minItems": 1,
+      "uniqueItems": true
     },
-    "section": {
+    "activity": {
       "type": "object",
       "properties": {
         "id": {
@@ -120,12 +110,29 @@
         "exercises": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/exercise"
+            "$ref": "#/definitions/activity"
           }
+        },
+        "editableQuantityUnits": {
+          "$ref": "#/definitions/editableQuantityUnits"
+        },
+        "allowsSessionNotes": {
+          "const": true
         }
       },
-      "required": ["id", "name", "exercises"],
+      "required": ["id", "name"],
       "additionalProperties": false
+    },
+    "section": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/activity"
+        },
+        {
+          "type": "object",
+          "required": ["exercises"]
+        }
+      ]
     },
     "drill": {
       "type": "object",

@@ -1,22 +1,33 @@
 import { describe, expect, it } from 'vitest';
 
-import type { TrainingExercise, TrainingSection } from '@kendo-menu/domain';
+import { asTrainingSetId } from '@kendo-menu/domain';
+import type { DashboardEntry, TrainingActivity } from '@kendo-menu/domain';
 
 import {
   formatCategory,
   getCategoryBadgeVariant,
+  getEditableTrainingQuantityUnits,
   getInferredTrainingQuantityUnit,
   getMissingTrainingQuantityLabel,
   getSpecifiedTrainingQuantities,
 } from './training-data';
 
-function createStandaloneActivity(name: string): TrainingSection {
-  return { id: `standalone-${name}`, name, exercises: [] };
+function createStandaloneActivity(name: string): TrainingActivity {
+  return { id: `standalone-${name}`, name, children: [] };
 }
 
-function createExercise(name: string): TrainingExercise {
-  return { id: `exercise-${name}`, name };
+function createExercise(name: string): TrainingActivity {
+  return { id: `exercise-${name}`, name, children: [] };
 }
+
+const EMPTY_ENTRY = {
+  id: 'entry',
+  trainingSetId: asTrainingSetId('set'),
+  quantityOverrides: {},
+  activityNotes: {},
+  notes: '',
+  createdAt: '',
+} satisfies DashboardEntry;
 
 describe('training-data presentation helpers', () => {
   it('keeps category identifiers stable while presenting session terminology', () => {
@@ -38,7 +49,7 @@ describe('training-data presentation helpers', () => {
     [
       'child Suburi exercise',
       createExercise('shōmen'),
-      { id: 'suburi', name: 'Suburi', exercises: [] },
+      { id: 'suburi', name: 'Suburi', children: [] },
       'repetitions',
       'Reps not set',
     ],
@@ -66,28 +77,30 @@ describe('training-data presentation helpers', () => {
     [
       'ordinary waza exercise',
       createExercise('Men'),
-      { id: 'kihon-waza', name: 'Kihon-waza', exercises: [] },
+      { id: 'kihon-waza', name: 'Kihon-waza', children: [] },
       'repetitions',
       'Reps not set',
     ],
   ] as const)(
     'infers the shared fallback for %s',
-    (_label, activity, parentSection, expectedUnit, expectedMissingLabel) => {
-      expect(getInferredTrainingQuantityUnit(activity, parentSection)).toBe(expectedUnit);
-      expect(getMissingTrainingQuantityLabel(activity, parentSection)).toBe(expectedMissingLabel);
+    (_label, activity, parentActivity, expectedUnit, expectedMissingLabel) => {
+      expect(getInferredTrainingQuantityUnit(activity, parentActivity)).toBe(expectedUnit);
+      expect(getMissingTrainingQuantityLabel(activity, parentActivity)).toBe(expectedMissingLabel);
     },
   );
 
   it('keeps explicit quantities available instead of applying an inferred value', () => {
-    const explicitlyTimedActivity: TrainingExercise = {
+    const explicitlyTimedActivity: TrainingActivity = {
       id: 'ken-tore-men',
       name: 'Ken-tore Men',
       quantities: { duration: { unit: 'seconds', value: 30 } },
+      children: [],
     };
-    const explicitlyCountedActivity: TrainingExercise = {
+    const explicitlyCountedActivity: TrainingActivity = {
       id: 'haya-suburi',
       name: 'Haya suburi',
       quantities: { repetitions: 100, sets: 2 },
+      children: [],
     };
 
     expect(getSpecifiedTrainingQuantities(explicitlyTimedActivity)).toEqual([
@@ -97,5 +110,17 @@ describe('training-data presentation helpers', () => {
       { unit: 'repetitions', value: 100 },
       { unit: 'sets', value: 2 },
     ]);
+  });
+
+  it('uses editable unit metadata before falling back to a name inference', () => {
+    const metadataActivity: TrainingActivity = {
+      id: 'timed-warm-up',
+      name: 'Warm-up',
+      editableQuantityUnits: ['seconds'],
+      children: [],
+    };
+
+    expect(getEditableTrainingQuantityUnits(EMPTY_ENTRY, metadataActivity)).toEqual(['seconds']);
+    expect(getMissingTrainingQuantityLabel(metadataActivity)).toBe('Time not set');
   });
 });

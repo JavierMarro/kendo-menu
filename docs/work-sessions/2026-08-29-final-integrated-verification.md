@@ -1,0 +1,8 @@
+- Session: final integrated PDF, recursive UI, dashboard, and persistence verification
+- Date/duration: 2026-08-29; about 2 hours
+- Scope/start: Job 7 audited the committed Jobs 2–6 against the full eight-page PDF, recursive contracts, persistence history, runtime behavior, and accumulated branch diff.
+- Changes: Corrected 12 International labels and one Top University source note; preserved library hashes; retained unavailable-session notes; made override reconstruction prototype-safe; scoped v6/v7 cleanup to owning sessions; added regression, 0–8 migration, and seeded 300-operation tests.
+- Decisions: Stable IDs, hierarchy, counts, persistence version 9, canonical/user-note separation, quantity semantics, and custom-session contracts remain unchanged.
+- Roadblocks: In-app Browser was unavailable, so Playwright supplied visual evidence; session helpers are not configured; the unrelated landing reveal makes its existing axe route scan nondeterministic through transient low-contrast animation frames.
+- Verification: `pnpm check` passed (41 domain, 49 store, 74 web, build); Job 7 browser flows passed in Desktop Chromium and Pixel 5; four visual captures passed; `git diff --check` and semantic review passed.
+- Follow-up: Address landing reveal/axe timing in a separately authorized UI job; Job 7 slices have no remaining confirmed defects.

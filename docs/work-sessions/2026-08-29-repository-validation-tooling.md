@@ -1,0 +1,8 @@
+- Session: repository validation tooling
+- Date/duration: 2026-08-29; about 25 minutes
+- Scope/start: Restore repository validation and work-session entry points from a clean worktree without changing product behavior or contracts.
+- Changes: Added package checks, Playwright targets, session aliases, the full gate, concise command docs, and a project-local Codex validation policy.
+- Decisions: Only named non-interactive validation aliases are allowed; dependency, mutation, development, raw filter, and raw exec commands remain excluded.
+- Roadblocks: None.
+- Verification: `pnpm session:check`, `pnpm check`, four Playwright listings, the execpolicy allow/non-match matrix, and `git diff --check` passed.
+- Follow-up: Restart Codex in this trusted project to load the new rule; environment sandbox and network policy can still require approval.

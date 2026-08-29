@@ -26,6 +26,14 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-08-29 — repository validation tooling](./2026-08-29-repository-validation-tooling.md)
+- [2026-08-29 — landing accessibility and E2E determinism](./2026-08-29-landing-a11y-determinism.md)
+- [2026-08-29 — final integrated verification](./2026-08-29-final-integrated-verification.md)
+- [2026-08-29 — activity-specific dashboard notes](./2026-08-29-activity-session-notes.md)
+- [2026-08-28 — complex curated session synchronization](./2026-08-28-complex-session-sync.md)
+- [2026-08-28 — non-complex curated session synchronization](./2026-08-28-non-complex-session-sync.md)
+- [2026-08-28 — recursive activity web rendering](./2026-08-28-recursive-activity-web-rendering.md)
+- [2026-08-28 — recursive training activity contract](./2026-08-28-recursive-training-activity-contract.md)
 - [2026-08-27 — session terminology and library-detail refinement](./2026-08-27-session-terminology-refinement.md)
 - [2026-08-27 — query-driven drill library dialog](./2026-08-27-drill-library-dialog.md)
 - [2026-08-27 — drill-card intensity and layout](./2026-08-27-drill-card-intensity.md)

@@ -35,11 +35,14 @@ export function LibraryPage() {
       return;
     }
 
-    void navigate(getLibraryLocationWithoutDrill(location.search), {
-      replace: true,
-      state: null,
-    });
-  }, [location.search, navigate, selectedDrillId, selectedTrainingSet]);
+    void navigate(
+      { ...getLibraryLocationWithoutDrill(location.search), hash: location.hash },
+      {
+        replace: true,
+        state: null,
+      },
+    );
+  }, [location.hash, location.search, navigate, selectedDrillId, selectedTrainingSet]);
 
   useEffect(() => {
     const nextSelectedDrillId = selectedTrainingSet?.id ?? null;
@@ -69,11 +72,14 @@ export function LibraryPage() {
       return;
     }
 
-    void navigate(getLibraryLocationWithoutDrill(location.search), {
-      replace: true,
-      state: null,
-    });
-  }, [location.search, location.state, navigate]);
+    void navigate(
+      { ...getLibraryLocationWithoutDrill(location.search), hash: location.hash },
+      {
+        replace: true,
+        state: null,
+      },
+    );
+  }, [location.hash, location.search, location.state, navigate]);
 
   return (
     <>

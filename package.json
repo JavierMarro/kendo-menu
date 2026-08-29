@@ -14,8 +14,20 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "pnpm -r --if-present test",
+    "test:domain": "pnpm --filter @kendo-menu/domain test",
+    "test:store": "pnpm --filter @kendo-menu/store test",
+    "test:web": "pnpm --filter @kendo-menu/web test",
+    "check:domain": "pnpm --filter @kendo-menu/domain typecheck && pnpm --filter @kendo-menu/domain lint && pnpm --filter @kendo-menu/domain test",
+    "check:store": "pnpm --filter @kendo-menu/store typecheck && pnpm --filter @kendo-menu/store lint && pnpm --filter @kendo-menu/store test",
+    "check:web": "pnpm --filter @kendo-menu/web typecheck && pnpm --filter @kendo-menu/web lint && pnpm --filter @kendo-menu/web test && pnpm --filter @kendo-menu/web build",
     "test:e2e": "pnpm --filter @kendo-menu/web test:e2e",
-    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build"
+    "test:e2e:chromium": "pnpm --filter @kendo-menu/web exec playwright test --config playwright.config.ts --project=chromium",
+    "test:e2e:mobile": "pnpm --filter @kendo-menu/web exec playwright test --config playwright.config.ts --project=mobile-chrome",
+    "test:e2e:a11y": "pnpm --filter @kendo-menu/web exec playwright test accessibility.spec.ts --config playwright.config.ts --project=chromium --project=mobile-chrome",
+    "session:new": "./scripts/new-work-session.sh",
+    "session:check": "./scripts/check-work-sessions.sh",
+    "check": "pnpm session:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
+    "verify:full": "pnpm check && pnpm test:e2e"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

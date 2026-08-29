@@ -4,26 +4,20 @@ KendoMenu models reusable kendo practice menus and the amounts of work they pres
 
 ## Language
 
-**Drill**:
-A complete, reusable, ordered kendo training session made of sections.
-_Avoid_: Workout
+**Training session / keiko menu**:
+A complete, reusable, ordered kendo practice menu.
 
-**Section**:
-A named, ordered activity block within a drill. A section may prescribe quantities for the whole block and may contain exercises.
-_Avoid_: Phase, category
-
-**Standalone section**:
-A section with no child exercises. The section itself is a valid editable activity.
-_Avoid_: Empty section, placeholder exercise
+**Activity**:
+An ordered practice node that may contain child activities.
 
 **Exercise**:
-A named practice activity within a section.
-_Avoid_: Step, drill
+A leaf activity with no children.
+
+**Standalone activity**:
+A childless activity that can be edited independently.
+
+**Session activity note**:
+A practitioner-entered note for one activity in one dashboard entry.
 
 **Quantity**:
-A count or duration prescribed for a section or exercise. An activity can carry several independent quantities; an unstated quantity remains unknown, while zero is an explicit amount.
-_Avoid_: Reps when the unit is unknown or is not repetitions
-
-**Unspecified category**:
-A drill whose source did not assign a practice category.
-_Avoid_: Mixed when the source does not establish a mixture
+A prescribed or editable count or duration; absence means unknown, not zero.
