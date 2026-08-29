@@ -1,0 +1,8 @@
+- Session: compact mixed-measurement session builder
+- Date/duration: 2026-08-29; about 1 hour
+- Scope/start: Polish `/app/drills/new` after inspecting library terminology and domain/store quantities; the starting builder was repetition-only and used exercise/subexercise language.
+- Changes: Added the decorative-arrow back link, compact responsive sections and aligned activity headers, activity/exercise terminology, and per-exercise repetition or minute/second duration controls.
+- Decisions: Kept internal section/step/reps identifiers and persistence version; mapped drafts directly to existing `TrainingQuantities`; existing and new rows default to repetitions.
+- Roadblocks: The in-app Browser still reported zero available backends, so requested manual desktop/mobile screenshots and visual inspection could not be completed.
+- Verification: `pnpm check` passed (41 domain, 49 store, 79 web, build) with two pre-existing Fast Refresh warnings; Chromium 46/46, mobile 46/46, accessibility 34/34, and final route checks 8/8 passed.
+- Follow-up: Complete the manual initial/populated/invalid, keyboard, long-copy, and 200% text visual pass when the in-app browser backend is restored; no automated defect remains.

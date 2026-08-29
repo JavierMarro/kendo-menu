@@ -374,13 +374,41 @@ describe('KendoMenu application flows', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^Create session$/ })).toBeVisible();
+    expect(screen.getByText('Shape today’s keiko to fit the practice ahead.')).toBeVisible();
+    expect(screen.queryByRole('link', { name: /^Create session$/ })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Browse Keiko library' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Create a training session' })).toBeVisible();
     expect(screen.getByText(/Add a session from the Keiko library/)).toBeVisible();
     expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveAttribute(
       'aria-expanded',
       'false',
     );
+  });
+
+  it('keeps both dashboard empty-state paths available without a duplicate header action', async () => {
+    const user = userEvent.setup();
+    const firstView = renderApp(createTestStore(), { initialEntries: ['/app/dashboard'] });
+
+    const dashboardHeading = screen.getByRole('heading', { name: 'Your dashboard' });
+    const dashboardHeader = dashboardHeading.closest('header');
+    if (dashboardHeader === null) {
+      throw new Error('Expected the dashboard page header.');
+    }
+
+    expect(screen.getByText('Shape today’s keiko to fit the practice ahead.')).toBeVisible();
+    expect(
+      within(dashboardHeader).queryByRole('link', { name: /^Create session$/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Browse Keiko library' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Create a training session' })).toBeVisible();
+
+    await user.click(screen.getByRole('link', { name: 'Browse Keiko library' }));
+    expect(screen.getByRole('heading', { name: 'Keiko library' })).toBeInTheDocument();
+
+    firstView.unmount();
+    renderApp(createTestStore(), { initialEntries: ['/app/dashboard'] });
+    await user.click(screen.getByRole('link', { name: 'Create a training session' }));
+    expect(screen.getByRole('heading', { name: 'Create a training session' })).toBeInTheDocument();
   });
 
   it('redirects the bare route to the landing page', () => {
@@ -435,17 +463,34 @@ describe('KendoMenu application flows', () => {
     expect(screen.getByRole('heading', { name: 'Create a training session' })).toBeInTheDocument();
     expect(document.title).toBe('Create session · KendoMenu');
     expect(screen.getByLabelText('Session name')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Session details' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Activities' })).toBeVisible();
+    const firstActivity = screen.getByRole('group', { name: 'Activity 1' });
+    expect(firstActivity).toBeVisible();
+    expect(within(firstActivity).getByRole('group', { name: 'Exercises' })).toBeVisible();
+    const activityHeader = firstActivity.querySelector<HTMLElement>('.builder-activity-header');
+    if (activityHeader === null) {
+      throw new Error('Expected the activity card header.');
+    }
+    expect(within(activityHeader).getByRole('heading', { name: 'Activity 1' })).toBeVisible();
+    expect(within(activityHeader).getByRole('button', { name: 'Remove activity' })).toBeDisabled();
+    expect(activityHeader.parentElement).toBe(firstActivity);
     expect(screen.getByRole('button', { name: 'Save session to dashboard' })).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Back to Keiko library' })).toBeVisible();
+    const backLink = screen.getByRole('link', { name: 'Back to keiko library' });
+    expect(backLink).toBeVisible();
+    expect(backLink).toHaveTextContent('← Back to keiko library');
+    expect(backLink).toHaveAttribute('href', '/app/library');
+    expect(screen.queryByRole('link', { name: '← Back to keiko library' })).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        'Build a repeatable keiko session containing the sections and exercises you want to practise.',
+        'Build a repeatable keiko session containing the activities and exercises you want to practise.',
       ),
     ).toBeVisible();
+    expect(screen.queryByText(/subexercise/i)).not.toBeInTheDocument();
 
-    builderView.unmount();
-    renderApp(createTestStore(), { initialEntries: ['/app/library'] });
+    await user.click(backLink);
     expect(screen.getByRole('heading', { name: 'Keiko library' })).toBeInTheDocument();
+    builderView.unmount();
   });
 
   it('renders exactly 11 compact drill cards with semantic badge variants and query links', () => {
@@ -1178,12 +1223,23 @@ describe('KendoMenu application flows', () => {
 
     await user.type(screen.getByLabelText('Session name'), 'Monday footwork');
     await user.type(screen.getByLabelText('Description (optional)'), 'A short solo session.');
-    await user.type(screen.getByLabelText('Exercise name', { exact: true }), 'Footwork');
-    await user.type(
-      screen.getByLabelText('Subexercise name', { exact: true }),
-      'Big step forward and back',
-    );
-    await user.type(screen.getByLabelText('Repetitions', { exact: true }), '24');
+    const activity = screen.getByRole('group', { name: 'Activity 1' });
+    await user.type(within(activity).getByLabelText('Activity name'), 'Footwork');
+    const exercises = within(activity).getByRole('group', { name: 'Exercises' });
+    await user.type(within(exercises).getByLabelText('Exercise name'), 'Big step forward and back');
+    await user.type(within(exercises).getByLabelText('Repetitions'), '24');
+
+    await user.click(within(exercises).getByRole('button', { name: 'Add exercise' }));
+    const exerciseNames = within(exercises).getAllByLabelText('Exercise name');
+    const measurements = within(exercises).getAllByLabelText('Measurement');
+    const secondExerciseName = exerciseNames[1];
+    const secondMeasurement = measurements[1];
+    if (secondExerciseName === undefined || secondMeasurement === undefined) {
+      throw new Error('Expected the second exercise row.');
+    }
+    await user.type(secondExerciseName, 'Jigeiko rounds');
+    await user.selectOptions(secondMeasurement, 'duration');
+    await user.type(within(exercises).getByLabelText('Duration'), '12.5');
     await user.click(screen.getByRole('button', { name: 'Save session to dashboard' }));
 
     await waitFor(() => {
@@ -1198,6 +1254,100 @@ describe('KendoMenu application flows', () => {
     expect(customSet?.id).toBe(entry?.trainingSetId);
     expect(customSet?.isBuiltIn).toBe(false);
     expect(customSet?.activities[0]?.children[0]?.quantities?.repetitions).toBe(24);
+    expect(customSet?.activities[0]?.children[1]?.quantities?.duration).toEqual({
+      unit: 'minutes',
+      value: 12.5,
+    });
+    expect(screen.getByLabelText('Repetitions for Big step forward and back')).toHaveValue(24);
+    expect(screen.getByLabelText('Minutes for Jigeiko rounds')).toHaveValue(12.5);
+  });
+
+  it('preserves entered builder values while activities and exercises are added or removed', async () => {
+    const user = userEvent.setup();
+    renderApp(createTestStore(), { initialEntries: ['/app/drills/new'] });
+
+    await user.type(screen.getByLabelText('Session name'), 'Tuesday basics');
+    const firstActivity = screen.getByRole('group', { name: 'Activity 1' });
+    expect(within(firstActivity).getByRole('button', { name: 'Remove activity' })).toBeDisabled();
+    await user.type(within(firstActivity).getByLabelText('Activity name'), 'Basics');
+
+    const firstExerciseGroup = within(firstActivity).getByRole('group', {
+      name: 'Exercises',
+    });
+    expect(
+      within(firstExerciseGroup).getByRole('button', { name: 'Remove exercise' }),
+    ).toBeDisabled();
+    await user.type(within(firstExerciseGroup).getByLabelText('Exercise name'), 'Suburi');
+    await user.type(within(firstExerciseGroup).getByLabelText('Repetitions'), '30');
+    await user.click(within(firstExerciseGroup).getByRole('button', { name: 'Add exercise' }));
+
+    const expandedFirstActivity = screen.getByRole('group', { name: 'Activity 1' });
+    const expandedExerciseGroup = within(expandedFirstActivity).getByRole('group', {
+      name: 'Exercises',
+    });
+    const exerciseNames = within(expandedExerciseGroup).getAllByLabelText('Exercise name');
+    const measurementInputs = within(expandedExerciseGroup).getAllByLabelText('Measurement');
+    const secondExerciseName = exerciseNames[1];
+    const secondMeasurement = measurementInputs[1];
+    const repetitionInputs = within(expandedExerciseGroup).getAllByLabelText('Repetitions');
+    const secondRepetitions = repetitionInputs[1];
+    if (
+      secondExerciseName === undefined ||
+      secondMeasurement === undefined ||
+      secondRepetitions === undefined
+    ) {
+      throw new Error('Expected a second exercise row.');
+    }
+    await user.type(secondExerciseName, 'Kakari-geiko');
+    await user.selectOptions(secondMeasurement, 'duration');
+    await user.selectOptions(
+      within(expandedExerciseGroup).getByLabelText('Duration unit'),
+      'seconds',
+    );
+    await user.type(within(expandedExerciseGroup).getByLabelText('Duration'), '12.5');
+
+    await user.click(screen.getByRole('button', { name: 'Add activity' }));
+    const secondActivity = screen.getByRole('group', { name: 'Activity 2' });
+    await user.type(within(secondActivity).getByLabelText('Activity name'), 'Finish');
+    await user.type(within(secondActivity).getByLabelText('Exercise name'), 'Kirikaeshi');
+    await user.type(within(secondActivity).getByLabelText('Repetitions'), '8');
+
+    expect(screen.getByLabelText('Session name')).toHaveValue('Tuesday basics');
+    expect(
+      within(screen.getByRole('group', { name: 'Activity 1' })).getByLabelText('Activity name'),
+    ).toHaveValue('Basics');
+    expect(within(secondActivity).getByLabelText('Activity name')).toHaveValue('Finish');
+
+    const exerciseRemoveButtons = within(expandedExerciseGroup).getAllByRole('button', {
+      name: 'Remove exercise',
+    });
+    const firstExerciseRemove = exerciseRemoveButtons[0];
+    if (firstExerciseRemove === undefined) {
+      throw new Error('Expected a removable first exercise.');
+    }
+    await user.click(firstExerciseRemove);
+
+    const remainingFirstActivity = screen.getByRole('group', { name: 'Activity 1' });
+    expect(within(remainingFirstActivity).getByLabelText('Exercise name')).toHaveValue(
+      'Kakari-geiko',
+    );
+    expect(within(remainingFirstActivity).getByLabelText('Measurement')).toHaveValue('duration');
+    expect(within(remainingFirstActivity).getByLabelText('Duration')).toHaveValue(12.5);
+    expect(within(remainingFirstActivity).getByLabelText('Duration unit')).toHaveValue('seconds');
+    expect(
+      within(remainingFirstActivity).getByRole('button', { name: 'Remove exercise' }),
+    ).toBeDisabled();
+
+    await user.click(within(secondActivity).getByRole('button', { name: 'Remove activity' }));
+    expect(screen.queryByRole('group', { name: 'Activity 2' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Session name')).toHaveValue('Tuesday basics');
+    expect(within(remainingFirstActivity).getByLabelText('Activity name')).toHaveValue('Basics');
+    expect(within(remainingFirstActivity).getByLabelText('Exercise name')).toHaveValue(
+      'Kakari-geiko',
+    );
+    expect(
+      within(remainingFirstActivity).getByRole('button', { name: 'Remove activity' }),
+    ).toBeDisabled();
   });
 
   it('does not partially create a custom drill when a repetition is outside the allowed range', async () => {
@@ -1206,8 +1356,8 @@ describe('KendoMenu application flows', () => {
     renderApp(store, { initialEntries: ['/app/drills/new'] });
 
     await user.type(screen.getByLabelText('Session name'), 'Invalid repetitions');
-    await user.type(screen.getByLabelText('Exercise name', { exact: true }), 'Footwork');
-    await user.type(screen.getByLabelText('Subexercise name', { exact: true }), 'Too many steps');
+    await user.type(screen.getByLabelText('Activity name'), 'Footwork');
+    await user.type(screen.getByLabelText('Exercise name'), 'Too many steps');
     await user.type(screen.getByLabelText('Repetitions', { exact: true }), '501');
     await user.click(screen.getByRole('button', { name: 'Save session to dashboard' }));
 
@@ -1215,6 +1365,78 @@ describe('KendoMenu application flows', () => {
       screen.getByRole('alert', { name: 'Check the highlighted fields.' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Create a training session' })).toBeInTheDocument();
+    expect(store.getState().customTrainingSets).toEqual([]);
+    expect(store.getState().dashboardEntries).toEqual([]);
+
+    const repetitions = screen.getByLabelText('Repetitions', { exact: true });
+    const describedBy = repetitions.getAttribute('aria-describedby')?.split(' ') ?? [];
+    expect(describedBy).toHaveLength(2);
+    expect(
+      describedBy.some(
+        (id) => document.getElementById(id)?.textContent === 'Use a whole number from 0 to 500.',
+      ),
+    ).toBe(true);
+    expect(
+      describedBy.some(
+        (id) => document.getElementById(id)?.textContent === 'Enter a whole number from 0 to 500.',
+      ),
+    ).toBe(true);
+  });
+
+  it('updates quantity labels, validation, and descriptions with the selected measurement', async () => {
+    const user = userEvent.setup();
+    const store = createTestStore();
+    renderApp(store, { initialEntries: ['/app/drills/new'] });
+
+    await user.type(screen.getByLabelText('Session name'), 'Measurement checks');
+    await user.type(screen.getByLabelText('Activity name'), 'Timing');
+    await user.type(screen.getByLabelText('Exercise name'), 'Jigeiko');
+
+    const measurement = screen.getByLabelText('Measurement');
+    const repetitions = screen.getByLabelText('Repetitions', { exact: true });
+    expect(measurement).toHaveValue('repetitions');
+    expect(repetitions).toHaveAttribute('max', '500');
+    expect(repetitions).toHaveAttribute('step', '1');
+    expect(repetitions).toHaveAttribute('inputmode', 'numeric');
+
+    await user.type(repetitions, '501');
+    await user.click(screen.getByRole('button', { name: 'Save session to dashboard' }));
+    expect(repetitions).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getAllByText('Enter a whole number from 0 to 500.')).toHaveLength(2);
+
+    await user.selectOptions(measurement, 'duration');
+    const duration = screen.getByLabelText('Duration', { exact: true });
+    expect(duration).toHaveValue(501);
+    expect(duration).toHaveAttribute('aria-invalid', 'false');
+    expect(duration).not.toHaveAttribute('max');
+    expect(duration).toHaveAttribute('step', 'any');
+    expect(duration).toHaveAttribute('inputmode', 'decimal');
+    expect(screen.queryByText('Enter a whole number from 0 to 500.')).not.toBeInTheDocument();
+
+    const durationUnit = screen.getByLabelText('Duration unit');
+    expect(durationUnit).toHaveValue('minutes');
+    const durationHintId = duration.getAttribute('aria-describedby');
+    expect(durationHintId).not.toBeNull();
+    expect(document.getElementById(durationHintId ?? '')).toHaveTextContent(
+      'Use minutes; zero and decimal values are supported.',
+    );
+
+    await user.selectOptions(durationUnit, 'seconds');
+    expect(document.getElementById(durationHintId ?? '')).toHaveTextContent(
+      'Use seconds; zero and decimal values are supported.',
+    );
+    await user.clear(duration);
+    await user.type(duration, '-1');
+    expect(duration).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getAllByText('Enter a number of seconds, 0 or more.')).toHaveLength(2);
+    expect(duration.getAttribute('aria-describedby')?.split(' ')).toHaveLength(2);
+
+    await user.selectOptions(measurement, 'repetitions');
+    const incompatibleRepetitions = screen.getByLabelText('Repetitions', { exact: true });
+    expect(incompatibleRepetitions).toHaveValue(-1);
+    expect(incompatibleRepetitions).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getAllByText('Enter a whole number from 0 to 500.')).toHaveLength(2);
+    expect(screen.queryByText('Enter a number of seconds, 0 or more.')).not.toBeInTheDocument();
     expect(store.getState().customTrainingSets).toEqual([]);
     expect(store.getState().dashboardEntries).toEqual([]);
   });

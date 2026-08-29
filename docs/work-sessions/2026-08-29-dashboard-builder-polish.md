@@ -1,0 +1,8 @@
+- Session: dashboard and session-builder polish
+- Date/duration: 2026-08-29; about 35 minutes
+- Scope/start: Refine the clean-worktree dashboard empty state and custom-session builder without changing routes, domain/store contracts, persistence, or populated dashboard cards.
+- Changes: Centered the empty dashboard and removed its duplicate header action; added the exact subtitle; grouped the narrower builder into session details, exercises, and labeled subexercise rows with responsive actions and repetition descriptions.
+- Decisions: Preserved reducer actions, validation, dirty-navigation protection, synchronous local save, one primary save action, existing tokens, and native disabled removal semantics.
+- Roadblocks: The in-app Browser reported zero available browser backends, so required baseline/final screenshots and manual zoom inspection could not be captured; no unrelated browser controller was substituted.
+- Verification: `pnpm test:web` passed 76 tests; `pnpm check:web` passed with two pre-existing Fast Refresh warnings; Chromium 45/45, mobile 45/45, and accessibility 32/32 passed; Prettier and diff checks passed.
+- Follow-up: Capture desktop/mobile visual comparisons plus keyboard and 200% text-zoom inspection when the in-app browser backend is restored; no confirmed automated defect remains.

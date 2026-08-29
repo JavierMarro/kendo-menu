@@ -64,6 +64,20 @@ const CUSTOM_SET_INPUT = {
   ],
 } satisfies TrainingSetInput;
 
+const MIXED_MEASUREMENT_SET_INPUT = {
+  name: 'Mixed measurement keiko',
+  category: 'custom',
+  sections: [
+    {
+      name: 'Main practice',
+      exercises: [
+        { name: 'Suburi', quantities: { repetitions: 30 } },
+        { name: 'Jigeiko', quantities: { duration: { unit: 'minutes', value: 12.5 } } },
+      ],
+    },
+  ],
+} satisfies TrainingSetInput;
+
 const LEGACY_DASHBOARD_ENTRY = {
   id: 'entry-legacy',
   trainingSetId: asTrainingSetId('custom-legacy'),
@@ -1267,7 +1281,7 @@ describe('persistence lifecycle', () => {
   it('round-trips current custom sets, notes, seconds, and independent units', () => {
     const storage = new MemoryStorage();
     const first = createTrainingStore({ storage, storageKey: STORAGE_KEY });
-    const customId = first.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
+    const customId = first.getState().addCustomTrainingSet(MIXED_MEASUREMENT_SET_INPUT);
     const entryId = first.getState().addToDashboard(customId);
     const activityId = first.getState().customTrainingSets[0]?.activities[0]?.children[0]?.id;
     if (activityId === undefined) {
@@ -1286,6 +1300,10 @@ describe('persistence lifecycle', () => {
 
     const second = createTrainingStore({ storage, storageKey: STORAGE_KEY });
     expect(second.getState().customTrainingSets[0]?.id).toBe(customId);
+    expect(second.getState().customTrainingSets[0]?.activities[0]?.children).toMatchObject([
+      { name: 'Suburi', quantities: { repetitions: 30 } },
+      { name: 'Jigeiko', quantities: { duration: { unit: 'minutes', value: 12.5 } } },
+    ]);
     expect(second.getState().dashboardEntries[0]).toMatchObject({
       id: entryId,
       activityNotes: {},
