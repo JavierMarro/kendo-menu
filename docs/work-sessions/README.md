@@ -26,6 +26,8 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-08-30 — mobile nav and dashboard layout](./2026-08-30-mobile-nav-dashboard-layout.md)
+- [2026-08-30 — responsive dashboard polish](./2026-08-30-responsive-dashboard-polish.md)
 - [2026-08-30 — dashboard and library ownership](./2026-08-30-dashboard-library-ownership.md)
 - [2026-08-30 — route scroll, landing copy, and footer polish](./2026-08-30-route-scroll-copy-footer.md)
 - [2026-08-30 — dashboard menu overview](./2026-08-30-dashboard-menu-overview.md)

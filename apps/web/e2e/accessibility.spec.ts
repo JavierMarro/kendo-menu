@@ -211,8 +211,8 @@ test.describe('accessibility and responsive layout', () => {
     await expectNoBlockingAxeViolations(page);
   });
 
-  test('does not overflow horizontally at 320px or desktop width', async ({ page }) => {
-    for (const width of [320, 800, 1440]) {
+  test('keeps all primary navigation links in one row with intact labels', async ({ page }) => {
+    for (const width of [320, 375, 393, 800, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/app');
       if (width <= 960) {
@@ -221,12 +221,146 @@ test.describe('accessibility and responsive layout', () => {
       } else {
         await expect(page.locator('.brand-name')).toBeVisible();
       }
+
+      const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
+      const links = navigation.getByRole('link');
+      await expect(links).toHaveCount(4);
+      await expect(page.locator('.nav-count')).toHaveCount(0);
+
+      const navMetrics = await navigation.evaluate((element) => {
+        const navigationRect = element.getBoundingClientRect();
+        const linkElements = [...element.querySelectorAll<HTMLElement>(':scope > .nav-item')];
+        const linkRects = linkElements.map((link) => link.getBoundingClientRect());
+        const libraryLabel = element.querySelector<HTMLElement>('.nav-label--wrappable');
+        const libraryWords = [
+          ...element.querySelectorAll<HTMLElement>('.nav-label--wrappable .nav-label-word'),
+        ];
+        const fixedLabels = [
+          ...element.querySelectorAll<HTMLElement>('.nav-label:not(.nav-label--wrappable)'),
+        ];
+        if (libraryLabel === null || libraryWords.length !== 2 || linkRects.length !== 4) {
+          throw new Error('The primary navigation label structure is incomplete.');
+        }
+
+        const textLineCount = (target: HTMLElement) => {
+          const range = document.createRange();
+          range.selectNodeContents(target);
+          return [...range.getClientRects()].filter(({ width, height }) => width > 0 && height > 0)
+            .length;
+        };
+        const wordRects = libraryWords.map((word) => word.getBoundingClientRect());
+        const libraryLineTops = new Set(wordRects.map(({ top }) => Math.round(top)));
+
+        return {
+          navigationClientWidth: element.clientWidth,
+          navigationScrollWidth: element.scrollWidth,
+          overflowingLink: linkElements
+            .map((link) => ({
+              label: link.textContent?.trim() ?? '',
+              clientWidth: link.clientWidth,
+              scrollWidth: link.scrollWidth,
+            }))
+            .find(({ clientWidth, scrollWidth }) => scrollWidth > clientWidth),
+          linksInsideNavigation: linkRects.every(
+            ({ left, right }) =>
+              left >= navigationRect.left - 1 && right <= navigationRect.right + 1,
+          ),
+          linksShareRow:
+            Math.max(...linkRects.map(({ top }) => top)) -
+              Math.min(...linkRects.map(({ top }) => top)) <=
+            1,
+          linksDoNotOverlap: linkRects.slice(1).every(({ left }, index) => {
+            const previousRect = linkRects[index];
+            return previousRect !== undefined && left >= previousRect.right - 1;
+          }),
+          touchTargetsAreUsable: linkRects.every(
+            ({ width, height }) => width >= 24 && height >= 44,
+          ),
+          fixedLabelLineCounts: fixedLabels.map(textLineCount),
+          libraryLineCount: libraryLineTops.size,
+          libraryWordLineCounts: libraryWords.map(textLineCount),
+          libraryWordWhiteSpace: libraryWords.map((word) => getComputedStyle(word).whiteSpace),
+          libraryOverflowWrap: getComputedStyle(libraryLabel).overflowWrap,
+        };
+      });
+      expect(
+        navMetrics.navigationScrollWidth,
+        `navigation overflow at ${width}px`,
+      ).toBeLessThanOrEqual(navMetrics.navigationClientWidth);
+      expect(navMetrics.overflowingLink, `navigation link overflow at ${width}px`).toBeUndefined();
+      expect(navMetrics.linksInsideNavigation, `navigation bounds at ${width}px`).toBe(true);
+      expect(navMetrics.linksShareRow, `navigation row at ${width}px`).toBe(true);
+      expect(navMetrics.linksDoNotOverlap, `navigation link overlap at ${width}px`).toBe(true);
+      expect(navMetrics.touchTargetsAreUsable, `navigation touch targets at ${width}px`).toBe(true);
+      expect(navMetrics.fixedLabelLineCounts).toEqual([1, 1, 1]);
+      expect(navMetrics.libraryLineCount).toBeLessThanOrEqual(2);
+      expect(navMetrics.libraryWordLineCounts).toEqual([1, 1]);
+      expect(navMetrics.libraryWordWhiteSpace).toEqual(['nowrap', 'nowrap']);
+      expect(navMetrics.libraryOverflowWrap).toBe('normal');
+
       const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(scrollWidth, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(width);
 
       await page.goto('/app/sources');
       const sourcesScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(sourcesScrollWidth, `sources overflow at ${width}px`).toBeLessThanOrEqual(width);
+    }
+  });
+
+  test('aligns Library activity quantities responsively with long titles', async ({ page }) => {
+    for (const width of [320, 375, 393, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/app/library?drill=international-dojo-2-hour-session');
+      const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
+      await expect(dialog).toBeVisible();
+
+      const activity = dialog
+        .getByRole('heading', { name: 'Warm-up', level: 2 })
+        .locator('xpath=ancestor::section');
+      const uchikomi = dialog.locator(
+        '[data-activity-id="international-dojo-2-hour-session-uchikomi"]',
+      );
+      await uchikomi.locator(':scope > summary').click();
+      const longExercise = dialog.locator(
+        '[data-activity-id="international-dojo-2-hour-session-uchikomi-men-kote-kote-men-men"]',
+      );
+
+      for (const row of [activity, longExercise]) {
+        const metrics = await row.evaluate((element) => {
+          const index = element.querySelector('.section-number, .step-number');
+          const copy = element.querySelector('.detail-standalone-copy, .step-copy');
+          const quantity = element.querySelector('.quantity-list, .quantity-not-specified');
+          if (
+            !(index instanceof HTMLElement) ||
+            !(copy instanceof HTMLElement) ||
+            !(quantity instanceof HTMLElement)
+          ) {
+            throw new Error('The activity row is incomplete.');
+          }
+
+          const rowBox = element.getBoundingClientRect();
+          const indexBox = index.getBoundingClientRect();
+          const copyBox = copy.getBoundingClientRect();
+          const quantityBox = quantity.getBoundingClientRect();
+          const sharesRow = copyBox.top < quantityBox.bottom && quantityBox.top < copyBox.bottom;
+          return {
+            hasOverflow: element.scrollWidth > element.clientWidth,
+            indexTitleTopDifference: Math.abs(indexBox.top - copyBox.top),
+            quantityRightInset: rowBox.right - quantityBox.right,
+            sharesRow,
+            overlapsHorizontally: sharesRow && copyBox.right > quantityBox.left + 1,
+          };
+        });
+
+        expect(metrics.hasOverflow, `activity overflow at ${width}px`).toBe(false);
+        expect(metrics.indexTitleTopDifference).toBeLessThanOrEqual(1);
+        expect(metrics.quantityRightInset).toBeGreaterThanOrEqual(0);
+        expect(metrics.quantityRightInset).toBeLessThanOrEqual(20);
+        expect(metrics.overlapsHorizontally).toBe(false);
+        if (width >= 375) {
+          expect(metrics.sharesRow, `activity metadata row at ${width}px`).toBe(true);
+        }
+      }
     }
   });
 

@@ -328,12 +328,8 @@ test.describe('routed training flows', () => {
     });
     expect(standaloneLayout.hasOverflow).toBe(false);
     expect(standaloneLayout.quantityRightInset).toBeGreaterThanOrEqual(12);
-    if (viewport.width > 640) {
-      expect(standaloneLayout.quantityRightInset).toBeLessThanOrEqual(20);
-      expect(standaloneLayout.rowsOverlap).toBe(true);
-    } else {
-      expect(standaloneLayout.rowsOverlap).toBe(false);
-    }
+    expect(standaloneLayout.quantityRightInset).toBeLessThanOrEqual(20);
+    expect(standaloneLayout.rowsOverlap).toBe(true);
 
     const sections = dialog.locator('details.detail-section');
     await expect(sections).toHaveCount(5);

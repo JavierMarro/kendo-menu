@@ -20,7 +20,6 @@ import { TrainingSetDetailPage } from '../features/library/TrainingSetDetailPage
 import { NotFoundPage } from '../features/not-found/NotFoundPage';
 import { CookiePolicyPage } from '../features/privacy/CookiePolicyPage';
 import { SourcesPage } from '../features/sources/SourcesPage';
-import { CURATED_TRAINING_SET_COUNT } from '../lib/training-data';
 
 const routeTitles: Readonly<Record<string, string>> = {
   '/app': 'Plan your keiko',
@@ -73,7 +72,7 @@ function hasLocationChanged(previous: Location, next: Location): boolean {
 }
 
 function AppLayout() {
-  return <AppShell libraryCount={CURATED_TRAINING_SET_COUNT} />;
+  return <AppShell />;
 }
 
 class ScrollManager extends Component<ScrollManagerProps> {

@@ -112,10 +112,12 @@ function renderTrainingActivityNode(
       <ol className="training-step-list">{children}</ol>
     </>
   );
+  const detailSectionClassName =
+    aside === null ? 'detail-section' : 'detail-section detail-section--has-aside';
 
   if (depth === 0) {
     return (
-      <details className="detail-section" {...activityDataAttributes}>
+      <details className={detailSectionClassName} {...activityDataAttributes}>
         {summary}
         {detailContent}
       </details>
@@ -124,7 +126,7 @@ function renderTrainingActivityNode(
 
   return (
     <li className="training-step training-step--nested-container" {...activityDataAttributes}>
-      <details className="detail-section detail-section--nested">
+      <details className={`${detailSectionClassName} detail-section--nested`}>
         {summary}
         {detailContent}
       </details>

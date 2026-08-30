@@ -7,6 +7,37 @@ function fixtureUrl(view: 'library' | 'dashboard'): string {
   return `/e2e/recursive-fixture.html?view=${view}`;
 }
 
+async function getDashboardParentLayout(details: Locator) {
+  return details.evaluate((element) => {
+    const summary = element.querySelector<HTMLElement>(':scope > summary');
+    const title = element.querySelector<HTMLElement>(':scope > summary .detail-section-label');
+    const quantity = element.querySelector<HTMLElement>(
+      ':scope > .detail-section-parent > .quantity-editor-group',
+    );
+    if (summary === null || title === null || quantity === null) {
+      throw new Error('The dashboard parent activity layout is incomplete.');
+    }
+
+    const detailsRect = element.getBoundingClientRect();
+    const summaryRect = summary.getBoundingClientRect();
+    const titleRect = title.getBoundingClientRect();
+    const quantityRect = quantity.getBoundingClientRect();
+    const sharesRow =
+      Math.min(summaryRect.bottom, quantityRect.bottom) >
+      Math.max(summaryRect.top, quantityRect.top);
+
+    return {
+      sharesRow,
+      wrapsBelowWhenNeeded: sharesRow || quantityRect.top >= summaryRect.bottom - 1,
+      titleClearsQuantity: !sharesRow || titleRect.right <= quantityRect.left + 1,
+      quantityInside:
+        quantityRect.left >= detailsRect.left - 1 && quantityRect.right <= detailsRect.right + 1,
+      quantityRightInset: detailsRect.right - quantityRect.right,
+      titleWordBreak: getComputedStyle(title).wordBreak,
+    };
+  });
+}
+
 async function expectNoBlockingAxeViolations(page: Page) {
   const results = await new AxeBuilder({ page }).analyze();
   expect(
@@ -147,6 +178,38 @@ test.describe('recursive activity consumers', () => {
     await expect(page.getByLabel('Seconds for Free version footwork')).toHaveValue('');
     await expect(page.getByLabel(/for Station A$/i)).toHaveCount(0);
     await expect(page.getByLabel(/for Free version$/i)).toHaveCount(0);
+
+    const initialViewport = page.viewportSize();
+    if (initialViewport === null) {
+      throw new Error('The recursive dashboard viewport is unavailable.');
+    }
+    const rootDetails = page.locator('[data-activity-id="synthetic-root"]');
+    const sandanDetails = page.locator('[data-activity-id="synthetic-sandan-geiko"] > details');
+    for (const width of [320, 375, 393, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const [label, details] of [
+        ['root', rootDetails],
+        ['nested', sandanDetails],
+      ] as const) {
+        const layout = await getDashboardParentLayout(details);
+        expect(layout.wrapsBelowWhenNeeded, `${label} parent flow at ${width}px`).toBe(true);
+        expect(layout.titleClearsQuantity, `${label} parent overlap at ${width}px`).toBe(true);
+        expect(layout.quantityInside, `${label} parent bounds at ${width}px`).toBe(true);
+        expect(
+          layout.quantityRightInset,
+          `${label} parent right edge at ${width}px`,
+        ).toBeLessThanOrEqual(20);
+        expect(layout.titleWordBreak).toBe('normal');
+        if (width === 1440) {
+          expect(layout.sharesRow, `${label} parent row at ${width}px`).toBe(true);
+        }
+      }
+
+      const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      expect(scrollWidth, `parent layout overflow at ${width}px`).toBeLessThanOrEqual(width);
+    }
+    await page.setViewportSize(initialViewport);
+
     const quantityUnitStyles = await page
       .locator('.quantity-input-wrap > span')
       .evaluateAll((elements) =>

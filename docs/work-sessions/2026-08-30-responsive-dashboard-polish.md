@@ -1,0 +1,8 @@
+- Session: responsive dashboard polish
+- Date/duration: 2026-08-30; about 1 hour
+- Scope/start: Polished narrow navigation, Library detail-row alignment, and dashboard editing feedback without changing domain or persistence contracts.
+- Changes: Added content-aware nav wrapping, fluid Library quantity rows, truly collapsible independent activity notes, destructive Remove states, and an optional explicit save action with live confirmation.
+- Decisions: Kept disclosure state local to each activity; the semantic dashboard form reuses existing blur commits so autosave remains authoritative and unchanged.
+- Roadblocks: None.
+- Verification: `pnpm check` passed (domain 44/44, store 54/54, web 86/86, build); Chromium and mobile Playwright suites passed 56/56 each, including 320/375/393/1440px geometry and axe checks.
+- Follow-up: None.

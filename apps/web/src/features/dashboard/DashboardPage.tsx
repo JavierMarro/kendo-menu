@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FocusEvent,
+  type FormEvent,
+} from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import type {
@@ -29,6 +37,7 @@ import { useTrainingStore, useTrainingStoreApi } from '../../lib/training-store-
 import { TrainingSetTags } from '../../components/TrainingSetTags';
 import { DrillDetailDialog } from '../library/DrillDetailDialog';
 import {
+  getExplicitPersistenceUpdateLabel,
   getPersistenceUpdateLabel,
   usePersistenceStatus,
 } from '../persistence/persistence-context';
@@ -42,6 +51,23 @@ function getQuantityDraftValue(
 ): string {
   const value = getEffectiveTrainingQuantity(entry, activity, unit);
   return value === undefined || isTrainingQuantityRange(value) ? '' : String(value);
+}
+
+const MAX_QUANTITY_DIGITS = 3;
+
+function hasAllowedQuantityDraftLength(value: string): boolean {
+  if (value.includes('e') || value.includes('E') || value.includes('+')) {
+    return false;
+  }
+
+  let digitCount = 0;
+  for (const character of value) {
+    if (character >= '0' && character <= '9') {
+      digitCount += 1;
+    }
+  }
+
+  return digitCount <= MAX_QUANTITY_DIGITS;
 }
 
 export function DashboardPage() {
@@ -297,7 +323,7 @@ function UnknownDashboardEntry({ entry, onRemove }: UnknownDashboardEntryProps) 
         <h2>Training session unavailable</h2>
         <p>The session for this dashboard entry is no longer available in local data.</p>
       </div>
-      <button className="text-button" type="button" onClick={onRemove}>
+      <button className="text-button destructive-button" type="button" onClick={onRemove}>
         Remove
       </button>
       <span className="sr-only">Entry {entry.id}</span>
@@ -330,11 +356,14 @@ export function DashboardTrainingSet({
 }: DashboardTrainingSetProps) {
   const [notesDraft, setNotesDraft] = useState(entry.notes);
   const [notesStatus, setNotesStatus] = useState<'idle' | 'updated'>('idle');
+  const [saveConfirmationVersion, setSaveConfirmationVersion] = useState(0);
   const persistenceStatus = usePersistenceStatus();
   const activities = trainingSet.activities;
   const activityCount = getTrainingSetActivityCount(trainingSet);
   const description = getTrainingSetDescription(trainingSet);
   const headingId = titleId ?? `dashboard-entry-title-${entry.id}`;
+  const saveHintId = `save-hint-${entry.id}`;
+  const saveStatusId = `save-status-${entry.id}`;
 
   const handleNotesChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setNotesDraft(event.target.value);
@@ -348,57 +377,103 @@ export function DashboardTrainingSet({
     }
   };
 
+  const handleExplicitSave = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && event.currentTarget.contains(activeElement)) {
+      activeElement.blur();
+    }
+
+    setSaveConfirmationVersion((version) => version + 1);
+  };
+
+  useEffect(() => {
+    if (saveConfirmationVersion === 0) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => setSaveConfirmationVersion(0), 4_000);
+    return () => window.clearTimeout(timeoutId);
+  }, [saveConfirmationVersion]);
+
   return (
     <article className="dashboard-card dashboard-card--expanded" data-entry-index={index + 1}>
-      <div className="dashboard-card-heading">
-        <div className="card-index" aria-hidden="true">
-          {String(index + 1).padStart(2, '0')}
-        </div>
-        <div className="card-content">
-          <div className="library-card-topline">
-            <TrainingSetTags trainingSet={trainingSet} />
-            <span className="step-count">{activityCount} activities</span>
+      <form className="dashboard-card-form" onSubmit={handleExplicitSave}>
+        <div className="dashboard-card-heading">
+          <div className="card-index" aria-hidden="true">
+            {String(index + 1).padStart(2, '0')}
           </div>
-          <h2 id={headingId}>{trainingSet.name}</h2>
-          {description === undefined ? null : <p>{description}</p>}
-          <div className="card-meta">
-            <span>{entry.notes.length > 0 ? 'Has notes' : 'No notes yet'}</span>
+          <div className="card-content">
+            <div className="library-card-topline">
+              <TrainingSetTags trainingSet={trainingSet} />
+              <span className="step-count">{activityCount} activities</span>
+            </div>
+            <h2 id={headingId}>{trainingSet.name}</h2>
+            {description === undefined ? null : <p>{description}</p>}
+            <div className="card-meta">
+              <span>{entry.notes.length > 0 ? 'Has notes' : 'No notes yet'}</span>
+            </div>
+          </div>
+          <button className="text-button destructive-button" type="button" onClick={onRemove}>
+            Remove
+          </button>
+        </div>
+
+        <div className="dashboard-sections detail-sections">
+          <TrainingActivityList
+            activities={activities}
+            titleId={headingId}
+            renderActivityAside={(context) =>
+              renderDashboardActivity(context, {
+                entry,
+                onSetQuantity,
+                onClearQuantity,
+                onSetActivityNote,
+              })
+            }
+          />
+        </div>
+
+        <div className="notes-field">
+          <label htmlFor={`notes-${entry.id}`}>Practice notes</label>
+          <textarea
+            id={`notes-${entry.id}`}
+            value={notesDraft}
+            placeholder="What do you want to remember for this session?"
+            rows={3}
+            onBlur={handleNotesBlur}
+            onChange={handleNotesChange}
+          />
+          <span className="field-status" role="status" aria-live="polite">
+            {notesStatus === 'updated' ? getPersistenceUpdateLabel(persistenceStatus) : ''}
+          </span>
+        </div>
+
+        <div className="dashboard-save-actions">
+          <button
+            className="primary-button"
+            type="submit"
+            aria-describedby={
+              saveConfirmationVersion === 0 ? saveHintId : `${saveHintId} ${saveStatusId}`
+            }
+          >
+            Save your changes
+          </button>
+          <div className="dashboard-save-feedback">
+            <p id={saveHintId} className="dashboard-save-hint">
+              Changes also save automatically when you leave a field.
+            </p>
+            <span id={saveStatusId} className="field-status" role="status" aria-live="polite">
+              {saveConfirmationVersion > 0 ? (
+                <span key={saveConfirmationVersion}>
+                  {getExplicitPersistenceUpdateLabel(persistenceStatus)}
+                </span>
+              ) : null}
+            </span>
           </div>
         </div>
-        <button className="text-button" type="button" onClick={onRemove}>
-          Remove
-        </button>
-      </div>
-
-      <div className="dashboard-sections detail-sections">
-        <TrainingActivityList
-          activities={activities}
-          titleId={headingId}
-          renderActivityAside={(context) =>
-            renderDashboardActivity(context, {
-              entry,
-              onSetQuantity,
-              onClearQuantity,
-              onSetActivityNote,
-            })
-          }
-        />
-      </div>
-
-      <div className="notes-field">
-        <label htmlFor={`notes-${entry.id}`}>Practice notes</label>
-        <textarea
-          id={`notes-${entry.id}`}
-          value={notesDraft}
-          placeholder="What do you want to remember for this session?"
-          rows={3}
-          onBlur={handleNotesBlur}
-          onChange={handleNotesChange}
-        />
-        <span className="field-status" role="status" aria-live="polite">
-          {notesStatus === 'updated' ? getPersistenceUpdateLabel(persistenceStatus) : ''}
-        </span>
-      </div>
+      </form>
     </article>
   );
 }
@@ -441,7 +516,7 @@ function DashboardTrainingSetCard({
         >
           View more
         </button>
-        <button className="text-button" type="button" onClick={onRemove}>
+        <button className="text-button destructive-button" type="button" onClick={onRemove}>
           Remove
         </button>
       </div>
@@ -477,15 +552,12 @@ function renderDashboardActivity(
         onClear={onClearQuantity}
       />
     );
-  const activityControls =
-    editors === null && activityNoteEditor === null ? null : (
-      <div className="training-activity-controls">
-        {editors}
-        {activityNoteEditor}
-      </div>
-    );
-
-  return activityControls;
+  return editors === null && activityNoteEditor === null ? null : (
+    <>
+      {editors}
+      {activityNoteEditor}
+    </>
+  );
 }
 
 interface ActivityNotesEditorProps {
@@ -611,13 +683,18 @@ function QuantityEditor({ entry, activity, unit, onSet, onClear }: QuantityEdito
   const persistenceStatus = usePersistenceStatus();
   const inputId = `quantity-${unit}-${entry.id}-${activity.id}`;
   const messageId = `${inputId}-message`;
+  const limitHintId = `${inputId}-limit`;
   const unitLabel = formatQuantityUnit(unit, 2);
   const accessibleUnitLabel = `${unitLabel.charAt(0).toUpperCase()}${unitLabel.slice(1)}`;
   const defaultValue = getTrainingQuantityValue(activity, unit);
-  const placeholder =
+  const defaultHint =
     defaultValue !== undefined && isTrainingQuantityRange(defaultValue)
-      ? `${formatQuantityValue(defaultValue.min)}–${formatQuantityValue(defaultValue.max)}`
-      : 'Not specified';
+      ? ` Current suggested range: ${formatQuantityValue(defaultValue.min)}–${formatQuantityValue(
+          defaultValue.max,
+        )} ${unitLabel}.`
+      : defaultValue === undefined
+        ? ` ${accessibleUnitLabel} is not specified yet.`
+        : '';
   const feedbackMessage =
     feedback === 'invalid'
       ? getQuantityValidationMessage(unit)
@@ -678,11 +755,18 @@ function QuantityEditor({ entry, activity, unit, onSet, onClear }: QuantityEdito
           step={unit === 'minutes' || unit === 'seconds' ? 'any' : 1}
           inputMode={unit === 'minutes' || unit === 'seconds' ? 'decimal' : 'numeric'}
           value={draft}
-          placeholder={placeholder}
-          aria-describedby={feedbackMessage.length > 0 ? messageId : undefined}
+          placeholder="—"
+          aria-describedby={
+            feedbackMessage.length > 0 ? `${limitHintId} ${messageId}` : limitHintId
+          }
           aria-invalid={feedback === 'invalid'}
           onChange={(event) => {
-            setDraft(event.target.value);
+            const nextDraft = event.target.value;
+            if (!hasAllowedQuantityDraftLength(nextDraft)) {
+              return;
+            }
+
+            setDraft(nextDraft);
             setFeedback('idle');
           }}
           onKeyDown={(event) => {
@@ -694,6 +778,9 @@ function QuantityEditor({ entry, activity, unit, onSet, onClear }: QuantityEdito
         />
         <span aria-hidden="true">{unitLabel}</span>
       </div>
+      <span id={limitHintId} className="sr-only">
+        Enter no more than three digits.{defaultHint}
+      </span>
       {feedbackMessage.length > 0 ? (
         <span
           id={messageId}

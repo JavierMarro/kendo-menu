@@ -125,9 +125,15 @@ describe('dashboard activity notes', () => {
         throw new Error('Expected the activity-note panel.');
       }
       expect(panel).toHaveAttribute('hidden');
+      expect(within(warmUp).getByLabelText('Extra notes for Warm-up')).not.toBeVisible();
+
+      const suburi = getActivity(SUBURI_ID);
+      const suburiToggle = within(suburi).getByRole('button', { name: 'Any extra details?' });
+      expect(suburiToggle).toHaveAttribute('aria-expanded', 'false');
 
       await user.click(toggle);
       expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(suburiToggle).toHaveAttribute('aria-expanded', 'false');
       expect(panel).not.toHaveAttribute('hidden');
       const textarea = within(warmUp).getByLabelText('Extra notes for Warm-up');
       expect(textarea).toBeVisible();
@@ -158,9 +164,71 @@ describe('dashboard activity notes', () => {
         },
       });
 
+      await user.click(suburiToggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(suburiToggle).toHaveAttribute('aria-expanded', 'true');
+
       await user.click(toggle);
       expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(suburiToggle).toHaveAttribute('aria-expanded', 'true');
       expect(panel).toHaveAttribute('hidden');
+
+      await user.click(toggle);
+      expect(textarea).toBeVisible();
+      expect(textarea).toHaveValue('  Keep the knees soft.\nBreathe.  ');
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
+
+  it(
+    'explicitly saves focused quantity, activity-note, and session-note drafts',
+    async () => {
+      const user = userEvent.setup();
+      const storage = new TestMemoryStorage();
+      const store = createTestStore(storage);
+      store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+
+      renderApp(store);
+      const dialog = await openDashboardMenu(user, 'International dojo menu');
+      const saveButton = within(dialog).getByRole('button', { name: 'Save your changes' });
+      expect(saveButton).toHaveAttribute('type', 'submit');
+      expect(saveButton).toHaveAccessibleDescription(
+        'Changes also save automatically when you leave a field.',
+      );
+
+      const warmUp = getActivity(WARM_UP_ID);
+      const quantity = within(warmUp).getByLabelText('Minutes for Warm-up');
+      await user.clear(quantity);
+      await user.type(quantity, '14');
+      await user.click(saveButton);
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [WARM_UP_ID]: { minutes: 14 },
+      });
+      expect(within(dialog).getByText('Changes saved on this device.')).toBeVisible();
+
+      await user.click(
+        within(warmUp).getByRole('button', {
+          name: 'Any extra details?',
+        }),
+      );
+      const activityNote = within(warmUp).getByLabelText('Extra notes for Warm-up');
+      await user.type(activityNote, 'Relax the shoulders.');
+      await user.click(saveButton);
+      expect(store.getState().dashboardEntries[0]?.activityNotes).toEqual({
+        [WARM_UP_ID]: 'Relax the shoulders.',
+      });
+
+      const sessionNotes = within(dialog).getByLabelText('Practice notes');
+      await user.type(sessionNotes, 'Keep the pace calm.');
+      await user.click(saveButton);
+      expect(store.getState().dashboardEntries[0]).toMatchObject({
+        notes: 'Keep the pace calm.',
+        quantityOverrides: { [WARM_UP_ID]: { minutes: 14 } },
+        activityNotes: { [WARM_UP_ID]: 'Relax the shoulders.' },
+      });
+      expect(storage.read()).toContain('Keep the pace calm.');
+      expect(storage.read()).toContain('Relax the shoulders.');
+      expect(storage.read()).toContain('"minutes":14');
     },
     DASHBOARD_EDITOR_TEST_TIMEOUT,
   );
@@ -344,6 +412,10 @@ describe('dashboard activity notes', () => {
       await waitFor(() =>
         expect(within(warmUp).getByText('Not saved to this device.')).toBeVisible(),
       );
+
+      await user.click(within(dialog).getByRole('button', { name: 'Save your changes' }));
+      expect(within(dialog).getByText('Changes are not being saved to this device.')).toBeVisible();
+      expect(within(dialog).queryByText('Changes saved on this device.')).not.toBeInTheDocument();
     },
     DASHBOARD_EDITOR_TEST_TIMEOUT,
   );
