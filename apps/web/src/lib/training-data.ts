@@ -2,8 +2,8 @@ import {
   DEFAULT_TRAINING_SETS,
   getDefaultTrainingQuantity,
   getDefaultTrainingQuantityUnits,
-  getEditableTrainingQuantityUnits as getDomainEditableTrainingQuantityUnits,
   getEffectiveTrainingQuantity as calculateEffectiveTrainingQuantity,
+  getTrainingQuantityPolicy,
   getTrainingSetActivities as getDomainTrainingSetActivities,
   getTrainingSetActivityCount as getDomainTrainingSetActivityCount,
   getTrainingSetLeafExerciseCount as getDomainTrainingSetLeafExerciseCount,
@@ -109,48 +109,12 @@ export function getEffectiveTrainingQuantity(
   return calculateEffectiveTrainingQuantity(activity, entry.quantityOverrides[activity.id], unit);
 }
 
-function normalizeTrainingActivityName(value: string): string {
-  return value.toLocaleLowerCase('en').replaceAll(/[^a-z0-9]+/g, '');
-}
-
-export function getInferredTrainingQuantityUnit(
-  activity: TrainingActivity,
-  parentActivity?: TrainingActivity,
-): TrainingQuantityUnit {
-  const activityName = normalizeTrainingActivityName(activity.name);
-  const parentActivityName =
-    parentActivity === undefined ? undefined : normalizeTrainingActivityName(parentActivity.name);
-
-  if (parentActivityName?.includes('suburi') === true) {
-    return 'repetitions';
-  }
-
-  const name = `${parentActivityName ?? ''}${activityName}`;
-  if (name.includes('kakari') || name.includes('butsukari')) {
-    return 'seconds';
-  }
-  if (
-    name.includes('warmup') ||
-    name.includes('suburi') ||
-    name.includes('ashisabaki') ||
-    name.includes('suriashi') ||
-    name.includes('footwork') ||
-    name.includes('jigeiko') ||
-    name.includes('shiaigeiko')
-  ) {
-    return 'minutes';
-  }
-  return 'repetitions';
-}
-
 export function getMissingTrainingQuantityLabel(
   activity: TrainingActivity,
   parentActivity?: TrainingActivity,
 ): 'Reps not set' | 'Time not set' {
-  const configuredUnit =
-    getDefaultTrainingQuantityUnits(activity)[0] ?? activity.editableQuantityUnits?.[0];
-  const unit = configuredUnit ?? getInferredTrainingQuantityUnit(activity, parentActivity);
-  return unit === 'seconds' || unit === 'minutes' ? 'Time not set' : 'Reps not set';
+  const { primaryUnit } = getTrainingQuantityPolicy(activity, parentActivity);
+  return primaryUnit === 'seconds' || primaryUnit === 'minutes' ? 'Time not set' : 'Reps not set';
 }
 
 export function getEditableTrainingQuantityUnits(
@@ -158,22 +122,8 @@ export function getEditableTrainingQuantityUnits(
   activity: TrainingActivity,
   parentActivity?: TrainingActivity,
 ): readonly TrainingQuantityUnit[] {
-  const overrides = entry.quantityOverrides[activity.id];
-  const hasExplicitQuantityUnits = getDefaultTrainingQuantityUnits(activity).length > 0;
-  const hasEditableUnitMetadata = (activity.editableQuantityUnits?.length ?? 0) > 0;
-  const isEligibleContainer = hasExplicitQuantityUnits || hasEditableUnitMetadata;
-  const explicitUnits =
-    activity.children.length === 0 || isEligibleContainer
-      ? getDomainEditableTrainingQuantityUnits(activity, overrides)
-      : [];
-  const fallbackUnit =
-    activity.children.length === 0 && !hasExplicitQuantityUnits && !hasEditableUnitMetadata
-      ? getInferredTrainingQuantityUnit(activity, parentActivity)
-      : undefined;
-
-  return fallbackUnit === undefined || explicitUnits.includes(fallbackUnit)
-    ? explicitUnits
-    : [...explicitUnits, fallbackUnit];
+  return getTrainingQuantityPolicy(activity, parentActivity, entry.quantityOverrides[activity.id])
+    .editableUnits;
 }
 
 export function isValidQuantityValue(unit: TrainingQuantityUnit, value: number): boolean {

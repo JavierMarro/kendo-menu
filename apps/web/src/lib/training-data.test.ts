@@ -1,13 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
-import { asTrainingSetId } from '@kendo-menu/domain';
-import type { DashboardEntry, TrainingActivity } from '@kendo-menu/domain';
+import {
+  DEFAULT_TRAINING_SETS,
+  asTrainingSetId,
+  getDefaultTrainingQuantityUnits,
+} from '@kendo-menu/domain';
+import type {
+  DashboardEntry,
+  TrainingActivity,
+  TrainingQuantityUnit,
+  TrainingSet,
+} from '@kendo-menu/domain';
 
 import {
   formatCategory,
   getCategoryBadgeVariant,
   getEditableTrainingQuantityUnits,
-  getInferredTrainingQuantityUnit,
   getMissingTrainingQuantityLabel,
   getSpecifiedTrainingQuantities,
   filterDashboardEntries,
@@ -31,7 +39,78 @@ const EMPTY_ENTRY = {
   createdAt: '',
 } satisfies DashboardEntry;
 
+type QuantityPolicyBasis = 'explicit' | 'fallback' | 'not editable';
+
+interface QuantityPolicyCharacterization {
+  readonly trainingSet: TrainingSet;
+  readonly parentActivity?: TrainingActivity;
+  readonly activity: TrainingActivity;
+  readonly basis: QuantityPolicyBasis;
+  readonly units: readonly TrainingQuantityUnit[];
+}
+
+function getQuantityPolicyBasis(activity: TrainingActivity): QuantityPolicyBasis {
+  const hasExplicitUnits =
+    getDefaultTrainingQuantityUnits(activity).length > 0 ||
+    (activity.editableQuantityUnits?.length ?? 0) > 0;
+
+  if (hasExplicitUnits) {
+    return 'explicit';
+  }
+  return activity.children.length === 0 ? 'fallback' : 'not editable';
+}
+
+function characterizeActivityQuantityPolicy(
+  trainingSet: TrainingSet,
+  entry: DashboardEntry,
+  activity: TrainingActivity,
+  parentActivity?: TrainingActivity,
+): readonly QuantityPolicyCharacterization[] {
+  const characterization: QuantityPolicyCharacterization = {
+    trainingSet,
+    ...(parentActivity === undefined ? {} : { parentActivity }),
+    activity,
+    basis: getQuantityPolicyBasis(activity),
+    units: getEditableTrainingQuantityUnits(entry, activity, parentActivity),
+  };
+
+  return [
+    characterization,
+    ...activity.children.flatMap((child) =>
+      characterizeActivityQuantityPolicy(trainingSet, entry, child, activity),
+    ),
+  ];
+}
+
+function getCuratedQuantityPolicyCharacterization(): readonly QuantityPolicyCharacterization[] {
+  return DEFAULT_TRAINING_SETS.flatMap((trainingSet) => {
+    const entry = { ...EMPTY_ENTRY, trainingSetId: trainingSet.id };
+    return trainingSet.activities.flatMap((activity) =>
+      characterizeActivityQuantityPolicy(trainingSet, entry, activity),
+    );
+  });
+}
+
+function formatQuantityPolicyCharacterization(
+  characterization: QuantityPolicyCharacterization,
+): string {
+  const { trainingSet, parentActivity, activity, basis, units } = characterization;
+  const parent = parentActivity === undefined ? '(root)' : parentActivity.id;
+  const editableUnits = units.length === 0 ? 'none' : units.join(', ');
+
+  return `${trainingSet.id} | ${parent} > ${activity.id} (${activity.name}) | ${basis} | ${editableUnits}`;
+}
+
 describe('training-data presentation helpers', () => {
+  it('characterizes editable quantity units for every curated activity', () => {
+    const characterization = getCuratedQuantityPolicyCharacterization();
+
+    expect(new Set(characterization.map(({ basis }) => basis))).toEqual(
+      new Set<QuantityPolicyBasis>(['explicit', 'fallback', 'not editable']),
+    );
+    expect(characterization.map(formatQuantityPolicyCharacterization)).toMatchSnapshot();
+  });
+
   it('keeps category identifiers stable while presenting session terminology', () => {
     expect(formatCategory('intense-drill')).toBe('Intense session');
     expect(formatCategory('high-intensity-drill')).toBe('High intensity session');
@@ -40,53 +119,26 @@ describe('training-data presentation helpers', () => {
   });
 
   it.each([
-    [
-      'standalone warm-up',
-      createStandaloneActivity('Warm-up'),
-      undefined,
-      'minutes',
-      'Time not set',
-    ],
-    ['standalone Suburi', createStandaloneActivity('Suburi'), undefined, 'minutes', 'Time not set'],
+    ['standalone warm-up', createStandaloneActivity('Warm-up'), undefined, 'Time not set'],
+    ['standalone Suburi', createStandaloneActivity('Suburi'), undefined, 'Time not set'],
     [
       'child Suburi exercise',
       createExercise('shōmen'),
       { id: 'suburi', name: 'Suburi', children: [] },
-      'repetitions',
       'Reps not set',
     ],
-    [
-      'Kakarigeiko',
-      createStandaloneActivity('Ai kakari-geiko'),
-      undefined,
-      'seconds',
-      'Time not set',
-    ],
-    [
-      'Butsukarigeiko',
-      createStandaloneActivity('Butsukarigeiko'),
-      undefined,
-      'seconds',
-      'Time not set',
-    ],
-    [
-      'Kirikaeshi',
-      createStandaloneActivity('Kirikaeshi'),
-      undefined,
-      'repetitions',
-      'Reps not set',
-    ],
+    ['Kakarigeiko', createStandaloneActivity('Ai kakari-geiko'), undefined, 'Time not set'],
+    ['Butsukarigeiko', createStandaloneActivity('Butsukarigeiko'), undefined, 'Time not set'],
+    ['Kirikaeshi', createStandaloneActivity('Kirikaeshi'), undefined, 'Reps not set'],
     [
       'ordinary waza exercise',
       createExercise('Men'),
       { id: 'kihon-waza', name: 'Kihon-waza', children: [] },
-      'repetitions',
       'Reps not set',
     ],
   ] as const)(
-    'infers the shared fallback for %s',
-    (_label, activity, parentActivity, expectedUnit, expectedMissingLabel) => {
-      expect(getInferredTrainingQuantityUnit(activity, parentActivity)).toBe(expectedUnit);
+    'presents the missing-quantity label for %s',
+    (_label, activity, parentActivity, expectedMissingLabel) => {
       expect(getMissingTrainingQuantityLabel(activity, parentActivity)).toBe(expectedMissingLabel);
     },
   );
