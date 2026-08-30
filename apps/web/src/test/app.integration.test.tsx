@@ -119,7 +119,7 @@ describe('KendoMenu application flows', () => {
 
     const notice = screen.getByRole('complementary', { name: 'Cookie notice' });
     expect(notice).toHaveTextContent(
-      'KendoMenu currently uses no cookies or third-party tracking. We may add privacy-friendly analytics in the future.',
+      'KendoMenu does not use any tracking cookies, no training data or notes leave your device. KendoMenu only uses aggregate analytics through GoatCounter.',
     );
     expect(screen.getByRole('link', { name: 'More information' })).toHaveAttribute(
       'href',
@@ -163,7 +163,34 @@ describe('KendoMenu application flows', () => {
     expect(screen.getByRole('heading', { name: 'How to disable cookies?' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Contact' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument();
-    expect(screen.getByText(/privacy-friendly Plausible Analytics/)).toBeInTheDocument();
+
+    const localStorageSection = screen
+      .getByRole('heading', { name: 'Local storage' })
+      .closest('section');
+    if (!(localStorageSection instanceof HTMLElement)) {
+      throw new Error('Expected the local storage policy section.');
+    }
+    expect(localStorageSection).toHaveTextContent(
+      'This training data is separate from cookies, is not sent to a remote service',
+    );
+
+    const analyticsSection = screen.getByRole('heading', { name: 'Analytics' }).closest('section');
+    if (!(analyticsSection instanceof HTMLElement)) {
+      throw new Error('Expected the analytics policy section.');
+    }
+    expect(analyticsSection).toHaveTextContent(
+      'GoatCounter does not use cookies, does not collect identifiable personal data, and does not track users between sessions.',
+    );
+    expect(analyticsSection).toHaveTextContent(
+      'Aggregated data (page views, country of origin, device type) is used solely to improve the service.',
+    );
+    const goatCounterLink = within(analyticsSection).getByRole('link', {
+      name: 'GoatCounter Analytics',
+    });
+    expect(goatCounterLink).toHaveAttribute('href', 'https://www.goatcounter.com/help/privacy');
+    expect(goatCounterLink).toHaveAttribute('target', '_blank');
+    expect(goatCounterLink).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(goatCounterLink.parentElement?.tagName).toBe('STRONG');
   });
 
   it('renders a named footer with shared navigation and information links', () => {

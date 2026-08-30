@@ -1,0 +1,8 @@
+- Session: goatcounter analytics
+- Date/duration: 2026-08-30; about 15 minutes
+- Scope/start: Added the requested minimal hosted analytics to the existing local-first web app and aligned its cookie disclosures.
+- Changes: Added the GoatCounter document script; updated notice and policy copy plus privacy link; replaced Vitest and Playwright assertions.
+- Decisions: Limited analytics to document loads with no SPA route or custom-event tracking; blocked GoatCounter host resolution in browser automation.
+- Roadblocks: None.
+- Verification: `pnpm check:web` passed with 86/86 tests and build; focused Chromium flow passed 1/1; built-string and stale-copy scans passed.
+- Follow-up: None.

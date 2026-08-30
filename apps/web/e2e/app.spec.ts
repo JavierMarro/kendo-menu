@@ -156,7 +156,7 @@ test.describe('routed training flows', () => {
   }) => {
     const notice = page.getByRole('complementary', { name: 'Cookie notice' });
     await expect(notice).toContainText(
-      'KendoMenu currently uses no cookies or third-party tracking. We may add privacy-friendly analytics in the future.',
+      'KendoMenu does not use any tracking cookies, no training data or notes leave your device. KendoMenu only uses aggregate analytics through GoatCounter.',
     );
     await expect(notice.getByRole('link', { name: 'More information' })).toHaveAttribute(
       'href',
@@ -166,6 +166,15 @@ test.describe('routed training flows', () => {
     await notice.getByRole('link', { name: 'More information' }).click();
     await expect(page).toHaveURL(/\/cookies$/);
     await expect(page.getByRole('heading', { name: 'Cookie Policy', exact: true })).toBeVisible();
+    await expect(
+      page.getByText(/This training data .* is not sent to a remote service/),
+    ).toBeVisible();
+    const goatCounterLink = page.getByRole('link', { name: 'GoatCounter Analytics' });
+    await expect(goatCounterLink).toHaveAttribute(
+      'href',
+      'https://www.goatcounter.com/help/privacy',
+    );
+    await expect(goatCounterLink).toHaveAttribute('target', '_blank');
     await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Got it' }).click();
