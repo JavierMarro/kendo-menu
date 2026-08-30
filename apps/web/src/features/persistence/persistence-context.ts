@@ -19,6 +19,17 @@ export function getPersistenceUpdateLabel({ writeFailed }: PersistenceContextVal
   return writeFailed ? 'Not saved to this device.' : 'Updated.';
 }
 
+export function getExplicitPersistenceUpdateLabel({
+  mode,
+  writeFailed,
+}: PersistenceContextValue): string {
+  if (writeFailed) {
+    return 'Changes are not being saved to this device.';
+  }
+
+  return mode === 'session' ? 'Changes saved for this session.' : 'Changes saved on this device.';
+}
+
 export function usePersistenceStatus(): PersistenceContextValue {
   const value = useContext(PersistenceContext);
 

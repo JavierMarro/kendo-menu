@@ -211,8 +211,10 @@ test.describe('accessibility and responsive layout', () => {
     await expectNoBlockingAxeViolations(page);
   });
 
-  test('does not overflow horizontally at 320px or desktop width', async ({ page }) => {
-    for (const width of [320, 800, 1440]) {
+  test('keeps navigation labels and counts intact without horizontal overflow', async ({
+    page,
+  }) => {
+    for (const width of [320, 375, 393, 800, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/app');
       if (width <= 960) {
@@ -221,12 +223,106 @@ test.describe('accessibility and responsive layout', () => {
       } else {
         await expect(page.locator('.brand-name')).toBeVisible();
       }
+
+      const libraryLink = page
+        .getByRole('navigation', { name: 'Primary navigation' })
+        .getByRole('link', { name: /Keiko library/ });
+      const navMetrics = await libraryLink.evaluate((element) => {
+        const label = element.querySelector('.nav-label');
+        const count = element.querySelector('.nav-count');
+        if (!(label instanceof HTMLElement) || !(count instanceof HTMLElement)) {
+          throw new Error('The library navigation item is incomplete.');
+        }
+
+        const textLineCount = (target: HTMLElement) => {
+          const range = document.createRange();
+          range.selectNodeContents(target);
+          return [...range.getClientRects()].filter(({ width, height }) => width > 0 && height > 0)
+            .length;
+        };
+
+        return {
+          linkOverflows: element.scrollWidth > element.clientWidth,
+          labelLineCount: textLineCount(label),
+          countLineCount: textLineCount(count),
+          countOverflows: count.scrollWidth > count.clientWidth,
+          labelOverflowWrap: getComputedStyle(label).overflowWrap,
+          countWhiteSpace: getComputedStyle(count).whiteSpace,
+        };
+      });
+      expect(navMetrics.linkOverflows, `library nav overflow at ${width}px`).toBe(false);
+      expect(
+        navMetrics.labelLineCount,
+        `library nav label lines at ${width}px`,
+      ).toBeLessThanOrEqual(2);
+      expect(navMetrics.countLineCount, `library count lines at ${width}px`).toBe(1);
+      expect(navMetrics.countOverflows, `library count overflow at ${width}px`).toBe(false);
+      expect(navMetrics.labelOverflowWrap).toBe('normal');
+      expect(navMetrics.countWhiteSpace).toBe('nowrap');
+
       const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(scrollWidth, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(width);
 
       await page.goto('/app/sources');
       const sourcesScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(sourcesScrollWidth, `sources overflow at ${width}px`).toBeLessThanOrEqual(width);
+    }
+  });
+
+  test('aligns Library activity quantities responsively with long titles', async ({ page }) => {
+    for (const width of [320, 375, 393, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/app/library?drill=international-dojo-2-hour-session');
+      const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
+      await expect(dialog).toBeVisible();
+
+      const activity = dialog
+        .getByRole('heading', { name: 'Warm-up', level: 2 })
+        .locator('xpath=ancestor::section');
+      const uchikomi = dialog.locator(
+        '[data-activity-id="international-dojo-2-hour-session-uchikomi"]',
+      );
+      await uchikomi.locator(':scope > summary').click();
+      const longExercise = dialog.locator(
+        '[data-activity-id="international-dojo-2-hour-session-uchikomi-men-kote-kote-men-men"]',
+      );
+
+      for (const row of [activity, longExercise]) {
+        const metrics = await row.evaluate((element) => {
+          const index = element.querySelector('.section-number, .step-number');
+          const copy = element.querySelector('.detail-standalone-copy, .step-copy');
+          const quantity = element.querySelector('.quantity-list, .quantity-not-specified');
+          if (
+            !(index instanceof HTMLElement) ||
+            !(copy instanceof HTMLElement) ||
+            !(quantity instanceof HTMLElement)
+          ) {
+            throw new Error('The activity row is incomplete.');
+          }
+
+          const rowBox = element.getBoundingClientRect();
+          const indexBox = index.getBoundingClientRect();
+          const copyBox = copy.getBoundingClientRect();
+          const quantityBox = quantity.getBoundingClientRect();
+          const sharesRow = copyBox.top < quantityBox.bottom && quantityBox.top < copyBox.bottom;
+          return {
+            hasOverflow: element.scrollWidth > element.clientWidth,
+            indexTitleTopDifference: Math.abs(indexBox.top - copyBox.top),
+            quantityRightInset: rowBox.right - quantityBox.right,
+            sharesRow,
+            overlapsHorizontally: sharesRow && copyBox.right > quantityBox.left + 1,
+          };
+        });
+
+        expect(metrics.hasOverflow, `activity overflow at ${width}px`).toBe(false);
+        expect(metrics.indexTitleTopDifference).toBeLessThanOrEqual(1);
+        expect(metrics.quantityRightInset).toBeGreaterThanOrEqual(0);
+        expect(metrics.quantityRightInset).toBeLessThanOrEqual(20);
+        expect(metrics.overlapsHorizontally).toBe(false);
+        if (width >= 375) {
+          expect(metrics.sharesRow, `activity metadata row at ${width}px`).toBe(true);
+        }
+      }
     }
   });
 

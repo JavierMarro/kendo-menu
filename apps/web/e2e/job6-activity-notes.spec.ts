@@ -66,6 +66,17 @@ test.describe('Job 6 dashboard activity notes', () => {
     const card = firstDashboardCard(page);
     await expect(card).toHaveCount(1);
     await expect(card.getByRole('button', { name: 'Any extra details?' })).toHaveCount(0);
+    const removeButton = card.getByRole('button', { name: 'Remove' });
+    await expect(removeButton).toHaveClass(/destructive-button/);
+    await expect(removeButton).toHaveCSS('color', 'rgb(255, 170, 163)');
+    await removeButton.focus();
+    await expect(removeButton).toHaveCSS('outline-width', '3px');
+    if (await page.evaluate(() => window.matchMedia('(hover: hover)').matches)) {
+      await removeButton.hover();
+      await expect(removeButton).toHaveCSS('background-color', 'rgba(240, 120, 111, 0.14)');
+      await expect(removeButton).toHaveCSS('color', 'rgb(255, 208, 204)');
+    }
+
     const dashboardDialog = await openDashboardMenu(page);
     await expect(dashboardDialog.getByRole('button', { name: 'Any extra details?' })).toHaveCount(
       3,
@@ -89,6 +100,7 @@ test.describe('Job 6 dashboard activity notes', () => {
     }
     const panel = page.locator(`#${panelId}`);
     await expect(panel).toHaveAttribute('hidden', '');
+    await expect(panel).toBeHidden();
 
     await toggle.press('Enter');
     await expect(toggle).toBeFocused();
@@ -98,9 +110,24 @@ test.describe('Job 6 dashboard activity notes', () => {
 
     const textarea = warmUp.getByLabel('Extra notes for Warm-up');
     await expect(textarea).toBeVisible();
+    const suburiToggle = activity(dashboardDialog, SUBURI_ID).getByRole('button', {
+      name: 'Any extra details?',
+    });
+    await expect(suburiToggle).toHaveAttribute('aria-expanded', 'false');
     await textarea.fill('  Keep the knees soft.\nBreathe.  ');
     await textarea.blur();
     await expect(warmUp.getByText('Updated.')).toBeVisible();
+
+    await suburiToggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(suburiToggle).toHaveAttribute('aria-expanded', 'true');
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(suburiToggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(panel).toBeHidden();
+    await toggle.click();
+    await expect(textarea).toBeVisible();
+    await expect(textarea).toHaveValue('  Keep the knees soft.\nBreathe.  ');
 
     const quantity = warmUp.getByLabel('Minutes for Warm-up');
     await quantity.fill('12');
@@ -112,14 +139,27 @@ test.describe('Job 6 dashboard activity notes', () => {
     await sessionNotes.blur();
     await expect(sessionNotes).toHaveValue('General session note.');
 
+    await textarea.fill('Saved with the explicit action.');
+    const explicitSave = dashboardDialog.getByRole('button', { name: 'Save your changes' });
+    await explicitSave.click();
+    await expect(dashboardDialog.getByText('Changes saved on this device.')).toBeVisible();
+
+    await quantity.fill('14');
+    await explicitSave.click();
+    await expect(quantity).toHaveValue('14');
+
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await expect(panel).toHaveAttribute('hidden', '');
+    await expect(panel).toBeHidden();
+
+    await toggle.click();
+    await expect(textarea).toHaveValue('Saved with the explicit action.');
 
     const persisted = await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY);
-    expect(persisted).toContain('Keep the knees soft.');
+    expect(persisted).toContain('Saved with the explicit action.');
     expect(persisted).toContain('General session note.');
-    expect(persisted).toContain('"minutes":12');
+    expect(persisted).toContain('"minutes":14');
 
     await page.reload();
     const reloadedDialog = await openDashboardMenu(page);
@@ -127,10 +167,10 @@ test.describe('Job 6 dashboard activity notes', () => {
     const reloadedToggle = reloadedWarmUp.getByRole('button', { name: 'Any extra details?' });
     await expect(reloadedToggle).toHaveAttribute('aria-expanded', 'true');
     await expect(reloadedWarmUp.getByLabel('Extra notes for Warm-up')).toHaveValue(
-      '  Keep the knees soft.\nBreathe.  ',
+      'Saved with the explicit action.',
     );
     await expect(reloadedWarmUp.getByText('Note added')).toBeVisible();
-    await expect(reloadedWarmUp.getByLabel('Minutes for Warm-up')).toHaveValue('12');
+    await expect(reloadedWarmUp.getByLabel('Minutes for Warm-up')).toHaveValue('14');
     await expect(reloadedDialog.getByLabel('Practice notes')).toHaveValue('General session note.');
     await expectNoBlockingAxeViolations(page);
   });

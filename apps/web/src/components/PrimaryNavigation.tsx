@@ -24,7 +24,7 @@ export function PrimaryNavigationLinks({
       {primaryNavigationItems.map((item) => {
         return (
           <Link key={item.id} className={linkClassName} to={item.to} onClick={onNavigate}>
-            {item.label}
+            <span className="nav-label">{item.label}</span>
             {item.showsCount ? <span className="nav-count">{libraryCount}</span> : null}
           </Link>
         );

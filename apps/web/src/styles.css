@@ -31,7 +31,10 @@
   --accent-bright-hover: #ffda7e;
   --accent-bright-pressed: #d9a944;
   --danger: #f0786f;
+  --danger-text: #ffaaa3;
+  --danger-text-strong: #ffd0cc;
   --danger-soft: rgba(240, 120, 111, 0.14);
+  --danger-soft-strong: rgba(240, 120, 111, 0.24);
   --success: #9bd0aa;
   --success-soft: rgba(155, 208, 170, 0.14);
   --badge-intense-background: #4b2a12;
@@ -343,6 +346,11 @@ a {
   transform: scaleX(1);
 }
 
+.nav-label {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
 .nav-count {
   display: inline-flex;
   min-width: 1.5rem;
@@ -355,6 +363,8 @@ a {
   color: var(--muted-strong);
   font-size: var(--type-12);
   font-variant-numeric: tabular-nums;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 .session-status {
@@ -438,7 +448,7 @@ a {
 
 .session-status.is-error {
   border-color: rgba(240, 120, 111, 0.62);
-  color: #ffaaa3;
+  color: var(--danger-text);
   background: var(--danger-soft);
 }
 
@@ -1496,13 +1506,27 @@ a {
 }
 
 .destructive-button {
-  color: #ffaaa3;
+  color: var(--danger-text);
 }
 
-.destructive-button:hover:not(:disabled) {
+.destructive-button:focus-visible {
   border-color: rgba(240, 120, 111, 0.62);
-  color: #ffd0cc;
+  color: var(--danger-text-strong);
   background: var(--danger-soft);
+}
+
+.destructive-button:active:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--text);
+  background: var(--danger-soft-strong);
+}
+
+@media (hover: hover) {
+  .destructive-button:hover:not(:disabled) {
+    border-color: rgba(240, 120, 111, 0.62);
+    color: var(--danger-text-strong);
+    background: var(--danger-soft);
+  }
 }
 
 .dashboard-list,
@@ -1556,6 +1580,10 @@ a {
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--space-4);
   align-items: start;
+}
+
+.dashboard-card-form {
+  min-width: 0;
 }
 
 .card-index,
@@ -1852,6 +1880,34 @@ a {
   gap: var(--space-1);
 }
 
+.drill-detail-content .detail-standalone-activity,
+.drill-detail-content .training-step:not(.training-step--nested-container) {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  text-align: left;
+}
+
+.drill-detail-content .detail-standalone-copy,
+.drill-detail-content .training-step:not(.training-step--nested-container) > .step-copy {
+  flex: 1 1 9rem;
+}
+
+.drill-detail-content .detail-standalone-activity > .quantity-list,
+.drill-detail-content .detail-standalone-activity > .quantity-not-specified,
+.drill-detail-content .training-step:not(.training-step--nested-container) > .quantity-list,
+.drill-detail-content
+  .training-step:not(.training-step--nested-container)
+  > .quantity-not-specified {
+  min-width: 0;
+  flex: 0 1 auto;
+  align-self: flex-start;
+  justify-content: flex-end;
+  margin-inline-start: auto;
+  text-align: right;
+}
+
 .step-label {
   color: var(--text);
   font-weight: 600;
@@ -1992,6 +2048,10 @@ a {
   background: var(--surface);
 }
 
+.activity-notes-panel[hidden] {
+  display: none;
+}
+
 .activity-notes-panel textarea {
   min-height: 4.5rem;
 }
@@ -2001,6 +2061,29 @@ a {
   gap: var(--space-2);
   max-width: 48rem;
   margin-top: var(--space-6);
+}
+
+.dashboard-save-actions {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--line);
+}
+
+.dashboard-save-feedback {
+  display: grid;
+  min-width: min(100%, 16rem);
+  flex: 1 1 16rem;
+  gap: var(--space-1);
+}
+
+.dashboard-save-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-12);
 }
 
 label {
@@ -2050,7 +2133,7 @@ textarea[aria-invalid='true'] {
 }
 
 .form-error {
-  color: #ffaaa3;
+  color: var(--danger-text);
 }
 
 .undo-banner,
@@ -2751,11 +2834,15 @@ textarea[aria-invalid='true'] {
   }
 
   .nav-item {
-    flex: 1 1 0;
-    min-width: 0;
+    min-width: min-content;
+    flex: 1 1 auto;
     padding-inline: var(--space-1);
     font-size: var(--type-12);
     letter-spacing: 0.03em;
+    white-space: normal;
+  }
+
+  .nav-label {
     white-space: normal;
   }
 

@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FocusEvent,
+  type FormEvent,
+} from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import type {
@@ -29,6 +37,7 @@ import { useTrainingStore, useTrainingStoreApi } from '../../lib/training-store-
 import { TrainingSetTags } from '../../components/TrainingSetTags';
 import { DrillDetailDialog } from '../library/DrillDetailDialog';
 import {
+  getExplicitPersistenceUpdateLabel,
   getPersistenceUpdateLabel,
   usePersistenceStatus,
 } from '../persistence/persistence-context';
@@ -297,7 +306,7 @@ function UnknownDashboardEntry({ entry, onRemove }: UnknownDashboardEntryProps) 
         <h2>Training session unavailable</h2>
         <p>The session for this dashboard entry is no longer available in local data.</p>
       </div>
-      <button className="text-button" type="button" onClick={onRemove}>
+      <button className="text-button destructive-button" type="button" onClick={onRemove}>
         Remove
       </button>
       <span className="sr-only">Entry {entry.id}</span>
@@ -330,11 +339,14 @@ export function DashboardTrainingSet({
 }: DashboardTrainingSetProps) {
   const [notesDraft, setNotesDraft] = useState(entry.notes);
   const [notesStatus, setNotesStatus] = useState<'idle' | 'updated'>('idle');
+  const [saveConfirmationVersion, setSaveConfirmationVersion] = useState(0);
   const persistenceStatus = usePersistenceStatus();
   const activities = trainingSet.activities;
   const activityCount = getTrainingSetActivityCount(trainingSet);
   const description = getTrainingSetDescription(trainingSet);
   const headingId = titleId ?? `dashboard-entry-title-${entry.id}`;
+  const saveHintId = `save-hint-${entry.id}`;
+  const saveStatusId = `save-status-${entry.id}`;
 
   const handleNotesChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setNotesDraft(event.target.value);
@@ -348,57 +360,103 @@ export function DashboardTrainingSet({
     }
   };
 
+  const handleExplicitSave = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && event.currentTarget.contains(activeElement)) {
+      activeElement.blur();
+    }
+
+    setSaveConfirmationVersion((version) => version + 1);
+  };
+
+  useEffect(() => {
+    if (saveConfirmationVersion === 0) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => setSaveConfirmationVersion(0), 4_000);
+    return () => window.clearTimeout(timeoutId);
+  }, [saveConfirmationVersion]);
+
   return (
     <article className="dashboard-card dashboard-card--expanded" data-entry-index={index + 1}>
-      <div className="dashboard-card-heading">
-        <div className="card-index" aria-hidden="true">
-          {String(index + 1).padStart(2, '0')}
-        </div>
-        <div className="card-content">
-          <div className="library-card-topline">
-            <TrainingSetTags trainingSet={trainingSet} />
-            <span className="step-count">{activityCount} activities</span>
+      <form className="dashboard-card-form" onSubmit={handleExplicitSave}>
+        <div className="dashboard-card-heading">
+          <div className="card-index" aria-hidden="true">
+            {String(index + 1).padStart(2, '0')}
           </div>
-          <h2 id={headingId}>{trainingSet.name}</h2>
-          {description === undefined ? null : <p>{description}</p>}
-          <div className="card-meta">
-            <span>{entry.notes.length > 0 ? 'Has notes' : 'No notes yet'}</span>
+          <div className="card-content">
+            <div className="library-card-topline">
+              <TrainingSetTags trainingSet={trainingSet} />
+              <span className="step-count">{activityCount} activities</span>
+            </div>
+            <h2 id={headingId}>{trainingSet.name}</h2>
+            {description === undefined ? null : <p>{description}</p>}
+            <div className="card-meta">
+              <span>{entry.notes.length > 0 ? 'Has notes' : 'No notes yet'}</span>
+            </div>
+          </div>
+          <button className="text-button destructive-button" type="button" onClick={onRemove}>
+            Remove
+          </button>
+        </div>
+
+        <div className="dashboard-sections detail-sections">
+          <TrainingActivityList
+            activities={activities}
+            titleId={headingId}
+            renderActivityAside={(context) =>
+              renderDashboardActivity(context, {
+                entry,
+                onSetQuantity,
+                onClearQuantity,
+                onSetActivityNote,
+              })
+            }
+          />
+        </div>
+
+        <div className="notes-field">
+          <label htmlFor={`notes-${entry.id}`}>Practice notes</label>
+          <textarea
+            id={`notes-${entry.id}`}
+            value={notesDraft}
+            placeholder="What do you want to remember for this session?"
+            rows={3}
+            onBlur={handleNotesBlur}
+            onChange={handleNotesChange}
+          />
+          <span className="field-status" role="status" aria-live="polite">
+            {notesStatus === 'updated' ? getPersistenceUpdateLabel(persistenceStatus) : ''}
+          </span>
+        </div>
+
+        <div className="dashboard-save-actions">
+          <button
+            className="primary-button"
+            type="submit"
+            aria-describedby={
+              saveConfirmationVersion === 0 ? saveHintId : `${saveHintId} ${saveStatusId}`
+            }
+          >
+            Save your changes
+          </button>
+          <div className="dashboard-save-feedback">
+            <p id={saveHintId} className="dashboard-save-hint">
+              Changes also save automatically when you leave a field.
+            </p>
+            <span id={saveStatusId} className="field-status" role="status" aria-live="polite">
+              {saveConfirmationVersion > 0 ? (
+                <span key={saveConfirmationVersion}>
+                  {getExplicitPersistenceUpdateLabel(persistenceStatus)}
+                </span>
+              ) : null}
+            </span>
           </div>
         </div>
-        <button className="text-button" type="button" onClick={onRemove}>
-          Remove
-        </button>
-      </div>
-
-      <div className="dashboard-sections detail-sections">
-        <TrainingActivityList
-          activities={activities}
-          titleId={headingId}
-          renderActivityAside={(context) =>
-            renderDashboardActivity(context, {
-              entry,
-              onSetQuantity,
-              onClearQuantity,
-              onSetActivityNote,
-            })
-          }
-        />
-      </div>
-
-      <div className="notes-field">
-        <label htmlFor={`notes-${entry.id}`}>Practice notes</label>
-        <textarea
-          id={`notes-${entry.id}`}
-          value={notesDraft}
-          placeholder="What do you want to remember for this session?"
-          rows={3}
-          onBlur={handleNotesBlur}
-          onChange={handleNotesChange}
-        />
-        <span className="field-status" role="status" aria-live="polite">
-          {notesStatus === 'updated' ? getPersistenceUpdateLabel(persistenceStatus) : ''}
-        </span>
-      </div>
+      </form>
     </article>
   );
 }
@@ -441,7 +499,7 @@ function DashboardTrainingSetCard({
         >
           View more
         </button>
-        <button className="text-button" type="button" onClick={onRemove}>
+        <button className="text-button destructive-button" type="button" onClick={onRemove}>
           Remove
         </button>
       </div>
