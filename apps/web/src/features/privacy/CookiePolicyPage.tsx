@@ -6,7 +6,8 @@ export function CookiePolicyPage() {
           <p className="eyebrow">Privacy and transparency</p>
           <h1 id="cookie-policy-title">Cookie Policy</h1>
           <p className="page-intro">
-            A clear explanation of how KendoMenu handles cookies, local data, and future analytics.
+            A clear explanation of how KendoMenu handles cookies, local data, and aggregate
+            analytics.
           </p>
         </div>
       </header>
@@ -24,7 +25,7 @@ export function CookiePolicyPage() {
         <section className="policy-section" aria-labelledby="how-kendo-menu-uses-cookies-title">
           <h2 id="how-kendo-menu-uses-cookies-title">How KendoMenu uses cookies</h2>
           <p>
-            <b>KendoMenu does not use analytics, advertising, or tracking cookies.</b>
+            <b>KendoMenu does not use cookies for analytics, advertising, or tracking.</b>
           </p>
         </section>
 
@@ -37,11 +38,23 @@ export function CookiePolicyPage() {
           </p>
         </section>
 
-        <section className="policy-section" aria-labelledby="future-analytics-title">
-          <h2 id="future-analytics-title">Analytics</h2>
+        <section className="policy-section" aria-labelledby="analytics-title">
+          <h2 id="analytics-title">Analytics</h2>
           <p>
-            KendoMenu does not currently include analytics. If privacy-friendly Plausible Analytics
-            is added in the future, this policy will be updated before it is enabled.
+            KendoMenu uses{' '}
+            <strong>
+              <a
+                href="https://www.goatcounter.com/help/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                GoatCounter Analytics
+              </a>
+            </strong>
+            , a privacy-friendly web analytics service. GoatCounter does not use cookies, does not
+            collect identifiable personal data, and does not track users between sessions.
+            Aggregated data (page views, country of origin, device type) is used solely to improve
+            the service.
           </p>
         </section>
 
