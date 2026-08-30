@@ -1,11 +1,9 @@
-import { createContext, useContext } from 'react';
-import type { createTrainingStore, TrainingStore } from '@kendo-menu/store';
+import { useContext } from 'react';
+import type { TrainingStore } from '@kendo-menu/store';
+
+import { TrainingStoreContext, type TrainingStoreHook } from './training-store-context-value';
 
 export { TrainingStoreProvider } from './training-store-provider';
-
-export type TrainingStoreHook = ReturnType<typeof createTrainingStore>;
-
-export const TrainingStoreContext = createContext<TrainingStoreHook | null>(null);
 
 export function useTrainingStore<T>(selector: (state: TrainingStore) => T): T {
   const store = useContext(TrainingStoreContext);

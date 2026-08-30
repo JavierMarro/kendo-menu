@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { TrainingStoreContext, type TrainingStoreHook } from './training-store-context';
+import { TrainingStoreContext, type TrainingStoreHook } from './training-store-context-value';
 
 interface TrainingStoreProviderProps {
   readonly store: TrainingStoreHook;

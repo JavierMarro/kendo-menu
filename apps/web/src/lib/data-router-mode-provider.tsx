@@ -1,6 +1,6 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
-const DataRouterModeContext = createContext(false);
+import { DataRouterModeContext } from './router-context-value';
 
 interface DataRouterModeProviderProps {
   readonly children: ReactNode;
@@ -8,8 +8,4 @@ interface DataRouterModeProviderProps {
 
 export function DataRouterModeProvider({ children }: DataRouterModeProviderProps) {
   return <DataRouterModeContext.Provider value={true}>{children}</DataRouterModeContext.Provider>;
-}
-
-export function useDataRouterMode(): boolean {
-  return useContext(DataRouterModeContext);
 }
