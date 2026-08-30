@@ -730,6 +730,60 @@ test.describe('routed training flows', () => {
     await expect(page.getByRole('heading', { name: 'Junior-high school dojo menu' })).toBeVisible();
   });
 
+  test('blocks explicit Save success for an invalid quantity and keeps the persisted value', async ({
+    page,
+  }) => {
+    await addCuratedSessionToDashboard(
+      page,
+      'junior-high-kendo-club',
+      'Junior-high school dojo menu',
+    );
+    await page.goto('/app/dashboard');
+
+    let dashboardDialog = await openDashboardMenu(page, 'Junior-high school dojo menu');
+    await openNestedDetails(
+      dashboardDialog.locator(`[data-activity-id="${JUNIOR_HIGH_SUBURI_ID}"]`),
+    );
+
+    const repetitions = dashboardDialog.getByLabel('Repetitions for Haya');
+    const validationMessage = dashboardDialog.getByText('Enter a whole number from 0 to 500.');
+    const savedMessage = dashboardDialog.getByText('Changes saved on this device.');
+    await expect(repetitions).toHaveValue('100');
+    const persistedBeforeInvalidEdit = await page.evaluate(
+      (key) => window.localStorage.getItem(key),
+      STORAGE_KEY,
+    );
+
+    await repetitions.fill('501');
+    await repetitions.blur();
+
+    await expect(repetitions).toHaveAttribute('aria-invalid', 'true');
+    await expect(validationMessage).toBeVisible();
+    expect(
+      await repetitions.evaluate(
+        (element) => element instanceof HTMLInputElement && element.validity.valid,
+      ),
+    ).toBe(false);
+
+    await dashboardDialog.getByRole('button', { name: 'Save your changes' }).click();
+
+    await expect(repetitions).toBeFocused();
+    await expect(repetitions).toHaveAttribute('aria-invalid', 'true');
+    await expect(validationMessage).toBeVisible();
+    await expect(savedMessage).toHaveCount(0);
+    expect(await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY)).toBe(
+      persistedBeforeInvalidEdit,
+    );
+
+    await page.reload();
+    dashboardDialog = await openDashboardMenu(page, 'Junior-high school dojo menu');
+    await openNestedDetails(
+      dashboardDialog.locator(`[data-activity-id="${JUNIOR_HIGH_SUBURI_ID}"]`),
+    );
+    await expect(dashboardDialog.getByLabel('Repetitions for Haya')).toHaveValue('100');
+    await expect(dashboardDialog.getByText('Changes saved on this device.')).toHaveCount(0);
+  });
+
   test('persists standalone minute and second overrides without changing their units', async ({
     page,
   }) => {
