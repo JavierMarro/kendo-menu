@@ -1,15 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import {
   findTrainingSet,
-  formatCategory,
   getAllTrainingSets,
-  getCategoryBadgeVariant,
   getTrainingSetDescription,
   getTrainingSetActivityCount,
 } from '../../lib/training-data';
-import { useTrainingStore } from '../../lib/training-store-context';
+import { TrainingSetTags } from '../../components/TrainingSetTags';
 import { DrillDetailDialog } from './DrillDetailDialog';
 import {
   getLibraryDrillLocation,
@@ -20,8 +18,7 @@ import {
 } from './library-query';
 
 export function LibraryPage() {
-  const customTrainingSets = useTrainingStore((state) => state.customTrainingSets);
-  const trainingSets = useMemo(() => getAllTrainingSets(customTrainingSets), [customTrainingSets]);
+  const trainingSets = getAllTrainingSets();
   const location = useLocation();
   const navigate = useNavigate();
   const selectedDrillId = getSelectedDrillId(location.search);
@@ -117,12 +114,7 @@ export function LibraryPage() {
             return (
               <article className="library-card" key={trainingSet.id}>
                 <div className="library-card-topline">
-                  <span
-                    className="category-pill"
-                    data-category-variant={getCategoryBadgeVariant(trainingSet.category)}
-                  >
-                    {formatCategory(trainingSet.category)}
-                  </span>
+                  <TrainingSetTags trainingSet={trainingSet} />
                   <span className="step-count">
                     {getTrainingSetActivityCount(trainingSet)} activities
                   </span>

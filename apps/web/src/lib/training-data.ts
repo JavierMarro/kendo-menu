@@ -7,8 +7,10 @@ import {
   getTrainingSetActivities as getDomainTrainingSetActivities,
   getTrainingSetActivityCount as getDomainTrainingSetActivityCount,
   getTrainingSetLeafExerciseCount as getDomainTrainingSetLeafExerciseCount,
+  getTrainingSetTags,
   isValidTrainingQuantityValue,
   type DashboardEntry,
+  type TrainingSetTag,
   type TrainingActivity,
   type TrainingQuantityUnit,
   type TrainingQuantityValue,
@@ -59,10 +61,15 @@ export function getSectionActivityCount(activity: TrainingActivity): number {
   return getDomainTrainingSetActivityCount({ activities: [activity] });
 }
 
-export function getAllTrainingSets(
-  customTrainingSets: readonly TrainingSet[],
-): readonly TrainingSet[] {
-  return [...DEFAULT_TRAINING_SETS, ...customTrainingSets];
+export function getAllTrainingSets(): readonly TrainingSet[] {
+  return DEFAULT_TRAINING_SETS;
+}
+
+export function getDashboardTrainingSet(entry: DashboardEntry): TrainingSet | undefined {
+  return (
+    entry.trainingSet ??
+    DEFAULT_TRAINING_SETS.find((trainingSet) => trainingSet.id === entry.trainingSetId)
+  );
 }
 
 export function findTrainingSet(
@@ -245,6 +252,51 @@ export function formatCategory(category: TrainingSet['category']): string {
 
   const label = category.replaceAll('-', ' ');
   return `${label.charAt(0).toUpperCase()}${label.slice(1)}`;
+}
+
+export function formatTrainingSetTag(tag: TrainingSetTag): string {
+  return tag === 'custom' ? 'Custom' : formatCategory(tag);
+}
+
+export function getTrainingSetTagVariant(tag: TrainingSetTag): CategoryBadgeVariant {
+  if (tag === 'custom') {
+    return 'custom';
+  }
+  return tag === 'intense-drill' ? 'intense' : 'high-intensity';
+}
+
+export function getTrainingSetTagLabels(
+  trainingSet: Pick<TrainingSet, 'category' | 'customIntensity'>,
+): readonly string[] {
+  return getTrainingSetTags(trainingSet).map(formatTrainingSetTag);
+}
+
+export type DashboardFilter = 'all' | TrainingSetTag;
+
+export const DASHBOARD_FILTER_OPTIONS: readonly {
+  readonly value: DashboardFilter;
+  readonly label: string;
+}[] = [
+  { value: 'all', label: 'All' },
+  { value: 'custom', label: 'Custom' },
+  { value: 'intense-drill', label: 'Intense session' },
+  { value: 'high-intensity-drill', label: 'High intensity session' },
+];
+
+export function matchesDashboardFilter(entry: DashboardEntry, filter: DashboardFilter): boolean {
+  if (filter === 'all') {
+    return true;
+  }
+  return entry.trainingSet === undefined
+    ? false
+    : getTrainingSetTags(entry.trainingSet).includes(filter);
+}
+
+export function filterDashboardEntries(
+  entries: readonly DashboardEntry[],
+  filter: DashboardFilter,
+): readonly DashboardEntry[] {
+  return entries.filter((entry) => matchesDashboardFilter(entry, filter));
 }
 
 export function getCategoryBadgeVariant(category: TrainingSet['category']): CategoryBadgeVariant {

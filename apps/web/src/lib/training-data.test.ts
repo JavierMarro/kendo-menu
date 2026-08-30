@@ -10,6 +10,8 @@ import {
   getInferredTrainingQuantityUnit,
   getMissingTrainingQuantityLabel,
   getSpecifiedTrainingQuantities,
+  filterDashboardEntries,
+  getTrainingSetTagLabels,
 } from './training-data';
 
 function createStandaloneActivity(name: string): TrainingActivity {
@@ -122,5 +124,44 @@ describe('training-data presentation helpers', () => {
 
     expect(getEditableTrainingQuantityUnits(EMPTY_ENTRY, metadataActivity)).toEqual(['seconds']);
     expect(getMissingTrainingQuantityLabel(metadataActivity)).toBe('Time not set');
+  });
+
+  it('derives all custom and curated tag combinations for filtering', () => {
+    const custom = {
+      id: asTrainingSetId('custom'),
+      name: 'Custom',
+      category: 'custom',
+      customIntensity: 'intense-drill',
+      activities: [createStandaloneActivity('Men')],
+      isBuiltIn: false,
+    } as const;
+    const high = {
+      id: asTrainingSetId('high'),
+      name: 'High',
+      category: 'high-intensity-drill',
+      activities: [createStandaloneActivity('Men')],
+      isBuiltIn: true,
+    } as const;
+    const entries = [
+      { ...EMPTY_ENTRY, id: 'custom-entry', trainingSet: custom },
+      { ...EMPTY_ENTRY, id: 'high-entry', trainingSet: high },
+      { ...EMPTY_ENTRY, id: 'unknown-entry', trainingSetId: asTrainingSetId('unknown') },
+    ];
+
+    expect(getTrainingSetTagLabels(custom)).toEqual(['Custom', 'Intense session']);
+    expect(filterDashboardEntries(entries, 'all').map((entry) => entry.id)).toEqual([
+      'custom-entry',
+      'high-entry',
+      'unknown-entry',
+    ]);
+    expect(filterDashboardEntries(entries, 'custom').map((entry) => entry.id)).toEqual([
+      'custom-entry',
+    ]);
+    expect(filterDashboardEntries(entries, 'intense-drill').map((entry) => entry.id)).toEqual([
+      'custom-entry',
+    ]);
+    expect(
+      filterDashboardEntries(entries, 'high-intensity-drill').map((entry) => entry.id),
+    ).toEqual(['high-entry']);
   });
 });

@@ -15,6 +15,20 @@ async function openDashboardMenu(page: Page, name: string): Promise<Locator> {
   return dialog;
 }
 
+async function addCuratedSessionToDashboard(
+  page: Page,
+  drillId: string,
+  name: string,
+): Promise<void> {
+  await page.goto(`/app/library?drill=${drillId}`);
+  const dialog = page.getByRole('dialog', { name });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Add to dashboard' }).click();
+  await expect(dialog.locator('.inline-confirmation')).toContainText(
+    `${name} added to your dashboard.`,
+  );
+}
+
 async function openNestedDetails(container: Locator): Promise<Locator> {
   const tagName = await container.evaluate((element) => element.tagName.toLowerCase());
   const details = tagName === 'details' ? container : container.locator(':scope > details');
@@ -277,12 +291,15 @@ test.describe('routed training flows', () => {
     await expect(
       dialog.getByRole('button', { name: 'Close International dojo menu details.' }),
     ).toBeFocused();
-    const detailBadge = dialog.locator('.drill-detail-category');
+    const detailTags = dialog.locator('.drill-detail-category');
+    await expect(detailTags).toHaveClass(/training-set-tags/);
+    await expect(detailTags).toHaveCSS('display', 'flex');
+    const detailBadge = detailTags.locator('.category-pill');
     await expect(detailBadge).toHaveText('Intense session');
     await expect(detailBadge).toHaveAttribute('data-category-variant', 'intense');
     expect(
-      await detailBadge.evaluate(
-        (badge) => badge.nextElementSibling?.textContent === 'International dojo menu',
+      await detailTags.evaluate(
+        (tags) => tags.nextElementSibling?.textContent === 'International dojo menu',
       ),
     ).toBe(true);
 
@@ -400,13 +417,20 @@ test.describe('routed training flows', () => {
       foreground: getComputedStyle(element).color,
     }));
     await page.goto('/app/library?drill=international-dojo-2-hour-session');
-    const intenseDetailBadge = page.getByRole('dialog').locator('.drill-detail-category');
+    const intenseDetailTags = page.getByRole('dialog').locator('.drill-detail-category');
+    await expect(intenseDetailTags).toHaveClass(/training-set-tags/);
+    await expect(intenseDetailTags).toHaveCSS('display', 'flex');
+    const intenseDetailBadge = intenseDetailTags.locator('.category-pill');
+    await expect(intenseDetailBadge).toHaveText('Intense session');
     await expect(intenseDetailBadge).toHaveAttribute('data-category-variant', 'intense');
     await expect(intenseDetailBadge).toHaveCSS('background-color', intenseCardColours.background);
     await expect(intenseDetailBadge).toHaveCSS('color', intenseCardColours.foreground);
 
     await page.goto('/app/library?drill=senior-high-school-kendo-club');
-    const highDetailBadge = page.getByRole('dialog').locator('.drill-detail-category');
+    const highDetailTags = page.getByRole('dialog').locator('.drill-detail-category');
+    await expect(highDetailTags).toHaveClass(/training-set-tags/);
+    await expect(highDetailTags).toHaveCSS('display', 'flex');
+    const highDetailBadge = highDetailTags.locator('.category-pill');
     await expect(highDetailBadge).toHaveText('High intensity session');
     await expect(highDetailBadge).toHaveAttribute('data-category-variant', 'high-intensity');
     const highDetailColours = await highDetailBadge.evaluate((element) => ({
@@ -795,6 +819,7 @@ test.describe('routed training flows', () => {
     await page.goto('/app/drills/new');
     await page.getByLabel('Session name').fill('Monday footwork');
     await page.getByLabel('Description (optional)').fill('A short solo session.');
+    await page.getByLabel('Intensity (optional)').selectOption('high-intensity-drill');
     const activity = page.getByRole('group', { name: 'Activity 1' });
     await activity.getByLabel('Activity name').fill('Footwork');
     const exercises = activity.getByRole('group', { name: 'Exercises' });
@@ -809,6 +834,9 @@ test.describe('routed training flows', () => {
     await expect(page).toHaveURL(/\/app\/dashboard\?created=Monday%20footwork$/);
     expect(unexpectedDialogMessage).toBeNull();
     await expect(page.getByRole('heading', { name: 'Monday footwork' })).toBeVisible();
+    let customCard = dashboardCard(page, 'Monday footwork');
+    await expect(customCard.getByText('Custom', { exact: true })).toBeVisible();
+    await expect(customCard.getByText('High intensity session', { exact: true })).toBeVisible();
     let dashboardDialog = await openDashboardMenu(page, 'Monday footwork');
     await dashboardDialog
       .locator('details.detail-section')
@@ -824,8 +852,19 @@ test.describe('routed training flows', () => {
         name: 'Close Monday footwork details.',
       })
       .click();
+
+    await page.goto('/app/library');
+    await expect(page.locator('.library-card')).toHaveCount(11);
+    await expect(page.getByRole('heading', { name: 'Monday footwork', exact: true })).toHaveCount(
+      0,
+    );
+
+    await page.goto('/app/dashboard');
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Monday footwork' })).toBeVisible();
+    customCard = dashboardCard(page, 'Monday footwork');
+    await expect(customCard.getByText('Custom', { exact: true })).toBeVisible();
+    await expect(customCard.getByText('High intensity session', { exact: true })).toBeVisible();
     dashboardDialog = await openDashboardMenu(page, 'Monday footwork');
     await dashboardDialog
       .locator('details.detail-section')
@@ -839,5 +878,93 @@ test.describe('routed training flows', () => {
 
     const persisted = await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY);
     expect(persisted).not.toBeNull();
+  });
+
+  test('filters populated dashboard sessions by tags and resets an empty result', async ({
+    page,
+  }) => {
+    await addCuratedSessionToDashboard(
+      page,
+      'international-dojo-2-hour-session',
+      'International dojo menu',
+    );
+    await addCuratedSessionToDashboard(
+      page,
+      'senior-high-school-kendo-club',
+      'Senior High School dojo menu',
+    );
+
+    await page.goto('/app/dashboard');
+    const createNewMenu = page.getByRole('link', { name: 'Create new menu' });
+    await expect(createNewMenu).toHaveAttribute('href', '/app/drills/new');
+    await createNewMenu.click();
+    await expect(page).toHaveURL(/\/app\/drills\/new$/);
+    await page.getByLabel('Session name').fill('High intensity custom menu');
+    await page.getByLabel('Intensity (optional)').selectOption('high-intensity-drill');
+    const customActivity = page.getByRole('group', { name: 'Activity 1' });
+    await customActivity.getByLabel('Activity name').fill('Practice');
+    const customExercises = customActivity.getByRole('group', { name: 'Exercises' });
+    await customExercises.getByLabel('Exercise name').fill('Men');
+    await customExercises.getByLabel('Repetitions', { exact: true }).fill('24');
+    await page.getByRole('button', { name: 'Save session to dashboard' }).click();
+
+    await expect(page).toHaveURL(/\/app\/dashboard\?created=High%20intensity%20custom%20menu$/);
+    const filter = page.getByLabel('Filter sessions');
+    await expect(filter).toHaveValue('all');
+    await expect(page.locator('.dashboard-card--compact')).toHaveCount(3);
+    await expect(
+      page.getByRole('heading', { name: 'International dojo menu', exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Senior High School dojo menu', exact: true }),
+    ).toBeVisible();
+    const customCard = dashboardCard(page, 'High intensity custom menu');
+    await expect(customCard).toBeVisible();
+    await expect(customCard.getByText('Custom', { exact: true })).toBeVisible();
+    await expect(customCard.getByText('High intensity session', { exact: true })).toBeVisible();
+
+    await filter.selectOption('custom');
+    await expect(page.locator('.dashboard-card--compact')).toHaveCount(1);
+    await expect(
+      page.getByRole('heading', { name: 'High intensity custom menu', exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'International dojo menu', exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole('heading', { name: 'Senior High School dojo menu', exact: true }),
+    ).toHaveCount(0);
+
+    await filter.selectOption('intense-drill');
+    await expect(page.locator('.dashboard-card--compact')).toHaveCount(1);
+    const intenseCard = dashboardCard(page, 'International dojo menu');
+    await expect(intenseCard).toBeVisible();
+    await expect(intenseCard.getByText('Intense session', { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'High intensity custom menu', exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole('heading', { name: 'Senior High School dojo menu', exact: true }),
+    ).toHaveCount(0);
+
+    await filter.selectOption('high-intensity-drill');
+    await expect(page.locator('.dashboard-card--compact')).toHaveCount(2);
+    const highCard = dashboardCard(page, 'Senior High School dojo menu');
+    await expect(highCard).toBeVisible();
+    await expect(highCard.getByText('High intensity session', { exact: true })).toBeVisible();
+    await expect(customCard).toBeVisible();
+    await expect(customCard.getByText('Custom', { exact: true })).toBeVisible();
+    await expect(customCard.getByText('High intensity session', { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'International dojo menu', exact: true }),
+    ).toHaveCount(0);
+
+    await filter.selectOption('custom');
+    await customCard.getByRole('button', { name: 'Remove' }).click();
+    await expect(page.getByRole('heading', { name: 'Nothing matches this filter.' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Show all sessions' })).toBeVisible();
+    await page.getByRole('button', { name: 'Show all sessions' }).click();
+    await expect(filter).toHaveValue('all');
+    await expect(page.locator('.dashboard-card--compact')).toHaveCount(2);
   });
 });

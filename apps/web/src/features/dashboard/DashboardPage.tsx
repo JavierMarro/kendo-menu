@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FocusEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import type {
@@ -10,12 +10,11 @@ import type {
 import type { RemovedDashboardEntry } from '@kendo-menu/store';
 
 import {
-  findTrainingSet,
-  formatCategory,
+  DASHBOARD_FILTER_OPTIONS,
+  filterDashboardEntries,
   formatQuantityValue,
   formatQuantityUnit,
-  getAllTrainingSets,
-  getCategoryBadgeVariant,
+  getDashboardTrainingSet,
   getEditableTrainingQuantityUnits,
   getEffectiveTrainingQuantity,
   getQuantityValidationMessage,
@@ -24,8 +23,10 @@ import {
   getTrainingSetDescription,
   isTrainingQuantityRange,
   isValidQuantityValue,
+  type DashboardFilter,
 } from '../../lib/training-data';
 import { useTrainingStore, useTrainingStoreApi } from '../../lib/training-store-context';
+import { TrainingSetTags } from '../../components/TrainingSetTags';
 import { DrillDetailDialog } from '../library/DrillDetailDialog';
 import {
   getPersistenceUpdateLabel,
@@ -45,7 +46,6 @@ function getQuantityDraftValue(
 
 export function DashboardPage() {
   const dashboardEntries = useTrainingStore((state) => state.dashboardEntries);
-  const customTrainingSets = useTrainingStore((state) => state.customTrainingSets);
   const removeFromDashboard = useTrainingStore((state) => state.removeFromDashboard);
   const updateDashboardEntry = useTrainingStore((state) => state.updateDashboardEntry);
   const setQuantityOverride = useTrainingStore((state) => state.setQuantityOverride);
@@ -56,18 +56,21 @@ export function DashboardPage() {
   const [searchParams] = useSearchParams();
   const persistenceStatus = usePersistenceStatus();
   const [statusMessage, setStatusMessage] = useState('');
+  const [dashboardFilter, setDashboardFilter] = useState<DashboardFilter>('all');
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const viewMoreButtonsRef = useRef(new Map<string, HTMLButtonElement>());
   const previousSelectedEntryIdRef = useRef<string | null>(null);
-  const trainingSets = getAllTrainingSets(customTrainingSets);
+  const filteredEntries = useMemo(
+    () => filterDashboardEntries(dashboardEntries, dashboardFilter),
+    [dashboardEntries, dashboardFilter],
+  );
   const selectedEntry =
     selectedEntryId === null
       ? undefined
-      : dashboardEntries.find((entry) => entry.id === selectedEntryId);
+      : filteredEntries.find((entry) => entry.id === selectedEntryId);
   const selectedTrainingSet =
-    selectedEntry === undefined
-      ? undefined
-      : findTrainingSet(trainingSets, selectedEntry.trainingSetId);
+    selectedEntry === undefined ? undefined : getDashboardTrainingSet(selectedEntry);
+  const visibleSelectedEntryId = selectedEntry?.id ?? null;
   const createdName = searchParams.get('created');
   const createdStatusMessage =
     createdName === null
@@ -79,8 +82,8 @@ export function DashboardPage() {
           : `${createdName} saved to your dashboard.`;
 
   useEffect(() => {
-    if (selectedEntryId !== null) {
-      previousSelectedEntryIdRef.current = selectedEntryId;
+    if (visibleSelectedEntryId !== null) {
+      previousSelectedEntryIdRef.current = visibleSelectedEntryId;
       return;
     }
 
@@ -97,7 +100,20 @@ export function DashboardPage() {
     }
 
     document.getElementById('main-content')?.focus({ preventScroll: true });
-  }, [selectedEntryId]);
+  }, [visibleSelectedEntryId]);
+
+  const handleDashboardFilterChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const selectedValue = event.target.value;
+    const option = DASHBOARD_FILTER_OPTIONS.find((candidate) => candidate.value === selectedValue);
+    if (option === undefined) {
+      return;
+    }
+
+    if (selectedEntryId !== null) {
+      setSelectedEntryId(null);
+    }
+    setDashboardFilter(option.value);
+  };
 
   const removeEntry = (entry: DashboardEntry, label = 'Training session') => {
     const removed = removeFromDashboard(entry.id);
@@ -121,12 +137,33 @@ export function DashboardPage() {
 
   return (
     <>
-      <header className="page-header">
+      <header className="page-header dashboard-page-header">
         <div>
           <p className="eyebrow">Today&apos;s keiko</p>
           <h1>Your dashboard</h1>
           <p className="page-intro">Shape today’s keiko to fit the practice ahead.</p>
         </div>
+        {dashboardEntries.length > 0 ? (
+          <div className="dashboard-header-actions">
+            <Link className="secondary-button" to="/app/drills/new">
+              Create new menu
+            </Link>
+            <div className="dashboard-filter-control">
+              <label htmlFor="dashboard-filter">Filter sessions</label>
+              <select
+                id="dashboard-filter"
+                value={dashboardFilter}
+                onChange={handleDashboardFilterChange}
+              >
+                {DASHBOARD_FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        ) : null}
       </header>
 
       <p className="sr-only" role="status" aria-live="polite">
@@ -161,13 +198,29 @@ export function DashboardPage() {
             </Link>
           </div>
         </section>
+      ) : filteredEntries.length === 0 ? (
+        <section
+          className="empty-state dashboard-filter-empty"
+          aria-labelledby="filter-empty-title"
+        >
+          <p className="eyebrow">No matching sessions</p>
+          <h2 id="filter-empty-title">Nothing matches this filter.</h2>
+          <p>Choose another session tag to see the training on your dashboard.</p>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => setDashboardFilter('all')}
+          >
+            Show all sessions
+          </button>
+        </section>
       ) : (
         <section className="dashboard-list" aria-labelledby="dashboard-list-title">
           <h2 id="dashboard-list-title" className="sr-only">
             Selected training sessions
           </h2>
-          {dashboardEntries.map((entry) => {
-            const trainingSet = findTrainingSet(trainingSets, entry.trainingSetId);
+          {filteredEntries.map((entry) => {
+            const trainingSet = getDashboardTrainingSet(entry);
             return trainingSet === undefined ? (
               <UnknownDashboardEntry
                 key={entry.id}
@@ -303,12 +356,7 @@ export function DashboardTrainingSet({
         </div>
         <div className="card-content">
           <div className="library-card-topline">
-            <span
-              className="category-pill"
-              data-category-variant={getCategoryBadgeVariant(trainingSet.category)}
-            >
-              {formatCategory(trainingSet.category)}
-            </span>
+            <TrainingSetTags trainingSet={trainingSet} />
             <span className="step-count">{activityCount} activities</span>
           </div>
           <h2 id={headingId}>{trainingSet.name}</h2>
@@ -376,12 +424,7 @@ function DashboardTrainingSetCard({
   return (
     <article className="dashboard-card dashboard-card--compact">
       <div className="library-card-topline">
-        <span
-          className="category-pill"
-          data-category-variant={getCategoryBadgeVariant(trainingSet.category)}
-        >
-          {formatCategory(trainingSet.category)}
-        </span>
+        <TrainingSetTags trainingSet={trainingSet} />
         <span className="step-count">{activityCount} activities</span>
       </div>
       <h2>{trainingSet.name}</h2>

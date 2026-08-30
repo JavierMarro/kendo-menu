@@ -461,6 +461,89 @@ describe('KendoMenu application flows', () => {
     expect(screen.getByRole('heading', { name: 'Create a training session' })).toBeInTheDocument();
   });
 
+  it('shows the populated-dashboard create action and navigates to the builder', async () => {
+    const user = userEvent.setup();
+    const emptyView = renderApp(createTestStore(), { initialEntries: ['/app/dashboard'] });
+    expect(screen.queryByRole('link', { name: 'Create new menu' })).not.toBeInTheDocument();
+    emptyView.unmount();
+
+    const store = createTestStore();
+    store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+    renderApp(store, { initialEntries: ['/app/dashboard'] });
+
+    const createLink = screen.getByRole('link', { name: 'Create new menu' });
+    expect(createLink).toHaveAttribute('href', '/app/drills/new');
+    await user.click(createLink);
+    expect(screen.getByRole('heading', { name: 'Create a training session' })).toBeInTheDocument();
+  });
+
+  it('filters dashboard sessions by derived tags and offers a reset for empty results', async () => {
+    const user = userEvent.setup();
+    const store = createTestStore();
+    store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+    store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
+    store.getState().createCustomTrainingSetAndAddToDashboard({
+      name: 'High intensity custom menu',
+      category: 'custom',
+      customIntensity: 'high-intensity-drill',
+      sections: [
+        { name: 'Practice', exercises: [{ name: 'Men', quantities: { repetitions: 24 } }] },
+      ],
+    });
+
+    renderApp(store, { initialEntries: ['/app/dashboard'] });
+    const filter = screen.getByLabelText('Filter sessions');
+    expect(screen.getAllByRole('article')).toHaveLength(3);
+
+    const customCard = screen
+      .getByRole('heading', { name: 'High intensity custom menu' })
+      .closest('.dashboard-card');
+    if (!(customCard instanceof HTMLElement)) {
+      throw new Error('Expected the custom dashboard card.');
+    }
+    expect(within(customCard).getByText('Custom')).toBeVisible();
+    expect(within(customCard).getByText('High intensity session')).toBeVisible();
+
+    await user.selectOptions(filter, 'custom');
+    expect(screen.getByRole('heading', { name: 'High intensity custom menu' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'International dojo menu' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Senior High School dojo menu' }),
+    ).not.toBeInTheDocument();
+
+    await user.selectOptions(filter, 'intense-drill');
+    expect(screen.getByRole('heading', { name: 'International dojo menu' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'High intensity custom menu' }),
+    ).not.toBeInTheDocument();
+
+    await user.selectOptions(filter, 'high-intensity-drill');
+    expect(
+      screen.getByRole('heading', { name: 'Senior High School dojo menu' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'High intensity custom menu' })).toBeInTheDocument();
+
+    await user.selectOptions(filter, 'all');
+    expect(filter).toHaveValue('all');
+    expect(screen.getAllByRole('article')).toHaveLength(3);
+  });
+
+  it('shows a useful result-empty state when a filter has no matches', async () => {
+    const user = userEvent.setup();
+    const store = createTestStore();
+    store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+    renderApp(store, { initialEntries: ['/app/dashboard'] });
+
+    const filter = screen.getByLabelText('Filter sessions');
+    await user.selectOptions(filter, 'custom');
+    expect(screen.getByRole('heading', { name: 'Nothing matches this filter.' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Show all sessions' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Show all sessions' }));
+    expect(screen.getByRole('heading', { name: 'International dojo menu' })).toBeVisible();
+  });
+
   it(
     'shows added menus as compact cards and opens only the selected editor',
     async () => {
@@ -707,9 +790,9 @@ describe('KendoMenu application flows', () => {
     ).toHaveTextContent('Kakarigeiko');
   });
 
-  it('omits missing and blank descriptions in the library, detail page, and dashboard', () => {
+  it('keeps custom menus out of the library and omits blank dashboard descriptions', () => {
     const store = createTestStore();
-    const trainingSetId = store.getState().addCustomTrainingSet({
+    const { trainingSetId } = store.getState().createCustomTrainingSetAndAddToDashboard({
       name: 'Blank description drill',
       description: '   ',
       category: 'custom',
@@ -717,32 +800,25 @@ describe('KendoMenu application flows', () => {
         { name: 'Practice', exercises: [{ name: 'Men', quantities: { repetitions: 5 } }] },
       ],
     });
-    store.getState().addToDashboard(trainingSetId);
 
     const libraryView = renderApp(store, { initialEntries: ['/app/library'] });
-    const libraryHeading = screen.getByRole('heading', { name: 'Blank description drill' });
-    const libraryCard = libraryHeading.closest('article');
-    if (libraryCard === null) {
-      throw new Error('Expected the blank-description drill inside a library card.');
-    }
-    expect(libraryCard.querySelector('.library-card-description')).toBeNull();
-    expect(within(libraryCard).queryByText('Description not provided.')).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: 'Available training sessions' })).getAllByRole(
+        'article',
+      ),
+    ).toHaveLength(11);
+    expect(
+      screen.queryByRole('heading', { name: 'Blank description drill' }),
+    ).not.toBeInTheDocument();
     libraryView.unmount();
 
     const detailView = renderApp(store, {
       initialEntries: [`/app/library?drill=${trainingSetId}`],
     });
-    const detailDialog = screen.getByRole('dialog', { name: 'Blank description drill' });
-    const detailHeading = within(detailDialog).getByRole('heading', {
-      name: 'Blank description drill',
-      level: 1,
-    });
-    const detailHeader = detailHeading.closest('header');
-    if (detailHeader === null) {
-      throw new Error('Expected the blank-description drill inside the detail header.');
-    }
-    expect(detailHeader.querySelector('.page-intro')).toBeNull();
-    expect(within(detailHeader).queryByText('Description not provided.')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Keiko library' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Blank description drill' }),
+    ).not.toBeInTheDocument();
     detailView.unmount();
 
     renderApp(store);
@@ -879,14 +955,16 @@ describe('KendoMenu application flows', () => {
     expect(
       within(dialog).getByRole('heading', { name: 'International dojo menu', level: 1 }),
     ).toBeVisible();
-    const detailBadge = within(dialog).getByText('Intense session');
+    const detailTags = within(dialog).getByLabelText('Session tags');
+    const detailBadge = within(detailTags).getByText('Intense session');
     const detailTitle = within(dialog).getByRole('heading', {
       name: 'International dojo menu',
       level: 1,
     });
-    expect(detailBadge).toHaveClass('category-pill', 'drill-detail-category');
+    expect(detailTags).toHaveClass('training-set-tags', 'drill-detail-category');
+    expect(detailBadge).toHaveClass('category-pill');
     expect(detailBadge).toHaveAttribute('data-category-variant', 'intense');
-    expect(detailBadge.nextElementSibling).toBe(detailTitle);
+    expect(detailTags.nextElementSibling).toBe(detailTitle);
     const sections = dialog.querySelectorAll<HTMLDetailsElement>('details.detail-section');
     const standaloneActivities = dialog.querySelectorAll<HTMLElement>(
       '.detail-standalone-activity',
@@ -1015,7 +1093,7 @@ describe('KendoMenu application flows', () => {
     standaloneSuburiView.unmount();
 
     const zeroStore = createTestStore();
-    const zeroSetId = zeroStore.getState().addCustomTrainingSet({
+    zeroStore.getState().createCustomTrainingSetAndAddToDashboard({
       name: 'Zero quantity example',
       description: '',
       category: 'custom',
@@ -1026,9 +1104,14 @@ describe('KendoMenu application flows', () => {
         },
       ],
     });
-    renderApp(zeroStore, {
-      initialEntries: [`/app/library?drill=${zeroSetId}`],
-    });
+    renderApp(zeroStore, { initialEntries: ['/app/dashboard'] });
+    const zeroCard = screen
+      .getByRole('heading', { name: 'Zero quantity example' })
+      .closest('.dashboard-card');
+    if (!(zeroCard instanceof HTMLElement)) {
+      throw new Error('Expected the custom zero-quantity dashboard card.');
+    }
+    await user.click(within(zeroCard).getByRole('button', { name: 'View more' }));
     const zeroDialog = screen.getByRole('dialog', { name: 'Zero quantity example' });
     const zeroSection = zeroDialog.querySelector<HTMLDetailsElement>('details');
     const zeroSummary = zeroSection?.querySelector('summary');
@@ -1036,14 +1119,14 @@ describe('KendoMenu application flows', () => {
       throw new Error('Expected the custom zero-quantity disclosure.');
     }
     await user.click(zeroSummary);
-    expect(within(zeroSection).getByText('0 repetitions')).toBeVisible();
+    expect(within(zeroSection).getByLabelText('Repetitions for Still explicit')).toHaveValue(0);
     expect(within(zeroSection).queryByText('Quantity not specified')).not.toBeInTheDocument();
   });
 
   it('shows standalone and section-owned notes with every read-only quantity unit', async () => {
     const user = userEvent.setup();
     const store = createTestStore();
-    const trainingSetId = store.getState().addCustomTrainingSet({
+    store.getState().createCustomTrainingSetAndAddToDashboard({
       name: 'Read-only activity examples',
       description: 'A detail rendering fixture.',
       category: 'custom',
@@ -1067,7 +1150,14 @@ describe('KendoMenu application flows', () => {
       ],
     });
 
-    renderApp(store, { initialEntries: [`/app/library?drill=${trainingSetId}`] });
+    renderApp(store, { initialEntries: ['/app/dashboard'] });
+    const dashboardCard = screen
+      .getByRole('heading', { name: 'Read-only activity examples' })
+      .closest('.dashboard-card');
+    if (!(dashboardCard instanceof HTMLElement)) {
+      throw new Error('Expected the custom activity dashboard card.');
+    }
+    await user.click(within(dashboardCard).getByRole('button', { name: 'View more' }));
     const dialog = screen.getByRole('dialog', { name: 'Read-only activity examples' });
     const standaloneHeading = within(dialog).getByRole('heading', {
       name: 'Solo circuit',
@@ -1081,9 +1171,11 @@ describe('KendoMenu application flows', () => {
     }
     expect(standaloneActivity.closest('details')).toBeNull();
     expect(within(standaloneActivity).getByText('Keep a steady rhythm.')).toBeVisible();
-    expect(within(standaloneActivity).getByText('8 repetitions')).toBeVisible();
-    expect(within(standaloneActivity).getByText('2 sets')).toBeVisible();
-    expect(within(standaloneActivity).getByText('3 minutes')).toBeVisible();
+    expect(within(standaloneActivity).getByLabelText('Repetitions for Solo circuit')).toHaveValue(
+      8,
+    );
+    expect(within(standaloneActivity).getByLabelText('Sets for Solo circuit')).toHaveValue(2);
+    expect(within(standaloneActivity).getByLabelText('Minutes for Solo circuit')).toHaveValue(3);
 
     const layeredSection = dialog.querySelector<HTMLDetailsElement>('details.detail-section');
     const layeredSummary = layeredSection?.querySelector('summary');
@@ -1093,9 +1185,11 @@ describe('KendoMenu application flows', () => {
     expect(layeredSummary).toHaveTextContent('1 exercise');
     await user.click(layeredSummary);
     expect(within(layeredSection).getByText('Parent section guidance.')).toBeVisible();
-    expect(within(layeredSection).getByText('2 rounds')).toBeVisible();
+    expect(within(layeredSection).getByLabelText('Rounds for Layered practice')).toHaveValue(2);
     expect(within(layeredSection).getByText('Child exercise guidance.')).toBeVisible();
-    expect(within(layeredSection).getByText('Reps not set')).toBeVisible();
+    expect(within(layeredSection).getByLabelText('Repetitions for Unmetered child')).toHaveValue(
+      null,
+    );
   });
 
   it(
@@ -1379,6 +1473,7 @@ describe('KendoMenu application flows', () => {
 
       await user.type(screen.getByLabelText('Session name'), 'Monday footwork');
       await user.type(screen.getByLabelText('Description (optional)'), 'A short solo session.');
+      await user.selectOptions(screen.getByLabelText('Intensity (optional)'), 'intense-drill');
       const activity = screen.getByRole('group', { name: 'Activity 1' });
       await user.type(within(activity).getByLabelText('Activity name'), 'Footwork');
       const exercises = within(activity).getByRole('group', { name: 'Exercises' });
@@ -1406,18 +1501,28 @@ describe('KendoMenu application flows', () => {
         expect(screen.getByRole('heading', { name: 'Monday footwork' })).toBeInTheDocument();
       });
 
-      expect(store.getState().customTrainingSets).toHaveLength(1);
       expect(store.getState().dashboardEntries).toHaveLength(1);
-      const customSet = store.getState().customTrainingSets[0];
       const entry = store.getState().dashboardEntries[0];
+      const customSet = entry?.trainingSet;
       expect(customSet?.id).toBe(entry?.trainingSetId);
       expect(customSet?.isBuiltIn).toBe(false);
+      expect(customSet?.customIntensity).toBe('intense-drill');
       expect(customSet?.activities[0]?.children[0]?.quantities?.repetitions).toBe(24);
       expect(customSet?.activities[0]?.children[1]?.quantities?.duration).toEqual({
         unit: 'minutes',
         value: 12.5,
       });
       const dialog = await openDashboardMenu(user, 'Monday footwork');
+      const dashboardCard = screen
+        .getByRole('heading', { name: 'Monday footwork' })
+        .closest('.dashboard-card');
+      if (!(dashboardCard instanceof HTMLElement)) {
+        throw new Error('Expected the custom dashboard card.');
+      }
+      expect(within(dashboardCard).getByText('Custom')).toBeVisible();
+      expect(within(dashboardCard).getByText('Intense session')).toBeVisible();
+      expect(within(dialog).getByText('Custom')).toBeVisible();
+      expect(within(dialog).getByText('Intense session')).toBeVisible();
       openAllDetails(dialog);
       expect(
         within(dialog).getByLabelText('Repetitions for Big step forward and back'),
@@ -1530,7 +1635,6 @@ describe('KendoMenu application flows', () => {
       screen.getByRole('alert', { name: 'Check the highlighted fields.' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Create a training session' })).toBeInTheDocument();
-    expect(store.getState().customTrainingSets).toEqual([]);
     expect(store.getState().dashboardEntries).toEqual([]);
 
     const repetitions = screen.getByLabelText('Repetitions', { exact: true });
@@ -1602,7 +1706,6 @@ describe('KendoMenu application flows', () => {
     expect(incompatibleRepetitions).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getAllByText('Enter a whole number from 0 to 500.')).toHaveLength(2);
     expect(screen.queryByText('Enter a number of seconds, 0 or more.')).not.toBeInTheDocument();
-    expect(store.getState().customTrainingSets).toEqual([]);
     expect(store.getState().dashboardEntries).toEqual([]);
   });
 

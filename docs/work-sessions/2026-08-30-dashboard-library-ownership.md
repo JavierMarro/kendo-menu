@@ -1,0 +1,8 @@
+- Session: dashboard library ownership
+- Date/duration: 2026-08-30; about 5 hours
+- Scope/start: Fixed shared dashboard/library ownership while adding custom intensity tags, populated-dashboard creation, and tag filtering without changing routes, dependencies, or curated content.
+- Changes: Made the library canonical-only at 11 sets; added dashboard-owned deep snapshots, Custom plus optional intensity tags, accessible builder/filter actions, empty-result recovery, and focused unit/integration/E2E coverage.
+- Decisions: Persistence v10 embeds custom snapshots per dashboard entry, reconstructs curated snapshots from immutable defaults, migrates referenced v9 custom sets, and drops unreferenced custom library data.
+- Roadblocks: Full validation exposed stale wrapper-versus-badge E2E locators and insufficient margin on the expanded 300-operation persistence stress test; corrected locators and retained coverage with a bounded 10-second timeout.
+- Verification: `pnpm verify:full` passed: domain 44/44, store 54/54, web 85/85, production build, and Chromium/mobile Playwright 110/110; final Sol semantic review passed.
+- Follow-up: Optional accessibility hardening can transfer focus after empty-filter reset and add populated-filter axe coverage.

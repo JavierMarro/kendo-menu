@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, type ReactElement } from 'react';
+import { Component, useEffect, type ReactElement } from 'react';
 import {
   Navigate,
   NavigationType,
@@ -20,8 +20,7 @@ import { TrainingSetDetailPage } from '../features/library/TrainingSetDetailPage
 import { NotFoundPage } from '../features/not-found/NotFoundPage';
 import { CookiePolicyPage } from '../features/privacy/CookiePolicyPage';
 import { SourcesPage } from '../features/sources/SourcesPage';
-import { useTrainingStore } from '../lib/training-store-context';
-import { getAllTrainingSets } from '../lib/training-data';
+import { CURATED_TRAINING_SET_COUNT } from '../lib/training-data';
 
 const routeTitles: Readonly<Record<string, string>> = {
   '/app': 'Plan your keiko',
@@ -74,13 +73,7 @@ function hasLocationChanged(previous: Location, next: Location): boolean {
 }
 
 function AppLayout() {
-  const customTrainingSets = useTrainingStore((state) => state.customTrainingSets);
-  const libraryCount = useMemo(
-    () => getAllTrainingSets(customTrainingSets).length,
-    [customTrainingSets],
-  );
-
-  return <AppShell libraryCount={libraryCount} />;
+  return <AppShell libraryCount={CURATED_TRAINING_SET_COUNT} />;
 }
 
 class ScrollManager extends Component<ScrollManagerProps> {

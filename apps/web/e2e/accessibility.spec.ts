@@ -168,6 +168,8 @@ test.describe('accessibility and responsive layout', () => {
     await page.keyboard.press('Tab');
     await expect(page.getByLabel('Description (optional)')).toBeFocused();
     await page.keyboard.press('Tab');
+    await expect(page.getByLabel('Intensity (optional)')).toBeFocused();
+    await page.keyboard.press('Tab');
     await expect(page.getByRole('button', { name: 'Add activity' })).toBeFocused();
 
     await page.getByLabel('Session name').fill('Long zoomed session name for keyboard practice');

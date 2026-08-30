@@ -11,6 +11,8 @@ import {
 } from 'react';
 import { Link, useBlocker, useNavigate } from 'react-router-dom';
 
+import { isCustomTrainingIntensity } from '@kendo-menu/domain';
+
 import {
   builderReducer,
   createInitialBuilderState,
@@ -252,6 +254,26 @@ export function CreateDrillPage() {
                 onBlur={markTouched}
                 onChange={(event) => update({ type: 'set-description', value: event.target.value })}
               />
+            </div>
+            <div className="field-group builder-intensity-field">
+              <label htmlFor="drill-intensity">Intensity (optional)</label>
+              <select
+                id="drill-intensity"
+                name="intensity"
+                value={state.customIntensity ?? ''}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  update({
+                    type: 'set-custom-intensity',
+                    value: isCustomTrainingIntensity(value) ? value : undefined,
+                  });
+                }}
+              >
+                <option value="">No intensity tag</option>
+                <option value="intense-drill">Intense session</option>
+                <option value="high-intensity-drill">High intensity session</option>
+              </select>
+              <span className="field-hint">Choose one intensity tag for this custom session.</span>
             </div>
           </div>
         </section>

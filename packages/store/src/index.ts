@@ -4,6 +4,7 @@ import { persist, type StateStorage } from 'zustand/middleware';
 import {
   DEFAULT_TRAINING_SETS,
   asTrainingSetId,
+  cloneTrainingSet,
   getEffectiveTrainingQuantity,
   getTrainingSetActivities,
   isTrainingQuantityUnit,
@@ -28,9 +29,9 @@ import {
   createTrainingJSONStorage,
   inspectTrainingStorage,
   migratePersistedTrainingState,
-  parsePersistedTrainingState,
+  parsePersistedTrainingStateV10,
   TRAINING_STORE_PERSISTENCE_VERSION,
-  type PersistedTrainingState,
+  type PersistedTrainingStateV10,
   type TrainingStorageInspection,
 } from './persistence';
 
@@ -42,6 +43,7 @@ export {
   classifyTrainingStorageValue,
   createTrainingJSONStorage,
   encodePersistedTrainingState,
+  encodePersistedTrainingStateV10,
   inspectTrainingRawValue,
   inspectPersistedTrainingStorage,
   inspectTrainingStorage,
@@ -55,6 +57,7 @@ export {
   migratePersistedTrainingStateV6ToV7,
   migratePersistedTrainingStateV7ToV8,
   migratePersistedTrainingStateV8ToV9,
+  migratePersistedTrainingStateV9ToV10,
   migrateV0ToV1,
   migrateV1ToV2,
   migrateV2ToV3,
@@ -64,6 +67,7 @@ export {
   migrateV6ToV7,
   migrateV7ToV8,
   migrateV8ToV9,
+  migrateV9ToV10,
   parsePersistedTrainingState,
   parsePersistedTrainingStateV0,
   parsePersistedTrainingStateV1,
@@ -71,6 +75,9 @@ export {
   parsePersistedTrainingStateV3,
   parsePersistedTrainingStateV4,
   parsePersistedTrainingStateV8,
+  parsePersistedTrainingStateV9,
+  parsePersistedTrainingStateV10,
+  parsePersistedTrainingWireStateV9,
   TrainingDurationOverrideMigrationConflictError,
   TrainingOverrideMigrationConflictError,
   TRAINING_STORE_PERSISTENCE_VERSION,
@@ -88,15 +95,20 @@ export type {
   LegacyTrainingStepV4,
   PersistedStorageState,
   PersistedTrainingState,
+  PersistedTrainingStateV9,
   PersistedTrainingExercise,
   PersistedTrainingSection,
   PersistedCustomTrainingSet,
   PersistedTrainingWireState,
+  PersistedTrainingWireStateV9,
   PersistedTrainingStateV5,
   PersistedTrainingStateV6,
   PersistedTrainingStateV7,
   PersistedDashboardEntryV8,
   PersistedTrainingStateV8,
+  PersistedTrainingStateV10,
+  PersistedDashboardEntryV10,
+  PersistedTrainingWireStateV10,
   PersistedTrainingWireStateV8,
   TrainingDurationOverrideMigrationConflict,
   TrainingOverrideMigrationConflict,
@@ -122,7 +134,6 @@ export interface CustomTrainingSetCreationResult {
 
 export interface TrainingStore {
   readonly dashboardEntries: readonly DashboardEntry[];
-  readonly customTrainingSets: readonly TrainingSet[];
   readonly addToDashboard: (trainingSetId: TrainingSetId) => string;
   readonly updateDashboardEntry: (entryId: string, patch: DashboardEntryPatch) => void;
   readonly setQuantityOverride: (
@@ -140,7 +151,6 @@ export interface TrainingStore {
   readonly removeFromDashboard: (entryId: string) => RemovedDashboardEntry | null;
   readonly restoreDashboardEntry: (removed: RemovedDashboardEntry) => void;
   readonly undoRemoveFromDashboard: (removed: RemovedDashboardEntry) => void;
-  readonly addCustomTrainingSet: (input: TrainingSetInput) => TrainingSetId;
   readonly createCustomTrainingSetAndAddToDashboard: (
     input: TrainingSetInput,
   ) => CustomTrainingSetCreationResult;
@@ -209,11 +219,9 @@ function ensureWritableInspection(
   }
 }
 
-function collectUsedIds(
-  state: Pick<TrainingStore, 'dashboardEntries' | 'customTrainingSets'>,
-): Set<string> {
+function collectUsedIds(state: Pick<TrainingStore, 'dashboardEntries'>): Set<string> {
   const usedIds = new Set<string>();
-  for (const trainingSet of [...DEFAULT_TRAINING_SETS, ...state.customTrainingSets]) {
+  for (const trainingSet of DEFAULT_TRAINING_SETS) {
     usedIds.add(trainingSet.id);
     for (const activity of getTrainingSetActivities(trainingSet)) {
       usedIds.add(activity.id);
@@ -221,6 +229,12 @@ function collectUsedIds(
   }
   for (const entry of state.dashboardEntries) {
     usedIds.add(entry.id);
+    if (entry.trainingSet !== undefined) {
+      usedIds.add(entry.trainingSet.id);
+      for (const activity of getTrainingSetActivities(entry.trainingSet)) {
+        usedIds.add(activity.id);
+      }
+    }
   }
   return usedIds;
 }
@@ -393,6 +407,9 @@ function buildCustomTrainingSet(input: TrainingSetInput, usedIds: Set<string>): 
       ? {}
       : { description: validatedInput.description }),
     category: 'custom',
+    ...(validatedInput.customIntensity === undefined
+      ? {}
+      : { customIntensity: validatedInput.customIntensity }),
     activities,
     isBuiltIn: false,
   };
@@ -403,10 +420,19 @@ function buildCustomTrainingSet(input: TrainingSetInput, usedIds: Set<string>): 
   return result.value;
 }
 
-function createDashboardEntry(trainingSetId: TrainingSetId, usedIds: Set<string>): DashboardEntry {
+function findTrainingSetSource(trainingSetId: TrainingSetId): TrainingSet | undefined {
+  return DEFAULT_TRAINING_SETS.find((trainingSet) => trainingSet.id === trainingSetId);
+}
+
+function createDashboardEntry(
+  trainingSetId: TrainingSetId,
+  usedIds: Set<string>,
+  trainingSet?: TrainingSet,
+): DashboardEntry {
   return {
     id: createUniqueId('dashboard-entry', usedIds),
     trainingSetId,
+    ...(trainingSet === undefined ? {} : { trainingSet: cloneTrainingSet(trainingSet) }),
     quantityOverrides: {},
     activityNotes: Object.freeze({}),
     notes: '',
@@ -424,12 +450,15 @@ function createValidatedTrainingStore(
     persist(
       (set, get) => ({
         dashboardEntries: [],
-        customTrainingSets: [],
         addToDashboard: (trainingSetId) => {
           let entryId = '';
           set((state) => {
             const usedIds = collectUsedIds(state);
-            const entry = createDashboardEntry(trainingSetId, usedIds);
+            const source = findTrainingSetSource(trainingSetId);
+            const entry =
+              source === undefined
+                ? createDashboardEntry(trainingSetId, usedIds)
+                : createDashboardEntry(trainingSetId, usedIds, source);
             entryId = entry.id;
             return { dashboardEntries: [...state.dashboardEntries, entry] };
           });
@@ -504,11 +533,9 @@ function createValidatedTrainingStore(
           if (entry === undefined) {
             throw new Error(`Dashboard entry ${entryId} does not exist.`);
           }
-          const trainingSet = DEFAULT_TRAINING_SETS.find(
-            (candidate) => candidate.id === entry.trainingSetId,
-          );
+          const trainingSet = entry.trainingSet ?? findTrainingSetSource(entry.trainingSetId);
           if (trainingSet === undefined) {
-            throw new Error(`Dashboard entry ${entryId} is not a built-in training session.`);
+            throw new Error(`Dashboard entry ${entryId} has no available training session.`);
           }
           const activity = getTrainingSetActivities(trainingSet).find(
             (candidate) => candidate.id === activityId,
@@ -567,22 +594,12 @@ function createValidatedTrainingStore(
             return { dashboardEntries };
           });
         },
-        addCustomTrainingSet: (input) => {
-          let trainingSetId: TrainingSetId = asTrainingSetId('');
-          set((state) => {
-            const usedIds = collectUsedIds(state);
-            const trainingSet = buildCustomTrainingSet(input, usedIds);
-            trainingSetId = trainingSet.id;
-            return { customTrainingSets: [...state.customTrainingSets, trainingSet] };
-          });
-          return trainingSetId;
-        },
         createCustomTrainingSetAndAddToDashboard: (input) => {
           let result: CustomTrainingSetCreationResult | null = null;
           set((state) => {
             const usedIds = collectUsedIds(state);
             const trainingSet = buildCustomTrainingSet(input, usedIds);
-            const dashboardEntry = createDashboardEntry(trainingSet.id, usedIds);
+            const dashboardEntry = createDashboardEntry(trainingSet.id, usedIds, trainingSet);
             result = {
               trainingSetId: trainingSet.id,
               dashboardEntryId: dashboardEntry.id,
@@ -590,7 +607,6 @@ function createValidatedTrainingStore(
               dashboardEntry,
             };
             return {
-              customTrainingSets: [...state.customTrainingSets, trainingSet],
               dashboardEntries: [...state.dashboardEntries, dashboardEntry],
             };
           });
@@ -606,18 +622,16 @@ function createValidatedTrainingStore(
         version: TRAINING_STORE_PERSISTENCE_VERSION,
         migrate: migratePersistedTrainingState,
         merge: (persistedState, currentState) => {
-          const parsedState = parsePersistedTrainingState(persistedState);
+          const parsedState = parsePersistedTrainingStateV10(persistedState);
           return parsedState === null
             ? currentState
             : {
                 ...currentState,
                 dashboardEntries: parsedState.dashboardEntries,
-                customTrainingSets: parsedState.customTrainingSets,
               };
         },
-        partialize: (state): PersistedTrainingState => ({
+        partialize: (state): PersistedTrainingStateV10 => ({
           dashboardEntries: state.dashboardEntries,
-          customTrainingSets: state.customTrainingSets,
         }),
         onRehydrateStorage: () => (_state, error) => {
           if (error !== undefined) {

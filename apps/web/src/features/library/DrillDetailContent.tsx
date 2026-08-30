@@ -4,15 +4,14 @@ import { Link } from 'react-router-dom';
 import type { TrainingActivity, TrainingSet } from '@kendo-menu/domain';
 
 import {
-  formatCategory,
   formatTrainingQuantity,
-  getCategoryBadgeVariant,
   getMissingTrainingQuantityLabel,
   getSpecifiedTrainingQuantities,
   getTrainingSetActivityCount,
   getTrainingSetDescription,
 } from '../../lib/training-data';
 import { useTrainingStore } from '../../lib/training-store-context';
+import { TrainingSetTags } from '../../components/TrainingSetTags';
 import { TrainingActivityList } from '../training-activities/TrainingActivityList';
 import type { TrainingActivityRenderContext } from '../training-activities/TrainingActivityTree';
 
@@ -65,12 +64,7 @@ export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentP
     <div className="drill-detail-content">
       <header className="page-header detail-header drill-detail-header">
         <div>
-          <span
-            className="category-pill drill-detail-category"
-            data-category-variant={getCategoryBadgeVariant(trainingSet.category)}
-          >
-            {formatCategory(trainingSet.category)}
-          </span>
+          <TrainingSetTags trainingSet={trainingSet} className="drill-detail-category" />
           <h1 id={titleId}>{trainingSet.name}</h1>
           {description === undefined ? null : <p className="page-intro">{description}</p>}
         </div>

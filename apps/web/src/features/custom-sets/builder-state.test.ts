@@ -88,4 +88,27 @@ describe('session builder state', () => {
     );
     expect(requireStep(requireSection(state)).measurement).toBe('duration');
   });
+
+  it('keeps one optional intensity choice in the typed authored input', () => {
+    const initial = createInitialBuilderState();
+    const intense = builderReducer(initial, {
+      type: 'set-custom-intensity',
+      value: 'intense-drill',
+    });
+    expect(intense.customIntensity).toBe('intense-drill');
+    expect(toTrainingSetInput(intense)).toMatchObject({ customIntensity: 'intense-drill' });
+
+    const high = builderReducer(intense, {
+      type: 'set-custom-intensity',
+      value: 'high-intensity-drill',
+    });
+    expect(toTrainingSetInput(high)).toMatchObject({ customIntensity: 'high-intensity-drill' });
+
+    const untagged = builderReducer(high, {
+      type: 'set-custom-intensity',
+      value: undefined,
+    });
+    expect(untagged.customIntensity).toBeUndefined();
+    expect(Object.hasOwn(toTrainingSetInput(untagged), 'customIntensity')).toBe(false);
+  });
 });

@@ -102,13 +102,15 @@ body.drill-dialog-open {
 body,
 button,
 input,
-textarea {
+textarea,
+select {
   overflow-wrap: anywhere;
 }
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -129,6 +131,7 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
+select:focus-visible,
 summary:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 3px;
@@ -136,7 +139,8 @@ summary:focus-visible {
 
 button:disabled,
 input:disabled,
-textarea:disabled {
+textarea:disabled,
+select:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -1206,6 +1210,41 @@ a {
   align-self: flex-start;
 }
 
+.dashboard-page-header {
+  align-items: flex-start;
+}
+
+.dashboard-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: end;
+  justify-content: flex-end;
+}
+
+.dashboard-filter-control {
+  display: grid;
+  min-width: 12rem;
+  gap: var(--space-1);
+}
+
+.dashboard-filter-control select {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  background: var(--surface-soft);
+  font: inherit;
+  line-height: 1.45;
+}
+
+.dashboard-filter-control select:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
 .policy-page {
   width: min(50vw, 100%);
   max-width: none;
@@ -2082,6 +2121,14 @@ textarea[aria-invalid='true'] {
   font-weight: 650;
 }
 
+.training-set-tags {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+}
+
 .category-pill[data-category-variant='intense'] {
   border-color: var(--badge-intense-border);
   color: var(--badge-intense-text);
@@ -2095,9 +2142,15 @@ textarea[aria-invalid='true'] {
 }
 
 .drill-detail-category {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   margin-bottom: var(--space-2);
+}
+
+.dashboard-filter-empty {
+  width: min(100%, 46rem);
+  margin-inline: auto;
+  min-height: 16rem;
 }
 
 .step-count,
@@ -2383,6 +2436,10 @@ textarea[aria-invalid='true'] {
 
 .builder-description-field textarea {
   min-height: 4.5rem;
+}
+
+.builder-intensity-field {
+  max-width: 24rem;
 }
 
 .field-group {
@@ -2891,6 +2948,17 @@ textarea[aria-invalid='true'] {
 
   .page-header .session-status {
     align-self: flex-start;
+  }
+
+  .dashboard-header-actions {
+    width: 100%;
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .dashboard-header-actions > .secondary-button,
+  .dashboard-filter-control {
+    flex: 1 1 12rem;
   }
 
   h1 {

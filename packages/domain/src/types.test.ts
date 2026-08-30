@@ -20,6 +20,8 @@ import {
   getTrainingSetActivities,
   getTrainingSetActivityCount,
   getTrainingSetLeafExerciseCount,
+  getTrainingSetTags,
+  isCustomTrainingIntensity,
   isValidEditableQuantityUnits,
   isValidRepetitionCount,
   isValidTrainingQuantities,
@@ -28,6 +30,7 @@ import {
   validateRepetitionCount,
   validateTrainingSet,
   validateTrainingSetInput,
+  trainingSetHasTag,
   type TrainingActivity,
   type TrainingSet,
 } from './index';
@@ -99,6 +102,70 @@ describe('training quantity validation', () => {
     expect(isValidTrainingQuantityValue('rounds', 3)).toBe(true);
     expect(isValidTrainingQuantityValue('sets', 1.5)).toBe(false);
     expect(isValidTrainingQuantityValue('repetitions', 501)).toBe(false);
+  });
+});
+
+describe('training-set intensity tags', () => {
+  const customInput = {
+    name: 'Tagged custom session',
+    category: 'custom',
+    sections: [{ name: 'Activity', exercises: [{ name: 'Men' }] }],
+  } as const;
+
+  it('always derives Custom and optionally the selected intensity for custom sets', () => {
+    const noIntensity = validateTrainingSetInput(customInput);
+    expect(noIntensity.success).toBe(true);
+    if (!noIntensity.success) {
+      return;
+    }
+    expect(getTrainingSetTags({ category: 'custom' })).toEqual(['custom']);
+    expect(getTrainingSetTags({ category: 'custom', customIntensity: 'intense-drill' })).toEqual([
+      'custom',
+      'intense-drill',
+    ]);
+    expect(
+      getTrainingSetTags({ category: 'custom', customIntensity: 'high-intensity-drill' }),
+    ).toEqual(['custom', 'high-intensity-drill']);
+    expect(
+      trainingSetHasTag({ category: 'custom', customIntensity: 'intense-drill' }, 'custom'),
+    ).toBe(true);
+  });
+
+  it('derives curated intensity tags from their existing category', () => {
+    expect(getTrainingSetTags({ category: 'intense-drill' })).toEqual(['intense-drill']);
+    expect(getTrainingSetTags({ category: 'high-intensity-drill' })).toEqual([
+      'high-intensity-drill',
+    ]);
+    expect(getTrainingSetTags({ category: 'kihon' })).toEqual([]);
+  });
+
+  it('strictly validates custom intensity metadata', () => {
+    expect(isCustomTrainingIntensity('intense-drill')).toBe(true);
+    expect(isCustomTrainingIntensity('high-intensity-drill')).toBe(true);
+    expect(isCustomTrainingIntensity('custom')).toBe(false);
+    expect(validateTrainingSetInput({ ...customInput, customIntensity: 'custom' }).success).toBe(
+      false,
+    );
+    expect(
+      validateTrainingSet({
+        ...trainingSet([leaf('activity')]),
+        customIntensity: 'high-intensity-drill',
+      }).success,
+    ).toBe(true);
+    expect(
+      validateTrainingSet({
+        ...trainingSet([leaf('activity')]),
+        customIntensity: 'not-an-intensity',
+      }).success,
+    ).toBe(false);
+    expect(
+      validateTrainingSet({
+        ...trainingSet([leaf('activity')]),
+        category: 'intense-drill',
+        isBuiltIn: true,
+        customIntensity: 'high-intensity-drill',
+      }).success,
+    ).toBe(false);
   });
 });
 

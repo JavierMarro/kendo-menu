@@ -95,7 +95,7 @@ describe('browser persistence recovery', () => {
   it('treats a valid JSON envelope with invalid domain data as corrupt without replacing it', () => {
     const raw = JSON.stringify({
       version: TRAINING_STORE_PERSISTENCE_VERSION,
-      state: { dashboardEntries: 'not-an-array', customTrainingSets: [] },
+      state: { dashboardEntries: 'not-an-array' },
     });
     window.localStorage.setItem(TRAINING_STORAGE_KEY, raw);
 
@@ -116,7 +116,7 @@ describe('browser persistence recovery', () => {
   it('leaves the application for recovery when persisted data changes during hydration', async () => {
     const validRaw = JSON.stringify({
       version: TRAINING_STORE_PERSISTENCE_VERSION,
-      state: { dashboardEntries: [], customTrainingSets: [] },
+      state: { dashboardEntries: [] },
     });
     const invalidRaw = '{changed during hydration';
     window.localStorage.setItem(TRAINING_STORAGE_KEY, validRaw);
