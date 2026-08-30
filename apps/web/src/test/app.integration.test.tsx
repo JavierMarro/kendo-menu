@@ -31,6 +31,7 @@ const OFFICIAL_ZNKR_ID = asTrainingSetId('official-znkr-ajkf');
 const OFFICIAL_ZNKR_MEN_ID = 'official-znkr-ajkf-kihon-waza-men';
 const TOP_UNIVERSITY_ID = asTrainingSetId('top-university');
 const TOP_UNIVERSITY_KAKARIGEIKO_ID = 'top-university-kakarigeiko-kakarigeiko';
+const DASHBOARD_EDITOR_TEST_TIMEOUT = 30_000;
 const IN_SCOPE_SESSION_SMOKE_CASES = [
   {
     id: 'international-dojo-2-hour-session',
@@ -60,6 +61,44 @@ const IN_SCOPE_SESSION_SMOKE_CASES = [
   { id: 'university-high-school', name: 'University High School dojo menu', activityCount: 31 },
   { id: 'top-university', name: 'Top university dojo menu', activityCount: 17 },
 ] as const;
+
+async function openDashboardMenu(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+): Promise<HTMLElement> {
+  const heading = screen.getByRole('heading', { name });
+  const card = heading.closest('.dashboard-card');
+  if (!(card instanceof HTMLElement)) {
+    throw new Error(`Expected the ${name} dashboard card.`);
+  }
+  await user.click(within(card).getByRole('button', { name: 'View more' }));
+  return screen.getByRole('dialog', { name });
+}
+
+function openAllDetails(container: HTMLElement): void {
+  const details = Array.from(container.querySelectorAll<HTMLDetailsElement>('details:not([open])'));
+  for (const detail of details) {
+    const outerDetails = detail.parentElement?.closest('details');
+    if (outerDetails !== null && outerDetails !== undefined && !outerDetails.open) {
+      continue;
+    }
+    detail.open = true;
+  }
+}
+
+function countStandaloneLandingMenuWords(): number {
+  const landing = document.querySelector('.main-content--landing');
+  if (!(landing instanceof HTMLElement)) {
+    throw new Error('Expected the landing page main content.');
+  }
+
+  const copy = landing.cloneNode(true);
+  if (!(copy instanceof HTMLElement)) {
+    throw new Error('Expected to clone the landing page content.');
+  }
+  const text = (copy.textContent ?? '').replace(/KendoMenu/gi, '');
+  return text.match(/\bmenu\b/gi)?.length ?? 0;
+}
 
 describe('KendoMenu application flows', () => {
   it('formats count, fixed-duration, and range quantities without changing units', () => {
@@ -188,6 +227,17 @@ describe('KendoMenu application flows', () => {
         level: 2,
       }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Browse a curated keiko menu or create your own training session from scratch.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /an Osaka police keiko menu, a high school routine, and a Kanoya University training sequence\./,
+      ),
+    ).toBeInTheDocument();
+    expect(countStandaloneLandingMenuWords()).toBe(4);
     expect(screen.getByRole('heading', { name: 'How it works', level: 2 })).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -251,7 +301,7 @@ describe('KendoMenu application flows', () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        /Choose a keiko menu, add it to your dashboard, then adjust its repetitions or duration/,
+        /Choose a practice plan, add it to your dashboard, then adjust its repetitions or duration/,
       ),
     ).toBeVisible();
 
@@ -410,6 +460,146 @@ describe('KendoMenu application flows', () => {
     await user.click(screen.getByRole('link', { name: 'Create a training session' }));
     expect(screen.getByRole('heading', { name: 'Create a training session' })).toBeInTheDocument();
   });
+
+  it('shows the populated-dashboard create action and navigates to the builder', async () => {
+    const user = userEvent.setup();
+    const emptyView = renderApp(createTestStore(), { initialEntries: ['/app/dashboard'] });
+    expect(screen.queryByRole('link', { name: 'Create new menu' })).not.toBeInTheDocument();
+    emptyView.unmount();
+
+    const store = createTestStore();
+    store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+    renderApp(store, { initialEntries: ['/app/dashboard'] });
+
+    const createLink = screen.getByRole('link', { name: 'Create new menu' });
+    expect(createLink).toHaveAttribute('href', '/app/drills/new');
+    await user.click(createLink);
+    expect(screen.getByRole('heading', { name: 'Create a training session' })).toBeInTheDocument();
+  });
+
+  it('filters dashboard sessions by derived tags and offers a reset for empty results', async () => {
+    const user = userEvent.setup();
+    const store = createTestStore();
+    store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+    store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
+    store.getState().createCustomTrainingSetAndAddToDashboard({
+      name: 'High intensity custom menu',
+      category: 'custom',
+      customIntensity: 'high-intensity-drill',
+      sections: [
+        { name: 'Practice', exercises: [{ name: 'Men', quantities: { repetitions: 24 } }] },
+      ],
+    });
+
+    renderApp(store, { initialEntries: ['/app/dashboard'] });
+    const filter = screen.getByLabelText('Filter sessions');
+    expect(screen.getAllByRole('article')).toHaveLength(3);
+
+    const customCard = screen
+      .getByRole('heading', { name: 'High intensity custom menu' })
+      .closest('.dashboard-card');
+    if (!(customCard instanceof HTMLElement)) {
+      throw new Error('Expected the custom dashboard card.');
+    }
+    expect(within(customCard).getByText('Custom')).toBeVisible();
+    expect(within(customCard).getByText('High intensity session')).toBeVisible();
+
+    await user.selectOptions(filter, 'custom');
+    expect(screen.getByRole('heading', { name: 'High intensity custom menu' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'International dojo menu' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Senior High School dojo menu' }),
+    ).not.toBeInTheDocument();
+
+    await user.selectOptions(filter, 'intense-drill');
+    expect(screen.getByRole('heading', { name: 'International dojo menu' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'High intensity custom menu' }),
+    ).not.toBeInTheDocument();
+
+    await user.selectOptions(filter, 'high-intensity-drill');
+    expect(
+      screen.getByRole('heading', { name: 'Senior High School dojo menu' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'High intensity custom menu' })).toBeInTheDocument();
+
+    await user.selectOptions(filter, 'all');
+    expect(filter).toHaveValue('all');
+    expect(screen.getAllByRole('article')).toHaveLength(3);
+  });
+
+  it('shows a useful result-empty state when a filter has no matches', async () => {
+    const user = userEvent.setup();
+    const store = createTestStore();
+    store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+    renderApp(store, { initialEntries: ['/app/dashboard'] });
+
+    const filter = screen.getByLabelText('Filter sessions');
+    await user.selectOptions(filter, 'custom');
+    expect(screen.getByRole('heading', { name: 'Nothing matches this filter.' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Show all sessions' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Show all sessions' }));
+    expect(screen.getByRole('heading', { name: 'International dojo menu' })).toBeVisible();
+  });
+
+  it(
+    'shows added menus as compact cards and opens only the selected editor',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+      store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
+
+      renderApp(store, { initialEntries: ['/app/dashboard'] });
+
+      const compactCards = screen.getAllByRole('heading', { name: /dojo menu$/i });
+      expect(compactCards).toHaveLength(2);
+      expect(document.querySelectorAll('.dashboard-card--compact')).toHaveLength(2);
+      expect(document.querySelectorAll('.dashboard-card--expanded')).toHaveLength(0);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Minutes for Warm-up')).not.toBeInTheDocument();
+
+      const secondCard = compactCards[1]?.closest('.dashboard-card');
+      if (!(secondCard instanceof HTMLElement)) {
+        throw new Error('Expected the second compact dashboard card.');
+      }
+      expect(within(secondCard).getByText('45 activities')).toBeVisible();
+      expect(within(secondCard).getByRole('button', { name: 'View more' })).toBeVisible();
+
+      await user.click(within(secondCard).getByRole('button', { name: 'View more' }));
+      const secondDialog = screen.getByRole('dialog', {
+        name: 'Senior High School dojo menu',
+      });
+      expect(screen.getAllByRole('dialog')).toHaveLength(1);
+      expect(
+        within(secondDialog).getByRole('heading', { name: 'Senior High School dojo menu' }),
+      ).toBeVisible();
+      expect(within(secondDialog).getByLabelText('Minutes for Stretch')).toBeInTheDocument();
+      expect(
+        within(secondDialog).getByRole('button', {
+          name: 'Close Senior High School dojo menu details.',
+        }),
+      ).toBeVisible();
+
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(within(secondCard).getByRole('button', { name: 'View more' })).toHaveFocus();
+
+      const firstHeading = screen.getByRole('heading', { name: 'International dojo menu' });
+      const firstCard = firstHeading.closest('.dashboard-card');
+      if (!(firstCard instanceof HTMLElement)) {
+        throw new Error('Expected the first compact dashboard card.');
+      }
+      await user.click(within(firstCard).getByRole('button', { name: 'View more' }));
+      expect(screen.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
+      expect(
+        screen.queryByRole('dialog', { name: 'Senior High School dojo menu' }),
+      ).not.toBeInTheDocument();
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
   it('redirects the bare route to the landing page', () => {
     const store = createTestStore();
@@ -600,9 +790,9 @@ describe('KendoMenu application flows', () => {
     ).toHaveTextContent('Kakarigeiko');
   });
 
-  it('omits missing and blank descriptions in the library, detail page, and dashboard', () => {
+  it('keeps custom menus out of the library and omits blank dashboard descriptions', () => {
     const store = createTestStore();
-    const trainingSetId = store.getState().addCustomTrainingSet({
+    const { trainingSetId } = store.getState().createCustomTrainingSetAndAddToDashboard({
       name: 'Blank description drill',
       description: '   ',
       category: 'custom',
@@ -610,32 +800,25 @@ describe('KendoMenu application flows', () => {
         { name: 'Practice', exercises: [{ name: 'Men', quantities: { repetitions: 5 } }] },
       ],
     });
-    store.getState().addToDashboard(trainingSetId);
 
     const libraryView = renderApp(store, { initialEntries: ['/app/library'] });
-    const libraryHeading = screen.getByRole('heading', { name: 'Blank description drill' });
-    const libraryCard = libraryHeading.closest('article');
-    if (libraryCard === null) {
-      throw new Error('Expected the blank-description drill inside a library card.');
-    }
-    expect(libraryCard.querySelector('.library-card-description')).toBeNull();
-    expect(within(libraryCard).queryByText('Description not provided.')).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: 'Available training sessions' })).getAllByRole(
+        'article',
+      ),
+    ).toHaveLength(11);
+    expect(
+      screen.queryByRole('heading', { name: 'Blank description drill' }),
+    ).not.toBeInTheDocument();
     libraryView.unmount();
 
     const detailView = renderApp(store, {
       initialEntries: [`/app/library?drill=${trainingSetId}`],
     });
-    const detailDialog = screen.getByRole('dialog', { name: 'Blank description drill' });
-    const detailHeading = within(detailDialog).getByRole('heading', {
-      name: 'Blank description drill',
-      level: 1,
-    });
-    const detailHeader = detailHeading.closest('header');
-    if (detailHeader === null) {
-      throw new Error('Expected the blank-description drill inside the detail header.');
-    }
-    expect(detailHeader.querySelector('.page-intro')).toBeNull();
-    expect(within(detailHeader).queryByText('Description not provided.')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Keiko library' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Blank description drill' }),
+    ).not.toBeInTheDocument();
     detailView.unmount();
 
     renderApp(store);
@@ -772,14 +955,16 @@ describe('KendoMenu application flows', () => {
     expect(
       within(dialog).getByRole('heading', { name: 'International dojo menu', level: 1 }),
     ).toBeVisible();
-    const detailBadge = within(dialog).getByText('Intense session');
+    const detailTags = within(dialog).getByLabelText('Session tags');
+    const detailBadge = within(detailTags).getByText('Intense session');
     const detailTitle = within(dialog).getByRole('heading', {
       name: 'International dojo menu',
       level: 1,
     });
-    expect(detailBadge).toHaveClass('category-pill', 'drill-detail-category');
+    expect(detailTags).toHaveClass('training-set-tags', 'drill-detail-category');
+    expect(detailBadge).toHaveClass('category-pill');
     expect(detailBadge).toHaveAttribute('data-category-variant', 'intense');
-    expect(detailBadge.nextElementSibling).toBe(detailTitle);
+    expect(detailTags.nextElementSibling).toBe(detailTitle);
     const sections = dialog.querySelectorAll<HTMLDetailsElement>('details.detail-section');
     const standaloneActivities = dialog.querySelectorAll<HTMLElement>(
       '.detail-standalone-activity',
@@ -908,7 +1093,7 @@ describe('KendoMenu application flows', () => {
     standaloneSuburiView.unmount();
 
     const zeroStore = createTestStore();
-    const zeroSetId = zeroStore.getState().addCustomTrainingSet({
+    zeroStore.getState().createCustomTrainingSetAndAddToDashboard({
       name: 'Zero quantity example',
       description: '',
       category: 'custom',
@@ -919,9 +1104,14 @@ describe('KendoMenu application flows', () => {
         },
       ],
     });
-    renderApp(zeroStore, {
-      initialEntries: [`/app/library?drill=${zeroSetId}`],
-    });
+    renderApp(zeroStore, { initialEntries: ['/app/dashboard'] });
+    const zeroCard = screen
+      .getByRole('heading', { name: 'Zero quantity example' })
+      .closest('.dashboard-card');
+    if (!(zeroCard instanceof HTMLElement)) {
+      throw new Error('Expected the custom zero-quantity dashboard card.');
+    }
+    await user.click(within(zeroCard).getByRole('button', { name: 'View more' }));
     const zeroDialog = screen.getByRole('dialog', { name: 'Zero quantity example' });
     const zeroSection = zeroDialog.querySelector<HTMLDetailsElement>('details');
     const zeroSummary = zeroSection?.querySelector('summary');
@@ -929,14 +1119,14 @@ describe('KendoMenu application flows', () => {
       throw new Error('Expected the custom zero-quantity disclosure.');
     }
     await user.click(zeroSummary);
-    expect(within(zeroSection).getByText('0 repetitions')).toBeVisible();
+    expect(within(zeroSection).getByLabelText('Repetitions for Still explicit')).toHaveValue(0);
     expect(within(zeroSection).queryByText('Quantity not specified')).not.toBeInTheDocument();
   });
 
   it('shows standalone and section-owned notes with every read-only quantity unit', async () => {
     const user = userEvent.setup();
     const store = createTestStore();
-    const trainingSetId = store.getState().addCustomTrainingSet({
+    store.getState().createCustomTrainingSetAndAddToDashboard({
       name: 'Read-only activity examples',
       description: 'A detail rendering fixture.',
       category: 'custom',
@@ -960,7 +1150,14 @@ describe('KendoMenu application flows', () => {
       ],
     });
 
-    renderApp(store, { initialEntries: [`/app/library?drill=${trainingSetId}`] });
+    renderApp(store, { initialEntries: ['/app/dashboard'] });
+    const dashboardCard = screen
+      .getByRole('heading', { name: 'Read-only activity examples' })
+      .closest('.dashboard-card');
+    if (!(dashboardCard instanceof HTMLElement)) {
+      throw new Error('Expected the custom activity dashboard card.');
+    }
+    await user.click(within(dashboardCard).getByRole('button', { name: 'View more' }));
     const dialog = screen.getByRole('dialog', { name: 'Read-only activity examples' });
     const standaloneHeading = within(dialog).getByRole('heading', {
       name: 'Solo circuit',
@@ -974,9 +1171,11 @@ describe('KendoMenu application flows', () => {
     }
     expect(standaloneActivity.closest('details')).toBeNull();
     expect(within(standaloneActivity).getByText('Keep a steady rhythm.')).toBeVisible();
-    expect(within(standaloneActivity).getByText('8 repetitions')).toBeVisible();
-    expect(within(standaloneActivity).getByText('2 sets')).toBeVisible();
-    expect(within(standaloneActivity).getByText('3 minutes')).toBeVisible();
+    expect(within(standaloneActivity).getByLabelText('Repetitions for Solo circuit')).toHaveValue(
+      8,
+    );
+    expect(within(standaloneActivity).getByLabelText('Sets for Solo circuit')).toHaveValue(2);
+    expect(within(standaloneActivity).getByLabelText('Minutes for Solo circuit')).toHaveValue(3);
 
     const layeredSection = dialog.querySelector<HTMLDetailsElement>('details.detail-section');
     const layeredSummary = layeredSection?.querySelector('summary');
@@ -986,281 +1185,352 @@ describe('KendoMenu application flows', () => {
     expect(layeredSummary).toHaveTextContent('1 exercise');
     await user.click(layeredSummary);
     expect(within(layeredSection).getByText('Parent section guidance.')).toBeVisible();
-    expect(within(layeredSection).getByText('2 rounds')).toBeVisible();
+    expect(within(layeredSection).getByLabelText('Rounds for Layered practice')).toHaveValue(2);
     expect(within(layeredSection).getByText('Child exercise guidance.')).toBeVisible();
-    expect(within(layeredSection).getByText('Reps not set')).toBeVisible();
-  });
-
-  it('uses the minute convention for missing Warm-up quantities and preserves explicit zero', async () => {
-    const user = userEvent.setup();
-    const store = createTestStore();
-    store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
-    renderApp(store);
-
-    const dashboardHeading = screen.getByRole('heading', {
-      name: 'Senior High School dojo menu',
-    });
-    const dashboardCard = dashboardHeading.closest('article');
-    if (dashboardCard === null) {
-      throw new Error('Expected the Senior High School drill inside a dashboard card.');
-    }
-    expect(within(dashboardCard).getByText('High intensity session')).toBeVisible();
-
-    const minutes = screen.getByLabelText(/minutes for stretch/i);
-    expect(minutes).toHaveValue(null);
-
-    await user.type(minutes, '0');
-    await user.tab();
-    expect(minutes).toHaveValue(0);
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [SENIOR_HIGH_SCHOOL_STRETCH_ID]: { minutes: 0 },
-    });
-
-    await user.clear(minutes);
-    await user.tab();
-    expect(minutes).toHaveValue(null);
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
-  });
-
-  it('uses structural Suburi fallbacks while preserving existing override units', async () => {
-    const user = userEvent.setup();
-    const japaneseStore = createTestStore();
-    const japaneseEntryId = japaneseStore.getState().addToDashboard(JAPANESE_SCHOOL_DRILL_ID);
-    japaneseStore
-      .getState()
-      .setQuantityOverride(japaneseEntryId, JAPANESE_SCHOOL_JOGE_ID, 'minutes', 2);
-    const japaneseView = renderApp(japaneseStore);
-
-    const repetitions = screen.getByLabelText('Repetitions for Joge');
-    const existingMinutes = screen.getByLabelText('Minutes for Joge');
-    expect(repetitions).toHaveValue(null);
-    expect(existingMinutes).toHaveValue(2);
-    expect(screen.queryByLabelText('Seconds for Joge')).not.toBeInTheDocument();
-
-    await user.type(repetitions, '24');
-    await user.tab();
-    expect(japaneseStore.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [JAPANESE_SCHOOL_JOGE_ID]: { repetitions: 24, minutes: 2 },
-    });
-    japaneseView.unmount();
-
-    const universityStore = createTestStore();
-    universityStore.getState().addToDashboard(UNIVERSITY_DRILL_ID);
-    renderApp(universityStore);
-    const suburiHeading = screen.getByRole('heading', { name: 'Suburi', level: 3 });
-    const suburiSection = suburiHeading.closest('section');
-    if (suburiSection === null) {
-      throw new Error('Expected the standalone University Suburi section.');
-    }
-    expect(within(suburiSection).getByLabelText('Minutes for Suburi')).toHaveValue(null);
-    expect(
-      within(suburiSection).queryByLabelText('Repetitions for Suburi'),
-    ).not.toBeInTheDocument();
-    expect(universityStore.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
-    expect(
-      universityStore.getState().dashboardEntries[0]?.quantityOverrides[UNIVERSITY_SUBURI_ID],
-    ).toBeUndefined();
-  });
-
-  it('uses repetitions for untimed waza and enforces the existing 0–500 limit', async () => {
-    const user = userEvent.setup();
-    const store = createTestStore();
-    store.getState().addToDashboard(OFFICIAL_ZNKR_ID);
-    renderApp(store);
-
-    const repetitions = screen.getByLabelText('Repetitions for Men');
-    expect(repetitions).toHaveValue(null);
-
-    await user.type(repetitions, '501');
-    await user.tab();
-    expect(screen.getByText('Enter a whole number from 0 to 500.')).toBeInTheDocument();
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
-
-    await user.clear(repetitions);
-    await user.type(repetitions, '500');
-    await user.tab();
-    expect(repetitions).toHaveValue(500);
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [OFFICIAL_ZNKR_MEN_ID]: { repetitions: 500 },
-    });
-  });
-
-  it('uses seconds when adding an override to Kakarigeiko without a default', async () => {
-    const user = userEvent.setup();
-    const store = createTestStore();
-    store.getState().addToDashboard(TOP_UNIVERSITY_ID);
-    renderApp(store);
-
-    const finalKakarigeiko = document.querySelector<HTMLElement>(
-      `[data-activity-id="${TOP_UNIVERSITY_KAKARIGEIKO_ID}"]`,
+    expect(within(layeredSection).getByLabelText('Repetitions for Unmetered child')).toHaveValue(
+      null,
     );
-    if (finalKakarigeiko === null) {
-      throw new Error('Expected the final Kakarigeiko activity.');
-    }
-    const seconds = within(finalKakarigeiko).getByLabelText('Seconds for Kakarigeiko');
-    expect(seconds).toHaveValue(null);
-    await user.type(seconds, '30');
-    await user.tab();
-
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [TOP_UNIVERSITY_KAKARIGEIKO_ID]: { seconds: 30 },
-    });
   });
 
-  it('edits simultaneous repetitions and sets as independent dashboard overrides', async () => {
-    const user = userEvent.setup();
-    const store = createTestStore();
-    store.getState().addToDashboard(JUNIOR_HIGH_DRILL_ID);
-    renderApp(store);
+  it(
+    'uses the minute convention for missing Warm-up quantities and preserves explicit zero',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
+      renderApp(store);
+      const dialog = await openDashboardMenu(user, 'Senior High School dojo menu');
+      openAllDetails(dialog);
 
-    const repetitions = screen.getByLabelText('Repetitions for Haya');
-    const sets = screen.getByLabelText('Sets for Haya');
-    expect(repetitions).toHaveValue(100);
-    expect(sets).toHaveValue(2);
-    expect(screen.queryByLabelText('Minutes for Haya')).not.toBeInTheDocument();
+      const dashboardHeading = screen.getByRole('heading', {
+        name: 'Senior High School dojo menu',
+      });
+      const dashboardCard = dashboardHeading.closest('article');
+      if (dashboardCard === null) {
+        throw new Error('Expected the Senior High School drill inside a dashboard card.');
+      }
+      expect(within(dashboardCard).getByText('High intensity session')).toBeVisible();
 
-    await user.clear(sets);
-    await user.type(sets, '0');
-    await user.tab();
-    await user.clear(repetitions);
-    await user.type(repetitions, '80');
-    await user.tab();
+      const minutes = within(dialog).getByLabelText(/minutes for stretch/i);
+      expect(minutes).toHaveValue(null);
 
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [JUNIOR_HIGH_HAYA_ID]: { repetitions: 80, sets: 0 },
-    });
+      await user.type(minutes, '0');
+      await user.tab();
+      expect(minutes).toHaveValue(0);
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [SENIOR_HIGH_SCHOOL_STRETCH_ID]: { minutes: 0 },
+      });
 
-    await user.clear(repetitions);
-    await user.tab();
-    expect(repetitions).toHaveValue(100);
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [JUNIOR_HIGH_HAYA_ID]: { sets: 0 },
-    });
+      await user.clear(minutes);
+      await user.tab();
+      expect(minutes).toHaveValue(null);
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
-    await user.clear(sets);
-    await user.tab();
-    expect(sets).toHaveValue(2);
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
-  });
+  it(
+    'uses structural Suburi fallbacks while preserving existing override units',
+    async () => {
+      const user = userEvent.setup();
+      const japaneseStore = createTestStore();
+      const japaneseEntryId = japaneseStore.getState().addToDashboard(JAPANESE_SCHOOL_DRILL_ID);
+      japaneseStore
+        .getState()
+        .setQuantityOverride(japaneseEntryId, JAPANESE_SCHOOL_JOGE_ID, 'minutes', 2);
+      const japaneseView = renderApp(japaneseStore);
+      const japaneseDialog = await openDashboardMenu(user, 'Japanese school dojo menu');
+      openAllDetails(japaneseDialog);
 
-  it('edits standalone section quantities by stable IDs without duplicate labels', async () => {
-    const user = userEvent.setup();
-    const store = createTestStore();
-    store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
-    const view = renderApp(store);
+      const repetitions = within(japaneseDialog).getByLabelText('Repetitions for Joge');
+      const existingMinutes = within(japaneseDialog).getByLabelText('Minutes for Joge');
+      expect(repetitions).toHaveValue(null);
+      expect(existingMinutes).toHaveValue(2);
+      expect(screen.queryByLabelText('Seconds for Joge')).not.toBeInTheDocument();
 
-    const warmUpHeading = screen.getByRole('heading', { name: 'Warm-up', level: 3 });
-    const warmUpSection = warmUpHeading.closest('section');
-    if (warmUpSection === null) {
-      throw new Error('Expected the standalone Warm-up section.');
-    }
-    expect(warmUpSection.querySelector('.step-label')).toBeNull();
-    expect(within(warmUpSection).getAllByText('Warm-up')).toHaveLength(1);
+      await user.type(repetitions, '24');
+      await user.tab();
+      expect(japaneseStore.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [JAPANESE_SCHOOL_JOGE_ID]: { repetitions: 24, minutes: 2 },
+      });
+      japaneseView.unmount();
 
-    const minutes = within(warmUpSection).getByLabelText('Minutes for Warm-up');
-    const suburiHeading = screen.getByRole('heading', { name: 'Suburi', level: 3 });
-    const suburiSection = suburiHeading.closest('section');
-    if (suburiSection === null) {
-      throw new Error('Expected the standalone International Suburi section.');
-    }
-    const suburiMinutes = within(suburiSection).getByLabelText('Minutes for Suburi');
-    const seconds = screen.getByLabelText('Seconds for Kakarigeiko');
-    expect(minutes).toHaveValue(10);
-    expect(suburiMinutes).toHaveValue(15);
-    expect(
-      within(suburiSection).queryByLabelText('Repetitions for Suburi'),
-    ).not.toBeInTheDocument();
-    expect(seconds).toHaveValue(60);
-    expect(screen.queryByLabelText('Rounds for Kakarigeiko')).not.toBeInTheDocument();
+      const universityStore = createTestStore();
+      universityStore.getState().addToDashboard(UNIVERSITY_DRILL_ID);
+      renderApp(universityStore);
+      const universityDialog = await openDashboardMenu(user, 'University dojo menu');
+      openAllDetails(universityDialog);
+      const suburiHeading = within(universityDialog).getByRole('heading', {
+        name: 'Suburi',
+        level: 2,
+      });
+      const suburiSection = suburiHeading.closest('section');
+      if (suburiSection === null) {
+        throw new Error('Expected the standalone University Suburi section.');
+      }
+      expect(within(suburiSection).getByLabelText('Minutes for Suburi')).toHaveValue(null);
+      expect(
+        within(suburiSection).queryByLabelText('Repetitions for Suburi'),
+      ).not.toBeInTheDocument();
+      expect(universityStore.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
+      expect(
+        universityStore.getState().dashboardEntries[0]?.quantityOverrides[UNIVERSITY_SUBURI_ID],
+      ).toBeUndefined();
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
-    await user.clear(minutes);
-    await user.type(minutes, '12.5');
-    await user.tab();
-    await user.clear(seconds);
-    await user.type(seconds, '45');
-    await user.tab();
+  it(
+    'uses repetitions for untimed waza and enforces the existing 0–500 limit',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      store.getState().addToDashboard(OFFICIAL_ZNKR_ID);
+      renderApp(store);
+      const dialog = await openDashboardMenu(user, 'Official ZNKR/AJKF menu');
+      openAllDetails(dialog);
 
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [INTERNATIONAL_WARM_UP_ID]: { minutes: 12.5 },
-      [INTERNATIONAL_KAKARIGEIKO_ID]: { seconds: 45 },
-    });
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides[INTERNATIONAL_SUBURI_ID]).toBe(
-      undefined,
-    );
-    view.unmount();
-  });
+      const repetitions = within(dialog).getByLabelText('Repetitions for Men');
+      expect(repetitions).toHaveValue(null);
 
-  it('persists notes and restores a removed dashboard entry with Undo', async () => {
-    const user = userEvent.setup();
-    const store = createTestStore();
-    store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
-    renderApp(store);
+      await user.type(repetitions, '501');
+      await user.tab();
+      expect(screen.getByText('Enter a whole number from 0 to 500.')).toBeInTheDocument();
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
 
-    const notes = screen.getByLabelText('Practice notes');
-    await user.type(notes, 'Keep the shoulders relaxed.');
-    await user.tab();
-    await waitFor(() => {
+      await user.clear(repetitions);
+      await user.type(repetitions, '500');
+      await user.tab();
+      expect(repetitions).toHaveValue(500);
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [OFFICIAL_ZNKR_MEN_ID]: { repetitions: 500 },
+      });
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
+
+  it(
+    'uses seconds when adding an override to Kakarigeiko without a default',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      store.getState().addToDashboard(TOP_UNIVERSITY_ID);
+      renderApp(store);
+      const dialog = await openDashboardMenu(user, 'Top university dojo menu');
+      openAllDetails(dialog);
+
+      const finalKakarigeiko = dialog.querySelector<HTMLElement>(
+        `[data-activity-id="${TOP_UNIVERSITY_KAKARIGEIKO_ID}"]`,
+      );
+      if (finalKakarigeiko === null) {
+        throw new Error('Expected the final Kakarigeiko activity.');
+      }
+      const seconds = within(finalKakarigeiko).getByLabelText('Seconds for Kakarigeiko');
+      expect(seconds).toHaveValue(null);
+      await user.type(seconds, '30');
+      await user.tab();
+
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [TOP_UNIVERSITY_KAKARIGEIKO_ID]: { seconds: 30 },
+      });
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
+
+  it(
+    'edits simultaneous repetitions and sets as independent dashboard overrides',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      store.getState().addToDashboard(JUNIOR_HIGH_DRILL_ID);
+      renderApp(store);
+      const dialog = await openDashboardMenu(user, 'Junior-high school dojo menu');
+      openAllDetails(dialog);
+
+      const repetitions = within(dialog).getByLabelText('Repetitions for Haya');
+      const sets = within(dialog).getByLabelText('Sets for Haya');
+      expect(repetitions).toHaveValue(100);
+      expect(sets).toHaveValue(2);
+      expect(screen.queryByLabelText('Minutes for Haya')).not.toBeInTheDocument();
+
+      await user.clear(sets);
+      await user.type(sets, '0');
+      await user.tab();
+      await user.clear(repetitions);
+      await user.type(repetitions, '80');
+      await user.tab();
+
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [JUNIOR_HIGH_HAYA_ID]: { repetitions: 80, sets: 0 },
+      });
+
+      await user.clear(repetitions);
+      await user.tab();
+      expect(repetitions).toHaveValue(100);
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [JUNIOR_HIGH_HAYA_ID]: { sets: 0 },
+      });
+
+      await user.clear(sets);
+      await user.tab();
+      expect(sets).toHaveValue(2);
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({});
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
+
+  it(
+    'edits standalone section quantities by stable IDs without duplicate labels',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+      const view = renderApp(store);
+      const dialog = await openDashboardMenu(user, 'International dojo menu');
+      openAllDetails(dialog);
+
+      const warmUpHeading = within(dialog).getByRole('heading', { name: 'Warm-up', level: 2 });
+      const warmUpSection = warmUpHeading.closest('section');
+      if (warmUpSection === null) {
+        throw new Error('Expected the standalone Warm-up section.');
+      }
+      expect(warmUpSection.querySelector('.step-label')).toBeNull();
+      expect(within(warmUpSection).getAllByText('Warm-up')).toHaveLength(1);
+
+      const minutes = within(warmUpSection).getByLabelText('Minutes for Warm-up');
+      const suburiHeading = within(dialog).getByRole('heading', { name: 'Suburi', level: 2 });
+      const suburiSection = suburiHeading.closest('section');
+      if (suburiSection === null) {
+        throw new Error('Expected the standalone International Suburi section.');
+      }
+      const suburiMinutes = within(suburiSection).getByLabelText('Minutes for Suburi');
+      const seconds = within(dialog).getByLabelText('Seconds for Kakarigeiko');
+      expect(minutes).toHaveValue(10);
+      expect(suburiMinutes).toHaveValue(15);
+      expect(
+        within(suburiSection).queryByLabelText('Repetitions for Suburi'),
+      ).not.toBeInTheDocument();
+      expect(seconds).toHaveValue(60);
+      expect(screen.queryByLabelText('Rounds for Kakarigeiko')).not.toBeInTheDocument();
+
+      await user.clear(minutes);
+      await user.type(minutes, '12.5');
+      await user.tab();
+      await user.clear(seconds);
+      await user.type(seconds, '45');
+      await user.tab();
+
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [INTERNATIONAL_WARM_UP_ID]: { minutes: 12.5 },
+        [INTERNATIONAL_KAKARIGEIKO_ID]: { seconds: 45 },
+      });
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides[INTERNATIONAL_SUBURI_ID]).toBe(
+        undefined,
+      );
+      view.unmount();
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
+
+  it(
+    'persists notes and restores a removed dashboard entry with Undo',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      store.getState().addToDashboard(SENIOR_HIGH_SCHOOL_DRILL_ID);
+      renderApp(store);
+      const dialog = await openDashboardMenu(user, 'Senior High School dojo menu');
+      openAllDetails(dialog);
+
+      const notes = within(dialog).getByLabelText('Practice notes');
+      await user.type(notes, 'Keep the shoulders relaxed.');
+      await user.tab();
+      await waitFor(() => {
+        expect(store.getState().dashboardEntries[0]?.notes).toBe('Keep the shoulders relaxed.');
+      });
+
+      await user.click(within(dialog).getByRole('button', { name: 'Remove' }));
+      expect(
+        screen.queryByRole('heading', { name: 'Senior High School dojo menu' }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Undo' }));
+      expect(
+        screen.getByRole('heading', { name: 'Senior High School dojo menu' }),
+      ).toBeInTheDocument();
       expect(store.getState().dashboardEntries[0]?.notes).toBe('Keep the shoulders relaxed.');
-    });
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
-    await user.click(screen.getByRole('button', { name: 'Remove' }));
-    expect(
-      screen.queryByRole('heading', { name: 'Senior High School dojo menu' }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+  it(
+    'creates a custom drill and links it to the dashboard in one save flow',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      renderApp(store, { initialEntries: ['/app/drills/new'] });
 
-    await user.click(screen.getByRole('button', { name: 'Undo' }));
-    expect(
-      screen.getByRole('heading', { name: 'Senior High School dojo menu' }),
-    ).toBeInTheDocument();
-    expect(store.getState().dashboardEntries[0]?.notes).toBe('Keep the shoulders relaxed.');
-  });
+      await user.type(screen.getByLabelText('Session name'), 'Monday footwork');
+      await user.type(screen.getByLabelText('Description (optional)'), 'A short solo session.');
+      await user.selectOptions(screen.getByLabelText('Intensity (optional)'), 'intense-drill');
+      const activity = screen.getByRole('group', { name: 'Activity 1' });
+      await user.type(within(activity).getByLabelText('Activity name'), 'Footwork');
+      const exercises = within(activity).getByRole('group', { name: 'Exercises' });
+      await user.type(
+        within(exercises).getByLabelText('Exercise name'),
+        'Big step forward and back',
+      );
+      await user.type(within(exercises).getByLabelText('Repetitions'), '24');
 
-  it('creates a custom drill and links it to the dashboard in one save flow', async () => {
-    const user = userEvent.setup();
-    const store = createTestStore();
-    renderApp(store, { initialEntries: ['/app/drills/new'] });
+      await user.click(within(exercises).getByRole('button', { name: 'Add exercise' }));
+      const exerciseNames = within(exercises).getAllByLabelText('Exercise name');
+      const measurements = within(exercises).getAllByLabelText('Measurement');
+      const secondExerciseName = exerciseNames[1];
+      const secondMeasurement = measurements[1];
+      if (secondExerciseName === undefined || secondMeasurement === undefined) {
+        throw new Error('Expected the second exercise row.');
+      }
+      await user.type(secondExerciseName, 'Jigeiko rounds');
+      await user.selectOptions(secondMeasurement, 'duration');
+      await user.type(within(exercises).getByLabelText('Duration'), '12.5');
+      await user.click(screen.getByRole('button', { name: 'Save session to dashboard' }));
 
-    await user.type(screen.getByLabelText('Session name'), 'Monday footwork');
-    await user.type(screen.getByLabelText('Description (optional)'), 'A short solo session.');
-    const activity = screen.getByRole('group', { name: 'Activity 1' });
-    await user.type(within(activity).getByLabelText('Activity name'), 'Footwork');
-    const exercises = within(activity).getByRole('group', { name: 'Exercises' });
-    await user.type(within(exercises).getByLabelText('Exercise name'), 'Big step forward and back');
-    await user.type(within(exercises).getByLabelText('Repetitions'), '24');
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Monday footwork' })).toBeInTheDocument();
+      });
 
-    await user.click(within(exercises).getByRole('button', { name: 'Add exercise' }));
-    const exerciseNames = within(exercises).getAllByLabelText('Exercise name');
-    const measurements = within(exercises).getAllByLabelText('Measurement');
-    const secondExerciseName = exerciseNames[1];
-    const secondMeasurement = measurements[1];
-    if (secondExerciseName === undefined || secondMeasurement === undefined) {
-      throw new Error('Expected the second exercise row.');
-    }
-    await user.type(secondExerciseName, 'Jigeiko rounds');
-    await user.selectOptions(secondMeasurement, 'duration');
-    await user.type(within(exercises).getByLabelText('Duration'), '12.5');
-    await user.click(screen.getByRole('button', { name: 'Save session to dashboard' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'Monday footwork' })).toBeInTheDocument();
-    });
-
-    expect(store.getState().customTrainingSets).toHaveLength(1);
-    expect(store.getState().dashboardEntries).toHaveLength(1);
-    const customSet = store.getState().customTrainingSets[0];
-    const entry = store.getState().dashboardEntries[0];
-    expect(customSet?.id).toBe(entry?.trainingSetId);
-    expect(customSet?.isBuiltIn).toBe(false);
-    expect(customSet?.activities[0]?.children[0]?.quantities?.repetitions).toBe(24);
-    expect(customSet?.activities[0]?.children[1]?.quantities?.duration).toEqual({
-      unit: 'minutes',
-      value: 12.5,
-    });
-    expect(screen.getByLabelText('Repetitions for Big step forward and back')).toHaveValue(24);
-    expect(screen.getByLabelText('Minutes for Jigeiko rounds')).toHaveValue(12.5);
-  });
+      expect(store.getState().dashboardEntries).toHaveLength(1);
+      const entry = store.getState().dashboardEntries[0];
+      const customSet = entry?.trainingSet;
+      expect(customSet?.id).toBe(entry?.trainingSetId);
+      expect(customSet?.isBuiltIn).toBe(false);
+      expect(customSet?.customIntensity).toBe('intense-drill');
+      expect(customSet?.activities[0]?.children[0]?.quantities?.repetitions).toBe(24);
+      expect(customSet?.activities[0]?.children[1]?.quantities?.duration).toEqual({
+        unit: 'minutes',
+        value: 12.5,
+      });
+      const dialog = await openDashboardMenu(user, 'Monday footwork');
+      const dashboardCard = screen
+        .getByRole('heading', { name: 'Monday footwork' })
+        .closest('.dashboard-card');
+      if (!(dashboardCard instanceof HTMLElement)) {
+        throw new Error('Expected the custom dashboard card.');
+      }
+      expect(within(dashboardCard).getByText('Custom')).toBeVisible();
+      expect(within(dashboardCard).getByText('Intense session')).toBeVisible();
+      expect(within(dialog).getByText('Custom')).toBeVisible();
+      expect(within(dialog).getByText('Intense session')).toBeVisible();
+      openAllDetails(dialog);
+      expect(
+        within(dialog).getByLabelText('Repetitions for Big step forward and back'),
+      ).toHaveValue(24);
+      expect(within(dialog).getByLabelText('Minutes for Jigeiko rounds')).toHaveValue(12.5);
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
   it('preserves entered builder values while activities and exercises are added or removed', async () => {
     const user = userEvent.setup();
@@ -1365,7 +1635,6 @@ describe('KendoMenu application flows', () => {
       screen.getByRole('alert', { name: 'Check the highlighted fields.' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Create a training session' })).toBeInTheDocument();
-    expect(store.getState().customTrainingSets).toEqual([]);
     expect(store.getState().dashboardEntries).toEqual([]);
 
     const repetitions = screen.getByLabelText('Repetitions', { exact: true });
@@ -1437,7 +1706,6 @@ describe('KendoMenu application flows', () => {
     expect(incompatibleRepetitions).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getAllByText('Enter a whole number from 0 to 500.')).toHaveLength(2);
     expect(screen.queryByText('Enter a number of seconds, 0 or more.')).not.toBeInTheDocument();
-    expect(store.getState().customTrainingSets).toEqual([]);
     expect(store.getState().dashboardEntries).toEqual([]);
   });
 

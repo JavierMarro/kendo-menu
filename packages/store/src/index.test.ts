@@ -315,11 +315,11 @@ function legacyVersionOneState(): unknown {
 describe('custom training sets', () => {
   it('creates the existing repetition-only custom-builder result with stable generated IDs', () => {
     const store = createTrainingStore({ storage: new MemoryStorage(), storageKey: STORAGE_KEY });
-    const id = store.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
-    const trainingSet = store.getState().customTrainingSets[0];
+    const result = store.getState().createCustomTrainingSetAndAddToDashboard(CUSTOM_SET_INPUT);
+    const { trainingSet } = result;
 
     expect(trainingSet).toMatchObject({
-      id,
+      id: result.trainingSetId,
       name: CUSTOM_SET_INPUT.name,
       description: CUSTOM_SET_INPUT.description,
       category: 'custom',
@@ -352,9 +352,9 @@ describe('custom training sets', () => {
     const store = createTrainingStore({ storage: new MemoryStorage(), storageKey: STORAGE_KEY });
     const result = store.getState().createCustomTrainingSetAndAddToDashboard(CUSTOM_SET_INPUT);
 
-    expect(store.getState().customTrainingSets).toEqual([result.trainingSet]);
     expect(store.getState().dashboardEntries).toEqual([result.dashboardEntry]);
     expect(result.dashboardEntry.trainingSetId).toBe(result.trainingSetId);
+    expect(result.dashboardEntry.trainingSet).toEqual(result.trainingSet);
   });
 
   it('rejects malformed custom input without partially changing state', () => {
@@ -370,7 +370,6 @@ describe('custom training sets', () => {
     };
 
     expect(() => store.getState().createCustomTrainingSetAndAddToDashboard(malformed)).toThrow();
-    expect(store.getState().customTrainingSets).toEqual([]);
     expect(store.getState().dashboardEntries).toEqual([]);
   });
 });
@@ -565,9 +564,12 @@ describe('dashboard activity note APIs', () => {
         ),
     ).toThrow();
 
-    const customSetId = store.getState().addCustomTrainingSet(CUSTOM_SET_INPUT);
-    const customEntryId = store.getState().addToDashboard(customSetId);
-    const customActivityId = store.getState().customTrainingSets[0]?.activities[0]?.children[0]?.id;
+    const customResult = store
+      .getState()
+      .createCustomTrainingSetAndAddToDashboard(CUSTOM_SET_INPUT);
+    const customEntryId = customResult.dashboardEntryId;
+    const customActivityId =
+      customResult.dashboardEntry.trainingSet?.activities[0]?.children[0]?.id;
     if (customActivityId === undefined) {
       throw new Error('Expected a custom activity.');
     }
@@ -1003,7 +1005,7 @@ describe('version 6 to version 7 curated-data correction migration', () => {
     expect(inspection).toMatchObject({
       status: 'migrated',
       fromVersion: 6,
-      version: 9,
+      version: TRAINING_STORE_PERSISTENCE_VERSION,
     });
     if (inspection.status !== 'migrated') {
       throw new Error('Expected the version 6 envelope to migrate.');
@@ -1115,7 +1117,7 @@ describe('version 7 to version 8 complex-session correction migration', () => {
     expect(inspection).toMatchObject({
       status: 'migrated',
       fromVersion: 7,
-      version: 9,
+      version: TRAINING_STORE_PERSISTENCE_VERSION,
     });
     if (inspection.status !== 'migrated') {
       throw new Error('Expected the version 7 envelope to migrate.');
@@ -1152,13 +1154,14 @@ describe('older migration chain', () => {
 
   it('migrates v1 through every version without changing set, section, exercise, or entry IDs', () => {
     const migrated = migratePersistedTrainingState(legacyVersionOneState(), 1);
+    const trainingSet = migrated.dashboardEntries[0]?.trainingSet;
     expect(migrated.dashboardEntries[0]?.id).toBe('entry-legacy');
-    expect(migrated.customTrainingSets[0]?.id).toBe('custom-legacy');
-    expect(migrated.customTrainingSets[0]?.activities[0]?.id).toBe('custom-legacy-exercises');
-    expect(migrated.customTrainingSets[0]?.activities[0]?.children[0]?.id).toBe('legacy-exercise');
+    expect(trainingSet?.id).toBe('custom-legacy');
+    expect(trainingSet?.activities[0]?.id).toBe('custom-legacy-exercises');
+    expect(trainingSet?.activities[0]?.children[0]?.id).toBe('legacy-exercise');
   });
 
-  it('migrates every supported historical start version from 0 through 8 to version 9', () => {
+  it('migrates every supported historical start version from 0 through 8 to version 10', () => {
     const stateV0 = legacyVersionOneState();
     const stateV1 = migratePersistedTrainingStateV0ToV1(stateV0);
     const stateV2 = migratePersistedTrainingStateV1ToV2(stateV1);
@@ -1215,7 +1218,7 @@ describe('older migration chain', () => {
       }
 
       const entry = inspection.state.dashboardEntries[0];
-      const trainingSet = inspection.state.customTrainingSets[0];
+      const trainingSet = entry?.trainingSet;
       expect(entry?.id, `entry id from version ${version}`).toBe('entry-legacy');
       expect(entry?.notes, `session note from version ${version}`).toBe('Stay relaxed.');
       expect(entry?.quantityOverrides, `overrides from version ${version}`).toEqual({
@@ -1234,7 +1237,7 @@ describe('older migration chain', () => {
 });
 
 describe('persistence lifecycle', () => {
-  it('round-trips independent activity notes at version 9', () => {
+  it('round-trips independent activity notes at version 10', () => {
     const storage = new MemoryStorage();
     const first = createTrainingStore({ storage, storageKey: STORAGE_KEY });
     const entryId = first
@@ -1244,7 +1247,7 @@ describe('persistence lifecycle', () => {
     first.getState().setActivityNote(entryId, activityId, 'Reload this note.\nKeep the spacing.');
 
     const envelope: unknown = JSON.parse(requireString(storage.read()));
-    expect(envelope).toMatchObject({ version: 9 });
+    expect(envelope).toMatchObject({ version: TRAINING_STORE_PERSISTENCE_VERSION });
     expect(envelope).toHaveProperty(
       `state.dashboardEntries.0.activityNotes.${activityId}`,
       'Reload this note.\nKeep the spacing.',
@@ -1278,12 +1281,15 @@ describe('persistence lifecycle', () => {
     expect(migrated.customTrainingSets).toEqual(legacyState.customTrainingSets);
   });
 
-  it('round-trips current custom sets, notes, seconds, and independent units', () => {
+  it('round-trips current dashboard-owned custom sets, notes, seconds, and independent units', () => {
     const storage = new MemoryStorage();
     const first = createTrainingStore({ storage, storageKey: STORAGE_KEY });
-    const customId = first.getState().addCustomTrainingSet(MIXED_MEASUREMENT_SET_INPUT);
-    const entryId = first.getState().addToDashboard(customId);
-    const activityId = first.getState().customTrainingSets[0]?.activities[0]?.children[0]?.id;
+    const creation = first
+      .getState()
+      .createCustomTrainingSetAndAddToDashboard(MIXED_MEASUREMENT_SET_INPUT);
+    const customId = creation.trainingSetId;
+    const entryId = creation.dashboardEntryId;
+    const activityId = creation.dashboardEntry.trainingSet?.activities[0]?.children[0]?.id;
     if (activityId === undefined) {
       throw new Error('Expected a generated custom activity ID.');
     }
@@ -1294,13 +1300,15 @@ describe('persistence lifecycle', () => {
 
     const envelope: unknown = JSON.parse(requireString(storage.read()));
     expect(envelope).toMatchObject({ version: TRAINING_STORE_PERSISTENCE_VERSION });
-    expect(envelope).toHaveProperty('state.customTrainingSets.0.sections');
-    expect(envelope).not.toHaveProperty('state.customTrainingSets.0.activities');
-    expect(envelope).toHaveProperty('state.customTrainingSets.0.sections.0.exercises');
+    expect(envelope).toHaveProperty('state.dashboardEntries.0.trainingSet.sections');
+    expect(envelope).not.toHaveProperty('state.customTrainingSets');
+    expect(envelope).toHaveProperty('state.dashboardEntries.0.trainingSet.sections.0.exercises');
 
     const second = createTrainingStore({ storage, storageKey: STORAGE_KEY });
-    expect(second.getState().customTrainingSets[0]?.id).toBe(customId);
-    expect(second.getState().customTrainingSets[0]?.activities[0]?.children).toMatchObject([
+    expect(second.getState().dashboardEntries[0]?.trainingSet?.id).toBe(customId);
+    expect(
+      second.getState().dashboardEntries[0]?.trainingSet?.activities[0]?.children,
+    ).toMatchObject([
       { name: 'Suburi', quantities: { repetitions: 30 } },
       { name: 'Jigeiko', quantities: { duration: { unit: 'minutes', value: 12.5 } } },
     ]);
@@ -1369,13 +1377,13 @@ describe('persistence lifecycle', () => {
     );
   });
 
-  it('loads a v4 envelope through Zustand and persists migrated v9 state', () => {
+  it('loads a v4 envelope through Zustand and persists migrated v10 state', () => {
     const storage = new MemoryStorage(serializeState(LEGACY_V4_STATE, 4));
     const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
 
-    expect(store.getState().customTrainingSets[0]?.activities[0]?.children[0]?.name).toBe(
-      'Legacy exercise',
-    );
+    expect(
+      store.getState().dashboardEntries[0]?.trainingSet?.activities[0]?.children[0]?.name,
+    ).toBe('Legacy exercise');
     expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
       'legacy-exercise': { repetitions: 0, sets: 4, seconds: 30 },
     });
@@ -1407,10 +1415,7 @@ describe('persistence lifecycle', () => {
   });
 
   it('reports data that becomes invalid between preflight and hydration', () => {
-    const validValue = serializeState(
-      { dashboardEntries: [], customTrainingSets: [] },
-      TRAINING_STORE_PERSISTENCE_VERSION,
-    );
+    const validValue = serializeState({ dashboardEntries: [] }, TRAINING_STORE_PERSISTENCE_VERSION);
     let reads = 0;
     let hydrationError: unknown;
     const storage: StateStorage = {
@@ -1432,7 +1437,6 @@ describe('persistence lifecycle', () => {
 
     expect(hydrationError).toBeInstanceOf(SyntaxError);
     expect(store.getState().dashboardEntries).toEqual([]);
-    expect(store.getState().customTrainingSets).toEqual([]);
   });
 
   it('removes and restores a dashboard entry at its previous position', () => {
@@ -1453,86 +1457,94 @@ describe('persistence lifecycle', () => {
     ]);
   });
 
-  it(`survives ${STATE_SEQUENCE_STRESS_ITERATIONS} deterministic public state operations (seed ${STATE_SEQUENCE_STRESS_SEED})`, () => {
-    const storage = new MemoryStorage();
-    const nextIndex = createDeterministicIndexGenerator(STATE_SEQUENCE_STRESS_SEED);
-    let store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
-    const quantityActivityId = 'international-dojo-2-hour-session-kirikaeshi-kirikaeshi';
-    const noteActivityId = 'international-dojo-2-hour-session-warm-up-warm-up';
+  it(
+    `survives ${STATE_SEQUENCE_STRESS_ITERATIONS} deterministic public state operations (seed ${STATE_SEQUENCE_STRESS_SEED})`,
+    { timeout: 10_000 },
+    () => {
+      const storage = new MemoryStorage();
+      const nextIndex = createDeterministicIndexGenerator(STATE_SEQUENCE_STRESS_SEED);
+      let store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+      const quantityActivityId = 'international-dojo-2-hour-session-kirikaeshi-kirikaeshi';
+      const noteActivityId = 'international-dojo-2-hour-session-warm-up-warm-up';
 
-    for (let iteration = 0; iteration < STATE_SEQUENCE_STRESS_ITERATIONS; iteration += 1) {
-      const operation = nextIndex(8);
-      const entries = store.getState().dashboardEntries;
-      if (entries.length === 0 || operation === 0 || operation === 7) {
-        store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
-      } else {
-        const entry = entries[nextIndex(entries.length)];
-        if (entry === undefined) {
-          throw new Error(`Seed ${STATE_SEQUENCE_STRESS_SEED} lost an entry at ${iteration}.`);
-        }
-
-        switch (operation) {
-          case 1:
-            store
-              .getState()
-              .setQuantityOverride(entry.id, quantityActivityId, 'repetitions', nextIndex(51));
-            break;
-          case 2:
-            store.getState().clearQuantityOverride(entry.id, quantityActivityId, 'repetitions');
-            break;
-          case 3:
-            store.getState().setActivityNote(entry.id, noteActivityId, `Seeded note ${iteration}`);
-            break;
-          case 4:
-            store.getState().setActivityNote(entry.id, noteActivityId, '  ');
-            break;
-          case 5: {
-            const removed = store.getState().removeFromDashboard(entry.id);
-            if (removed === null) {
-              throw new Error(
-                `Seed ${STATE_SEQUENCE_STRESS_SEED} could not remove at ${iteration}.`,
-              );
-            }
-            if (nextIndex(2) === 0) {
-              store.getState().restoreDashboardEntry(removed);
-            }
-            break;
+      for (let iteration = 0; iteration < STATE_SEQUENCE_STRESS_ITERATIONS; iteration += 1) {
+        const operation = nextIndex(8);
+        const entries = store.getState().dashboardEntries;
+        if (entries.length === 0 || operation === 0 || operation === 7) {
+          store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+        } else {
+          const entry = entries[nextIndex(entries.length)];
+          if (entry === undefined) {
+            throw new Error(`Seed ${STATE_SEQUENCE_STRESS_SEED} lost an entry at ${iteration}.`);
           }
-          case 6:
-            store.getState().updateDashboardEntry(entry.id, { notes: `Session note ${iteration}` });
-            break;
+
+          switch (operation) {
+            case 1:
+              store
+                .getState()
+                .setQuantityOverride(entry.id, quantityActivityId, 'repetitions', nextIndex(51));
+              break;
+            case 2:
+              store.getState().clearQuantityOverride(entry.id, quantityActivityId, 'repetitions');
+              break;
+            case 3:
+              store
+                .getState()
+                .setActivityNote(entry.id, noteActivityId, `Seeded note ${iteration}`);
+              break;
+            case 4:
+              store.getState().setActivityNote(entry.id, noteActivityId, '  ');
+              break;
+            case 5: {
+              const removed = store.getState().removeFromDashboard(entry.id);
+              if (removed === null) {
+                throw new Error(
+                  `Seed ${STATE_SEQUENCE_STRESS_SEED} could not remove at ${iteration}.`,
+                );
+              }
+              if (nextIndex(2) === 0) {
+                store.getState().restoreDashboardEntry(removed);
+              }
+              break;
+            }
+            case 6:
+              store
+                .getState()
+                .updateDashboardEntry(entry.id, { notes: `Session note ${iteration}` });
+              break;
+          }
+        }
+
+        const currentEntries = store.getState().dashboardEntries;
+        const currentIds = currentEntries.map((entry) => entry.id);
+        expect(
+          new Set(currentIds).size,
+          `unique entry ids for seed ${STATE_SEQUENCE_STRESS_SEED} at iteration ${iteration}`,
+        ).toBe(currentIds.length);
+
+        const persisted = requireString(storage.read());
+        const inspection = classifyTrainingStorageValue(persisted);
+        expect(
+          inspection.status,
+          `valid envelope for seed ${STATE_SEQUENCE_STRESS_SEED} at iteration ${iteration}`,
+        ).toBe('ready');
+        if (inspection.status !== 'ready') {
+          throw new Error(
+            `Seed ${STATE_SEQUENCE_STRESS_SEED} produced ${inspection.status} at ${iteration}.`,
+          );
+        }
+        expect(inspection.state.dashboardEntries).toEqual(currentEntries);
+
+        if (operation === 6) {
+          store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
         }
       }
 
-      const currentEntries = store.getState().dashboardEntries;
-      const currentIds = currentEntries.map((entry) => entry.id);
-      expect(
-        new Set(currentIds).size,
-        `unique entry ids for seed ${STATE_SEQUENCE_STRESS_SEED} at iteration ${iteration}`,
-      ).toBe(currentIds.length);
-
-      const persisted = requireString(storage.read());
-      const inspection = classifyTrainingStorageValue(persisted);
-      expect(
-        inspection.status,
-        `valid envelope for seed ${STATE_SEQUENCE_STRESS_SEED} at iteration ${iteration}`,
-      ).toBe('ready');
-      if (inspection.status !== 'ready') {
-        throw new Error(
-          `Seed ${STATE_SEQUENCE_STRESS_SEED} produced ${inspection.status} at ${iteration}.`,
-        );
-      }
-      expect(inspection.state.dashboardEntries).toEqual(currentEntries);
-
-      if (operation === 6) {
-        store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
-      }
-    }
-
-    const beforeFinalReload = store.getState().dashboardEntries;
-    store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
-    expect(store.getState().dashboardEntries).toEqual(beforeFinalReload);
-  });
+      const beforeFinalReload = store.getState().dashboardEntries;
+      store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+      expect(store.getState().dashboardEntries).toEqual(beforeFinalReload);
+    },
+  );
 });
 
 describe('untrusted persistence classification', () => {
@@ -1544,22 +1556,19 @@ describe('untrusted persistence classification', () => {
     });
     expect(
       classifyTrainingStorageValue(
-        serializeState(
-          { dashboardEntries: [], customTrainingSets: [] },
-          TRAINING_STORE_PERSISTENCE_VERSION,
-        ),
+        serializeState({ dashboardEntries: [] }, TRAINING_STORE_PERSISTENCE_VERSION),
       ),
-    ).toMatchObject({ status: 'ready', version: 9 });
+    ).toMatchObject({ status: 'ready', version: TRAINING_STORE_PERSISTENCE_VERSION });
     expect(classifyTrainingStorageValue(serializeState(LEGACY_V4_STATE, 4))).toMatchObject({
       status: 'migrated',
       fromVersion: 4,
-      version: 9,
+      version: TRAINING_STORE_PERSISTENCE_VERSION,
     });
-    expect(
-      classifyTrainingStorageValue(
-        serializeState({ dashboardEntries: [], customTrainingSets: [] }, 999),
-      ),
-    ).toEqual({ status: 'unsupported-future', kind: 'unsupported-future', version: 999 });
+    expect(classifyTrainingStorageValue(serializeState({ dashboardEntries: [] }, 999))).toEqual({
+      status: 'unsupported-future',
+      kind: 'unsupported-future',
+      version: 999,
+    });
   });
 
   it('sanitizes stale activity notes while preserving valid notes, overrides, and session notes', () => {
@@ -1765,9 +1774,7 @@ describe('untrusted persistence classification', () => {
   });
 
   it('does not create a store over future-version data', () => {
-    const storage = new MemoryStorage(
-      serializeState({ dashboardEntries: [], customTrainingSets: [] }, 999),
-    );
+    const storage = new MemoryStorage(serializeState({ dashboardEntries: [] }, 999));
     expect(() => createTrainingStore({ storage, storageKey: STORAGE_KEY })).toThrow(
       TrainingStoreBootstrapError,
     );

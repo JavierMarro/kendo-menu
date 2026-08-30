@@ -14,7 +14,7 @@ const FAQ_ITEMS: readonly FaqItem[] = [
     id: 'what-is-kendomenu',
     question: 'What is KendoMenu?',
     answer:
-      'KendoMenu is a free web app for choosing, adapting, creating and organising keiko menus. Choose a menu, add it to your dashboard, then adjust each activity’s repetitions or duration to prepare a session. You can also record a menu practised with a visiting sensei or at a seminar, or create one from scratch, and save it on your device.',
+      'KendoMenu is a free web app for choosing, adapting, creating and organising keiko menus. Choose a menu, add it to your dashboard, then adjust each activity’s repetitions or duration to prepare a session. You can also record a session practised with a visiting sensei or at a seminar, or create one from scratch, and save it on your device.',
   },
   {
     id: 'is-kendomenu-free',
@@ -26,7 +26,7 @@ const FAQ_ITEMS: readonly FaqItem[] = [
     id: 'all-experience-levels',
     question: 'Is KendoMenu useful for all experience levels?',
     answer:
-      'Yes. KendoMenu is intended for all experience levels. The curated menus cover different kinds of practice, and each menu can be adapted by changing repetitions or duration to suit your dojo and training goals.',
+      'Yes. KendoMenu is intended for all experience levels. The curated menus cover different kinds of practice, and each plan can be adapted by changing repetitions or duration to suit your dojo and training goals.',
   },
   {
     id: 'menu-sources',
@@ -170,8 +170,8 @@ export function LandingPage(): ReactElement {
                 and practitioners who want to adapt activities by changing repetitions or duration.
               </p>
               <p>
-                <strong>Start with a curated menu or build from scratch.</strong> Shape it around
-                the people, time, and goals in front of you.
+                <strong>Start with a curated practice plan or build from scratch.</strong> Shape it
+                around the people, time, and goals in front of you.
               </p>
 
               <div className="landing-benefits">
@@ -233,7 +233,7 @@ export function LandingPage(): ReactElement {
                   03
                 </span>
                 <h3>Keep it ready</h3>
-                <p>Add the menu to your dashboard and reuse it when the next session arrives.</p>
+                <p>Add the plan to your dashboard and reuse it when the next session arrives.</p>
               </li>
             </ol>
           </div>
@@ -247,9 +247,9 @@ export function LandingPage(): ReactElement {
               </div>
               <p className="landing-reveal-left">
                 <strong>Carefully sourced and easy to adapt.</strong> These figures reflect the
-                training sessions currently available in KendoMenu. Choose a keiko menu, add it to
-                your dashboard, then adjust its repetitions or duration to suit the practice you are
-                planning.
+                training sessions currently available in KendoMenu. Choose a practice plan, add it
+                to your dashboard, then adjust its repetitions or duration to suit the practice you
+                are planning.
               </p>
             </div>
 
@@ -298,10 +298,10 @@ export function LandingPage(): ReactElement {
                 </p>
               </div>
               <div>
-                <h3>Menu contexts we include</h3>
+                <h3>Training contexts we include</h3>
                 <p>
-                  <strong>Examples include</strong> an Osaka police keiko menu, a high school menu,
-                  and a Kanoya University menu.
+                  <strong>Examples include</strong> an Osaka police keiko menu, a high school
+                  routine, and a Kanoya University training sequence.
                 </p>
               </div>
             </div>
@@ -363,8 +363,8 @@ export function LandingPage(): ReactElement {
               <div className="landing-final-cta-copy landing-reveal-right">
                 <h2 id="final-cta-title">Your next keiko starts with a clear plan.</h2>
                 <p>
-                  <strong>Make today’s plan real.</strong> Choose a menu from the library, adjust it
-                  and make the plan yours.
+                  <strong>Make today’s plan real.</strong> Choose a session from the library, adjust
+                  it and make the plan yours.
                 </p>
               </div>
               <Link

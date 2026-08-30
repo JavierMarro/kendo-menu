@@ -192,6 +192,20 @@ describe('recursive activity web consumers', () => {
     const user = userEvent.setup();
     const { store } = renderDashboardFixture();
 
+    for (const activityId of [
+      'synthetic-root',
+      'synthetic-station-a',
+      'synthetic-sandan-geiko',
+      'synthetic-yakusoku-geiko',
+      'synthetic-free-version',
+    ]) {
+      const activity = document.querySelector<HTMLElement>(`[data-activity-id="${activityId}"]`);
+      if (activity === null) {
+        throw new Error(`Expected the synthetic ${activityId} container.`);
+      }
+      await user.click(getRequiredSummary(activity));
+    }
+
     expect(screen.getByLabelText('Minutes for Recursive keiko')).toBeInTheDocument();
     expect(screen.getByLabelText('Rounds for Sandan-geiko')).toBeInTheDocument();
     expect(screen.getByLabelText('Repetitions for Station A exercise')).toBeInTheDocument();

@@ -36,7 +36,8 @@ is the free-tier persistence boundary for the first milestone.
 
 ## Capabilities and Constraints
 
-- The library contains curated built-in training sets and user-created training sets.
+- The library contains exactly the 11 curated built-in training sets. User-created training sets
+  appear on the dashboard only.
 - Practitioners can add training sets to a dashboard, adjust per-step quantities, attach notes, and
   remove dashboard entries.
 - Built-in training data is immutable, marked `isBuiltIn: true`, and uses stable ids for sets and
@@ -73,7 +74,8 @@ keiko terminology. No additional brand assets, claims, or formal voice rules hav
 
 - Keep core practice useful without accounts, servers, or network access.
 - Help practitioners shape the session they actually intend to do today.
-- Treat curated drills and user-created sets as one coherent training model.
+- Treat curated drills and user-created sets as one coherent training model while keeping curated
+  library defaults immutable and user-created sessions dashboard-owned.
 - Keep domain and state contracts portable so a future native app can reuse them.
 - Preserve a calm, focused practice experience with clear, accessible interactions.
 

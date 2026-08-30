@@ -1,5 +1,6 @@
 import {
   isValidTrainingQuantityValue,
+  type CustomTrainingIntensity,
   type DurationUnit,
   type TrainingSetInput,
 } from '@kendo-menu/domain';
@@ -23,12 +24,17 @@ export interface SectionDraft {
 export interface BuilderState {
   readonly name: string;
   readonly description: string;
+  readonly customIntensity?: CustomTrainingIntensity;
   readonly sections: readonly SectionDraft[];
 }
 
 export type BuilderAction =
   | { readonly type: 'set-name'; readonly value: string }
   | { readonly type: 'set-description'; readonly value: string }
+  | {
+      readonly type: 'set-custom-intensity';
+      readonly value: CustomTrainingIntensity | undefined;
+    }
   | { readonly type: 'set-section-label'; readonly sectionId: string; readonly value: string }
   | { readonly type: 'set-step-label'; readonly stepId: string; readonly value: string }
   | { readonly type: 'set-step-reps'; readonly stepId: string; readonly value: string }
@@ -78,6 +84,12 @@ export function builderReducer(state: BuilderState, action: BuilderAction): Buil
       return { ...state, name: action.value };
     case 'set-description':
       return { ...state, description: action.value };
+    case 'set-custom-intensity':
+      if (action.value === undefined) {
+        const { customIntensity: _customIntensity, ...stateWithoutIntensity } = state;
+        return stateWithoutIntensity;
+      }
+      return { ...state, customIntensity: action.value };
     case 'set-section-label':
       return {
         ...state,
@@ -196,6 +208,7 @@ export function toTrainingSetInput(state: BuilderState): TrainingSetInput {
     name: state.name.trim(),
     description: state.description.trim(),
     category: 'custom',
+    ...(state.customIntensity === undefined ? {} : { customIntensity: state.customIntensity }),
     sections: state.sections.map((section) => ({
       name: section.label.trim(),
       exercises: section.steps.map((step) => ({

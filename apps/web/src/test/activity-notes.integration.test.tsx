@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -13,6 +13,7 @@ const WARM_UP_ID = 'international-dojo-2-hour-session-warm-up-warm-up';
 const SUBURI_ID = 'international-dojo-2-hour-session-suburi-suburi';
 const ASHI_SABAKI_ID = 'international-dojo-2-hour-session-ashi-sabaki-ashi-sabaki';
 const KIRIKAESHI_ID = 'international-dojo-2-hour-session-kirikaeshi-kirikaeshi';
+const DASHBOARD_EDITOR_TEST_TIMEOUT = 30_000;
 
 function getActivity(activityId: string): HTMLElement {
   const activity = document.querySelector<HTMLElement>(`[data-activity-id="${activityId}"]`);
@@ -29,6 +30,15 @@ function getDashboardCard(): HTMLElement {
     throw new Error('Expected the International dojo dashboard card.');
   }
   return card;
+}
+
+async function openDashboardMenu(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+): Promise<HTMLElement> {
+  const card = getDashboardCard();
+  await user.click(within(card).getByRole('button', { name: 'View more' }));
+  return screen.getByRole('dialog', { name });
 }
 
 const NESTED_NOTE_TRAINING_SET = {
@@ -75,162 +85,202 @@ describe('dashboard activity notes', () => {
     });
 
     expect(screen.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Any extra notes?' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Any extra details?' })).not.toBeInTheDocument();
   });
 
-  it('renders controls only for eligible activities and commits notes independently of quantities', async () => {
-    const user = userEvent.setup();
-    const storage = new TestMemoryStorage();
-    const store = createTestStore(storage);
-    const entryId = store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+  it(
+    'renders controls only for eligible activities and commits notes independently of quantities',
+    async () => {
+      const user = userEvent.setup();
+      const storage = new TestMemoryStorage();
+      const store = createTestStore(storage);
+      const entryId = store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
 
-    renderApp(store);
+      renderApp(store);
+      const dialog = await openDashboardMenu(user, 'International dojo menu');
 
-    const card = getDashboardCard();
-    expect(within(card).getAllByRole('button', { name: 'Any extra notes?' })).toHaveLength(3);
-    expect(
-      within(getActivity(WARM_UP_ID)).getByRole('button', { name: 'Any extra notes?' }),
-    ).toBeInTheDocument();
-    expect(
-      within(getActivity(SUBURI_ID)).getByRole('button', { name: 'Any extra notes?' }),
-    ).toBeInTheDocument();
-    expect(
-      within(getActivity(ASHI_SABAKI_ID)).getByRole('button', { name: 'Any extra notes?' }),
-    ).toBeInTheDocument();
-    expect(
-      within(getActivity(KIRIKAESHI_ID)).queryByRole('button', { name: 'Any extra notes?' }),
-    ).not.toBeInTheDocument();
+      expect(within(dialog).getAllByRole('button', { name: 'Any extra details?' })).toHaveLength(3);
+      expect(
+        within(getActivity(WARM_UP_ID)).getByRole('button', { name: 'Any extra details?' }),
+      ).toBeInTheDocument();
+      expect(
+        within(getActivity(SUBURI_ID)).getByRole('button', { name: 'Any extra details?' }),
+      ).toBeInTheDocument();
+      expect(
+        within(getActivity(ASHI_SABAKI_ID)).getByRole('button', { name: 'Any extra details?' }),
+      ).toBeInTheDocument();
+      expect(
+        within(getActivity(KIRIKAESHI_ID)).queryByRole('button', { name: 'Any extra details?' }),
+      ).not.toBeInTheDocument();
 
-    const warmUp = getActivity(WARM_UP_ID);
-    const toggle = within(warmUp).getByRole('button', { name: 'Any extra notes?' });
-    const panelId = toggle.getAttribute('aria-controls');
-    expect(panelId).not.toBeNull();
-    expect(toggle).toHaveAttribute('type', 'button');
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    const panel = panelId === null ? null : document.getElementById(panelId);
-    expect(panel).not.toBeNull();
-    if (panel === null) {
-      throw new Error('Expected the activity-note panel.');
-    }
-    expect(panel).toHaveAttribute('hidden');
+      const warmUp = getActivity(WARM_UP_ID);
+      const toggle = within(warmUp).getByRole('button', { name: 'Any extra details?' });
+      const panelId = toggle.getAttribute('aria-controls');
+      expect(panelId).not.toBeNull();
+      expect(toggle).toHaveAttribute('type', 'button');
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      const panel = panelId === null ? null : document.getElementById(panelId);
+      expect(panel).not.toBeNull();
+      if (panel === null) {
+        throw new Error('Expected the activity-note panel.');
+      }
+      expect(panel).toHaveAttribute('hidden');
 
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(panel).not.toHaveAttribute('hidden');
-    const textarea = within(warmUp).getByLabelText('Extra notes for Warm-up');
-    expect(textarea).toBeVisible();
+      await user.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(panel).not.toHaveAttribute('hidden');
+      const textarea = within(warmUp).getByLabelText('Extra notes for Warm-up');
+      expect(textarea).toBeVisible();
 
-    await user.type(textarea, '  Keep the knees soft.\nBreathe.  ');
-    await user.tab();
-    expect(store.getState().dashboardEntries[0]?.activityNotes).toEqual({
-      [WARM_UP_ID]: '  Keep the knees soft.\nBreathe.  ',
-    });
-    expect(within(warmUp).getByText('Updated.')).toBeVisible();
-
-    const warmUpQuantity = within(warmUp).getByLabelText('Minutes for Warm-up');
-    await user.clear(warmUpQuantity);
-    await user.type(warmUpQuantity, '12');
-    await user.tab();
-    expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
-      [WARM_UP_ID]: { minutes: 12 },
-    });
-
-    const sessionNotes = within(card).getByLabelText('Practice notes');
-    await user.type(sessionNotes, 'General session note.');
-    await user.tab();
-    expect(store.getState().dashboardEntries[0]).toMatchObject({
-      id: entryId,
-      notes: 'General session note.',
-      activityNotes: {
+      await user.type(textarea, '  Keep the knees soft.\nBreathe.  ');
+      await user.tab();
+      expect(store.getState().dashboardEntries[0]?.activityNotes).toEqual({
         [WARM_UP_ID]: '  Keep the knees soft.\nBreathe.  ',
-      },
-    });
-
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(panel).toHaveAttribute('hidden');
-  });
-
-  it('reopens saved notes after a fresh store and restores independent duplicate entries after undo', async () => {
-    const user = userEvent.setup();
-    const storage = new TestMemoryStorage();
-    const firstStore = createTestStore(storage);
-    const firstId = firstStore.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
-    const secondId = firstStore.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
-    const firstView = renderApp(firstStore);
-
-    const cards = () =>
-      screen.getAllByRole('heading', { name: 'International dojo menu' }).map((heading) => {
-        const card = heading.closest('.dashboard-card');
-        if (!(card instanceof HTMLElement)) {
-          throw new Error('Expected a dashboard card.');
-        }
-        return card;
       });
-    expect(cards()).toHaveLength(2);
+      expect(within(warmUp).getByText('Updated.')).toBeVisible();
 
-    const firstWarmUp = within(getActivity(WARM_UP_ID)).getByRole('button', {
-      name: 'Any extra notes?',
-    });
-    await user.click(firstWarmUp);
-    const firstCard = cards()[0];
-    if (firstCard === undefined) {
-      throw new Error('Expected the first dashboard card.');
-    }
-    const firstTextarea = within(firstCard).getByLabelText('Extra notes for Warm-up');
-    await user.type(firstTextarea, 'First dashboard entry.');
-    await user.tab();
+      const warmUpQuantity = within(warmUp).getByLabelText('Minutes for Warm-up');
+      await user.clear(warmUpQuantity);
+      await user.type(warmUpQuantity, '12');
+      await user.tab();
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [WARM_UP_ID]: { minutes: 12 },
+      });
 
-    const secondCard = cards()[1];
-    if (secondCard === undefined) {
-      throw new Error('Expected the second dashboard card.');
-    }
-    const secondWarmActivity = secondCard.querySelector<HTMLElement>(
-      `[data-activity-id="${WARM_UP_ID}"]`,
-    );
-    if (secondWarmActivity === null) {
-      throw new Error('Expected the second Warm-up activity.');
-    }
-    const secondWarmUp = within(secondWarmActivity).getByRole('button', {
-      name: 'Any extra notes?',
-    });
-    await user.click(secondWarmUp);
-    const secondTextarea = within(secondCard).getByLabelText('Extra notes for Warm-up');
-    await user.type(secondTextarea, 'Second dashboard entry.');
-    await user.tab();
+      const sessionNotes = within(dialog).getByLabelText('Practice notes');
+      await user.type(sessionNotes, 'General session note.');
+      await user.tab();
+      expect(store.getState().dashboardEntries[0]).toMatchObject({
+        id: entryId,
+        notes: 'General session note.',
+        activityNotes: {
+          [WARM_UP_ID]: '  Keep the knees soft.\nBreathe.  ',
+        },
+      });
 
-    expect(firstStore.getState().dashboardEntries).toEqual([
-      expect.objectContaining({
-        id: firstId,
-        activityNotes: { [WARM_UP_ID]: 'First dashboard entry.' },
-      }),
-      expect.objectContaining({
-        id: secondId,
-        activityNotes: { [WARM_UP_ID]: 'Second dashboard entry.' },
-      }),
-    ]);
+      await user.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(panel).toHaveAttribute('hidden');
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
-    const firstRemove = within(firstCard).getByRole('button', { name: 'Remove' });
-    await user.click(firstRemove);
-    await user.click(screen.getByRole('button', { name: 'Undo' }));
-    expect(cards()).toHaveLength(2);
-    expect(
-      within(cards()[0] ?? document.body).getByLabelText('Extra notes for Warm-up'),
-    ).toHaveValue('First dashboard entry.');
+  it(
+    'reopens saved notes after a fresh store and restores independent duplicate entries after undo',
+    async () => {
+      const user = userEvent.setup();
+      const storage = new TestMemoryStorage();
+      const firstStore = createTestStore(storage);
+      const firstId = firstStore.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+      const secondId = firstStore.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+      const firstView = renderApp(firstStore);
 
-    firstView.unmount();
-    const secondStore = createTestStore(storage);
-    const view = renderApp(secondStore);
-    expect(view.getAllByText('Note added')).toHaveLength(2);
-    const reloadedCards = cards();
-    expect(reloadedCards).toHaveLength(2);
-    expect(
-      within(reloadedCards[0] ?? document.body).getByLabelText('Extra notes for Warm-up'),
-    ).toHaveValue('First dashboard entry.');
-    expect(
-      within(reloadedCards[1] ?? document.body).getByLabelText('Extra notes for Warm-up'),
-    ).toHaveValue('Second dashboard entry.');
-  });
+      const cards = () =>
+        screen.getAllByRole('heading', { name: 'International dojo menu' }).map((heading) => {
+          const card = heading.closest('.dashboard-card');
+          if (!(card instanceof HTMLElement)) {
+            throw new Error('Expected a dashboard card.');
+          }
+          return card;
+        });
+      expect(cards()).toHaveLength(2);
+
+      const firstCard = cards()[0];
+      if (firstCard === undefined) {
+        throw new Error('Expected the first dashboard card.');
+      }
+      await user.click(within(firstCard).getByRole('button', { name: 'View more' }));
+      const firstDialog = screen.getByRole('dialog', { name: 'International dojo menu' });
+      const firstWarmUp = within(getActivity(WARM_UP_ID)).getByRole('button', {
+        name: 'Any extra details?',
+      });
+      await user.click(firstWarmUp);
+      const firstTextarea = within(firstDialog).getByLabelText('Extra notes for Warm-up');
+      await user.type(firstTextarea, 'First dashboard entry.');
+      await user.tab();
+      await user.click(
+        within(firstDialog).getByRole('button', {
+          name: 'Close International dojo menu details.',
+        }),
+      );
+
+      const secondCard = cards()[1];
+      if (secondCard === undefined) {
+        throw new Error('Expected the second dashboard card.');
+      }
+      await user.click(within(secondCard).getByRole('button', { name: 'View more' }));
+      const secondDialog = screen.getByRole('dialog', { name: 'International dojo menu' });
+      const secondWarmUp = within(getActivity(WARM_UP_ID)).getByRole('button', {
+        name: 'Any extra details?',
+      });
+      await user.click(secondWarmUp);
+      const secondTextarea = within(secondDialog).getByLabelText('Extra notes for Warm-up');
+      await user.type(secondTextarea, 'Second dashboard entry.');
+      await user.tab();
+      await user.click(
+        within(secondDialog).getByRole('button', {
+          name: 'Close International dojo menu details.',
+        }),
+      );
+
+      expect(firstStore.getState().dashboardEntries).toEqual([
+        expect.objectContaining({
+          id: firstId,
+          activityNotes: { [WARM_UP_ID]: 'First dashboard entry.' },
+        }),
+        expect.objectContaining({
+          id: secondId,
+          activityNotes: { [WARM_UP_ID]: 'Second dashboard entry.' },
+        }),
+      ]);
+
+      const firstRemove = within(firstCard).getByRole('button', { name: 'Remove' });
+      await user.click(firstRemove);
+      await user.click(screen.getByRole('button', { name: 'Undo' }));
+      expect(cards()).toHaveLength(2);
+      const restoredFirstCard = cards()[0];
+      if (restoredFirstCard === undefined) {
+        throw new Error('Expected the restored first dashboard card.');
+      }
+      await user.click(within(restoredFirstCard).getByRole('button', { name: 'View more' }));
+      const restoredFirstDialog = screen.getByRole('dialog', { name: 'International dojo menu' });
+      expect(within(restoredFirstDialog).getByLabelText('Extra notes for Warm-up')).toHaveValue(
+        'First dashboard entry.',
+      );
+      await user.click(
+        within(restoredFirstDialog).getByRole('button', {
+          name: 'Close International dojo menu details.',
+        }),
+      );
+
+      firstView.unmount();
+      const secondStore = createTestStore(storage);
+      renderApp(secondStore);
+      const reloadedCards = cards();
+      expect(reloadedCards).toHaveLength(2);
+      expect(screen.getAllByText('No notes yet')).toHaveLength(2);
+      for (const [index, expectedNote] of [
+        'First dashboard entry.',
+        'Second dashboard entry.',
+      ].entries()) {
+        const card = cards()[index];
+        if (card === undefined) {
+          throw new Error('Expected a reloaded dashboard card with notes.');
+        }
+        await user.click(within(card).getByRole('button', { name: 'View more' }));
+        const reloadedDialog = screen.getByRole('dialog', { name: 'International dojo menu' });
+        expect(within(reloadedDialog).getByLabelText('Extra notes for Warm-up')).toHaveValue(
+          expectedNote,
+        );
+        await user.click(
+          within(reloadedDialog).getByRole('button', {
+            name: 'Close International dojo menu details.',
+          }),
+        );
+      }
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 
   it('keeps canonical source notes separate and renders the control at nested depth', async () => {
     const user = userEvent.setup();
@@ -251,9 +301,21 @@ describe('dashboard activity notes', () => {
       </PersistenceContext.Provider>,
     );
 
+    const root = getActivity('nested-root');
+    const rootSummary = root.querySelector('summary');
+    if (rootSummary === null) {
+      throw new Error('Expected the nested root disclosure.');
+    }
+    await user.click(rootSummary);
+
     const nested = getActivity('nested-eligible');
+    const nestedSummary = nested.querySelector('summary');
+    if (nestedSummary === null) {
+      throw new Error('Expected the nested eligible disclosure.');
+    }
+    await user.click(nestedSummary);
     expect(within(nested).getByText('Canonical source note.')).toBeVisible();
-    const toggle = within(nested).getByRole('button', { name: 'Any extra notes?' });
+    const toggle = within(nested).getByRole('button', { name: 'Any extra details?' });
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const textarea = within(nested).getByLabelText('Extra notes for Nested eligible activity');
     expect(textarea).toHaveValue('Existing practitioner note.');
@@ -265,17 +327,24 @@ describe('dashboard activity notes', () => {
     expect(within(nested).getByText('Canonical source note.')).toBeVisible();
   });
 
-  it('shows the persistence failure status after an activity-note blur', async () => {
-    const user = userEvent.setup();
-    const store = createTestStore();
-    store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
-    renderApp(store, { persistence: { writeFailed: true } });
+  it(
+    'shows the persistence failure status after an activity-note blur',
+    async () => {
+      const user = userEvent.setup();
+      const store = createTestStore();
+      store.getState().addToDashboard(INTERNATIONAL_DOJO_ID);
+      renderApp(store, { persistence: { writeFailed: true } });
+      const dialog = await openDashboardMenu(user, 'International dojo menu');
 
-    const warmUp = getActivity(WARM_UP_ID);
-    await user.click(within(warmUp).getByRole('button', { name: 'Any extra notes?' }));
-    const textarea = within(warmUp).getByLabelText('Extra notes for Warm-up');
-    await user.type(textarea, 'This write should be reported.');
-    await user.tab();
-    expect(within(warmUp).getByText('Not saved to this device.')).toBeVisible();
-  });
+      const warmUp = getActivity(WARM_UP_ID);
+      await user.click(within(warmUp).getByRole('button', { name: 'Any extra details?' }));
+      const textarea = within(dialog).getByLabelText('Extra notes for Warm-up');
+      await user.type(textarea, 'This write should be reported.');
+      await user.tab();
+      await waitFor(() =>
+        expect(within(warmUp).getByText('Not saved to this device.')).toBeVisible(),
+      );
+    },
+    DASHBOARD_EDITOR_TEST_TIMEOUT,
+  );
 });

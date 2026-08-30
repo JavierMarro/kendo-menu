@@ -21,6 +21,14 @@ async function expectDisclosureIndicator(details: Locator, content: '+' | '−')
     .toBe(`"${content}"`);
 }
 
+async function openNestedDetails(container: Locator): Promise<Locator> {
+  const tagName = await container.evaluate((element) => element.tagName.toLowerCase());
+  const details = tagName === 'details' ? container : container.locator(':scope > details');
+  await details.locator(':scope > summary').click();
+  await expect(details).toHaveJSProperty('open', true);
+  return details;
+}
+
 test.describe('recursive activity consumers', () => {
   test('opens nested library disclosures by mouse and keyboard with stable hierarchy', async ({
     page,
@@ -126,6 +134,12 @@ test.describe('recursive activity consumers', () => {
   }) => {
     await page.goto(fixtureUrl('dashboard'));
 
+    await openNestedDetails(page.locator('[data-activity-id="synthetic-root"]'));
+    await openNestedDetails(page.locator('[data-activity-id="synthetic-station-a"]'));
+    await openNestedDetails(page.locator('[data-activity-id="synthetic-sandan-geiko"]'));
+    await openNestedDetails(page.locator('[data-activity-id="synthetic-yakusoku-geiko"]'));
+    await openNestedDetails(page.locator('[data-activity-id="synthetic-free-version"]'));
+
     await expect(page.getByLabel('Minutes for Recursive keiko')).toHaveValue('30');
     await expect(page.getByLabel('Rounds for Sandan-geiko')).toHaveValue('2');
     await expect(page.getByLabel('Repetitions for Station A exercise')).toHaveValue('12');
@@ -158,6 +172,10 @@ test.describe('recursive activity consumers', () => {
     expect(raw).toContain('"repetitions":18');
 
     await page.reload();
+    await openNestedDetails(page.locator('[data-activity-id="synthetic-root"]'));
+    await openNestedDetails(page.locator('[data-activity-id="synthetic-sandan-geiko"]'));
+    await openNestedDetails(page.locator('[data-activity-id="synthetic-yakusoku-geiko"]'));
+    await openNestedDetails(page.locator('[data-activity-id="synthetic-free-version"]'));
     await expect(page.getByLabel('Repetitions for Yakusoku men')).toHaveValue('18');
     await expect(page.getByLabel('Seconds for Free version footwork')).toHaveValue('');
 

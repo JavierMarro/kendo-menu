@@ -42,6 +42,13 @@ Object.defineProperty(globalThis, 'localStorage', {
   value: localStorage,
 });
 
+const scrollTo: Window['scrollTo'] = () => undefined;
+
+Object.defineProperty(window, 'scrollTo', {
+  configurable: true,
+  value: scrollTo,
+});
+
 beforeEach(() => {
   localStorage.clear();
 });

@@ -16,6 +16,20 @@ export type DrillCategory =
   | 'high-intensity-drill'
   | 'custom';
 
+/** Optional intensity metadata for a user-authored training set. */
+export type CustomTrainingIntensity = Extract<
+  DrillCategory,
+  'intense-drill' | 'high-intensity-drill'
+>;
+
+/** Filterable tags exposed by a training set. */
+export type TrainingSetTag = 'custom' | CustomTrainingIntensity;
+
+export const CUSTOM_TRAINING_INTENSITIES = [
+  'intense-drill',
+  'high-intensity-drill',
+] as const satisfies readonly CustomTrainingIntensity[];
+
 export const TRAINING_QUANTITY_UNITS = [
   'repetitions',
   'sets',
@@ -115,6 +129,7 @@ export interface TrainingSet {
   readonly name: string;
   readonly description?: string;
   readonly category: DrillCategory;
+  readonly customIntensity?: CustomTrainingIntensity;
   readonly activities: readonly TrainingActivity[];
   readonly isBuiltIn: boolean;
 }
@@ -147,6 +162,7 @@ export interface TrainingSetInput {
   readonly name: string;
   readonly description?: string;
   readonly category: 'custom';
+  readonly customIntensity?: CustomTrainingIntensity;
   readonly sections: readonly TrainingSectionInput[];
 }
 
@@ -157,6 +173,8 @@ export type CustomTrainingSetInput = TrainingSetInput;
 export interface DashboardEntry {
   readonly id: string;
   readonly trainingSetId: TrainingSetId;
+  /** Dashboard-owned snapshot; absent only for unknown legacy entries. */
+  readonly trainingSet?: TrainingSet;
   readonly quantityOverrides: DashboardQuantityOverrides;
   readonly activityNotes: DashboardActivityNotes;
   readonly notes: string;
@@ -364,6 +382,10 @@ function isDrillCategory(value: unknown): value is DrillCategory {
   );
 }
 
+export function isCustomTrainingIntensity(value: unknown): value is CustomTrainingIntensity {
+  return value === 'intense-drill' || value === 'high-intensity-drill';
+}
+
 function validateOptionalText(
   value: Readonly<Record<string, unknown>>,
   property: 'description' | 'notes',
@@ -567,6 +589,7 @@ function cloneCanonicalTrainingSet(
   sourceId: number | undefined,
   name: string,
   category: DrillCategory,
+  customIntensity: CustomTrainingIntensity | undefined,
   isBuiltIn: boolean,
 ): TrainingSet {
   const activitiesValue = value['activities'];
@@ -580,6 +603,7 @@ function cloneCanonicalTrainingSet(
     name,
     ...(typeof value['description'] === 'string' ? { description: value['description'] } : {}),
     category,
+    ...(customIntensity === undefined ? {} : { customIntensity }),
     activities,
     isBuiltIn,
   });
@@ -593,7 +617,16 @@ export function validateTrainingSet(value: unknown): ValidationResult<TrainingSe
   if (
     !hasOnlyProperties(
       value,
-      new Set(['id', 'sourceId', 'name', 'description', 'category', 'activities', 'isBuiltIn']),
+      new Set([
+        'id',
+        'sourceId',
+        'name',
+        'description',
+        'category',
+        'customIntensity',
+        'activities',
+        'isBuiltIn',
+      ]),
     )
   ) {
     pushIssue(issues, '', 'contains unsupported properties');
@@ -620,8 +653,20 @@ export function validateTrainingSet(value: unknown): ValidationResult<TrainingSe
   if (typeof isBuiltIn !== 'boolean') {
     pushIssue(issues, 'isBuiltIn', 'must be a boolean');
   }
+  if (
+    Object.hasOwn(value, 'customIntensity') &&
+    !isCustomTrainingIntensity(value['customIntensity'])
+  ) {
+    pushIssue(issues, 'customIntensity', 'must be a supported custom intensity when provided');
+  }
   if (isBuiltIn === false && category !== 'custom') {
     pushIssue(issues, 'category', 'custom sets must use the custom category');
+  }
+  if (isBuiltIn === true && Object.hasOwn(value, 'customIntensity')) {
+    pushIssue(issues, 'customIntensity', 'built-in sets cannot define custom intensity metadata');
+  }
+  if (category !== 'custom' && Object.hasOwn(value, 'customIntensity')) {
+    pushIssue(issues, 'customIntensity', 'only custom sets can define custom intensity metadata');
   }
   const activitiesAreValid = validateTrainingActivities(
     value['activities'],
@@ -636,6 +681,8 @@ export function validateTrainingSet(value: unknown): ValidationResult<TrainingSe
     (Object.hasOwn(value, 'sourceId') && !isValidCount(sourceId)) ||
     !isNonBlankString(name) ||
     !isDrillCategory(category) ||
+    (Object.hasOwn(value, 'customIntensity') &&
+      !isCustomTrainingIntensity(value['customIntensity'])) ||
     typeof isBuiltIn !== 'boolean' ||
     !activitiesAreValid
   ) {
@@ -653,6 +700,7 @@ export function validateTrainingSet(value: unknown): ValidationResult<TrainingSe
       isValidCount(sourceId) ? sourceId : undefined,
       name,
       category,
+      isCustomTrainingIntensity(value['customIntensity']) ? value['customIntensity'] : undefined,
       isBuiltIn,
     ),
   };
@@ -722,7 +770,12 @@ export function validateTrainingSetInput(value: unknown): ValidationResult<Train
   if (!isRecord(value)) {
     return { success: false, issues: [{ path: '', message: 'must be an object' }] };
   }
-  if (!hasOnlyProperties(value, new Set(['name', 'description', 'category', 'sections']))) {
+  if (
+    !hasOnlyProperties(
+      value,
+      new Set(['name', 'description', 'category', 'customIntensity', 'sections']),
+    )
+  ) {
     pushIssue(issues, '', 'contains unsupported properties');
   }
 
@@ -736,6 +789,12 @@ export function validateTrainingSetInput(value: unknown): ValidationResult<Train
   validateOptionalText(value, 'description', 'description', issues);
   if (category !== 'custom') {
     pushIssue(issues, 'category', 'custom sets must use the custom category');
+  }
+  if (
+    Object.hasOwn(value, 'customIntensity') &&
+    !isCustomTrainingIntensity(value['customIntensity'])
+  ) {
+    pushIssue(issues, 'customIntensity', 'must be a supported custom intensity when provided');
   }
   if (!Array.isArray(sections) || sections.length < 1) {
     pushIssue(issues, 'sections', 'must contain at least one section');
@@ -761,6 +820,9 @@ export function validateTrainingSetInput(value: unknown): ValidationResult<Train
     name,
     ...(typeof value['description'] === 'string' ? { description: value['description'] } : {}),
     category,
+    ...(isCustomTrainingIntensity(value['customIntensity'])
+      ? { customIntensity: value['customIntensity'] }
+      : {}),
     sections: sections.filter(
       (section): section is TrainingSectionInput =>
         isRecord(section) &&
@@ -1037,6 +1099,37 @@ export function getEffectiveTrainingQuantity(
 ): TrainingQuantityValue | undefined {
   const override = overrides?.[unit];
   return override === undefined ? getDefaultTrainingQuantity(activity, unit) : override;
+}
+
+/** Deep-clone a validated training set while preserving all stable ids and metadata. */
+export function cloneTrainingSet(trainingSet: TrainingSet): TrainingSet {
+  const result = validateTrainingSet(trainingSet);
+  if (!result.success) {
+    throw new TrainingValidationError(result.issues);
+  }
+  return result.value;
+}
+
+/** Return the filterable tags associated with a training set. */
+export function getTrainingSetTags(
+  trainingSet: Pick<TrainingSet, 'category' | 'customIntensity'>,
+): readonly TrainingSetTag[] {
+  if (trainingSet.category === 'custom') {
+    return trainingSet.customIntensity === undefined
+      ? ['custom']
+      : ['custom', trainingSet.customIntensity];
+  }
+  return trainingSet.category === 'intense-drill' || trainingSet.category === 'high-intensity-drill'
+    ? [trainingSet.category]
+    : [];
+}
+
+/** Test whether a training set carries a filterable tag. */
+export function trainingSetHasTag(
+  trainingSet: Pick<TrainingSet, 'category' | 'customIntensity'>,
+  tag: TrainingSetTag,
+): boolean {
+  return getTrainingSetTags(trainingSet).includes(tag);
 }
 
 export function asTrainingSetId(value: string): TrainingSetId {

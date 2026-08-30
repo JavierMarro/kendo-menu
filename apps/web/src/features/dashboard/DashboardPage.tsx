@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type FocusEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import type {
@@ -10,11 +10,11 @@ import type {
 import type { RemovedDashboardEntry } from '@kendo-menu/store';
 
 import {
-  findTrainingSet,
-  formatCategory,
+  DASHBOARD_FILTER_OPTIONS,
+  filterDashboardEntries,
   formatQuantityValue,
   formatQuantityUnit,
-  getAllTrainingSets,
+  getDashboardTrainingSet,
   getEditableTrainingQuantityUnits,
   getEffectiveTrainingQuantity,
   getQuantityValidationMessage,
@@ -23,16 +23,17 @@ import {
   getTrainingSetDescription,
   isTrainingQuantityRange,
   isValidQuantityValue,
+  type DashboardFilter,
 } from '../../lib/training-data';
 import { useTrainingStore, useTrainingStoreApi } from '../../lib/training-store-context';
+import { TrainingSetTags } from '../../components/TrainingSetTags';
+import { DrillDetailDialog } from '../library/DrillDetailDialog';
 import {
   getPersistenceUpdateLabel,
   usePersistenceStatus,
 } from '../persistence/persistence-context';
-import {
-  TrainingActivityTree,
-  type TrainingActivityRenderContext,
-} from '../training-activities/TrainingActivityTree';
+import { TrainingActivityList } from '../training-activities/TrainingActivityList';
+import type { TrainingActivityRenderContext } from '../training-activities/TrainingActivityTree';
 
 function getQuantityDraftValue(
   entry: DashboardEntry,
@@ -45,7 +46,6 @@ function getQuantityDraftValue(
 
 export function DashboardPage() {
   const dashboardEntries = useTrainingStore((state) => state.dashboardEntries);
-  const customTrainingSets = useTrainingStore((state) => state.customTrainingSets);
   const removeFromDashboard = useTrainingStore((state) => state.removeFromDashboard);
   const updateDashboardEntry = useTrainingStore((state) => state.updateDashboardEntry);
   const setQuantityOverride = useTrainingStore((state) => state.setQuantityOverride);
@@ -56,7 +56,21 @@ export function DashboardPage() {
   const [searchParams] = useSearchParams();
   const persistenceStatus = usePersistenceStatus();
   const [statusMessage, setStatusMessage] = useState('');
-  const trainingSets = getAllTrainingSets(customTrainingSets);
+  const [dashboardFilter, setDashboardFilter] = useState<DashboardFilter>('all');
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const viewMoreButtonsRef = useRef(new Map<string, HTMLButtonElement>());
+  const previousSelectedEntryIdRef = useRef<string | null>(null);
+  const filteredEntries = useMemo(
+    () => filterDashboardEntries(dashboardEntries, dashboardFilter),
+    [dashboardEntries, dashboardFilter],
+  );
+  const selectedEntry =
+    selectedEntryId === null
+      ? undefined
+      : filteredEntries.find((entry) => entry.id === selectedEntryId);
+  const selectedTrainingSet =
+    selectedEntry === undefined ? undefined : getDashboardTrainingSet(selectedEntry);
+  const visibleSelectedEntryId = selectedEntry?.id ?? null;
   const createdName = searchParams.get('created');
   const createdStatusMessage =
     createdName === null
@@ -66,6 +80,40 @@ export function DashboardPage() {
         : persistenceStatus.mode === 'session'
           ? `${createdName} was added for this session only.`
           : `${createdName} saved to your dashboard.`;
+
+  useEffect(() => {
+    if (visibleSelectedEntryId !== null) {
+      previousSelectedEntryIdRef.current = visibleSelectedEntryId;
+      return;
+    }
+
+    const previousEntryId = previousSelectedEntryIdRef.current;
+    previousSelectedEntryIdRef.current = null;
+    if (previousEntryId === null) {
+      return;
+    }
+
+    const viewMoreButton = viewMoreButtonsRef.current.get(previousEntryId);
+    if (viewMoreButton !== undefined) {
+      viewMoreButton.focus({ preventScroll: true });
+      return;
+    }
+
+    document.getElementById('main-content')?.focus({ preventScroll: true });
+  }, [visibleSelectedEntryId]);
+
+  const handleDashboardFilterChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const selectedValue = event.target.value;
+    const option = DASHBOARD_FILTER_OPTIONS.find((candidate) => candidate.value === selectedValue);
+    if (option === undefined) {
+      return;
+    }
+
+    if (selectedEntryId !== null) {
+      setSelectedEntryId(null);
+    }
+    setDashboardFilter(option.value);
+  };
 
   const removeEntry = (entry: DashboardEntry, label = 'Training session') => {
     const removed = removeFromDashboard(entry.id);
@@ -89,12 +137,33 @@ export function DashboardPage() {
 
   return (
     <>
-      <header className="page-header">
+      <header className="page-header dashboard-page-header">
         <div>
           <p className="eyebrow">Today&apos;s keiko</p>
           <h1>Your dashboard</h1>
           <p className="page-intro">Shape today’s keiko to fit the practice ahead.</p>
         </div>
+        {dashboardEntries.length > 0 ? (
+          <div className="dashboard-header-actions">
+            <Link className="secondary-button" to="/app/drills/new">
+              Create new menu
+            </Link>
+            <div className="dashboard-filter-control">
+              <label htmlFor="dashboard-filter">Filter sessions</label>
+              <select
+                id="dashboard-filter"
+                value={dashboardFilter}
+                onChange={handleDashboardFilterChange}
+              >
+                {DASHBOARD_FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        ) : null}
       </header>
 
       <p className="sr-only" role="status" aria-live="polite">
@@ -129,13 +198,29 @@ export function DashboardPage() {
             </Link>
           </div>
         </section>
+      ) : filteredEntries.length === 0 ? (
+        <section
+          className="empty-state dashboard-filter-empty"
+          aria-labelledby="filter-empty-title"
+        >
+          <p className="eyebrow">No matching sessions</p>
+          <h2 id="filter-empty-title">Nothing matches this filter.</h2>
+          <p>Choose another session tag to see the training on your dashboard.</p>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => setDashboardFilter('all')}
+          >
+            Show all sessions
+          </button>
+        </section>
       ) : (
         <section className="dashboard-list" aria-labelledby="dashboard-list-title">
           <h2 id="dashboard-list-title" className="sr-only">
             Selected training sessions
           </h2>
-          {dashboardEntries.map((entry, index) => {
-            const trainingSet = findTrainingSet(trainingSets, entry.trainingSetId);
+          {filteredEntries.map((entry) => {
+            const trainingSet = getDashboardTrainingSet(entry);
             return trainingSet === undefined ? (
               <UnknownDashboardEntry
                 key={entry.id}
@@ -143,27 +228,55 @@ export function DashboardPage() {
                 onRemove={() => removeEntry(entry)}
               />
             ) : (
-              <DashboardTrainingSet
+              <DashboardTrainingSetCard
                 key={entry.id}
                 entry={entry}
-                index={index}
                 trainingSet={trainingSet}
                 onRemove={() => removeEntry(entry, trainingSet.name)}
-                onUpdate={(patch) => updateDashboardEntry(entry.id, patch)}
-                onSetQuantity={(activityId, unit, value) =>
-                  setQuantityOverride(entry.id, activityId, unit, value)
-                }
-                onClearQuantity={(activityId, unit) =>
-                  clearQuantityOverride(entry.id, activityId, unit)
-                }
-                onSetActivityNote={(activityId, note) =>
-                  setActivityNote(entry.id, activityId, note)
-                }
+                onViewMore={() => setSelectedEntryId(entry.id)}
+                viewMoreButtonRef={(element) => {
+                  if (element === null) {
+                    viewMoreButtonsRef.current.delete(entry.id);
+                    return;
+                  }
+
+                  viewMoreButtonsRef.current.set(entry.id, element);
+                }}
               />
             );
           })}
         </section>
       )}
+
+      {selectedEntry !== undefined && selectedTrainingSet !== undefined ? (
+        <DrillDetailDialog
+          key={selectedEntry.id}
+          titleId={`dashboard-dialog-title-${selectedEntry.id}`}
+          trainingSet={selectedTrainingSet}
+          onClose={() => setSelectedEntryId(null)}
+        >
+          <DashboardTrainingSet
+            entry={selectedEntry}
+            index={dashboardEntries.findIndex((entry) => entry.id === selectedEntry.id)}
+            titleId={`dashboard-dialog-title-${selectedEntry.id}`}
+            trainingSet={selectedTrainingSet}
+            onRemove={() => {
+              setSelectedEntryId(null);
+              removeEntry(selectedEntry, selectedTrainingSet.name);
+            }}
+            onUpdate={(patch) => updateDashboardEntry(selectedEntry.id, patch)}
+            onSetQuantity={(activityId, unit, value) =>
+              setQuantityOverride(selectedEntry.id, activityId, unit, value)
+            }
+            onClearQuantity={(activityId, unit) =>
+              clearQuantityOverride(selectedEntry.id, activityId, unit)
+            }
+            onSetActivityNote={(activityId, note) =>
+              setActivityNote(selectedEntry.id, activityId, note)
+            }
+          />
+        </DrillDetailDialog>
+      ) : null}
     </>
   );
 }
@@ -195,6 +308,7 @@ function UnknownDashboardEntry({ entry, onRemove }: UnknownDashboardEntryProps) 
 interface DashboardTrainingSetProps {
   readonly entry: DashboardEntry;
   readonly index: number;
+  readonly titleId?: string;
   readonly trainingSet: TrainingSet;
   readonly onRemove: () => void;
   readonly onUpdate: (patch: { readonly notes?: string }) => void;
@@ -206,6 +320,7 @@ interface DashboardTrainingSetProps {
 export function DashboardTrainingSet({
   entry,
   index,
+  titleId,
   trainingSet,
   onRemove,
   onUpdate,
@@ -219,6 +334,7 @@ export function DashboardTrainingSet({
   const activities = trainingSet.activities;
   const activityCount = getTrainingSetActivityCount(trainingSet);
   const description = getTrainingSetDescription(trainingSet);
+  const headingId = titleId ?? `dashboard-entry-title-${entry.id}`;
 
   const handleNotesChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setNotesDraft(event.target.value);
@@ -233,17 +349,19 @@ export function DashboardTrainingSet({
   };
 
   return (
-    <article className="dashboard-card dashboard-card--expanded">
+    <article className="dashboard-card dashboard-card--expanded" data-entry-index={index + 1}>
       <div className="dashboard-card-heading">
         <div className="card-index" aria-hidden="true">
           {String(index + 1).padStart(2, '0')}
         </div>
         <div className="card-content">
-          <p className="card-kicker">{formatCategory(trainingSet.category)}</p>
-          <h2>{trainingSet.name}</h2>
+          <div className="library-card-topline">
+            <TrainingSetTags trainingSet={trainingSet} />
+            <span className="step-count">{activityCount} activities</span>
+          </div>
+          <h2 id={headingId}>{trainingSet.name}</h2>
           {description === undefined ? null : <p>{description}</p>}
           <div className="card-meta">
-            <span>{activityCount} activities</span>
             <span>{entry.notes.length > 0 ? 'Has notes' : 'No notes yet'}</span>
           </div>
         </div>
@@ -252,10 +370,11 @@ export function DashboardTrainingSet({
         </button>
       </div>
 
-      <div className="dashboard-sections">
-        <TrainingActivityTree
+      <div className="dashboard-sections detail-sections">
+        <TrainingActivityList
           activities={activities}
-          renderActivity={(context) =>
+          titleId={headingId}
+          renderActivityAside={(context) =>
             renderDashboardActivity(context, {
               entry,
               onSetQuantity,
@@ -284,6 +403,52 @@ export function DashboardTrainingSet({
   );
 }
 
+interface DashboardTrainingSetCardProps {
+  readonly entry: DashboardEntry;
+  readonly trainingSet: TrainingSet;
+  readonly onRemove: () => void;
+  readonly onViewMore: () => void;
+  readonly viewMoreButtonRef: (element: HTMLButtonElement | null) => void;
+}
+
+function DashboardTrainingSetCard({
+  entry,
+  trainingSet,
+  onRemove,
+  onViewMore,
+  viewMoreButtonRef,
+}: DashboardTrainingSetCardProps) {
+  const activityCount = getTrainingSetActivityCount(trainingSet);
+  const description = getTrainingSetDescription(trainingSet);
+
+  return (
+    <article className="dashboard-card dashboard-card--compact">
+      <div className="library-card-topline">
+        <TrainingSetTags trainingSet={trainingSet} />
+        <span className="step-count">{activityCount} activities</span>
+      </div>
+      <h2>{trainingSet.name}</h2>
+      {description === undefined ? null : <p className="library-card-description">{description}</p>}
+      <div className="card-meta">
+        <span>{entry.notes.length > 0 ? 'Has notes' : 'No notes yet'}</span>
+      </div>
+      <div className="library-card-actions">
+        <button
+          ref={viewMoreButtonRef}
+          className="secondary-button"
+          type="button"
+          onClick={onViewMore}
+        >
+          View more
+        </button>
+        <button className="text-button" type="button" onClick={onRemove}>
+          Remove
+        </button>
+      </div>
+    </article>
+  );
+}
+
 interface DashboardActivityRenderOptions {
   readonly entry: DashboardEntry;
   readonly onSetQuantity: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
@@ -295,16 +460,13 @@ function renderDashboardActivity(
   context: TrainingActivityRenderContext,
   options: DashboardActivityRenderOptions,
 ) {
-  const { activity, parentActivity, depth, index, isLeaf, children } = context;
+  const { activity, parentActivity } = context;
   const { entry, onSetQuantity, onClearQuantity, onSetActivityNote } = options;
   const activityUnits = getEditableTrainingQuantityUnits(entry, activity, parentActivity);
-  const hasNotes = activity.notes !== undefined && activity.notes.length > 0;
   const activityNoteEditor =
     activity.allowsSessionNotes === true ? (
       <ActivityNotesEditor entry={entry} activity={activity} onSet={onSetActivityNote} />
     ) : null;
-  const activityDataAttributes = { 'data-activity-id': activity.id };
-  const headingId = `${entry.id}-${activity.id}`;
   const editors =
     activityUnits.length === 0 ? null : (
       <QuantityEditors
@@ -323,60 +485,7 @@ function renderDashboardActivity(
       </div>
     );
 
-  if (depth === 0) {
-    return (
-      <section className="training-section" aria-labelledby={headingId} {...activityDataAttributes}>
-        <div className="training-section-heading">
-          <span className="section-number" aria-hidden="true">
-            {index + 1}
-          </span>
-          <h3 id={headingId}>{activity.name}</h3>
-        </div>
-        {isLeaf || activityUnits.length > 0 || activityNoteEditor !== null ? (
-          <div className="training-step training-step--standalone">
-            {hasNotes ? <span className="step-description">{activity.notes}</span> : null}
-            {activityControls}
-          </div>
-        ) : hasNotes ? (
-          <p className="step-description">{activity.notes}</p>
-        ) : null}
-        {isLeaf ? null : <ol className="training-step-list">{children}</ol>}
-      </section>
-    );
-  }
-
-  if (isLeaf) {
-    return (
-      <li className="training-step" {...activityDataAttributes}>
-        <span className="step-number" aria-hidden="true">
-          {index + 1}
-        </span>
-        <div className="step-copy">
-          <span className="step-label">{activity.name}</span>
-          {hasNotes ? <span className="step-description">{activity.notes}</span> : null}
-        </div>
-        {activityControls}
-      </li>
-    );
-  }
-
-  return (
-    <li className="training-step training-step--nested-container" {...activityDataAttributes}>
-      <div className="training-nested-heading">
-        <span className="step-number" aria-hidden="true">
-          {index + 1}
-        </span>
-        <h4 id={headingId}>{activity.name}</h4>
-      </div>
-      {hasNotes || activityUnits.length > 0 || activityNoteEditor !== null ? (
-        <div className="training-step training-step--standalone">
-          {hasNotes ? <span className="step-description">{activity.notes}</span> : null}
-          {activityControls}
-        </div>
-      ) : null}
-      <ol className="training-step-list">{children}</ol>
-    </li>
-  );
+  return activityControls;
 }
 
 interface ActivityNotesEditorProps {
@@ -425,7 +534,7 @@ function ActivityNotesEditor({ entry, activity, onSet }: ActivityNotesEditorProp
           aria-describedby={hasSavedNote ? indicatorId : undefined}
           onClick={() => setIsOpen((open) => !open)}
         >
-          Any extra notes?
+          Any extra details?
         </button>
         {hasSavedNote ? (
           <span id={indicatorId} className="activity-notes-indicator">
