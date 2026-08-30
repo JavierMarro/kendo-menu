@@ -1,0 +1,8 @@
+- Session: route scroll copy footer
+- Date/duration: 2026-08-30; about 2 hours
+- Scope/start: Polished internal navigation scroll positions, repetitive landing copy, and the footer boundary without changing public routes or page layouts.
+- Changes: Added centralized path/hash/query/history scroll handling and same-route logo behavior; reduced eligible landing “menu” uses from 13 to 4; added a subtly darker semantic footer surface.
+- Decisions: Used per-location snapshots at React’s guaranteed pre-commit boundary; preserved hash targets, query-dialog position, and Back/Forward restoration; left domain, persistence, dependencies, and routes unchanged.
+- Roadblocks: Native SPA restoration clamped a saved landing position and an early path reset moved query dialogs to the top; focused Playwright regressions exposed both before final review.
+- Verification: `pnpm verify:full` passed: domain 41/41, store 49/49, web 80/80, build, and Chromium/mobile Playwright 108/108; focused navigation tests passed 8/8 per project.
+- Follow-up: None.

@@ -86,6 +86,20 @@ function openAllDetails(container: HTMLElement): void {
   }
 }
 
+function countStandaloneLandingMenuWords(): number {
+  const landing = document.querySelector('.main-content--landing');
+  if (!(landing instanceof HTMLElement)) {
+    throw new Error('Expected the landing page main content.');
+  }
+
+  const copy = landing.cloneNode(true);
+  if (!(copy instanceof HTMLElement)) {
+    throw new Error('Expected to clone the landing page content.');
+  }
+  const text = (copy.textContent ?? '').replace(/KendoMenu/gi, '');
+  return text.match(/\bmenu\b/gi)?.length ?? 0;
+}
+
 describe('KendoMenu application flows', () => {
   it('formats count, fixed-duration, and range quantities without changing units', () => {
     expect(formatTrainingQuantity({ unit: 'repetitions', value: 5 })).toBe('5 repetitions');
@@ -213,6 +227,17 @@ describe('KendoMenu application flows', () => {
         level: 2,
       }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Browse a curated keiko menu or create your own training session from scratch.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /an Osaka police keiko menu, a high school routine, and a Kanoya University training sequence\./,
+      ),
+    ).toBeInTheDocument();
+    expect(countStandaloneLandingMenuWords()).toBe(4);
     expect(screen.getByRole('heading', { name: 'How it works', level: 2 })).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -276,7 +301,7 @@ describe('KendoMenu application flows', () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        /Choose a keiko menu, add it to your dashboard, then adjust its repetitions or duration/,
+        /Choose a practice plan, add it to your dashboard, then adjust its repetitions or duration/,
       ),
     ).toBeVisible();
 

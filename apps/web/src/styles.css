@@ -13,6 +13,7 @@
   -webkit-font-smoothing: antialiased;
   --canvas: #0b1b33;
   --surface-nav: #0b1b33;
+  --surface-footer: #08182e;
   --surface: #122743;
   --surface-raised: #193451;
   --surface-soft: #10233d;
@@ -477,7 +478,7 @@ a {
   padding: var(--space-6) clamp(var(--space-4), 4vw, var(--space-16)) var(--space-5);
   border-top: 1px solid var(--line);
   color: var(--muted);
-  background: var(--surface-nav);
+  background: var(--surface-footer);
 }
 
 .site-footer-grid {
@@ -569,7 +570,7 @@ a {
   z-index: 31;
   outline: 3px solid var(--focus);
   outline-offset: 3px;
-  background-color: var(--surface-nav);
+  background-color: var(--surface-footer);
 }
 
 .footer-nav-item,

@@ -6,6 +6,36 @@ async function dismissCookieNotice(page: Page): Promise<void> {
   await notice.getByRole('button', { name: 'Got it' }).click();
 }
 
+function parseRgb(color: string): readonly [number, number, number] {
+  const channels = color
+    .match(/[\d.]+/g)
+    ?.slice(0, 3)
+    .map(Number);
+  if (channels === undefined || channels.length !== 3) {
+    throw new Error(`Could not parse CSS colour ${color}.`);
+  }
+
+  const [red, green, blue] = channels;
+  if (red === undefined || green === undefined || blue === undefined) {
+    throw new Error(`CSS colour ${color} did not contain three channels.`);
+  }
+
+  return [red, green, blue];
+}
+
+function getRelativeLuminance(color: string): number {
+  const channels = parseRgb(color).map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  const [red, green, blue] = channels;
+  if (red === undefined || green === undefined || blue === undefined) {
+    throw new Error(`CSS colour ${color} could not be converted to luminance.`);
+  }
+
+  return red * 0.2126 + green * 0.7152 + blue * 0.0722;
+}
+
 async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): Promise<void> {
   await expect(footer.getByRole('link', { name: 'KendoMenu home' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'How it works' })).toBeVisible();
@@ -40,6 +70,15 @@ test.describe('responsive site footer', () => {
 
     const footer = page.getByRole('contentinfo', { name: 'Site footer' });
     await footer.scrollIntoViewIfNeeded();
+    const surfaces = await footer.evaluate((element) => ({
+      footer: getComputedStyle(element).backgroundColor,
+      canvas: getComputedStyle(document.documentElement).backgroundColor,
+    }));
+    const footerLuminance = getRelativeLuminance(surfaces.footer);
+    const canvasLuminance = getRelativeLuminance(surfaces.canvas);
+    expect(footerLuminance).toBeLessThan(canvasLuminance);
+    expect(canvasLuminance - footerLuminance).toBeLessThan(0.03);
+
     const grid = footer.locator('.site-footer-grid');
     const desktopLayout = await grid.evaluate((element) => {
       const columns = Array.from(element.querySelectorAll<HTMLElement>('.site-footer-column'));

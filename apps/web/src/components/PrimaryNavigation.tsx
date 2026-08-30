@@ -1,5 +1,5 @@
-import { useEffect, type MouseEventHandler, type ReactElement } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import type { MouseEventHandler, ReactElement } from 'react';
+import { Link } from 'react-router-dom';
 
 const primaryNavigationItems = [
   { id: 'how-it-works', label: 'How it works', to: '/app#how-it-works-title', showsCount: false },
@@ -19,15 +19,6 @@ export function PrimaryNavigationLinks({
   linkClassName,
   onNavigate,
 }: PrimaryNavigationLinksProps): ReactElement {
-  const location = useLocation();
-
-  useEffect(() => {
-    const targetId = location.hash.slice(1);
-    if (targetId.length > 0) {
-      document.getElementById(targetId)?.scrollIntoView({ block: 'start' });
-    }
-  }, [location.hash, location.pathname]);
-
   return (
     <>
       {primaryNavigationItems.map((item) => {
