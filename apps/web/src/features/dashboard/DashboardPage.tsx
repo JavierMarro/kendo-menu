@@ -53,6 +53,23 @@ function getQuantityDraftValue(
   return value === undefined || isTrainingQuantityRange(value) ? '' : String(value);
 }
 
+const MAX_QUANTITY_DIGITS = 3;
+
+function hasAllowedQuantityDraftLength(value: string): boolean {
+  if (value.includes('e') || value.includes('E') || value.includes('+')) {
+    return false;
+  }
+
+  let digitCount = 0;
+  for (const character of value) {
+    if (character >= '0' && character <= '9') {
+      digitCount += 1;
+    }
+  }
+
+  return digitCount <= MAX_QUANTITY_DIGITS;
+}
+
 export function DashboardPage() {
   const dashboardEntries = useTrainingStore((state) => state.dashboardEntries);
   const removeFromDashboard = useTrainingStore((state) => state.removeFromDashboard);
@@ -535,15 +552,12 @@ function renderDashboardActivity(
         onClear={onClearQuantity}
       />
     );
-  const activityControls =
-    editors === null && activityNoteEditor === null ? null : (
-      <div className="training-activity-controls">
-        {editors}
-        {activityNoteEditor}
-      </div>
-    );
-
-  return activityControls;
+  return editors === null && activityNoteEditor === null ? null : (
+    <>
+      {editors}
+      {activityNoteEditor}
+    </>
+  );
 }
 
 interface ActivityNotesEditorProps {
@@ -669,13 +683,18 @@ function QuantityEditor({ entry, activity, unit, onSet, onClear }: QuantityEdito
   const persistenceStatus = usePersistenceStatus();
   const inputId = `quantity-${unit}-${entry.id}-${activity.id}`;
   const messageId = `${inputId}-message`;
+  const limitHintId = `${inputId}-limit`;
   const unitLabel = formatQuantityUnit(unit, 2);
   const accessibleUnitLabel = `${unitLabel.charAt(0).toUpperCase()}${unitLabel.slice(1)}`;
   const defaultValue = getTrainingQuantityValue(activity, unit);
-  const placeholder =
+  const defaultHint =
     defaultValue !== undefined && isTrainingQuantityRange(defaultValue)
-      ? `${formatQuantityValue(defaultValue.min)}–${formatQuantityValue(defaultValue.max)}`
-      : 'Not specified';
+      ? ` Current suggested range: ${formatQuantityValue(defaultValue.min)}–${formatQuantityValue(
+          defaultValue.max,
+        )} ${unitLabel}.`
+      : defaultValue === undefined
+        ? ` ${accessibleUnitLabel} is not specified yet.`
+        : '';
   const feedbackMessage =
     feedback === 'invalid'
       ? getQuantityValidationMessage(unit)
@@ -736,11 +755,18 @@ function QuantityEditor({ entry, activity, unit, onSet, onClear }: QuantityEdito
           step={unit === 'minutes' || unit === 'seconds' ? 'any' : 1}
           inputMode={unit === 'minutes' || unit === 'seconds' ? 'decimal' : 'numeric'}
           value={draft}
-          placeholder={placeholder}
-          aria-describedby={feedbackMessage.length > 0 ? messageId : undefined}
+          placeholder="—"
+          aria-describedby={
+            feedbackMessage.length > 0 ? `${limitHintId} ${messageId}` : limitHintId
+          }
           aria-invalid={feedback === 'invalid'}
           onChange={(event) => {
-            setDraft(event.target.value);
+            const nextDraft = event.target.value;
+            if (!hasAllowedQuantityDraftLength(nextDraft)) {
+              return;
+            }
+
+            setDraft(nextDraft);
             setFeedback('idle');
           }}
           onKeyDown={(event) => {
@@ -752,6 +778,9 @@ function QuantityEditor({ entry, activity, unit, onSet, onClear }: QuantityEdito
         />
         <span aria-hidden="true">{unitLabel}</span>
       </div>
+      <span id={limitHintId} className="sr-only">
+        Enter no more than three digits.{defaultHint}
+      </span>
       {feedbackMessage.length > 0 ? (
         <span
           id={messageId}

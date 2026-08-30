@@ -9,11 +9,7 @@ import { BrandLockup } from './BrandLockup';
 import { PrimaryNavigationLinks } from './PrimaryNavigation';
 import { SiteFooter } from './SiteFooter';
 
-interface AppShellProps {
-  readonly libraryCount: number;
-}
-
-export function AppShell({ libraryCount }: AppShellProps) {
+export function AppShell() {
   const { mode, writeFailed } = usePersistenceStatus();
   const location = useLocation();
   const [openLocationKey, setOpenLocationKey] = useState<string | null>(null);
@@ -78,11 +74,7 @@ export function AppShell({ libraryCount }: AppShellProps) {
           className={isMenuOpen ? 'primary-nav is-open' : 'primary-nav'}
           aria-label="Primary navigation"
         >
-          <PrimaryNavigationLinks
-            libraryCount={libraryCount}
-            linkClassName="nav-item"
-            onNavigate={closeMenu}
-          />
+          <PrimaryNavigationLinks linkClassName="nav-item" onNavigate={closeMenu} />
         </nav>
       </header>
 
@@ -93,7 +85,7 @@ export function AppShell({ libraryCount }: AppShellProps) {
       >
         <Outlet />
       </main>
-      <SiteFooter libraryCount={libraryCount} onNavigate={closeMenu} />
+      <SiteFooter onNavigate={closeMenu} />
     </div>
   );
 }

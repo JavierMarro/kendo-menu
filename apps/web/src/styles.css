@@ -348,22 +348,20 @@ a {
 
 .nav-label {
   overflow-wrap: normal;
+  white-space: nowrap;
   word-break: normal;
 }
 
-.nav-count {
+.nav-label--wrappable {
   display: inline-flex;
-  min-width: 1.5rem;
-  min-height: 1.5rem;
-  align-items: center;
+  min-width: 0;
+  flex-wrap: wrap;
   justify-content: center;
-  padding: 0 var(--space-1);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--muted-strong);
-  font-size: var(--type-12);
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: normal;
+  column-gap: 0.35em;
+  white-space: normal;
+}
+
+.nav-label-word {
   white-space: nowrap;
 }
 
@@ -1735,12 +1733,6 @@ a {
   justify-self: end;
 }
 
-.detail-standalone-activity > .training-activity-controls,
-.training-step > .training-activity-controls,
-.detail-section-parent > .training-activity-controls {
-  justify-self: end;
-}
-
 .training-step.training-step--standalone {
   display: flex;
   align-items: center;
@@ -1920,22 +1912,20 @@ a {
 
 .quantity-editor-group {
   display: grid;
-  min-width: 11rem;
-  gap: var(--space-2);
-}
-
-.training-activity-controls {
-  display: grid;
-  width: min(100%, 20rem);
+  width: max-content;
+  max-width: 100%;
   min-width: 0;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  justify-items: end;
 }
 
 .quantity-editor {
   display: grid;
-  min-width: 11rem;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
   gap: var(--space-1);
-  justify-items: stretch;
+  justify-items: end;
 }
 
 .quantity-editor label {
@@ -1949,14 +1939,18 @@ a {
 
 .quantity-input-wrap {
   display: flex;
-  min-width: 11rem;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   padding-inline: var(--space-2);
   border: 1px solid var(--field-border);
   border-radius: var(--radius-sm);
   color: var(--muted);
   background: var(--surface);
+  font-size: var(--type-14);
+  line-height: 1.2;
 }
 
 .quantity-input-wrap:focus-within {
@@ -1966,8 +1960,9 @@ a {
 }
 
 .quantity-input-wrap input {
-  width: 100%;
-  min-width: 3rem;
+  width: 3.25ch;
+  min-width: 3.25ch;
+  max-width: 3.25ch;
   min-height: 2.75rem;
   padding: 0;
   border: 0;
@@ -1975,6 +1970,76 @@ a {
   color: var(--text);
   background: transparent;
   font-variant-numeric: tabular-nums;
+}
+
+.dashboard-card--expanded .detail-standalone-activity,
+.dashboard-card--expanded .training-step:not(.training-step--nested-container) {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.dashboard-card--expanded .detail-standalone-activity > .quantity-editor-group,
+.dashboard-card--expanded
+  .training-step:not(.training-step--nested-container)
+  > .quantity-editor-group {
+  grid-row: 1;
+  grid-column: 3;
+  align-self: start;
+  justify-self: end;
+}
+
+.dashboard-card--expanded .detail-standalone-activity > .activity-notes-editor,
+.dashboard-card--expanded
+  .training-step:not(.training-step--nested-container)
+  > .activity-notes-editor {
+  grid-row: 2;
+  grid-column: 2 / -1;
+  justify-self: start;
+}
+
+.dashboard-card--expanded .detail-section--has-aside[open] {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.dashboard-card--expanded .detail-section--has-aside[open] > .detail-section-summary {
+  min-width: min-content;
+  flex: 1 1 12rem;
+}
+
+.dashboard-card--expanded .detail-section--has-aside[open] > .detail-section-parent {
+  display: contents;
+}
+
+.dashboard-card--expanded
+  .detail-section--has-aside[open]
+  > .detail-section-parent
+  > .quantity-editor-group {
+  align-self: center;
+  flex: 0 0 auto;
+  margin: var(--space-2) var(--space-4) var(--space-2) auto;
+}
+
+.dashboard-card--expanded
+  .detail-section--has-aside[open]
+  > .detail-section-parent
+  > .step-description {
+  flex: 1 0 100%;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.dashboard-card--expanded
+  .detail-section--has-aside[open]
+  > .detail-section-parent
+  > .activity-notes-editor {
+  flex: 0 1 20rem;
+  margin: var(--space-3) var(--space-4);
+}
+
+.dashboard-card--expanded .detail-section--has-aside[open] > .training-step-list {
+  flex: 1 0 100%;
 }
 
 .quantity-input-wrap > span {
@@ -2823,7 +2888,9 @@ textarea[aria-invalid='true'] {
     grid-area: nav;
     width: 100%;
     flex: none;
-    justify-content: stretch;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 0;
     margin: 0;
     padding-top: var(--space-1);
     border-top: 1px solid var(--line);
@@ -2834,15 +2901,25 @@ textarea[aria-invalid='true'] {
   }
 
   .nav-item {
-    min-width: min-content;
-    flex: 1 1 auto;
-    padding-inline: var(--space-1);
+    min-width: 0;
+    flex: 0 0 auto;
+    padding-block: var(--space-1);
+    padding-inline: clamp(0.0625rem, 0.5vw, 0.125rem);
     font-size: var(--type-12);
-    letter-spacing: 0.03em;
-    white-space: normal;
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+
+  .nav-item:has(.nav-label--wrappable) {
+    min-width: min-content;
+    flex: 0 1 auto;
   }
 
   .nav-label {
+    white-space: nowrap;
+  }
+
+  .nav-label--wrappable {
     white-space: normal;
   }
 
@@ -3073,7 +3150,6 @@ textarea[aria-invalid='true'] {
   .training-step .quantity-list,
   .training-step .quantity-not-specified,
   .training-step .activity-notes-editor,
-  .training-step .training-activity-controls,
   .builder-step > .text-button {
     grid-column: 2;
   }
@@ -3085,19 +3161,8 @@ textarea[aria-invalid='true'] {
     text-align: left;
   }
 
-  .quantity-editor-group,
-  .quantity-editor,
-  .quantity-input-wrap {
-    width: min(100%, 16rem);
-  }
-
   .training-step .activity-notes-editor {
     width: min(100%, 20rem);
-  }
-
-  .detail-section-parent > .training-activity-controls {
-    grid-column: 2;
-    justify-self: stretch;
   }
 
   .training-step .quantity-list {
@@ -3230,18 +3295,8 @@ textarea[aria-invalid='true'] {
     align-items: start;
   }
 
-  .detail-standalone-activity > .training-activity-controls {
-    grid-column: 2;
-    justify-self: stretch;
-  }
-
   .detail-section-parent {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .detail-section-parent > .training-activity-controls {
-    grid-column: 1;
-    justify-self: stretch;
   }
 
   .detail-section-parent > .quantity-list,
@@ -3267,10 +3322,6 @@ textarea[aria-invalid='true'] {
   .nav-item {
     gap: var(--space-1);
     padding-inline: var(--space-1);
-  }
-
-  .nav-count {
-    min-width: 1.25rem;
   }
 
   .dashboard-card,
@@ -3318,10 +3369,6 @@ textarea[aria-invalid='true'] {
     justify-self: start;
     justify-content: flex-start;
     text-align: left;
-  }
-
-  .detail-standalone-activity > .training-activity-controls {
-    grid-column: 2;
   }
 
   .detail-section > .training-step-list {

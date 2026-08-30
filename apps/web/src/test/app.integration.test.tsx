@@ -391,6 +391,8 @@ describe('KendoMenu application flows', () => {
         name: /Keiko library/,
       }),
     ).toBeVisible();
+    expect(document.querySelector('.nav-count')).toBeNull();
+    expect(document.querySelectorAll('.nav-label--wrappable .nav-label-word')).toHaveLength(4);
   });
 
   it('opens and closes the responsive navigation accessibly', async () => {
@@ -1304,6 +1306,15 @@ describe('KendoMenu application flows', () => {
       expect(repetitions).toHaveValue(500);
       expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
         [OFFICIAL_ZNKR_MEN_ID]: { repetitions: 500 },
+      });
+
+      await user.clear(repetitions);
+      await user.type(repetitions, '1234');
+      expect(repetitions).toHaveValue(123);
+      expect(repetitions).toHaveAccessibleDescription(/^Enter no more than three digits\./);
+      await user.tab();
+      expect(store.getState().dashboardEntries[0]?.quantityOverrides).toEqual({
+        [OFFICIAL_ZNKR_MEN_ID]: { repetitions: 123 },
       });
     },
     DASHBOARD_EDITOR_TEST_TIMEOUT,

@@ -1,0 +1,8 @@
+- Session: mobile nav dashboard layout
+- Date/duration: 2026-08-30; about 45 minutes
+- Scope/start: Finished the focused mobile navigation and expanded-dashboard row refinements after the earlier responsive polish.
+- Changes: Removed navigation counts, constrained the Library label to whole-word wrapping, aligned compact quantity controls with titles, placed eligible note toggles below, and capped controlled drafts at three digits.
+- Decisions: Used intrinsic flex/grid sizing and direct activity control siblings; retained existing domain minimum/maximum validation, autosave, note state, and explicit-save behavior.
+- Roadblocks: The in-app Browser had no connected backend; the repository Playwright harness supplied browser and geometry verification.
+- Verification: `pnpm check:web` passed (web 86/86 and build; two existing Fast Refresh warnings); accessibility 36/36, activity-notes 8/8, recursive 6/6, and complex-session 4/4 E2E passed across Chromium and mobile Chrome.
+- Follow-up: None.

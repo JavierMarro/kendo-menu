@@ -211,9 +211,7 @@ test.describe('accessibility and responsive layout', () => {
     await expectNoBlockingAxeViolations(page);
   });
 
-  test('keeps navigation labels and counts intact without horizontal overflow', async ({
-    page,
-  }) => {
+  test('keeps all primary navigation links in one row with intact labels', async ({ page }) => {
     for (const width of [320, 375, 393, 800, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/app');
@@ -224,14 +222,24 @@ test.describe('accessibility and responsive layout', () => {
         await expect(page.locator('.brand-name')).toBeVisible();
       }
 
-      const libraryLink = page
-        .getByRole('navigation', { name: 'Primary navigation' })
-        .getByRole('link', { name: /Keiko library/ });
-      const navMetrics = await libraryLink.evaluate((element) => {
-        const label = element.querySelector('.nav-label');
-        const count = element.querySelector('.nav-count');
-        if (!(label instanceof HTMLElement) || !(count instanceof HTMLElement)) {
-          throw new Error('The library navigation item is incomplete.');
+      const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
+      const links = navigation.getByRole('link');
+      await expect(links).toHaveCount(4);
+      await expect(page.locator('.nav-count')).toHaveCount(0);
+
+      const navMetrics = await navigation.evaluate((element) => {
+        const navigationRect = element.getBoundingClientRect();
+        const linkElements = [...element.querySelectorAll<HTMLElement>(':scope > .nav-item')];
+        const linkRects = linkElements.map((link) => link.getBoundingClientRect());
+        const libraryLabel = element.querySelector<HTMLElement>('.nav-label--wrappable');
+        const libraryWords = [
+          ...element.querySelectorAll<HTMLElement>('.nav-label--wrappable .nav-label-word'),
+        ];
+        const fixedLabels = [
+          ...element.querySelectorAll<HTMLElement>('.nav-label:not(.nav-label--wrappable)'),
+        ];
+        if (libraryLabel === null || libraryWords.length !== 2 || linkRects.length !== 4) {
+          throw new Error('The primary navigation label structure is incomplete.');
         }
 
         const textLineCount = (target: HTMLElement) => {
@@ -240,25 +248,55 @@ test.describe('accessibility and responsive layout', () => {
           return [...range.getClientRects()].filter(({ width, height }) => width > 0 && height > 0)
             .length;
         };
+        const wordRects = libraryWords.map((word) => word.getBoundingClientRect());
+        const libraryLineTops = new Set(wordRects.map(({ top }) => Math.round(top)));
 
         return {
-          linkOverflows: element.scrollWidth > element.clientWidth,
-          labelLineCount: textLineCount(label),
-          countLineCount: textLineCount(count),
-          countOverflows: count.scrollWidth > count.clientWidth,
-          labelOverflowWrap: getComputedStyle(label).overflowWrap,
-          countWhiteSpace: getComputedStyle(count).whiteSpace,
+          navigationClientWidth: element.clientWidth,
+          navigationScrollWidth: element.scrollWidth,
+          overflowingLink: linkElements
+            .map((link) => ({
+              label: link.textContent?.trim() ?? '',
+              clientWidth: link.clientWidth,
+              scrollWidth: link.scrollWidth,
+            }))
+            .find(({ clientWidth, scrollWidth }) => scrollWidth > clientWidth),
+          linksInsideNavigation: linkRects.every(
+            ({ left, right }) =>
+              left >= navigationRect.left - 1 && right <= navigationRect.right + 1,
+          ),
+          linksShareRow:
+            Math.max(...linkRects.map(({ top }) => top)) -
+              Math.min(...linkRects.map(({ top }) => top)) <=
+            1,
+          linksDoNotOverlap: linkRects.slice(1).every(({ left }, index) => {
+            const previousRect = linkRects[index];
+            return previousRect !== undefined && left >= previousRect.right - 1;
+          }),
+          touchTargetsAreUsable: linkRects.every(
+            ({ width, height }) => width >= 24 && height >= 44,
+          ),
+          fixedLabelLineCounts: fixedLabels.map(textLineCount),
+          libraryLineCount: libraryLineTops.size,
+          libraryWordLineCounts: libraryWords.map(textLineCount),
+          libraryWordWhiteSpace: libraryWords.map((word) => getComputedStyle(word).whiteSpace),
+          libraryOverflowWrap: getComputedStyle(libraryLabel).overflowWrap,
         };
       });
-      expect(navMetrics.linkOverflows, `library nav overflow at ${width}px`).toBe(false);
       expect(
-        navMetrics.labelLineCount,
-        `library nav label lines at ${width}px`,
-      ).toBeLessThanOrEqual(2);
-      expect(navMetrics.countLineCount, `library count lines at ${width}px`).toBe(1);
-      expect(navMetrics.countOverflows, `library count overflow at ${width}px`).toBe(false);
-      expect(navMetrics.labelOverflowWrap).toBe('normal');
-      expect(navMetrics.countWhiteSpace).toBe('nowrap');
+        navMetrics.navigationScrollWidth,
+        `navigation overflow at ${width}px`,
+      ).toBeLessThanOrEqual(navMetrics.navigationClientWidth);
+      expect(navMetrics.overflowingLink, `navigation link overflow at ${width}px`).toBeUndefined();
+      expect(navMetrics.linksInsideNavigation, `navigation bounds at ${width}px`).toBe(true);
+      expect(navMetrics.linksShareRow, `navigation row at ${width}px`).toBe(true);
+      expect(navMetrics.linksDoNotOverlap, `navigation link overlap at ${width}px`).toBe(true);
+      expect(navMetrics.touchTargetsAreUsable, `navigation touch targets at ${width}px`).toBe(true);
+      expect(navMetrics.fixedLabelLineCounts).toEqual([1, 1, 1]);
+      expect(navMetrics.libraryLineCount).toBeLessThanOrEqual(2);
+      expect(navMetrics.libraryWordLineCounts).toEqual([1, 1]);
+      expect(navMetrics.libraryWordWhiteSpace).toEqual(['nowrap', 'nowrap']);
+      expect(navMetrics.libraryOverflowWrap).toBe('normal');
 
       const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(scrollWidth, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(width);

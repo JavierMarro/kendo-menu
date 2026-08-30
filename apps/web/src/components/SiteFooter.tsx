@@ -5,11 +5,10 @@ import { PrimaryNavigationLinks } from './PrimaryNavigation';
 import { Link } from 'react-router-dom';
 
 interface SiteFooterProps {
-  readonly libraryCount: number;
   readonly onNavigate?: MouseEventHandler<HTMLAnchorElement> | undefined;
 }
 
-export function SiteFooter({ libraryCount, onNavigate }: SiteFooterProps): ReactElement {
+export function SiteFooter({ onNavigate }: SiteFooterProps): ReactElement {
   return (
     <footer className="site-footer" aria-label="Site footer">
       <div className="site-footer-grid">
@@ -24,11 +23,7 @@ export function SiteFooter({ libraryCount, onNavigate }: SiteFooterProps): React
         <section className="site-footer-column" aria-labelledby="footer-navigation-title">
           <h2 id="footer-navigation-title">Navigation</h2>
           <nav className="footer-nav" aria-labelledby="footer-navigation-title">
-            <PrimaryNavigationLinks
-              libraryCount={libraryCount}
-              linkClassName="footer-nav-item"
-              onNavigate={onNavigate}
-            />
+            <PrimaryNavigationLinks linkClassName="footer-nav-item" onNavigate={onNavigate} />
           </nav>
         </section>
 
