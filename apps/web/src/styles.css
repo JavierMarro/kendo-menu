@@ -724,6 +724,7 @@ body:has(.cookie-notice) .install-promo {
 .install-footer-link {
   appearance: none;
   border: 0;
+  background: transparent;
   font: inherit;
   text-align: left;
 }
