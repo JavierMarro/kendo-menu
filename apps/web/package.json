@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
-    "test:e2e": "playwright test --config playwright.config.ts"
+    "test:e2e": "playwright test --config playwright.config.ts",
+    "test:e2e:pwa": "playwright test pwa.spec.ts --config playwright.pwa.config.ts"
   },
   "dependencies": {
     "@kendo-menu/domain": "workspace:*",
@@ -33,6 +34,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^24.0.0",
     "jsdom": "^26.1.0",
+    "vite-plugin-pwa": "^1.3.0",
     "vitest": "^4.1.11"
   }
 }

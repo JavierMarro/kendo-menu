@@ -26,6 +26,7 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-08-31 — PWA installation](./2026-08-31-pwa-installation.md)
 - [2026-08-31 — dashboard save characterization](./2026-08-31-dashboard-save-characterization.md)
 - [2026-08-30 — GoatCounter analytics](./2026-08-30-goatcounter-analytics.md)
 - [2026-08-30 — mobile nav and dashboard layout](./2026-08-30-mobile-nav-dashboard-layout.md)

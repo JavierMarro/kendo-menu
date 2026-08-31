@@ -1,5 +1,6 @@
 import type { MouseEventHandler, ReactElement } from 'react';
 
+import { useInstallExperience } from '../features/install/install-context';
 import { BrandLockup } from './BrandLockup';
 import { PrimaryNavigationLinks } from './PrimaryNavigation';
 import { Link } from 'react-router-dom';
@@ -9,6 +10,9 @@ interface SiteFooterProps {
 }
 
 export function SiteFooter({ onNavigate }: SiteFooterProps): ReactElement {
+  const { isInstallActionAvailable, openInstallExperience, registerInstallAction } =
+    useInstallExperience();
+
   return (
     <footer className="site-footer" aria-label="Site footer">
       <div className="site-footer-grid">
@@ -36,6 +40,16 @@ export function SiteFooter({ onNavigate }: SiteFooterProps): ReactElement {
             <Link className="footer-social-link" to="/cookies">
               Cookies
             </Link>
+            {isInstallActionAvailable ? (
+              <button
+                ref={registerInstallAction}
+                className="footer-social-link install-footer-link"
+                type="button"
+                onClick={(event) => openInstallExperience(event.currentTarget)}
+              >
+                Install KendoMenu
+              </button>
+            ) : null}
           </nav>
         </section>
       </div>

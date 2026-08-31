@@ -21,6 +21,7 @@
     "check:store": "pnpm --filter @kendo-menu/store typecheck && pnpm --filter @kendo-menu/store lint && pnpm --filter @kendo-menu/store test",
     "check:web": "pnpm --filter @kendo-menu/web typecheck && pnpm --filter @kendo-menu/web lint && pnpm --filter @kendo-menu/web test && pnpm --filter @kendo-menu/web build",
     "test:e2e": "pnpm --filter @kendo-menu/web test:e2e",
+    "test:e2e:pwa": "pnpm --filter @kendo-menu/web test:e2e:pwa",
     "test:e2e:chromium": "pnpm --filter @kendo-menu/web exec playwright test --config playwright.config.ts --project=chromium",
     "test:e2e:mobile": "pnpm --filter @kendo-menu/web exec playwright test --config playwright.config.ts --project=mobile-chrome",
     "test:e2e:a11y": "pnpm --filter @kendo-menu/web exec playwright test accessibility.spec.ts --config playwright.config.ts --project=chromium --project=mobile-chrome",

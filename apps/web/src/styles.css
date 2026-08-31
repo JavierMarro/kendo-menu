@@ -629,6 +629,154 @@ a {
   pointer-events: auto;
 }
 
+.install-promo {
+  position: fixed;
+  z-index: 35;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-5);
+  align-items: center;
+  width: min(40rem, calc(100vw - var(--space-8)));
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid rgba(200, 155, 60, 0.72);
+  border-radius: var(--radius-lg);
+  color: var(--muted-strong);
+  background: var(--surface-raised);
+  box-shadow: 0 1rem 3rem rgba(3, 10, 22, 0.42);
+}
+
+body:has(.cookie-notice) .install-promo {
+  bottom: calc(var(--space-4) + 6.5rem);
+}
+
+.install-promo-copy {
+  min-width: 0;
+}
+
+.install-promo-copy .eyebrow {
+  margin-bottom: var(--space-2);
+}
+
+.install-promo-copy h2 {
+  font-size: var(--type-18);
+}
+
+.install-promo-copy p:last-child {
+  max-width: 48ch;
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--type-14);
+  line-height: 1.5;
+}
+
+.install-promo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: var(--space-8);
+}
+
+.install-promo-actions .text-button {
+  white-space: nowrap;
+}
+
+.install-promo-dismiss {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  display: inline-flex;
+  width: 2.75rem;
+  height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--muted-strong);
+  background: transparent;
+  font-size: var(--type-22);
+  line-height: 1;
+  transition:
+    color 160ms ease-out,
+    border-color 160ms ease-out,
+    background-color 160ms ease-out;
+}
+
+.install-promo-dismiss:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+  background: var(--surface-soft);
+}
+
+.install-promo-dismiss svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.install-footer-link {
+  appearance: none;
+  border: 0;
+  font: inherit;
+  text-align: left;
+}
+
+.install-dialog-content {
+  width: min(100%, 38rem);
+  margin-inline: auto;
+  padding-top: var(--space-2);
+}
+
+.install-dialog-content h2 {
+  font-size: clamp(var(--type-22), 4vw, var(--type-28));
+}
+
+.install-dialog-intro {
+  max-width: 56ch;
+  margin: var(--space-3) 0 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.install-instructions {
+  margin-top: var(--space-7);
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.install-instructions h3 {
+  font-size: var(--type-16);
+}
+
+.install-instructions-note {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--type-14);
+  line-height: 1.5;
+}
+
+.install-instructions ol {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 0;
+  padding-left: var(--space-6);
+  color: var(--muted-strong);
+}
+
+.install-instructions li {
+  padding-left: var(--space-1);
+  line-height: 1.6;
+}
+
 .landing-page {
   display: flex;
   min-height: calc(100vh - var(--header-height));
@@ -2842,6 +2990,15 @@ textarea[aria-invalid='true'] {
     transform: none;
   }
 
+  .install-promo {
+    left: var(--space-4);
+    width: auto;
+  }
+
+  body:has(.cookie-notice) .install-promo {
+    bottom: calc(var(--space-4) + 8rem);
+  }
+
   .brand-name {
     display: none;
   }
@@ -2986,6 +3143,31 @@ textarea[aria-invalid='true'] {
 
   .cookie-notice-dismiss {
     width: 100%;
+  }
+
+  .install-promo {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-5);
+  }
+
+  body:has(.cookie-notice) .install-promo {
+    bottom: calc(var(--space-4) + 11rem);
+  }
+
+  .install-promo-actions {
+    align-items: stretch;
+    justify-content: stretch;
+    padding-right: var(--space-8);
+  }
+
+  .install-promo-actions .primary-button,
+  .install-promo-actions .text-button {
+    flex: 1 1 10rem;
+  }
+
+  .install-instructions {
+    padding: var(--space-4);
   }
 
   .landing-page {
@@ -3209,6 +3391,16 @@ textarea[aria-invalid='true'] {
 }
 
 @media (max-width: 640px) {
+  .install-promo-actions {
+    flex-direction: column;
+  }
+
+  .install-promo-actions .primary-button,
+  .install-promo-actions .text-button {
+    width: 100%;
+    flex: 0 0 auto;
+  }
+
   .empty-state--dashboard {
     min-height: 0;
     padding: var(--space-8) var(--space-4);
