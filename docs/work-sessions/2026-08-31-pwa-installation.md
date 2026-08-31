@@ -1,0 +1,8 @@
+- Session: pwa installation
+- Date/duration: 2026-08-31; about 45 minutes
+- Scope/start: Added a production-ready install and offline experience to the clean web baseline while preserving local-first storage and GoatCounter isolation.
+- Changes: Added vite-plugin-pwa 1.3 generated service worker/manifest/SPA fallback, logo-derived icons and metadata, typed accessible install UI/fallbacks, and production-preview PWA tests.
+- Decisions: Kept root deployment paths to match existing routes; prompt-based updates never auto-reload; service-worker caches remain independent of LocalStorage and external analytics; no provider files were added.
+- Roadblocks: Preview-server binding required sandbox permission; the incomplete offline pnpm cache required an approved lockfile-based dependency restore.
+- Verification: `pnpm check:web` passed 103/103; `pnpm test:e2e:pwa` passed 3/3; `pnpm check` passed domain 60/60, store 54/54, web 103/103, and a 12-entry PWA build.
+- Follow-up: Production must use HTTPS and serve the SPA entry point for supported client routes; no hosting provider is configured.

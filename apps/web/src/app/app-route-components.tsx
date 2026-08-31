@@ -9,6 +9,7 @@ import {
 
 import { AppShell } from '../components/AppShell';
 import { CookieNotice } from '../components/CookieNotice';
+import { InstallExperienceProvider } from '../features/install/InstallExperience';
 import { NotFoundPage } from '../features/not-found/NotFoundPage';
 
 const routeTitles: Readonly<Record<string, string>> = {
@@ -170,11 +171,11 @@ function RouteFocusAndTitle(): ReactElement {
 
 export function RouteRoot() {
   return (
-    <>
+    <InstallExperienceProvider>
       <RouteFocusAndTitle />
       <Outlet />
       <CookieNotice />
-    </>
+    </InstallExperienceProvider>
   );
 }
 

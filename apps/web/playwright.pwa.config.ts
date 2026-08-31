@@ -1,14 +1,16 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const previewPort = 4174;
+const previewUrl = `http://127.0.0.1:${previewPort}`;
+
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: '**/pwa.spec.ts',
-  fullyParallel: true,
+  fullyParallel: false,
   forbidOnly: Boolean(process.env['CI']),
   retries: process.env['CI'] === undefined ? 0 : 2,
   reporter: 'list',
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: previewUrl,
     launchOptions: {
       args: [
         '--host-resolver-rules=MAP gc.zgo.at ~NOTFOUND,MAP javiermarro.goatcounter.com ~NOTFOUND',
@@ -17,14 +19,11 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
-  projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'mobile-chrome', use: { ...devices['Pixel 5'] } },
-  ],
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: 'pnpm exec vite --host 127.0.0.1 --port 4173',
-    url: 'http://127.0.0.1:4173',
-    reuseExistingServer: process.env['CI'] === undefined,
+    command: `pnpm build && pnpm preview --host 127.0.0.1 --port ${previewPort}`,
+    url: previewUrl,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });
