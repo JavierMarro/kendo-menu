@@ -1,4 +1,6 @@
 export { DEFAULT_TRAINING_SETS } from './default-training-sets';
+export { getTrainingQuantityPolicy } from './training-quantity-policy';
+export type { TrainingQuantityPolicy } from './training-quantity-policy';
 export {
   DURATION_UNITS,
   MAX_REPETITIONS,

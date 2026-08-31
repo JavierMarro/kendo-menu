@@ -607,6 +607,26 @@ test.describe('routed training flows', () => {
     await expect(viewDrill).toBeFocused();
   });
 
+  test('returns focus to the dashboard card that launched its dialog', async ({ page }) => {
+    await addCuratedSessionToDashboard(
+      page,
+      'international-dojo-2-hour-session',
+      'International dojo menu',
+    );
+    await page.goto('/app/dashboard');
+
+    const card = dashboardCard(page, 'International dojo menu');
+    const viewMore = card.getByRole('button', { name: 'View more' });
+    await viewMore.click();
+
+    const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Close International dojo menu details.' }).click();
+
+    await expect(dialog).toHaveCount(0);
+    await expect(viewMore).toBeFocused();
+  });
+
   test('removes non-essential drill-dialog motion when reduced motion is requested', async ({
     page,
   }) => {
@@ -728,6 +748,60 @@ test.describe('routed training flows', () => {
     );
     await page.getByRole('button', { name: 'Undo' }).click();
     await expect(page.getByRole('heading', { name: 'Junior-high school dojo menu' })).toBeVisible();
+  });
+
+  test('blocks explicit Save success for an invalid quantity and keeps the persisted value', async ({
+    page,
+  }) => {
+    await addCuratedSessionToDashboard(
+      page,
+      'junior-high-kendo-club',
+      'Junior-high school dojo menu',
+    );
+    await page.goto('/app/dashboard');
+
+    let dashboardDialog = await openDashboardMenu(page, 'Junior-high school dojo menu');
+    await openNestedDetails(
+      dashboardDialog.locator(`[data-activity-id="${JUNIOR_HIGH_SUBURI_ID}"]`),
+    );
+
+    const repetitions = dashboardDialog.getByLabel('Repetitions for Haya');
+    const validationMessage = dashboardDialog.getByText('Enter a whole number from 0 to 500.');
+    const savedMessage = dashboardDialog.getByText('Changes saved on this device.');
+    await expect(repetitions).toHaveValue('100');
+    const persistedBeforeInvalidEdit = await page.evaluate(
+      (key) => window.localStorage.getItem(key),
+      STORAGE_KEY,
+    );
+
+    await repetitions.fill('501');
+    await repetitions.blur();
+
+    await expect(repetitions).toHaveAttribute('aria-invalid', 'true');
+    await expect(validationMessage).toBeVisible();
+    expect(
+      await repetitions.evaluate(
+        (element) => element instanceof HTMLInputElement && element.validity.valid,
+      ),
+    ).toBe(false);
+
+    await dashboardDialog.getByRole('button', { name: 'Save your changes' }).click();
+
+    await expect(repetitions).toBeFocused();
+    await expect(repetitions).toHaveAttribute('aria-invalid', 'true');
+    await expect(validationMessage).toBeVisible();
+    await expect(savedMessage).toHaveCount(0);
+    expect(await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY)).toBe(
+      persistedBeforeInvalidEdit,
+    );
+
+    await page.reload();
+    dashboardDialog = await openDashboardMenu(page, 'Junior-high school dojo menu');
+    await openNestedDetails(
+      dashboardDialog.locator(`[data-activity-id="${JUNIOR_HIGH_SUBURI_ID}"]`),
+    );
+    await expect(dashboardDialog.getByLabel('Repetitions for Haya')).toHaveValue('100');
+    await expect(dashboardDialog.getByText('Changes saved on this device.')).toHaveCount(0);
   });
 
   test('persists standalone minute and second overrides without changing their units', async ({

@@ -16,11 +16,13 @@ import { isCustomTrainingIntensity } from '@kendo-menu/domain';
 import {
   builderReducer,
   createInitialBuilderState,
-  toTrainingSetInput,
-  validateBuilderState,
+  parseBuilderState,
+  type BuilderErrors,
 } from './builder-state';
 import { useTrainingStore } from '../../lib/training-store-context';
 import { useDataRouterMode } from '../../lib/router-context';
+
+const EMPTY_BUILDER_ERRORS: BuilderErrors = {};
 
 function getErrorTargetId(key: string): string {
   if (key === 'name') {
@@ -76,7 +78,8 @@ export function CreateDrillPage() {
   const createCustomTrainingSet = useTrainingStore(
     (store) => store.createCustomTrainingSetAndAddToDashboard,
   );
-  const errors = useMemo(() => validateBuilderState(state), [state]);
+  const parseResult = useMemo(() => parseBuilderState(state), [state]);
+  const errors: BuilderErrors = parseResult.success ? EMPTY_BUILDER_ERRORS : parseResult.errors;
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -139,12 +142,12 @@ export function CreateDrillPage() {
     setSubmitRequest((request) => request + 1);
     setSubmitError('');
 
-    if (Object.keys(errors).length > 0) {
+    if (!parseResult.success) {
       return;
     }
 
     try {
-      const input = toTrainingSetInput(state);
+      const input = parseResult.value;
       createCustomTrainingSet(input);
       isDirtyRef.current = false;
       setIsDirty(false);

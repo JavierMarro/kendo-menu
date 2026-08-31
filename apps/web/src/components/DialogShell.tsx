@@ -1,15 +1,11 @@
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
-import type { TrainingSet } from '@kendo-menu/domain';
-
-import { DrillDetailContent } from './DrillDetailContent';
-
-interface DrillDetailDialogProps {
-  readonly children?: ReactNode;
+interface DialogShellProps {
+  readonly children: ReactNode;
+  readonly closeLabel: string;
   readonly onClose: () => void;
-  readonly titleId?: string;
-  readonly trainingSet: TrainingSet;
+  readonly titleId: string;
 }
 
 const FOCUSABLE_SELECTOR = [
@@ -21,15 +17,6 @@ const FOCUSABLE_SELECTOR = [
   'summary',
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
-
-function getFocusableElements(dialog: HTMLElement): readonly HTMLElement[] {
-  return [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)]
-    .filter(
-      (element) =>
-        element.getAttribute('aria-hidden') !== 'true' && element.closest('[hidden]') === null,
-    )
-    .filter((element) => !isHiddenByClosedDetails(element));
-}
 
 function isHiddenByClosedDetails(element: HTMLElement): boolean {
   let ancestor = element.parentElement;
@@ -46,6 +33,15 @@ function isHiddenByClosedDetails(element: HTMLElement): boolean {
   return false;
 }
 
+function getFocusableElements(dialog: HTMLElement): readonly HTMLElement[] {
+  return [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)]
+    .filter(
+      (element) =>
+        element.getAttribute('aria-hidden') !== 'true' && element.closest('[hidden]') === null,
+    )
+    .filter((element) => !isHiddenByClosedDetails(element));
+}
+
 function restoreAttribute(element: HTMLElement, name: string, previousValue: string | null): void {
   if (previousValue === null) {
     element.removeAttribute(name);
@@ -55,16 +51,9 @@ function restoreAttribute(element: HTMLElement, name: string, previousValue: str
   element.setAttribute(name, previousValue);
 }
 
-export function DrillDetailDialog({
-  children,
-  onClose,
-  titleId,
-  trainingSet,
-}: DrillDetailDialogProps) {
+export function DialogShell({ children, closeLabel, onClose, titleId }: DialogShellProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const dialogTitleId = titleId ?? `drill-dialog-title-${trainingSet.id}`;
-  const closeLabel = `Close ${trainingSet.name} details.`;
 
   useEffect(() => {
     const applicationRoot =
@@ -88,7 +77,7 @@ export function DrillDetailDialog({
     };
   }, []);
 
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
@@ -140,7 +129,7 @@ export function DrillDetailDialog({
         className="drill-dialog-panel"
         role="dialog"
         aria-modal="true"
-        aria-labelledby={dialogTitleId}
+        aria-labelledby={titleId}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
       >
@@ -157,9 +146,7 @@ export function DrillDetailDialog({
             </svg>
           </button>
         </div>
-        <div className="drill-dialog-scroll">
-          {children ?? <DrillDetailContent titleId={dialogTitleId} trainingSet={trainingSet} />}
-        </div>
+        <div className="drill-dialog-scroll">{children}</div>
       </div>
     </div>,
     document.body,

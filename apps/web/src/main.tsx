@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 
-import { appRoutes } from './app/App';
+import { appRoutes } from './app/app-routes';
 import { PersistenceGate } from './features/persistence/PersistenceGate';
 import { DataRouterModeProvider } from './lib/router-context';
 import './styles.css';

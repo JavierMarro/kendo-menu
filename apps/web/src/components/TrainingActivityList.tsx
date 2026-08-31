@@ -2,7 +2,81 @@ import type { KeyboardEvent, ReactNode } from 'react';
 
 import type { TrainingActivity } from '@kendo-menu/domain';
 
-import { TrainingActivityTree, type TrainingActivityRenderContext } from './TrainingActivityTree';
+/** Information feature-owned presentation adapters receive for one activity. */
+export interface TrainingActivityRenderContext {
+  readonly activity: TrainingActivity;
+  readonly parentActivity?: TrainingActivity;
+  readonly depth: number;
+  readonly index: number;
+  readonly childCount: number;
+  readonly isLeaf: boolean;
+  readonly children: ReactNode;
+}
+
+interface TrainingActivityTreeProps {
+  readonly activities: readonly TrainingActivity[];
+  readonly renderActivity: (context: TrainingActivityRenderContext) => ReactNode;
+  readonly parentActivity?: TrainingActivity;
+  readonly depth?: number;
+}
+
+function TrainingActivityTree({
+  activities,
+  renderActivity,
+  parentActivity,
+  depth = 0,
+}: TrainingActivityTreeProps) {
+  return (
+    <>
+      {activities.map((activity, index) => (
+        <TrainingActivityTreeNode
+          key={activity.id}
+          activity={activity}
+          {...(parentActivity === undefined ? {} : { parentActivity })}
+          depth={depth}
+          index={index}
+          renderActivity={renderActivity}
+        />
+      ))}
+    </>
+  );
+}
+
+interface TrainingActivityTreeNodeProps {
+  readonly activity: TrainingActivity;
+  readonly parentActivity?: TrainingActivity;
+  readonly depth: number;
+  readonly index: number;
+  readonly renderActivity: (context: TrainingActivityRenderContext) => ReactNode;
+}
+
+function TrainingActivityTreeNode({
+  activity,
+  parentActivity,
+  depth,
+  index,
+  renderActivity,
+}: TrainingActivityTreeNodeProps) {
+  const childCount = activity.children.length;
+  const children = (
+    <TrainingActivityTree
+      activities={activity.children}
+      renderActivity={renderActivity}
+      parentActivity={activity}
+      depth={depth + 1}
+    />
+  );
+
+  return renderActivity({
+    activity,
+    ...(parentActivity === undefined ? {} : { parentActivity }),
+    depth,
+    index,
+    childCount,
+    isLeaf: childCount === 0,
+    children,
+  });
+}
 
 interface TrainingActivityListProps {
   readonly activities: readonly TrainingActivity[];

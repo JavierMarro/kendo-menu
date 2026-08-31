@@ -169,7 +169,11 @@ export function builderReducer(state: BuilderState, action: BuilderAction): Buil
 
 export type BuilderErrors = Readonly<Record<string, string>>;
 
-export function validateBuilderState(state: BuilderState): BuilderErrors {
+export type BuilderParseResult =
+  | { readonly success: true; readonly value: TrainingSetInput }
+  | { readonly success: false; readonly errors: BuilderErrors };
+
+export function parseBuilderState(state: BuilderState): BuilderParseResult {
   const errors: Record<string, string> = {};
 
   if (state.name.trim().length === 0) {
@@ -200,24 +204,27 @@ export function validateBuilderState(state: BuilderState): BuilderErrors {
     });
   });
 
-  return errors;
-}
-
-export function toTrainingSetInput(state: BuilderState): TrainingSetInput {
-  return {
-    name: state.name.trim(),
-    description: state.description.trim(),
-    category: 'custom',
-    ...(state.customIntensity === undefined ? {} : { customIntensity: state.customIntensity }),
-    sections: state.sections.map((section) => ({
-      name: section.label.trim(),
-      exercises: section.steps.map((step) => ({
-        name: step.label.trim(),
-        quantities:
-          step.measurement === 'repetitions'
-            ? { repetitions: Number(step.reps) }
-            : { duration: { unit: step.durationUnit, value: Number(step.reps) } },
-      })),
-    })),
-  };
+  return Object.keys(errors).length > 0
+    ? { success: false, errors }
+    : {
+        success: true,
+        value: {
+          name: state.name.trim(),
+          description: state.description.trim(),
+          category: 'custom',
+          ...(state.customIntensity === undefined
+            ? {}
+            : { customIntensity: state.customIntensity }),
+          sections: state.sections.map((section) => ({
+            name: section.label.trim(),
+            exercises: section.steps.map((step) => ({
+              name: step.label.trim(),
+              quantities:
+                step.measurement === 'repetitions'
+                  ? { repetitions: Number(step.reps) }
+                  : { duration: { unit: step.durationUnit, value: Number(step.reps) } },
+            })),
+          })),
+        },
+      };
 }

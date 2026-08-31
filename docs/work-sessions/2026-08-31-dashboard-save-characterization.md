@@ -1,0 +1,8 @@
+- Session: dashboard save characterization
+- Date/duration: 2026-08-31; about 15 minutes
+- Scope/start: Investigated only whether an invalid dashboard quantity could trigger contradictory explicit-Save success feedback from a clean branch.
+- Changes: Added a Chromium characterization covering invalid blur, native validity, Save, unchanged LocalStorage, and reload restoration.
+- Decisions: Kept production behavior unchanged because native form validation blocks submission, refocuses the invalid field, and prevents the success announcement.
+- Roadblocks: None.
+- Verification: Focused Chromium passed 1/1; `pnpm test:web` passed 86/86; `pnpm check:web`, formatting, and diff checks passed with two existing lint warnings.
+- Follow-up: Retain the browser regression test; no production fix or mobile E2E is required.
