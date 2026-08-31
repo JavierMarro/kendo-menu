@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
+import type { TrainingSet } from '@kendo-menu/domain';
+
 import {
   findTrainingSet,
   getAllTrainingSets,
   getTrainingSetDescription,
   getTrainingSetActivityCount,
 } from '../../lib/training-data';
+import { DialogShell } from '../../components/DialogShell';
 import { TrainingSetTags } from '../../components/TrainingSetTags';
-import { DrillDetailDialog } from './DrillDetailDialog';
+import { DrillDetailContent } from './DrillDetailContent';
 import {
   getLibraryDrillLocation,
   getLibraryLocationWithoutDrill,
@@ -16,6 +19,25 @@ import {
   isLibraryDrillNavigationState,
   LIBRARY_DRILL_NAVIGATION_STATE,
 } from './library-query';
+
+interface LibraryDetailDialogProps {
+  readonly onClose: () => void;
+  readonly trainingSet: TrainingSet;
+}
+
+function LibraryDetailDialog({ onClose, trainingSet }: LibraryDetailDialogProps) {
+  const titleId = `drill-dialog-title-${trainingSet.id}`;
+
+  return (
+    <DialogShell
+      titleId={titleId}
+      closeLabel={`Close ${trainingSet.name} details.`}
+      onClose={onClose}
+    >
+      <DrillDetailContent titleId={titleId} trainingSet={trainingSet} />
+    </DialogShell>
+  );
+}
 
 export function LibraryPage() {
   const trainingSets = getAllTrainingSets();
@@ -150,7 +172,7 @@ export function LibraryPage() {
       )}
 
       {selectedTrainingSet === undefined ? null : (
-        <DrillDetailDialog
+        <LibraryDetailDialog
           key={selectedTrainingSet.id}
           trainingSet={selectedTrainingSet}
           onClose={closeSelectedDrill}

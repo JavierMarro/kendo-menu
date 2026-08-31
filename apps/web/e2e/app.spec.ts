@@ -607,6 +607,26 @@ test.describe('routed training flows', () => {
     await expect(viewDrill).toBeFocused();
   });
 
+  test('returns focus to the dashboard card that launched its dialog', async ({ page }) => {
+    await addCuratedSessionToDashboard(
+      page,
+      'international-dojo-2-hour-session',
+      'International dojo menu',
+    );
+    await page.goto('/app/dashboard');
+
+    const card = dashboardCard(page, 'International dojo menu');
+    const viewMore = card.getByRole('button', { name: 'View more' });
+    await viewMore.click();
+
+    const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Close International dojo menu details.' }).click();
+
+    await expect(dialog).toHaveCount(0);
+    await expect(viewMore).toBeFocused();
+  });
+
   test('removes non-essential drill-dialog motion when reduced motion is requested', async ({
     page,
   }) => {

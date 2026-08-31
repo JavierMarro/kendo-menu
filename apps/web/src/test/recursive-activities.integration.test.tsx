@@ -8,10 +8,10 @@ import {
   useTrainingStore,
   useTrainingStoreApi,
 } from '../lib/training-store-context';
+import { DialogShell } from '../components/DialogShell';
 import { PersistenceContext } from '../features/persistence/PersistenceGate';
 import { DashboardTrainingSet } from '../features/dashboard/DashboardPage';
 import { DrillDetailContent } from '../features/library/DrillDetailContent';
-import { DrillDetailDialog } from '../features/library/DrillDetailDialog';
 import { createTestStore, TestMemoryStorage } from './test-utils';
 import { RECURSIVE_TRAINING_SET } from './recursive-activity.fixture';
 
@@ -267,7 +267,16 @@ describe('recursive activity web consumers', () => {
       <PersistenceContext.Provider value={{ mode: 'local', writeFailed: false }}>
         <TrainingStoreProvider store={store}>
           <MemoryRouter>
-            <DrillDetailDialog trainingSet={RECURSIVE_TRAINING_SET} onClose={onClose} />
+            <DialogShell
+              titleId="synthetic-dialog-title"
+              closeLabel="Close Synthetic recursive keiko details."
+              onClose={onClose}
+            >
+              <DrillDetailContent
+                titleId="synthetic-dialog-title"
+                trainingSet={RECURSIVE_TRAINING_SET}
+              />
+            </DialogShell>
           </MemoryRouter>
         </TrainingStoreProvider>
       </PersistenceContext.Provider>,

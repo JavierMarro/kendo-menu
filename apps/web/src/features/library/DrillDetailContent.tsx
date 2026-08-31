@@ -11,9 +11,11 @@ import {
   getTrainingSetDescription,
 } from '../../lib/training-data';
 import { useTrainingStore } from '../../lib/training-store-context';
+import {
+  TrainingActivityList,
+  type TrainingActivityRenderContext,
+} from '../../components/TrainingActivityList';
 import { TrainingSetTags } from '../../components/TrainingSetTags';
-import { TrainingActivityList } from '../training-activities/TrainingActivityList';
-import type { TrainingActivityRenderContext } from '../training-activities/TrainingActivityTree';
 
 interface DrillDetailContentProps {
   readonly titleId: string;

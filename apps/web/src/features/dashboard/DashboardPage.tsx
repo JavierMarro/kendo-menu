@@ -34,15 +34,17 @@ import {
   type DashboardFilter,
 } from '../../lib/training-data';
 import { useTrainingStore, useTrainingStoreApi } from '../../lib/training-store-context';
+import { DialogShell } from '../../components/DialogShell';
+import {
+  TrainingActivityList,
+  type TrainingActivityRenderContext,
+} from '../../components/TrainingActivityList';
 import { TrainingSetTags } from '../../components/TrainingSetTags';
-import { DrillDetailDialog } from '../library/DrillDetailDialog';
 import {
   getExplicitPersistenceUpdateLabel,
   getPersistenceUpdateLabel,
   usePersistenceStatus,
 } from '../persistence/persistence-context';
-import { TrainingActivityList } from '../training-activities/TrainingActivityList';
-import type { TrainingActivityRenderContext } from '../training-activities/TrainingActivityTree';
 
 function getQuantityDraftValue(
   entry: DashboardEntry,
@@ -275,10 +277,10 @@ export function DashboardPage() {
       )}
 
       {selectedEntry !== undefined && selectedTrainingSet !== undefined ? (
-        <DrillDetailDialog
+        <DialogShell
           key={selectedEntry.id}
           titleId={`dashboard-dialog-title-${selectedEntry.id}`}
-          trainingSet={selectedTrainingSet}
+          closeLabel={`Close ${selectedTrainingSet.name} details.`}
           onClose={() => setSelectedEntryId(null)}
         >
           <DashboardTrainingSet
@@ -301,7 +303,7 @@ export function DashboardPage() {
               setActivityNote(selectedEntry.id, activityId, note)
             }
           />
-        </DrillDetailDialog>
+        </DialogShell>
       ) : null}
     </>
   );
