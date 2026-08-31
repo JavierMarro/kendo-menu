@@ -1,0 +1,8 @@
+- Session: landing mobile polish
+- Date/duration: 2026-08-31; about 35 minutes
+- Scope/start: Improve landing-page phone reveals, repair the final CTA overflow down to 320px, and recolour the footer install action while preserving the incumbent desktop design.
+- Changes: Added a narrow-phone IntersectionObserver boundary, fluid wrapping CTA sizing, ochre install-action states, and Playwright coverage for timing, one-shot reveals, containment, overflow, contrast, and focus.
+- Decisions: Keep desktop reveal settings unchanged; use the existing 640px phone breakpoint and ochre tokens; retain one-shot observation, reduced-motion behavior, and the install control's larger inherited type.
+- Roadblocks: The in-app Browser was unavailable and sandboxed Chromium could not launch; repository Playwright verification succeeded after the required browser permissions were granted.
+- Verification: `pnpm check:web` passed (103 tests plus typecheck, lint, and build); mobile Chromium 61/61 and focused desktop Chromium 22/22 passed; 375×812, 320×568, and 1440×900 renders were inspected.
+- Follow-up: None.

@@ -724,9 +724,29 @@ body:has(.cookie-notice) .install-promo {
 .install-footer-link {
   appearance: none;
   border: 0;
-  background: transparent;
+  color: var(--accent-hover);
+  background: var(--surface-footer);
   font: inherit;
   text-align: left;
+  text-decoration-line: underline;
+  text-decoration-thickness: 0.1em;
+  text-underline-offset: 0.2em;
+}
+
+.install-footer-link:visited {
+  color: var(--accent-hover);
+}
+
+.install-footer-link:hover,
+.install-footer-link:focus-visible {
+  color: var(--accent-bright);
+  background: var(--surface-soft);
+  text-decoration-thickness: 0.14em;
+}
+
+.install-footer-link:active {
+  color: var(--accent-bright-pressed);
+  background: var(--surface-soft);
 }
 
 .install-dialog-content {
@@ -1263,8 +1283,14 @@ body:has(.cookie-notice) .install-promo {
 .landing-final-cta .primary-button {
   grid-row: 1;
   grid-column: 1;
+  min-width: 0;
+  max-width: 100%;
   justify-self: start;
-  white-space: nowrap;
+  padding-inline: clamp(var(--space-3), 5vw, var(--space-6));
+  overflow-wrap: normal;
+  font-size: clamp(var(--type-14), 4vw, var(--type-16));
+  text-wrap: balance;
+  white-space: normal;
 }
 
 .landing-motion-ready [data-landing-reveal]:not([data-landing-reveal='split']) {
