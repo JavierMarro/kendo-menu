@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
+import { useInstallLandingEntry } from '../install/install-context';
 import { CURATED_EXERCISE_COUNT, CURATED_TRAINING_SET_COUNT } from '../../lib/training-data';
 
 interface FaqItem {
@@ -136,6 +137,7 @@ function useLandingScrollReveal() {
 }
 
 export function LandingPage(): ReactElement {
+  useInstallLandingEntry();
   const [openFaqId, setOpenFaqId] = useState<string | null>(null);
   const sectionsRef = useLandingScrollReveal();
 

@@ -2,7 +2,15 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { APP_DISPLAY_MODE_QUERIES, INSTALL_DISMISSAL_STORAGE_KEY } from '../../lib/install-prompt';
+import {
+  COOKIE_NOTICE_ACKNOWLEDGEMENT_DURATION_MS,
+  COOKIE_NOTICE_ACKNOWLEDGEMENT_STORAGE_KEY,
+} from '../../lib/cookie-notice';
+import {
+  APP_DISPLAY_MODE_QUERIES,
+  INSTALL_DISMISSAL_STORAGE_KEY,
+  INSTALL_LANDING_VISIT_STORAGE_KEY,
+} from '../../lib/install-prompt';
 import { createTestStore, renderApp } from '../../test/test-utils';
 
 const originalMatchMediaDescriptor = Object.getOwnPropertyDescriptor(window, 'matchMedia');
@@ -20,6 +28,7 @@ const originalMaxTouchPointsDescriptor = Object.getOwnPropertyDescriptor(
   window.navigator,
   'maxTouchPoints',
 );
+const originalInnerWidthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
 
 type PromptChoice = {
   readonly outcome: 'accepted' | 'dismissed';
@@ -58,6 +67,34 @@ function configureDisplayMode(matchesFor: string | null): void {
   });
 }
 
+function configurePhoneDevice(): void {
+  Object.defineProperty(window.navigator, 'userAgent', {
+    configurable: true,
+    value: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Mobile Safari/537.36',
+  });
+  Object.defineProperty(window.navigator, 'platform', {
+    configurable: true,
+    value: 'Linux armv8l',
+  });
+  Object.defineProperty(window.navigator, 'maxTouchPoints', {
+    configurable: true,
+    value: 5,
+  });
+}
+
+function acknowledgeCookieNotice(): void {
+  window.localStorage.setItem(
+    COOKIE_NOTICE_ACKNOWLEDGEMENT_STORAGE_KEY,
+    String(Date.now() + COOKIE_NOTICE_ACKNOWLEDGEMENT_DURATION_MS),
+  );
+}
+
+function prepareAutomaticInstallPromo(): void {
+  configurePhoneDevice();
+  acknowledgeCookieNotice();
+  window.localStorage.setItem(INSTALL_LANDING_VISIT_STORAGE_KEY, '1');
+}
+
 function restoreBrowserProperties(): void {
   if (originalMatchMediaDescriptor === undefined) {
     Reflect.deleteProperty(window, 'matchMedia');
@@ -94,6 +131,12 @@ function restoreBrowserProperties(): void {
   } else {
     Object.defineProperty(window.navigator, 'maxTouchPoints', originalMaxTouchPointsDescriptor);
   }
+
+  if (originalInnerWidthDescriptor === undefined) {
+    Reflect.deleteProperty(window, 'innerWidth');
+  } else {
+    Object.defineProperty(window, 'innerWidth', originalInnerWidthDescriptor);
+  }
 }
 
 afterEach(() => {
@@ -101,8 +144,113 @@ afterEach(() => {
 });
 
 describe('install experience', () => {
+  it('never offers the automatic prompt to a narrow desktop browser', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 Safari/537.36',
+    });
+    Object.defineProperty(window.navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
+    Object.defineProperty(window.navigator, 'maxTouchPoints', {
+      configurable: true,
+      value: 5,
+    });
+    acknowledgeCookieNotice();
+    window.localStorage.setItem(INSTALL_LANDING_VISIT_STORAGE_KEY, '1');
+
+    renderApp(createTestStore(), { initialEntries: ['/app'] });
+    const event = createBeforeInstallPromptEvent();
+    window.dispatchEvent(event);
+
+    await waitFor(() => expect(event.defaultPrevented).toBe(true));
+    expect(
+      screen.queryByRole('dialog', { name: 'Keep KendoMenu close for practice.' }),
+    ).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(INSTALL_LANDING_VISIT_STORAGE_KEY)).toBe('1');
+  });
+
+  it('records the first phone landing entry once and offers the prompt on the second', async () => {
+    configurePhoneDevice();
+    acknowledgeCookieNotice();
+
+    const firstView = renderApp(createTestStore(), { initialEntries: ['/app'] });
+    window.dispatchEvent(createBeforeInstallPromptEvent());
+
+    await waitFor(() =>
+      expect(window.localStorage.getItem(INSTALL_LANDING_VISIT_STORAGE_KEY)).toBe('1'),
+    );
+    expect(
+      screen.queryByRole('dialog', { name: 'Keep KendoMenu close for practice.' }),
+    ).not.toBeInTheDocument();
+
+    firstView.unmount();
+    renderApp(createTestStore(), { initialEntries: ['/app'] });
+    window.dispatchEvent(createBeforeInstallPromptEvent());
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Keep KendoMenu close for practice.' }),
+    ).toBeVisible();
+    expect(window.localStorage.getItem(INSTALL_LANDING_VISIT_STORAGE_KEY)).toBe('2');
+  });
+
+  it('does not count provider re-renders as additional landing entries', async () => {
+    configurePhoneDevice();
+    acknowledgeCookieNotice();
+    renderApp(createTestStore(), { initialEntries: ['/app'], reactStrictMode: true });
+
+    await waitFor(() =>
+      expect(window.localStorage.getItem(INSTALL_LANDING_VISIT_STORAGE_KEY)).toBe('1'),
+    );
+    const event = createBeforeInstallPromptEvent();
+    window.dispatchEvent(event);
+    await waitFor(() => expect(event.defaultPrevented).toBe(true));
+
+    expect(window.localStorage.getItem(INSTALL_LANDING_VISIT_STORAGE_KEY)).toBe('1');
+    expect(
+      screen.queryByRole('dialog', { name: 'Keep KendoMenu close for practice.' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('gives the cookie notice priority and defers installation to a later landing entry', async () => {
+    const user = userEvent.setup();
+    configurePhoneDevice();
+    window.localStorage.setItem(INSTALL_LANDING_VISIT_STORAGE_KEY, '1');
+    renderApp(createTestStore(), { initialEntries: ['/app'] });
+    window.dispatchEvent(createBeforeInstallPromptEvent());
+
+    expect(screen.getByRole('complementary', { name: 'Cookie notice' })).toBeVisible();
+    expect(
+      screen.queryByRole('dialog', { name: 'Keep KendoMenu close for practice.' }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Got it' }));
+    expect(
+      screen.queryByRole('dialog', { name: 'Keep KendoMenu close for practice.' }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
+        name: /Keiko library/,
+      }),
+    );
+    expect(screen.getByRole('heading', { name: 'Keiko library' })).toBeVisible();
+    const topBar = document.querySelector('.top-bar');
+    if (!(topBar instanceof HTMLElement)) {
+      throw new Error('Expected the application top bar.');
+    }
+    await user.click(within(topBar).getByRole('link', { name: 'KendoMenu home' }));
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Keep KendoMenu close for practice.' }),
+    ).toBeVisible();
+  });
+
   it('dismisses the promo with Tab and Enter, restoring focus to the named footer action', async () => {
     const user = userEvent.setup();
+    prepareAutomaticInstallPromo();
     renderApp(createTestStore(), { initialEntries: ['/app'] });
     window.dispatchEvent(createBeforeInstallPromptEvent());
 
@@ -136,6 +284,7 @@ describe('install experience', () => {
   it('captures and prevents the browser event, then offers the one-use native prompt', async () => {
     const user = userEvent.setup();
     const prompt = vi.fn<() => Promise<void>>(() => Promise.resolve());
+    prepareAutomaticInstallPromo();
     renderApp(createTestStore(), { initialEntries: ['/app'] });
 
     const event = createBeforeInstallPromptEvent(prompt);
@@ -160,6 +309,7 @@ describe('install experience', () => {
   it('persists Not now across navigation and a fresh render while keeping the footer action', async () => {
     const user = userEvent.setup();
     const prompt = vi.fn<() => Promise<void>>(() => Promise.resolve());
+    prepareAutomaticInstallPromo();
     const view = renderApp(createTestStore(), { initialEntries: ['/app'] });
     window.dispatchEvent(createBeforeInstallPromptEvent(prompt));
 
@@ -211,6 +361,7 @@ describe('install experience', () => {
     const prompt = vi.fn<() => Promise<void>>(() =>
       Promise.reject(new Error('The browser prompt was unavailable.')),
     );
+    prepareAutomaticInstallPromo();
     renderApp(createTestStore(), { initialEntries: ['/app'] });
     window.dispatchEvent(createBeforeInstallPromptEvent(prompt));
 
@@ -287,6 +438,7 @@ describe('install experience', () => {
     const userChoice = new Promise<PromptChoice>((resolve) => {
       resolveChoice = resolve;
     });
+    prepareAutomaticInstallPromo();
     renderApp(createTestStore(), { initialEntries: ['/app'] });
     window.dispatchEvent(createBeforeInstallPromptEvent(prompt, userChoice));
 
@@ -344,9 +496,17 @@ describe('install experience', () => {
     await waitFor(() => expect(footer.querySelector('button')).not.toBeInTheDocument());
   });
 
-  it('hides the footer action for manifest standalone and fullscreen display modes', () => {
+  it('hides both install surfaces in manifest standalone mode', async () => {
+    prepareAutomaticInstallPromo();
     configureDisplayMode(APP_DISPLAY_MODE_QUERIES[0]);
     renderApp(createTestStore(), { initialEntries: ['/app'] });
+    const event = createBeforeInstallPromptEvent();
+    window.dispatchEvent(event);
+
+    await waitFor(() => expect(event.defaultPrevented).toBe(true));
+    expect(
+      screen.queryByRole('dialog', { name: 'Keep KendoMenu close for practice.' }),
+    ).not.toBeInTheDocument();
     expect(
       within(screen.getByRole('contentinfo', { name: 'Site footer' })).queryByRole('button', {
         name: 'Install KendoMenu',
@@ -366,6 +526,7 @@ describe('install experience', () => {
 
   it('cleans up the captured prompt and install UI after appinstalled', async () => {
     const prompt = vi.fn<() => Promise<void>>(() => Promise.resolve());
+    prepareAutomaticInstallPromo();
     renderApp(createTestStore(), { initialEntries: ['/app'] });
     window.dispatchEvent(createBeforeInstallPromptEvent(prompt));
     const promo = await screen.findByRole('dialog', {

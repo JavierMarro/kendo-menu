@@ -594,7 +594,7 @@ a {
   position: fixed;
   z-index: 30;
   right: auto;
-  bottom: var(--space-4);
+  bottom: max(var(--space-4), env(safe-area-inset-bottom));
   left: 50%;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -632,8 +632,8 @@ a {
 .install-promo {
   position: fixed;
   z-index: 35;
-  right: var(--space-4);
-  bottom: var(--space-4);
+  right: max(var(--space-4), env(safe-area-inset-right));
+  bottom: max(var(--space-4), env(safe-area-inset-bottom));
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-5);
@@ -3011,14 +3011,14 @@ textarea[aria-invalid='true'] {
 
 @media (max-width: 840px) {
   .cookie-notice {
-    right: var(--space-4);
-    left: var(--space-4);
+    right: max(var(--space-4), env(safe-area-inset-right));
+    left: max(var(--space-4), env(safe-area-inset-left));
     width: auto;
     transform: none;
   }
 
   .install-promo {
-    left: var(--space-4);
+    left: max(var(--space-4), env(safe-area-inset-left));
     width: auto;
   }
 
@@ -3158,9 +3158,9 @@ textarea[aria-invalid='true'] {
   }
 
   .cookie-notice {
-    right: var(--space-4);
-    bottom: var(--space-4);
-    left: var(--space-4);
+    right: max(var(--space-4), env(safe-area-inset-right));
+    bottom: max(var(--space-4), env(safe-area-inset-bottom));
+    left: max(var(--space-4), env(safe-area-inset-left));
     grid-template-columns: 1fr;
     gap: var(--space-3);
     padding: var(--space-4);

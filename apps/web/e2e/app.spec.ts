@@ -1,5 +1,10 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+import {
+  COOKIE_NOTICE_ACKNOWLEDGEMENT_DURATION_MS,
+  COOKIE_NOTICE_ACKNOWLEDGEMENT_STORAGE_KEY,
+} from '../src/lib/cookie-notice';
+
 const STORAGE_KEY = 'kendo-menu';
 const JUNIOR_HIGH_SUBURI_ID = 'junior-high-kendo-club-suburi';
 
@@ -151,9 +156,7 @@ test.describe('routed training flows', () => {
     await expect(page).toHaveURL(/\/app$/);
   });
 
-  test('shows the session-only cookie notice, links to its policy, and returns after reload', async ({
-    page,
-  }) => {
+  test('persists the cookie notice acknowledgement for 21 days', async ({ page }) => {
     const notice = page.getByRole('complementary', { name: 'Cookie notice' });
     await expect(notice).toContainText(
       'KendoMenu does not use any tracking cookies, no training data or notes leave your device. KendoMenu only uses aggregate analytics through GoatCounter.',
@@ -187,10 +190,17 @@ test.describe('routed training flows', () => {
       .click();
     await expect(page).toHaveURL(/\/app\/dashboard$/);
     await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toHaveCount(0);
-    expect(await page.evaluate(() => Object.keys(window.localStorage))).toEqual([]);
+    const acknowledgement = await page.evaluate(
+      (key) => window.localStorage.getItem(key),
+      COOKIE_NOTICE_ACKNOWLEDGEMENT_STORAGE_KEY,
+    );
+    expect(Number(acknowledgement)).toBeGreaterThan(Date.now());
+    expect(Number(acknowledgement)).toBeLessThanOrEqual(
+      Date.now() + COOKIE_NOTICE_ACKNOWLEDGEMENT_DURATION_MS,
+    );
 
     await page.reload();
-    await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toBeVisible();
+    await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toHaveCount(0);
   });
 
   test('supports direct URLs, navigation, browser history, and reload', async ({ page }) => {
