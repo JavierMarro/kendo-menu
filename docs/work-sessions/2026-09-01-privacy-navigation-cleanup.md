@@ -1,0 +1,8 @@
+- Session: privacy and navigation cleanup
+- Date/duration: 2026-09-01; about 30 minutes
+- Scope/start: Replaced URL query data with clean typed React Router state and refreshed privacy disclosures.
+- Changes: Consumed state with history replacement, preserved accessible announcements, cleared same-route stale messages, and updated exact analytics wording.
+- Decisions: Kept GoatCounter integration/loading unchanged; added no SPA analytics, consent system, storage, sharing, or authentication.
+- Roadblocks: Initial Sol warning about stale same-route announcements was fixed; second review PASS.
+- Verification: Full Chromium Playwright passed 62 with 2 phone-only skips; `pnpm check` passed session history, types, lint, format, 231 unit/integration tests (domain 60 + store 54 + web 117), and production/PWA build.
+- Follow-up: None.

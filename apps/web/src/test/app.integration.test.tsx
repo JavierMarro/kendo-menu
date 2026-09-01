@@ -17,6 +17,7 @@ import {
   COOKIE_NOTICE_ACKNOWLEDGEMENT_DURATION_MS,
   COOKIE_NOTICE_ACKNOWLEDGEMENT_STORAGE_KEY,
 } from '../lib/cookie-notice';
+import { createSavedMenuNavigationState } from '../lib/navigation-state';
 import { renderApp, createTestStore } from './test-utils';
 
 const SENIOR_HIGH_SCHOOL_DRILL_ID = asTrainingSetId('senior-high-school-kendo-club');
@@ -125,7 +126,7 @@ describe('KendoMenu application flows', () => {
 
     const notice = screen.getByRole('complementary', { name: 'Cookie notice' });
     expect(notice).toHaveTextContent(
-      'KendoMenu does not use any tracking cookies, no training data or notes leave your device. KendoMenu only uses aggregate analytics through GoatCounter.',
+      'This site does not use tracking cookies. We use GoatCounter Analytics (no cookies) to improve the service.',
     );
     expect(screen.getByRole('link', { name: 'More information' })).toHaveAttribute(
       'href',
@@ -217,10 +218,7 @@ describe('KendoMenu application flows', () => {
       throw new Error('Expected the analytics policy section.');
     }
     expect(analyticsSection).toHaveTextContent(
-      'GoatCounter does not use cookies, does not collect identifiable personal data, and does not track users between sessions.',
-    );
-    expect(analyticsSection).toHaveTextContent(
-      'Aggregated data (page views, country of origin, device type) is used solely to improve the service.',
+      'KendoMenu uses GoatCounter for cookie-free, aggregate usage statistics such as page paths, browser and operating-system categories, screen size, country, and short-lived session deduplication. Individual pageviews and referrer collection are disabled. Training plans, notes, and menu names are not intentionally sent to GoatCounter.',
     );
     const goatCounterLink = within(analyticsSection).getByRole('link', {
       name: 'GoatCounter Analytics',
@@ -748,6 +746,52 @@ describe('KendoMenu application flows', () => {
     await user.click(backLink);
     expect(screen.getByRole('heading', { name: 'Keiko library' })).toBeInTheDocument();
     builderView.unmount();
+  });
+
+  it('announces a saved menu once and consumes its transient navigation state', async () => {
+    const user = userEvent.setup();
+    const menuName = 'Monday footwork';
+
+    renderApp(createTestStore(), {
+      initialEntries: [
+        '/app/library',
+        {
+          pathname: '/app/dashboard',
+          state: createSavedMenuNavigationState(menuName),
+        },
+      ],
+    });
+
+    const announcement = `${menuName} saved to your dashboard.`;
+    expect(screen.getByText(announcement, { selector: 'p[role="status"]' })).toBeInTheDocument();
+
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
+        name: 'Dashboard',
+      }),
+    );
+    expect(
+      screen.queryByText(announcement, { selector: 'p[role="status"]' }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
+        name: /Keiko library/,
+      }),
+    );
+    expect(
+      screen.queryByText(announcement, { selector: 'p[role="status"]' }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
+        name: 'Dashboard',
+      }),
+    );
+    expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
+    expect(
+      screen.queryByText(announcement, { selector: 'p[role="status"]' }),
+    ).not.toBeInTheDocument();
   });
 
   it('renders exactly 11 compact drill cards with semantic badge variants and query links', () => {

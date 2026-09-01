@@ -21,6 +21,7 @@ import {
 } from './builder-state';
 import { useTrainingStore } from '../../lib/training-store-context';
 import { useDataRouterMode } from '../../lib/router-context';
+import { createSavedMenuNavigationState } from '../../lib/navigation-state';
 
 const EMPTY_BUILDER_ERRORS: BuilderErrors = {};
 
@@ -151,7 +152,9 @@ export function CreateDrillPage() {
       createCustomTrainingSet(input);
       isDirtyRef.current = false;
       setIsDirty(false);
-      const navigation = navigate(`/app/dashboard?created=${encodeURIComponent(input.name)}`);
+      const navigation = navigate('/app/dashboard', {
+        state: createSavedMenuNavigationState(input.name),
+      });
       void Promise.resolve(navigation).catch(() => {
         isDirtyRef.current = true;
         setIsDirty(true);

@@ -53,10 +53,13 @@ export function CookiePolicyPage() {
                 GoatCounter Analytics
               </a>
             </strong>
-            , a privacy-friendly web analytics service. GoatCounter does not use cookies, does not
-            collect identifiable personal data, and does not track users between sessions.
-            Aggregated data (page views, country of origin, device type) is used solely to improve
-            the service.
+            , a privacy-friendly web analytics service.
+          </p>
+          <p>
+            KendoMenu uses GoatCounter for cookie-free, aggregate usage statistics such as page
+            paths, browser and operating-system categories, screen size, country, and short-lived
+            session deduplication. Individual pageviews and referrer collection are disabled.
+            Training plans, notes, and menu names are not intentionally sent to GoatCounter.
           </p>
         </section>
 
