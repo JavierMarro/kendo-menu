@@ -74,6 +74,32 @@ function customSet(): TrainingSet {
   };
 }
 
+function richCustomSet(): TrainingSet {
+  return {
+    id: asTrainingSetId('rich-custom'),
+    name: 'Rich custom',
+    description: 'A custom session with mixed defaults.',
+    category: 'custom',
+    customIntensity: 'intense-drill',
+    activities: [
+      {
+        id: 'rich-section',
+        name: 'Main work',
+        quantities: { duration: { unit: 'minutes', value: 5 } },
+        children: [
+          {
+            id: 'rich-exercise',
+            name: 'Men',
+            quantities: { repetitions: 20 },
+            children: [],
+          },
+        ],
+      },
+    ],
+    isBuiltIn: false,
+  };
+}
+
 describe('dashboard-owned training-set snapshots', () => {
   it('creates custom menus on the dashboard and never writes a library collection', () => {
     const storage = new MemoryStorage();
@@ -183,5 +209,128 @@ describe('dashboard-owned training-set snapshots', () => {
       ],
     };
     expect(parsePersistedTrainingStateV10(wireCollision)).toBeNull();
+  });
+
+  it('round-trips encoded runtime state with curated and custom ownership semantics', () => {
+    const curated = DEFAULT_TRAINING_SETS[0];
+    if (curated === undefined) {
+      throw new Error('Expected the international curated training set.');
+    }
+    const eligibleActivity = curated.activities.find(
+      (activity) => activity.allowsSessionNotes === true,
+    );
+    if (eligibleActivity === undefined) {
+      throw new Error('Expected an eligible curated activity.');
+    }
+    const custom = richCustomSet();
+    const runtimeState = {
+      dashboardEntries: [
+        {
+          id: 'curated-round-trip-entry',
+          trainingSetId: curated.id,
+          trainingSet: curated,
+          quantityOverrides: {
+            [eligibleActivity.id]: { repetitions: 3, minutes: 12 },
+          },
+          activityNotes: { [eligibleActivity.id]: 'Keep this spacing.' },
+          notes: 'Curated session notes.',
+          createdAt: '2026-08-30T10:00:00.000Z',
+        },
+        {
+          id: 'custom-round-trip-entry',
+          trainingSetId: custom.id,
+          trainingSet: custom,
+          quantityOverrides: { 'rich-exercise': { repetitions: 40, minutes: 2 } },
+          activityNotes: {},
+          notes: 'Custom session notes.',
+          createdAt: '2026-08-30T11:00:00.000Z',
+        },
+      ],
+    };
+
+    const encoded = encodePersistedTrainingStateV10(runtimeState);
+    const parsed = parsePersistedTrainingStateV10(encoded);
+    if (parsed === null) {
+      throw new Error('Expected encoded runtime state to parse as v10.');
+    }
+    expect(parsed.dashboardEntries).toHaveLength(2);
+    expect(parsed.dashboardEntries[0]).toMatchObject({
+      trainingSetId: curated.id,
+      quantityOverrides: { [eligibleActivity.id]: { repetitions: 3, minutes: 12 } },
+      activityNotes: { [eligibleActivity.id]: 'Keep this spacing.' },
+      notes: 'Curated session notes.',
+      createdAt: '2026-08-30T10:00:00.000Z',
+    });
+    expect(parsed.dashboardEntries[0]?.trainingSet?.activities[0]?.quantities).toEqual(
+      curated.activities[0]?.quantities,
+    );
+    expect(parsed.dashboardEntries[1]).toMatchObject({
+      trainingSetId: custom.id,
+      notes: 'Custom session notes.',
+      createdAt: '2026-08-30T11:00:00.000Z',
+      quantityOverrides: { 'rich-exercise': { repetitions: 40, minutes: 2 } },
+      trainingSet: {
+        description: custom.description,
+        customIntensity: 'intense-drill',
+      },
+    });
+    expect(parsed.dashboardEntries[1]?.trainingSet?.activities[0]?.quantities).toEqual({
+      duration: { unit: 'minutes', value: 5 },
+    });
+    expect(parsed.dashboardEntries[1]?.trainingSet?.activities[0]?.children[0]?.quantities).toEqual(
+      { repetitions: 20 },
+    );
+
+    const reencoded = encodePersistedTrainingStateV10(parsed);
+    const reparsed = parsePersistedTrainingStateV10(reencoded);
+    expect(reparsed).toEqual(parsed);
+  });
+
+  it('rejects unsupported nested or metadata-bearing custom snapshots at the v10 boundary', () => {
+    const base = richCustomSet();
+    const section = base.activities[0];
+    const exercise = section?.children[0];
+    if (section === undefined || exercise === undefined) {
+      throw new Error('Expected the rich custom fixture to contain an exercise.');
+    }
+    const nested = {
+      ...base,
+      activities: [
+        {
+          ...section,
+          children: [
+            {
+              ...exercise,
+              children: [{ id: 'nested-leaf', name: 'Nested leaf', children: [] }],
+            },
+          ],
+        },
+      ],
+    } satisfies TrainingSet;
+    const nestedState = {
+      dashboardEntries: [{ ...entryFor(nested.id), trainingSet: nested }],
+    };
+    expect(parsePersistedTrainingStateV10(nestedState)).toBeNull();
+    expect(() => encodePersistedTrainingStateV10(nestedState)).toThrow(
+      'unsupported nested custom activities',
+    );
+
+    const metadata = {
+      ...base,
+      activities: [
+        {
+          ...section,
+          editableQuantityUnits: ['repetitions'] as const,
+          children: [],
+        },
+      ],
+    } satisfies TrainingSet;
+    const metadataState = {
+      dashboardEntries: [{ ...entryFor(metadata.id), trainingSet: metadata }],
+    };
+    expect(parsePersistedTrainingStateV10(metadataState)).toBeNull();
+    expect(() => encodePersistedTrainingStateV10(metadataState)).toThrow(
+      'activity metadata unsupported by custom-set storage',
+    );
   });
 });

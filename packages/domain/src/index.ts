@@ -40,6 +40,7 @@ export {
   isValidTrainingQuantityValue,
   trainingSetHasTag,
   TRAINING_QUANTITY_UNITS,
+  TRAINING_DATA_LIMITS,
   validateRepetitionCount,
   validateReps,
   validateCuratedDrills,

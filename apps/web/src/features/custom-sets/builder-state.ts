@@ -1,4 +1,5 @@
 import {
+  TRAINING_DATA_LIMITS,
   isValidTrainingQuantityValue,
   type CustomTrainingIntensity,
   type DurationUnit,
@@ -138,6 +139,12 @@ export function builderReducer(state: BuilderState, action: BuilderAction): Buil
         })),
       };
     case 'add-section':
+      if (
+        state.sections.length >= TRAINING_DATA_LIMITS.customSections ||
+        getDraftActivityCount(state) + 2 > TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet
+      ) {
+        return state;
+      }
       return { ...state, sections: [...state.sections, createSectionDraft()] };
     case 'remove-section':
       return state.sections.length <= 1
@@ -151,7 +158,10 @@ export function builderReducer(state: BuilderState, action: BuilderAction): Buil
         ...state,
         sections: state.sections.map((section) =>
           section.id === action.sectionId
-            ? { ...section, steps: [...section.steps, createStepDraft()] }
+            ? section.steps.length >= TRAINING_DATA_LIMITS.exercisesPerSection ||
+              getDraftActivityCount(state) >= TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet
+              ? section
+              : { ...section, steps: [...section.steps, createStepDraft()] }
             : section,
         ),
       };
@@ -167,6 +177,10 @@ export function builderReducer(state: BuilderState, action: BuilderAction): Buil
   }
 }
 
+function getDraftActivityCount(state: BuilderState): number {
+  return state.sections.reduce((total, section) => total + 1 + section.steps.length, 0);
+}
+
 export type BuilderErrors = Readonly<Record<string, string>>;
 
 export type BuilderParseResult =
@@ -178,16 +192,47 @@ export function parseBuilderState(state: BuilderState): BuilderParseResult {
 
   if (state.name.trim().length === 0) {
     errors['name'] = 'Give this session a name.';
+  } else if (state.name.length > TRAINING_DATA_LIMITS.nameCharacters) {
+    errors['name'] =
+      `Keep the session name to ${TRAINING_DATA_LIMITS.nameCharacters} characters or fewer.`;
+  }
+  if (state.description.length > TRAINING_DATA_LIMITS.descriptionCharacters) {
+    errors['description'] =
+      `Keep the description to ${TRAINING_DATA_LIMITS.descriptionCharacters} characters or fewer.`;
+  }
+
+  if (state.sections.length < 1) {
+    errors['sections'] = 'Add at least one activity.';
+  } else if (state.sections.length > TRAINING_DATA_LIMITS.customSections) {
+    errors['sections'] = `Use no more than ${TRAINING_DATA_LIMITS.customSections} activities.`;
+  } else if (getDraftActivityCount(state) > TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet) {
+    errors['activities'] =
+      `Use no more than ${TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet} activities in total.`;
+  }
+
+  if (state.sections.length > TRAINING_DATA_LIMITS.customSections) {
+    return { success: false, errors };
   }
 
   state.sections.forEach((section) => {
     if (section.label.trim().length === 0) {
       errors[`section-${section.id}`] = 'Name this activity.';
+    } else if (section.label.length > TRAINING_DATA_LIMITS.nameCharacters) {
+      errors[`section-${section.id}`] =
+        `Keep the activity name to ${TRAINING_DATA_LIMITS.nameCharacters} characters or fewer.`;
     }
 
-    section.steps.forEach((step) => {
+    if (section.steps.length > TRAINING_DATA_LIMITS.exercisesPerSection) {
+      errors[`section-steps-${section.id}`] =
+        `Use no more than ${TRAINING_DATA_LIMITS.exercisesPerSection} exercises per activity.`;
+    }
+
+    section.steps.slice(0, TRAINING_DATA_LIMITS.exercisesPerSection + 1).forEach((step) => {
       if (step.label.trim().length === 0) {
         errors[`step-label-${step.id}`] = 'Name this exercise.';
+      } else if (step.label.length > TRAINING_DATA_LIMITS.nameCharacters) {
+        errors[`step-label-${step.id}`] =
+          `Keep the exercise name to ${TRAINING_DATA_LIMITS.nameCharacters} characters or fewer.`;
       }
 
       const quantityValue = step.reps.trim();

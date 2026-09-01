@@ -8,6 +8,7 @@ import {
   isValidRepetitionCount,
   isValidTrainingQuantities,
   isValidTrainingQuantityValue,
+  TRAINING_DATA_LIMITS,
   validateTrainingSet,
   type DashboardActivityNotes,
   type DashboardEntry,
@@ -20,14 +21,13 @@ import {
   type TrainingQuantityUnit,
   type TrainingSet,
 } from '@kendo-menu/domain';
-import {
-  createJSONStorage,
-  type PersistStorage,
-  type StateStorage,
-  type StorageValue,
-} from 'zustand/middleware';
+import { type PersistStorage, type StateStorage, type StorageValue } from 'zustand/middleware';
 
 export const TRAINING_STORE_PERSISTENCE_VERSION = 10;
+
+/** Maximum serialized storage value. Keep local-first persistence bounded before parsing JSON. */
+export const TRAINING_STORE_RAW_JSON_LIMIT = 2 * 1024 * 1024;
+export const MAX_PERSISTED_JSON_CHARACTERS = TRAINING_STORE_RAW_JSON_LIMIT;
 
 /** Runtime shape persisted by version 9. Kept solely for migration callers. */
 export interface PersistedTrainingStateV9 {
@@ -283,7 +283,8 @@ export type TrainingStorageInspection =
   | {
       readonly status: 'corrupt';
       readonly kind: 'corrupt';
-      readonly reason: 'malformed-json' | 'malformed-envelope' | 'invalid-domain';
+      readonly reason:
+        'malformed-json' | 'malformed-envelope' | 'invalid-domain' | 'resource-limit';
     }
   | {
       readonly status: 'corrupt';
@@ -318,8 +319,22 @@ function isUnknownArray(value: unknown): value is readonly unknown[] {
   return Array.isArray(value);
 }
 
-function isNonBlankString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
+function isNonBlankString(
+  value: unknown,
+  maximumLength: number = TRAINING_DATA_LIMITS.identifierCharacters,
+): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= maximumLength;
+}
+
+function isBoundedString(value: unknown, maximumLength: number): value is string {
+  return typeof value === 'string' && value.length <= maximumLength;
+}
+
+function hasAtMostProperties(
+  value: Readonly<Record<string, unknown>>,
+  maximumEntries: number,
+): boolean {
+  return Object.keys(value).length <= maximumEntries;
 }
 
 function hasOnlyProperties(
@@ -330,11 +345,15 @@ function hasOnlyProperties(
 }
 
 function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
-  return (
-    ((typeof value === 'object' && value !== null) || typeof value === 'function') &&
-    'then' in value &&
-    typeof value.then === 'function'
-  );
+  try {
+    return (
+      ((typeof value === 'object' && value !== null) || typeof value === 'function') &&
+      'then' in value &&
+      typeof value.then === 'function'
+    );
+  } catch {
+    return false;
+  }
 }
 
 function isDrillCategory(value: unknown): value is DrillCategory {
@@ -370,8 +389,9 @@ function isValidLegacyQuantityValue(
 function parseArray<T>(
   value: unknown,
   parseItem: (item: unknown) => T | null,
+  maximumLength: number = TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet,
 ): readonly T[] | null {
-  if (!isUnknownArray(value)) {
+  if (!isUnknownArray(value) || value.length > maximumLength) {
     return null;
   }
 
@@ -401,10 +421,11 @@ function parseLegacyTrainingStep(value: unknown): LegacyTrainingStep | null {
   const description = value['description'];
   if (
     !isNonBlankString(id) ||
-    !isNonBlankString(label) ||
+    !isNonBlankString(label, TRAINING_DATA_LIMITS.nameCharacters) ||
     (defaultReps !== null && !isValidRepetitionCount(defaultReps)) ||
     !isLegacyRepUnit(repUnit) ||
-    (Object.hasOwn(value, 'description') && typeof description !== 'string')
+    (Object.hasOwn(value, 'description') &&
+      !isBoundedString(description, TRAINING_DATA_LIMITS.descriptionCharacters))
   ) {
     return null;
   }
@@ -439,7 +460,11 @@ function createLegacyTrainingQuantities(
 function parseLegacyTrainingQuantitiesV4(
   value: unknown,
 ): readonly LegacyTrainingQuantityV4[] | null {
-  const parsed = parseArray(value, parseLegacyTrainingQuantityV4);
+  const parsed = parseArray(
+    value,
+    parseLegacyTrainingQuantityV4,
+    LEGACY_TRAINING_QUANTITY_UNITS.length,
+  );
   if (parsed === null || parsed.length !== LEGACY_TRAINING_QUANTITY_UNITS.length) {
     return null;
   }
@@ -501,8 +526,17 @@ function parseLegacyTrainingSectionV2(value: unknown): LegacyTrainingSectionV2 |
   }
   const id = value['id'];
   const label = value['label'];
-  const steps = parseArray(value['steps'], parseLegacyTrainingStep);
-  if (!isNonBlankString(id) || !isNonBlankString(label) || steps === null || steps.length < 1) {
+  const steps = parseArray(
+    value['steps'],
+    parseLegacyTrainingStep,
+    TRAINING_DATA_LIMITS.exercisesPerSection,
+  );
+  if (
+    !isNonBlankString(id) ||
+    !isNonBlankString(label, TRAINING_DATA_LIMITS.nameCharacters) ||
+    steps === null ||
+    steps.length < 1
+  ) {
     return null;
   }
   const ids = new Set<string>([id]);
@@ -521,8 +555,17 @@ function parseLegacyTrainingSectionV4(value: unknown): LegacyTrainingSectionV4 |
   }
   const id = value['id'];
   const label = value['label'];
-  const steps = parseArray(value['steps'], parseLegacyTrainingStepV4);
-  if (!isNonBlankString(id) || !isNonBlankString(label) || steps === null || steps.length < 1) {
+  const steps = parseArray(
+    value['steps'],
+    parseLegacyTrainingStepV4,
+    TRAINING_DATA_LIMITS.exercisesPerSection,
+  );
+  if (
+    !isNonBlankString(id) ||
+    !isNonBlankString(label, TRAINING_DATA_LIMITS.nameCharacters) ||
+    steps === null ||
+    steps.length < 1
+  ) {
     return null;
   }
   const ids = new Set<string>([id]);
@@ -536,7 +579,10 @@ function parseLegacyTrainingSectionV4(value: unknown): LegacyTrainingSectionV4 |
 }
 
 function parseRepOverrides(value: unknown): Readonly<Record<string, number>> | null {
-  if (!isRecord(value)) {
+  if (
+    !isRecord(value) ||
+    !hasAtMostProperties(value, TRAINING_DATA_LIMITS.dashboardRecordEntries)
+  ) {
     return null;
   }
   const entries: [string, number][] = [];
@@ -568,8 +614,8 @@ function parseLegacyDashboardEntry(value: unknown): LegacyDashboardEntry | null 
     !isNonBlankString(id) ||
     !isNonBlankString(trainingSetId) ||
     repOverrides === null ||
-    typeof notes !== 'string' ||
-    typeof createdAt !== 'string'
+    !isBoundedString(notes, TRAINING_DATA_LIMITS.noteCharacters) ||
+    !isBoundedString(createdAt, TRAINING_DATA_LIMITS.timestampCharacters)
   ) {
     return null;
   }
@@ -583,7 +629,10 @@ function parseLegacyDashboardEntry(value: unknown): LegacyDashboardEntry | null 
 }
 
 function parseTrainingQuantityOverrides(value: unknown): TrainingQuantityOverrides | null {
-  if (!isRecord(value)) {
+  if (
+    !isRecord(value) ||
+    !hasAtMostProperties(value, TRAINING_DATA_LIMITS.dashboardRecordEntries)
+  ) {
     return null;
   }
   const entries: [TrainingQuantityUnit, number][] = [];
@@ -597,7 +646,10 @@ function parseTrainingQuantityOverrides(value: unknown): TrainingQuantityOverrid
 }
 
 function parseDashboardQuantityOverrides(value: unknown): DashboardQuantityOverrides | null {
-  if (!isRecord(value)) {
+  if (
+    !isRecord(value) ||
+    !hasAtMostProperties(value, TRAINING_DATA_LIMITS.dashboardRecordEntries)
+  ) {
     return null;
   }
   const entries: [string, TrainingQuantityOverrides][] = [];
@@ -612,13 +664,19 @@ function parseDashboardQuantityOverrides(value: unknown): DashboardQuantityOverr
 }
 
 function parseDashboardActivityNotes(value: unknown): DashboardActivityNotes | null {
-  if (!isRecord(value)) {
+  if (
+    !isRecord(value) ||
+    !hasAtMostProperties(value, TRAINING_DATA_LIMITS.dashboardRecordEntries)
+  ) {
     return null;
   }
 
   const entries: [string, string][] = [];
   for (const [activityId, note] of Object.entries(value)) {
-    if (!isNonBlankString(activityId) || typeof note !== 'string') {
+    if (
+      !isNonBlankString(activityId) ||
+      !isBoundedString(note, TRAINING_DATA_LIMITS.noteCharacters)
+    ) {
       return null;
     }
     entries.push([activityId, note]);
@@ -647,8 +705,8 @@ function parseDashboardEntry(value: unknown): DashboardEntry | null {
     !isNonBlankString(trainingSetId) ||
     quantityOverrides === null ||
     activityNotes === null ||
-    typeof notes !== 'string' ||
-    typeof createdAt !== 'string'
+    !isBoundedString(notes, TRAINING_DATA_LIMITS.noteCharacters) ||
+    !isBoundedString(createdAt, TRAINING_DATA_LIMITS.timestampCharacters)
   ) {
     return null;
   }
@@ -681,8 +739,8 @@ function parsePersistedDashboardEntryV8(value: unknown): PersistedDashboardEntry
     !isNonBlankString(id) ||
     !isNonBlankString(trainingSetId) ||
     quantityOverrides === null ||
-    typeof notes !== 'string' ||
-    typeof createdAt !== 'string'
+    !isBoundedString(notes, TRAINING_DATA_LIMITS.noteCharacters) ||
+    !isBoundedString(createdAt, TRAINING_DATA_LIMITS.timestampCharacters)
   ) {
     return null;
   }
@@ -709,11 +767,15 @@ function parseLegacyTrainingSet(value: unknown): LegacyTrainingSet | null {
   const name = value['name'];
   const description = value['description'];
   const category = value['category'];
-  const steps = parseArray(value['steps'], parseLegacyTrainingStep);
+  const steps = parseArray(
+    value['steps'],
+    parseLegacyTrainingStep,
+    TRAINING_DATA_LIMITS.exercisesPerSection,
+  );
   if (
     !isNonBlankString(id) ||
-    !isNonBlankString(name) ||
-    typeof description !== 'string' ||
+    !isNonBlankString(name, TRAINING_DATA_LIMITS.nameCharacters) ||
+    !isBoundedString(description, TRAINING_DATA_LIMITS.descriptionCharacters) ||
     !isDrillCategory(category) ||
     steps === null ||
     steps.length < 1 ||
@@ -745,11 +807,15 @@ function parseLegacyTrainingSetV2(value: unknown): LegacyTrainingSetV2 | null {
   const name = value['name'];
   const description = value['description'];
   const category = value['category'];
-  const sections = parseArray(value['sections'], parseLegacyTrainingSectionV2);
+  const sections = parseArray(
+    value['sections'],
+    parseLegacyTrainingSectionV2,
+    TRAINING_DATA_LIMITS.customSections,
+  );
   if (
     !isNonBlankString(id) ||
-    !isNonBlankString(name) ||
-    typeof description !== 'string' ||
+    !isNonBlankString(name, TRAINING_DATA_LIMITS.nameCharacters) ||
+    !isBoundedString(description, TRAINING_DATA_LIMITS.descriptionCharacters) ||
     !isDrillCategory(category) ||
     sections === null ||
     sections.length < 1 ||
@@ -777,11 +843,15 @@ function parseLegacyTrainingSetV4(value: unknown): LegacyTrainingSetV4 | null {
   const name = value['name'];
   const description = value['description'];
   const category = value['category'];
-  const sections = parseArray(value['sections'], parseLegacyTrainingSectionV4);
+  const sections = parseArray(
+    value['sections'],
+    parseLegacyTrainingSectionV4,
+    TRAINING_DATA_LIMITS.customSections,
+  );
   if (
     !isNonBlankString(id) ||
-    !isNonBlankString(name) ||
-    typeof description !== 'string' ||
+    !isNonBlankString(name, TRAINING_DATA_LIMITS.nameCharacters) ||
+    !isBoundedString(description, TRAINING_DATA_LIMITS.descriptionCharacters) ||
     !isDrillCategory(category) ||
     sections === null ||
     sections.length < 1 ||
@@ -824,8 +894,13 @@ function validateUniqueNestedIds(
     readonly steps: readonly { readonly id: string }[];
   }[],
 ): boolean {
+  let activityCount = 0;
   const ids = new Set<string>([trainingSetId]);
   for (const section of sections) {
+    activityCount += 1 + section.steps.length;
+    if (activityCount > TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet) {
+      return false;
+    }
     if (ids.has(section.id)) {
       return false;
     }
@@ -845,9 +920,10 @@ function parsePersistedTrainingExercise(value: unknown): PersistedTrainingExerci
     !isRecord(value) ||
     !hasOnlyProperties(value, new Set(['id', 'name', 'quantities', 'notes'])) ||
     !isNonBlankString(value['id']) ||
-    !isNonBlankString(value['name']) ||
+    !isNonBlankString(value['name'], TRAINING_DATA_LIMITS.nameCharacters) ||
     (Object.hasOwn(value, 'quantities') && !isValidTrainingQuantities(value['quantities'])) ||
-    (Object.hasOwn(value, 'notes') && typeof value['notes'] !== 'string')
+    (Object.hasOwn(value, 'notes') &&
+      !isBoundedString(value['notes'], TRAINING_DATA_LIMITS.noteCharacters))
   ) {
     return null;
   }
@@ -864,13 +940,18 @@ function parsePersistedTrainingSection(value: unknown): PersistedTrainingSection
     !isRecord(value) ||
     !hasOnlyProperties(value, new Set(['id', 'name', 'quantities', 'notes', 'exercises'])) ||
     !isNonBlankString(value['id']) ||
-    !isNonBlankString(value['name']) ||
+    !isNonBlankString(value['name'], TRAINING_DATA_LIMITS.nameCharacters) ||
     (Object.hasOwn(value, 'quantities') && !isValidTrainingQuantities(value['quantities'])) ||
-    (Object.hasOwn(value, 'notes') && typeof value['notes'] !== 'string')
+    (Object.hasOwn(value, 'notes') &&
+      !isBoundedString(value['notes'], TRAINING_DATA_LIMITS.noteCharacters))
   ) {
     return null;
   }
-  const exercises = parseArray(value['exercises'], parsePersistedTrainingExercise);
+  const exercises = parseArray(
+    value['exercises'],
+    parsePersistedTrainingExercise,
+    TRAINING_DATA_LIMITS.exercisesPerSection,
+  );
   if (exercises === null) {
     return null;
   }
@@ -887,8 +968,13 @@ function validateUniquePersistedNestedIds(
   trainingSetId: string,
   sections: readonly PersistedTrainingSection[],
 ): boolean {
+  let activityCount = 0;
   const ids = new Set<string>([trainingSetId]);
   for (const section of sections) {
+    activityCount += 1 + section.exercises.length;
+    if (activityCount > TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet) {
+      return false;
+    }
     if (ids.has(section.id)) {
       return false;
     }
@@ -919,8 +1005,9 @@ function parsePersistedCustomTrainingSetWire(value: unknown): PersistedCustomTra
       ]),
     ) ||
     !isNonBlankString(value['id']) ||
-    !isNonBlankString(value['name']) ||
-    (Object.hasOwn(value, 'description') && typeof value['description'] !== 'string') ||
+    !isNonBlankString(value['name'], TRAINING_DATA_LIMITS.nameCharacters) ||
+    (Object.hasOwn(value, 'description') &&
+      !isBoundedString(value['description'], TRAINING_DATA_LIMITS.descriptionCharacters)) ||
     value['category'] !== 'custom' ||
     (Object.hasOwn(value, 'customIntensity') &&
       !isCustomTrainingIntensity(value['customIntensity'])) ||
@@ -928,7 +1015,11 @@ function parsePersistedCustomTrainingSetWire(value: unknown): PersistedCustomTra
   ) {
     return null;
   }
-  const sections = parseArray(value['sections'], parsePersistedTrainingSection);
+  const sections = parseArray(
+    value['sections'],
+    parsePersistedTrainingSection,
+    TRAINING_DATA_LIMITS.customSections,
+  );
   if (
     sections === null ||
     sections.length < 1 ||
@@ -1036,10 +1127,15 @@ function parsePersistedTrainingWireState(value: unknown): PersistedTrainingState
   ) {
     return null;
   }
-  const dashboardEntries = parseArray(value['dashboardEntries'], parseDashboardEntry);
+  const dashboardEntries = parseArray(
+    value['dashboardEntries'],
+    parseDashboardEntry,
+    TRAINING_DATA_LIMITS.dashboardEntries,
+  );
   const wireCustomTrainingSets = parseArray(
     value['customTrainingSets'],
     parsePersistedCustomTrainingSetWire,
+    TRAINING_DATA_LIMITS.legacyCustomSetCollection,
   );
   if (
     dashboardEntries === null ||
@@ -1069,7 +1165,11 @@ function parsePersistedTrainingWireState(value: unknown): PersistedTrainingState
 
 /** Parse the v9 wire state before the v9→v10 ownership migration. */
 export function parsePersistedTrainingWireStateV9(value: unknown): PersistedTrainingStateV9 | null {
-  return parsePersistedTrainingWireState(value);
+  try {
+    return parsePersistedTrainingWireState(value);
+  } catch {
+    return null;
+  }
 }
 
 function parsePersistedTrainingWireStateV8(value: unknown): PersistedTrainingStateV8 | null {
@@ -1079,10 +1179,15 @@ function parsePersistedTrainingWireStateV8(value: unknown): PersistedTrainingSta
   ) {
     return null;
   }
-  const dashboardEntries = parseArray(value['dashboardEntries'], parsePersistedDashboardEntryV8);
+  const dashboardEntries = parseArray(
+    value['dashboardEntries'],
+    parsePersistedDashboardEntryV8,
+    TRAINING_DATA_LIMITS.dashboardEntries,
+  );
   const wireCustomTrainingSets = parseArray(
     value['customTrainingSets'],
     parsePersistedCustomTrainingSetWire,
+    TRAINING_DATA_LIMITS.legacyCustomSetCollection,
   );
   if (
     dashboardEntries === null ||
@@ -1103,6 +1208,28 @@ function parsePersistedTrainingWireStateV8(value: unknown): PersistedTrainingSta
     customTrainingSets.push(trainingSet);
   }
   return { dashboardEntries, customTrainingSets };
+}
+
+/**
+ * Current v10 custom snapshots use the unchanged two-level wire shape: section activities may
+ * contain leaf exercises, but neither level may carry runtime-only dashboard metadata.
+ */
+function isStorageCompatibleCustomTrainingSet(trainingSet: TrainingSet): boolean {
+  for (const section of trainingSet.activities) {
+    if (section.editableQuantityUnits !== undefined || section.allowsSessionNotes !== undefined) {
+      return false;
+    }
+    for (const exercise of section.children) {
+      if (
+        exercise.editableQuantityUnits !== undefined ||
+        exercise.allowsSessionNotes !== undefined ||
+        exercise.children.length > 0
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 function validateUniqueEntryIds(entries: readonly { readonly id: string }[]): boolean {
@@ -1135,15 +1262,23 @@ function isCuratedTrainingSetId(id: string): boolean {
   return DEFAULT_TRAINING_SETS.some((trainingSet) => trainingSet.id === id);
 }
 
-export function parsePersistedTrainingState(value: unknown): PersistedTrainingState | null {
+function parsePersistedTrainingStateUnchecked(value: unknown): PersistedTrainingState | null {
   if (
     !isRecord(value) ||
     !hasOnlyProperties(value, new Set(['dashboardEntries', 'customTrainingSets']))
   ) {
     return null;
   }
-  const dashboardEntries = parseArray(value['dashboardEntries'], parseDashboardEntry);
-  const customTrainingSets = parseArray(value['customTrainingSets'], parseCustomTrainingSet);
+  const dashboardEntries = parseArray(
+    value['dashboardEntries'],
+    parseDashboardEntry,
+    TRAINING_DATA_LIMITS.dashboardEntries,
+  );
+  const customTrainingSets = parseArray(
+    value['customTrainingSets'],
+    parseCustomTrainingSet,
+    TRAINING_DATA_LIMITS.legacyCustomSetCollection,
+  );
   if (
     dashboardEntries === null ||
     customTrainingSets === null ||
@@ -1161,20 +1296,41 @@ export function parsePersistedTrainingState(value: unknown): PersistedTrainingSt
   };
 }
 
-/** Explicit parser for the v9 runtime state used by the v9→v10 migration. */
+/** Parse the v9 runtime state used by the v9→v10 migration. */
 export function parsePersistedTrainingStateV9(value: unknown): PersistedTrainingStateV9 | null {
-  return parsePersistedTrainingState(value);
+  try {
+    return parsePersistedTrainingStateUnchecked(value);
+  } catch {
+    return null;
+  }
 }
 
-export function parsePersistedTrainingStateV8(value: unknown): PersistedTrainingStateV8 | null {
+/** Parse the pre-v10 runtime state without leaking hostile getter/proxy errors. */
+export function parsePersistedTrainingState(value: unknown): PersistedTrainingState | null {
+  try {
+    return parsePersistedTrainingStateUnchecked(value);
+  } catch {
+    return null;
+  }
+}
+
+function parsePersistedTrainingStateV8Unchecked(value: unknown): PersistedTrainingStateV8 | null {
   if (
     !isRecord(value) ||
     !hasOnlyProperties(value, new Set(['dashboardEntries', 'customTrainingSets']))
   ) {
     return null;
   }
-  const dashboardEntries = parseArray(value['dashboardEntries'], parsePersistedDashboardEntryV8);
-  const customTrainingSets = parseArray(value['customTrainingSets'], parseCustomTrainingSet);
+  const dashboardEntries = parseArray(
+    value['dashboardEntries'],
+    parsePersistedDashboardEntryV8,
+    TRAINING_DATA_LIMITS.dashboardEntries,
+  );
+  const customTrainingSets = parseArray(
+    value['customTrainingSets'],
+    parseCustomTrainingSet,
+    TRAINING_DATA_LIMITS.legacyCustomSetCollection,
+  );
   if (
     dashboardEntries === null ||
     customTrainingSets === null ||
@@ -1185,6 +1341,14 @@ export function parsePersistedTrainingStateV8(value: unknown): PersistedTraining
     return null;
   }
   return { dashboardEntries, customTrainingSets };
+}
+
+export function parsePersistedTrainingStateV8(value: unknown): PersistedTrainingStateV8 | null {
+  try {
+    return parsePersistedTrainingStateV8Unchecked(value);
+  } catch {
+    return null;
+  }
 }
 
 function parsePersistedDashboardEntryV10(value: unknown): DashboardEntry | null {
@@ -1217,8 +1381,8 @@ function parsePersistedDashboardEntryV10(value: unknown): DashboardEntry | null 
     !isNonBlankString(trainingSetId) ||
     quantityOverrides === null ||
     activityNotes === null ||
-    typeof notes !== 'string' ||
-    typeof createdAt !== 'string'
+    !isBoundedString(notes, TRAINING_DATA_LIMITS.noteCharacters) ||
+    !isBoundedString(createdAt, TRAINING_DATA_LIMITS.timestampCharacters)
   ) {
     return null;
   }
@@ -1242,7 +1406,8 @@ function parsePersistedDashboardEntryV10(value: unknown): DashboardEntry | null 
       } else if (
         !isCuratedTrainingSetId(validation.value.id) &&
         validation.value.category === 'custom' &&
-        validation.value.sourceId === undefined
+        validation.value.sourceId === undefined &&
+        isStorageCompatibleCustomTrainingSet(validation.value)
       ) {
         ownedTrainingSet = validation.value;
       } else {
@@ -1309,26 +1474,87 @@ function sanitizeDashboardActivityNotesForTrainingSet(
 }
 
 /** Parse the current v10 runtime state from an untrusted wire value. */
-export function parsePersistedTrainingStateV10(value: unknown): PersistedTrainingStateV10 | null {
+function parsePersistedTrainingStateV10Unchecked(value: unknown): PersistedTrainingStateV10 | null {
   if (!isRecord(value) || !hasOnlyProperties(value, new Set(['dashboardEntries']))) {
     return null;
   }
-  const dashboardEntries = parseArray(value['dashboardEntries'], parsePersistedDashboardEntryV10);
+  const dashboardEntries = parseArray(
+    value['dashboardEntries'],
+    parsePersistedDashboardEntryV10,
+    TRAINING_DATA_LIMITS.dashboardEntries,
+  );
   if (dashboardEntries === null || !validateUniqueEntryIds(dashboardEntries)) {
     return null;
   }
   return { dashboardEntries };
 }
 
-export function parsePersistedTrainingStateV1(value: unknown): LegacyPersistedTrainingState | null {
+export function parsePersistedTrainingStateV10(value: unknown): PersistedTrainingStateV10 | null {
+  try {
+    return parsePersistedTrainingStateV10Unchecked(value);
+  } catch {
+    return null;
+  }
+}
+
+function parsePersistedTrainingStateV1Unchecked(
+  value: unknown,
+): LegacyPersistedTrainingState | null {
   if (
     !isRecord(value) ||
     !hasOnlyProperties(value, new Set(['dashboardEntries', 'customTrainingSets']))
   ) {
     return null;
   }
-  const dashboardEntries = parseArray(value['dashboardEntries'], parseLegacyDashboardEntry);
-  const customTrainingSets = parseArray(value['customTrainingSets'], parseLegacyTrainingSet);
+  const dashboardEntries = parseArray(
+    value['dashboardEntries'],
+    parseLegacyDashboardEntry,
+    TRAINING_DATA_LIMITS.dashboardEntries,
+  );
+  const customTrainingSets = parseArray(
+    value['customTrainingSets'],
+    parseLegacyTrainingSet,
+    TRAINING_DATA_LIMITS.legacyCustomSetCollection,
+  );
+  if (
+    dashboardEntries === null ||
+    customTrainingSets === null ||
+    !validateUniqueEntryIds(dashboardEntries) ||
+    !validateUniqueSetIds(customTrainingSets) ||
+    !validateNoCuratedSetIdCollisions(customTrainingSets)
+  ) {
+    return null;
+  }
+  return { dashboardEntries, customTrainingSets };
+}
+
+export function parsePersistedTrainingStateV1(value: unknown): LegacyPersistedTrainingState | null {
+  try {
+    return parsePersistedTrainingStateV1Unchecked(value);
+  } catch {
+    return null;
+  }
+}
+
+function parsePersistedTrainingStateV2Unchecked(
+  value: unknown,
+): LegacyPersistedTrainingStateV2 | null {
+  if (
+    !isRecord(value) ||
+    !hasOnlyProperties(value, new Set(['dashboardEntries', 'customTrainingSets']))
+  ) {
+    return null;
+  }
+  const dashboardEntries = parseArray(
+    value['dashboardEntries'],
+    parseLegacyDashboardEntry,
+    TRAINING_DATA_LIMITS.dashboardEntries,
+  );
+  const customTrainingSets = parseArray(
+    value['customTrainingSets'],
+    parseLegacyCustomTrainingSetV2,
+    TRAINING_DATA_LIMITS.legacyCustomSetCollection,
+  );
   if (
     dashboardEntries === null ||
     customTrainingSets === null ||
@@ -1344,16 +1570,31 @@ export function parsePersistedTrainingStateV1(value: unknown): LegacyPersistedTr
 export function parsePersistedTrainingStateV2(
   value: unknown,
 ): LegacyPersistedTrainingStateV2 | null {
+  try {
+    return parsePersistedTrainingStateV2Unchecked(value);
+  } catch {
+    return null;
+  }
+}
+
+function parsePersistedTrainingStateV3Unchecked(
+  value: unknown,
+): LegacyPersistedTrainingStateV3 | null {
   if (
     !isRecord(value) ||
     !hasOnlyProperties(value, new Set(['dashboardEntries', 'customTrainingSets']))
   ) {
     return null;
   }
-  const dashboardEntries = parseArray(value['dashboardEntries'], parseLegacyDashboardEntry);
+  const dashboardEntries = parseArray(
+    value['dashboardEntries'],
+    parseLegacyDashboardEntry,
+    TRAINING_DATA_LIMITS.dashboardEntries,
+  );
   const customTrainingSets = parseArray(
     value['customTrainingSets'],
-    parseLegacyCustomTrainingSetV2,
+    parseLegacyCustomTrainingSetV4,
+    TRAINING_DATA_LIMITS.legacyCustomSetCollection,
   );
   if (
     dashboardEntries === null ||
@@ -1370,16 +1611,31 @@ export function parsePersistedTrainingStateV2(
 export function parsePersistedTrainingStateV3(
   value: unknown,
 ): LegacyPersistedTrainingStateV3 | null {
+  try {
+    return parsePersistedTrainingStateV3Unchecked(value);
+  } catch {
+    return null;
+  }
+}
+
+function parsePersistedTrainingStateV4Unchecked(
+  value: unknown,
+): LegacyPersistedTrainingStateV4 | null {
   if (
     !isRecord(value) ||
     !hasOnlyProperties(value, new Set(['dashboardEntries', 'customTrainingSets']))
   ) {
     return null;
   }
-  const dashboardEntries = parseArray(value['dashboardEntries'], parseLegacyDashboardEntry);
+  const dashboardEntries = parseArray(
+    value['dashboardEntries'],
+    parsePersistedDashboardEntryV8,
+    TRAINING_DATA_LIMITS.dashboardEntries,
+  );
   const customTrainingSets = parseArray(
     value['customTrainingSets'],
     parseLegacyCustomTrainingSetV4,
+    TRAINING_DATA_LIMITS.legacyCustomSetCollection,
   );
   if (
     dashboardEntries === null ||
@@ -1396,35 +1652,23 @@ export function parsePersistedTrainingStateV3(
 export function parsePersistedTrainingStateV4(
   value: unknown,
 ): LegacyPersistedTrainingStateV4 | null {
-  if (
-    !isRecord(value) ||
-    !hasOnlyProperties(value, new Set(['dashboardEntries', 'customTrainingSets']))
-  ) {
+  try {
+    return parsePersistedTrainingStateV4Unchecked(value);
+  } catch {
     return null;
   }
-  const dashboardEntries = parseArray(value['dashboardEntries'], parsePersistedDashboardEntryV8);
-  const customTrainingSets = parseArray(
-    value['customTrainingSets'],
-    parseLegacyCustomTrainingSetV4,
-  );
-  if (
-    dashboardEntries === null ||
-    customTrainingSets === null ||
-    !validateUniqueEntryIds(dashboardEntries) ||
-    !validateUniqueSetIds(customTrainingSets) ||
-    !validateNoCuratedSetIdCollisions(customTrainingSets)
-  ) {
-    return null;
-  }
-  return { dashboardEntries, customTrainingSets };
 }
 
 export function parsePersistedTrainingStateV0(value: unknown): LegacyPersistedTrainingState | null {
-  return parsePersistedTrainingStateV1(value);
+  try {
+    return parsePersistedTrainingStateV1Unchecked(value);
+  } catch {
+    return null;
+  }
 }
 
 export function migratePersistedTrainingStateV0ToV1(value: unknown): LegacyPersistedTrainingState {
-  const parsed = parsePersistedTrainingStateV0(value);
+  const parsed = parsePersistedTrainingStateV1Unchecked(value);
   if (parsed === null) {
     throw new Error('Training-store version 0 state is invalid.');
   }
@@ -1433,10 +1677,27 @@ export function migratePersistedTrainingStateV0ToV1(value: unknown): LegacyPersi
 
 export const migrateV0ToV1 = migratePersistedTrainingStateV0ToV1;
 
+function createMigratedSectionId(
+  trainingSetId: string,
+  steps: readonly LegacyTrainingStep[],
+): string {
+  const suffix = '-exercises';
+  const maxAttempts = steps.length + 1;
+  for (let attempt = 0; attempt <= maxAttempts; attempt += 1) {
+    const attemptSuffix = attempt === 0 ? suffix : `${suffix}-${attempt}`;
+    const prefixLength = TRAINING_DATA_LIMITS.identifierCharacters - attemptSuffix.length;
+    const candidate = `${trainingSetId.slice(0, prefixLength)}${attemptSuffix}`;
+    if (candidate !== trainingSetId && !steps.some((step) => step.id === candidate)) {
+      return candidate;
+    }
+  }
+  throw new Error('Could not derive a unique migrated section identifier.');
+}
+
 export function migratePersistedTrainingStateV1ToV2(
   value: unknown,
 ): LegacyPersistedTrainingStateV2 {
-  const parsed = parsePersistedTrainingStateV1(value);
+  const parsed = parsePersistedTrainingStateV1Unchecked(value);
   if (parsed === null) {
     throw new Error('Training-store version 1 state is invalid.');
   }
@@ -1449,7 +1710,7 @@ export function migratePersistedTrainingStateV1ToV2(
       category: 'custom',
       sections: [
         {
-          id: `${trainingSet.id}-exercises`,
+          id: createMigratedSectionId(trainingSet.id, trainingSet.steps),
           label: 'Exercises',
           steps: trainingSet.steps,
         },
@@ -1458,7 +1719,7 @@ export function migratePersistedTrainingStateV1ToV2(
     }),
   );
   const migrated = { dashboardEntries: parsed.dashboardEntries, customTrainingSets };
-  const result = parsePersistedTrainingStateV2(migrated);
+  const result = parsePersistedTrainingStateV2Unchecked(migrated);
   if (result === null) {
     throw new Error('Training-store version 1 migration produced invalid state.');
   }
@@ -1484,7 +1745,7 @@ function migrateLegacyTrainingStepV2ToV3(step: LegacyTrainingStep): LegacyTraini
 export function migratePersistedTrainingStateV2ToV3(
   value: unknown,
 ): LegacyPersistedTrainingStateV3 {
-  const parsed = parsePersistedTrainingStateV2(value);
+  const parsed = parsePersistedTrainingStateV2Unchecked(value);
   if (parsed === null) {
     throw new Error('Training-store version 2 state is invalid.');
   }
@@ -1504,7 +1765,7 @@ export function migratePersistedTrainingStateV2ToV3(
     }),
   );
   const migrated = { dashboardEntries: parsed.dashboardEntries, customTrainingSets };
-  const result = parsePersistedTrainingStateV3(migrated);
+  const result = parsePersistedTrainingStateV3Unchecked(migrated);
   if (result === null) {
     throw new Error('Training-store version 2 migration produced invalid state.');
   }
@@ -1555,7 +1816,7 @@ function migrateLegacyDashboardEntryV3ToV4(
 export function migratePersistedTrainingStateV3ToV4(
   value: unknown,
 ): LegacyPersistedTrainingStateV4 {
-  const parsed = parsePersistedTrainingStateV3(value);
+  const parsed = parsePersistedTrainingStateV3Unchecked(value);
   if (parsed === null) {
     throw new Error('Training-store version 3 state is invalid.');
   }
@@ -1567,7 +1828,7 @@ export function migratePersistedTrainingStateV3ToV4(
     ),
     customTrainingSets: parsed.customTrainingSets,
   };
-  const result = parsePersistedTrainingStateV4(migrated);
+  const result = parsePersistedTrainingStateV4Unchecked(migrated);
   if (result === null) {
     throw new Error('Training-store version 3 migration produced invalid state.');
   }
@@ -1625,7 +1886,7 @@ function migrateLegacyTrainingSetV4ToV5(trainingSet: LegacyTrainingSetV4): Train
 }
 
 export function migratePersistedTrainingStateV4ToV5(value: unknown): PersistedTrainingStateV8 {
-  const parsed = parsePersistedTrainingStateV4(value);
+  const parsed = parsePersistedTrainingStateV4Unchecked(value);
   if (parsed === null) {
     throw new Error('Training-store version 4 state is invalid.');
   }
@@ -1634,7 +1895,7 @@ export function migratePersistedTrainingStateV4ToV5(value: unknown): PersistedTr
     dashboardEntries: parsed.dashboardEntries,
     customTrainingSets: parsed.customTrainingSets.map(migrateLegacyTrainingSetV4ToV5),
   };
-  const result = parsePersistedTrainingStateV8(migrated);
+  const result = parsePersistedTrainingStateV8Unchecked(migrated);
   if (result === null) {
     throw new Error('Training-store version 4 migration produced invalid state.');
   }
@@ -1785,7 +2046,7 @@ function migrateKakarigeijoDurationOverrideV5ToV6(
 }
 
 export function migratePersistedTrainingStateV5ToV6(value: unknown): PersistedTrainingStateV8 {
-  const parsed = parsePersistedTrainingStateV8(value);
+  const parsed = parsePersistedTrainingStateV8Unchecked(value);
   if (parsed === null) {
     throw new Error('Training-store version 5 state is invalid.');
   }
@@ -1796,7 +2057,7 @@ export function migratePersistedTrainingStateV5ToV6(value: unknown): PersistedTr
     ),
     customTrainingSets: parsed.customTrainingSets,
   };
-  const result = parsePersistedTrainingStateV8(migrated);
+  const result = parsePersistedTrainingStateV8Unchecked(migrated);
   if (result === null) {
     throw new Error('Training-store version 5 migration produced invalid state.');
   }
@@ -1851,7 +2112,7 @@ function migrateDashboardEntryV6ToV7(entry: PersistedDashboardEntryV8): Persiste
 }
 
 export function migratePersistedTrainingStateV6ToV7(value: unknown): PersistedTrainingStateV8 {
-  const parsed = parsePersistedTrainingStateV8(value);
+  const parsed = parsePersistedTrainingStateV8Unchecked(value);
   if (parsed === null) {
     throw new Error('Training-store version 6 state is invalid.');
   }
@@ -1860,7 +2121,7 @@ export function migratePersistedTrainingStateV6ToV7(value: unknown): PersistedTr
     dashboardEntries: parsed.dashboardEntries.map(migrateDashboardEntryV6ToV7),
     customTrainingSets: parsed.customTrainingSets,
   };
-  const result = parsePersistedTrainingStateV8(migrated);
+  const result = parsePersistedTrainingStateV8Unchecked(migrated);
   if (result === null) {
     throw new Error('Training-store version 6 migration produced invalid state.');
   }
@@ -1935,7 +2196,7 @@ function migrateDashboardEntryV7ToV8(entry: PersistedDashboardEntryV8): Persiste
 }
 
 export function migratePersistedTrainingStateV7ToV8(value: unknown): PersistedTrainingStateV8 {
-  const parsed = parsePersistedTrainingStateV8(value);
+  const parsed = parsePersistedTrainingStateV8Unchecked(value);
   if (parsed === null) {
     throw new Error('Training-store version 7 state is invalid.');
   }
@@ -1944,7 +2205,7 @@ export function migratePersistedTrainingStateV7ToV8(value: unknown): PersistedTr
     dashboardEntries: parsed.dashboardEntries.map(migrateDashboardEntryV7ToV8),
     customTrainingSets: parsed.customTrainingSets,
   };
-  const result = parsePersistedTrainingStateV8(migrated);
+  const result = parsePersistedTrainingStateV8Unchecked(migrated);
   if (result === null) {
     throw new Error('Training-store version 7 migration produced invalid state.');
   }
@@ -1954,7 +2215,7 @@ export function migratePersistedTrainingStateV7ToV8(value: unknown): PersistedTr
 export const migrateV7ToV8 = migratePersistedTrainingStateV7ToV8;
 
 export function migratePersistedTrainingStateV8ToV9(value: unknown): PersistedTrainingState {
-  const parsed = parsePersistedTrainingStateV8(value);
+  const parsed = parsePersistedTrainingStateV8Unchecked(value);
   if (parsed === null) {
     throw new Error('Training-store version 8 state is invalid.');
   }
@@ -1966,7 +2227,7 @@ export function migratePersistedTrainingStateV8ToV9(value: unknown): PersistedTr
     })),
     customTrainingSets: parsed.customTrainingSets,
   };
-  const result = parsePersistedTrainingState(migrated);
+  const result = parsePersistedTrainingStateUnchecked(migrated);
   if (result === null) {
     throw new Error('Training-store version 8 migration produced invalid state.');
   }
@@ -1980,7 +2241,7 @@ export const migrateV8ToV9 = migratePersistedTrainingStateV8ToV9;
  * Curated entries are cloned from the canonical defaults; unreferenced custom sets are dropped.
  */
 export function migratePersistedTrainingStateV9ToV10(value: unknown): PersistedTrainingStateV10 {
-  const parsed = parsePersistedTrainingStateV9(value);
+  const parsed = parsePersistedTrainingStateUnchecked(value);
   if (parsed === null) {
     throw new Error('Training-store version 9 state is invalid.');
   }
@@ -1999,7 +2260,12 @@ export function migratePersistedTrainingStateV9ToV10(value: unknown): PersistedT
     );
   });
 
-  return { dashboardEntries: migratedEntries };
+  const migrated = { dashboardEntries: migratedEntries };
+  const result = parsePersistedTrainingStateV10Unchecked(migrated);
+  if (result === null) {
+    throw new Error('Training-store version 9 migration produced invalid state.');
+  }
+  return result;
 }
 
 export const migrateV9ToV10 = migratePersistedTrainingStateV9ToV10;
@@ -2076,7 +2342,7 @@ export function migratePersistedTrainingState(
     case 9:
       return migratePersistedTrainingStateV9ToV10(persistedState);
     case TRAINING_STORE_PERSISTENCE_VERSION: {
-      const stateV10 = parsePersistedTrainingStateV10(persistedState);
+      const stateV10 = parsePersistedTrainingStateV10Unchecked(persistedState);
       if (stateV10 === null) {
         throw new Error('Training-store version 10 state is invalid.');
       }
@@ -2156,7 +2422,7 @@ function encodePersistedCustomTrainingSet(
 
 /** Encode canonical state into the unchanged two-level sections/exercises storage DTO. */
 export function encodePersistedTrainingState(value: unknown): PersistedTrainingWireState {
-  const parsed = parsePersistedTrainingState(value);
+  const parsed = parsePersistedTrainingStateUnchecked(value);
   if (parsed === null) {
     throw new Error('Training-store state is invalid and cannot be encoded.');
   }
@@ -2195,8 +2461,8 @@ function parseRuntimeDashboardEntry(value: unknown): DashboardEntry | null {
     !isNonBlankString(trainingSetId) ||
     quantityOverrides === null ||
     activityNotes === null ||
-    typeof notes !== 'string' ||
-    typeof createdAt !== 'string'
+    !isBoundedString(notes, TRAINING_DATA_LIMITS.noteCharacters) ||
+    !isBoundedString(createdAt, TRAINING_DATA_LIMITS.timestampCharacters)
   ) {
     return null;
   }
@@ -2247,7 +2513,11 @@ export function encodePersistedTrainingStateV10(value: unknown): PersistedTraini
   if (!isRecord(value) || !hasOnlyProperties(value, new Set(['dashboardEntries']))) {
     throw new Error('Training-store state is invalid and cannot be encoded.');
   }
-  const dashboardEntries = parseArray(value['dashboardEntries'], parseRuntimeDashboardEntry);
+  const dashboardEntries = parseArray(
+    value['dashboardEntries'],
+    parseRuntimeDashboardEntry,
+    TRAINING_DATA_LIMITS.dashboardEntries,
+  );
   if (dashboardEntries === null || !validateUniqueEntryIds(dashboardEntries)) {
     throw new Error('Training-store state is invalid and cannot be encoded.');
   }
@@ -2280,6 +2550,27 @@ export function encodePersistedTrainingStateV10(value: unknown): PersistedTraini
   };
 }
 
+/**
+ * Encode a v10 state exactly as the storage adapter does and enforce its serialized size.
+ * Callers can use this pure preflight before committing a candidate to an in-memory store.
+ */
+export function serializePersistedTrainingStateV10(value: unknown): string {
+  const state = encodePersistedTrainingStateV10(value);
+  if (parsePersistedTrainingStateV10Unchecked(state) === null) {
+    throw new Error('Training-store encoder produced invalid version 10 state.');
+  }
+  const rawValue = JSON.stringify({
+    state,
+    version: TRAINING_STORE_PERSISTENCE_VERSION,
+  });
+  if (rawValue.length > TRAINING_STORE_RAW_JSON_LIMIT) {
+    throw new Error(
+      `Training-store persistence data exceeds ${String(TRAINING_STORE_RAW_JSON_LIMIT)} characters.`,
+    );
+  }
+  return rawValue;
+}
+
 function parseStorageValue(value: unknown): StorageValue<PersistedStorageState> | null {
   if (value === null) {
     return null;
@@ -2300,7 +2591,7 @@ function parseStorageValue(value: unknown): StorageValue<PersistedStorageState> 
     throw new Error(`Unsupported training-store persistence version: ${String(version)}`);
   }
   if (version === TRAINING_STORE_PERSISTENCE_VERSION) {
-    const state = parsePersistedTrainingStateV10(value['state']);
+    const state = parsePersistedTrainingStateV10Unchecked(value['state']);
     if (state === null) {
       throw new Error('Training-store persistence data is invalid.');
     }
@@ -2310,28 +2601,28 @@ function parseStorageValue(value: unknown): StorageValue<PersistedStorageState> 
   switch (version) {
     case 0:
     case 1: {
-      const state = parsePersistedTrainingStateV1(value['state']);
+      const state = parsePersistedTrainingStateV1Unchecked(value['state']);
       if (state === null) {
         throw new Error('Training-store legacy persistence data is invalid.');
       }
       return { state, version };
     }
     case 2: {
-      const state = parsePersistedTrainingStateV2(value['state']);
+      const state = parsePersistedTrainingStateV2Unchecked(value['state']);
       if (state === null) {
         throw new Error('Training-store version 2 persistence data is invalid.');
       }
       return { state, version };
     }
     case 3: {
-      const state = parsePersistedTrainingStateV3(value['state']);
+      const state = parsePersistedTrainingStateV3Unchecked(value['state']);
       if (state === null) {
         throw new Error('Training-store version 3 persistence data is invalid.');
       }
       return { state, version };
     }
     case 4: {
-      const state = parsePersistedTrainingStateV4(value['state']);
+      const state = parsePersistedTrainingStateV4Unchecked(value['state']);
       if (state === null) {
         throw new Error('Training-store version 4 persistence data is invalid.');
       }
@@ -2348,7 +2639,7 @@ function parseStorageValue(value: unknown): StorageValue<PersistedStorageState> 
       return { state, version };
     }
     case 9: {
-      const state = parsePersistedTrainingWireStateV9(value['state']);
+      const state = parsePersistedTrainingWireState(value['state']);
       if (state === null) {
         throw new Error('Training-store version 9 persistence data is invalid.');
       }
@@ -2362,29 +2653,38 @@ function parseStorageValue(value: unknown): StorageValue<PersistedStorageState> 
 export function createTrainingJSONStorage(
   storage: StateStorage,
 ): PersistStorage<PersistedStorageState> {
-  const jsonStorage = createJSONStorage<unknown>(() => storage);
-  if (jsonStorage === undefined) {
-    throw new Error('Training-store storage is unavailable.');
-  }
+  const parseRawValue = (rawValue: string | null): StorageValue<PersistedStorageState> | null => {
+    if (rawValue === null) {
+      return null;
+    }
+    if (rawValue.length > TRAINING_STORE_RAW_JSON_LIMIT) {
+      throw new Error(
+        `Training-store persistence data exceeds ${String(TRAINING_STORE_RAW_JSON_LIMIT)} characters.`,
+      );
+    }
+    return parseStorageValue(JSON.parse(rawValue));
+  };
 
   return {
     getItem: (name) => {
-      const storedValue = jsonStorage.getItem(name);
+      const storedValue = storage.getItem(name);
       return isPromiseLike(storedValue)
-        ? storedValue.then(parseStorageValue)
-        : parseStorageValue(storedValue);
+        ? storedValue.then(parseRawValue)
+        : parseRawValue(storedValue);
     },
     setItem: (name, value) => {
-      const state = encodePersistedTrainingStateV10(value.state);
-      const encodedValue =
-        value.version === undefined ? { state } : { state, version: value.version };
-      return jsonStorage.setItem(name, encodedValue);
+      if (value.version !== undefined && value.version !== TRAINING_STORE_PERSISTENCE_VERSION) {
+        throw new Error(
+          `Training-store persistence version must be ${String(TRAINING_STORE_PERSISTENCE_VERSION)}.`,
+        );
+      }
+      return storage.setItem(name, serializePersistedTrainingStateV10(value.state));
     },
-    removeItem: (name) => jsonStorage.removeItem(name),
+    removeItem: (name) => storage.removeItem(name),
   };
 }
 
-function classifyParsedEnvelope(value: unknown): TrainingStorageInspection {
+function classifyParsedEnvelopeUnchecked(value: unknown): TrainingStorageInspection {
   if (!isRecord(value) || !hasOnlyProperties(value, new Set(['state', 'version']))) {
     return { status: 'corrupt', kind: 'corrupt', reason: 'malformed-envelope' };
   }
@@ -2401,7 +2701,7 @@ function classifyParsedEnvelope(value: unknown): TrainingStorageInspection {
     return { status: 'unsupported-future', kind: 'unsupported-future', version };
   }
   if (version === TRAINING_STORE_PERSISTENCE_VERSION) {
-    const state = parsePersistedTrainingStateV10(value['state']);
+    const state = parsePersistedTrainingStateV10Unchecked(value['state']);
     return state === null
       ? { status: 'corrupt', kind: 'corrupt', reason: 'invalid-domain' }
       : { status: 'ready', kind: 'ready', version, state };
@@ -2412,7 +2712,7 @@ function classifyParsedEnvelope(value: unknown): TrainingStorageInspection {
       version === 5 || version === 6 || version === 7 || version === 8
         ? parsePersistedTrainingWireStateV8(value['state'])
         : version === 9
-          ? parsePersistedTrainingWireStateV9(value['state'])
+          ? parsePersistedTrainingWireState(value['state'])
           : value['state'];
     if (persistedState === null) {
       return { status: 'corrupt', kind: 'corrupt', reason: 'invalid-domain' };
@@ -2456,23 +2756,34 @@ function classifyParsedEnvelope(value: unknown): TrainingStorageInspection {
   }
 }
 
+function classifyParsedEnvelope(value: unknown): TrainingStorageInspection {
+  try {
+    return classifyParsedEnvelopeUnchecked(value);
+  } catch {
+    return { status: 'corrupt', kind: 'corrupt', reason: 'invalid-domain' };
+  }
+}
+
 export function classifyTrainingStorageValue(
   rawValue: string | null | undefined,
 ): TrainingStorageInspection {
-  if (rawValue === undefined) {
-    return { status: 'unavailable', kind: 'unavailable' };
-  }
-  if (rawValue === null) {
-    return { status: 'empty', kind: 'empty' };
-  }
-
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(rawValue);
+    if (rawValue === undefined) {
+      return { status: 'unavailable', kind: 'unavailable' };
+    }
+    if (rawValue === null) {
+      return { status: 'empty', kind: 'empty' };
+    }
+    if (typeof rawValue !== 'string') {
+      return { status: 'corrupt', kind: 'corrupt', reason: 'malformed-json' };
+    }
+    if (rawValue.length > TRAINING_STORE_RAW_JSON_LIMIT) {
+      return { status: 'corrupt', kind: 'corrupt', reason: 'resource-limit' };
+    }
+    return classifyParsedEnvelope(JSON.parse(rawValue));
   } catch {
     return { status: 'corrupt', kind: 'corrupt', reason: 'malformed-json' };
   }
-  return classifyParsedEnvelope(parsed);
 }
 
 export const classifyPersistedStorage = classifyTrainingStorageValue;

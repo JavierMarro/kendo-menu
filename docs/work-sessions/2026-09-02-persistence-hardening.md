@@ -1,0 +1,8 @@
+- Session: persistence hardening
+- Date/duration: 2026-09-02; not recorded
+- Scope/start: Harden untrusted local persistence limits, exception safety, and v10 read/write symmetry from a clean worktree.
+- Changes: Centralized data limits, bounded public parsers/classification, symmetric encoder/storage preflight, atomic store actions, UI constraints, and boundary/hostile/round-trip tests.
+- Decisions: Kept persistence version 10 and its two-level custom-set wire format; unsupported nesting throws rather than being truncated.
+- Roadblocks: Independent review found and resolved a pre-commit atomicity gap for oversized but domain-valid state.
+- Verification: Passed test:domain (63), test:store (68), check:domain, check:store, and check (web 119 plus build).
+- Follow-up: None.
