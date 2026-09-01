@@ -1,5 +1,5 @@
 import { render, type RenderOptions, type RenderResult } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, type InitialEntry } from 'react-router-dom';
 import { createTrainingStore, type StateStorage, type TrainingStoreApi } from '@kendo-menu/store';
 import type { ReactNode } from 'react';
 
@@ -46,7 +46,7 @@ export function createTestStore(
 }
 
 interface AppRenderOptions extends Omit<RenderOptions, 'wrapper'> {
-  readonly initialEntries?: readonly string[];
+  readonly initialEntries?: readonly InitialEntry[];
   readonly persistence?: Partial<PersistenceContextValue>;
 }
 

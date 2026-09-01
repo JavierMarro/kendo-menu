@@ -159,7 +159,7 @@ test.describe('routed training flows', () => {
   test('persists the cookie notice acknowledgement for 21 days', async ({ page }) => {
     const notice = page.getByRole('complementary', { name: 'Cookie notice' });
     await expect(notice).toContainText(
-      'KendoMenu does not use any tracking cookies, no training data or notes leave your device. KendoMenu only uses aggregate analytics through GoatCounter.',
+      'This site does not use tracking cookies. We use GoatCounter Analytics (no cookies) to improve the service.',
     );
     await expect(notice.getByRole('link', { name: 'More information' })).toHaveAttribute(
       'href',
@@ -178,6 +178,12 @@ test.describe('routed training flows', () => {
       'https://www.goatcounter.com/help/privacy',
     );
     await expect(goatCounterLink).toHaveAttribute('target', '_blank');
+    await expect(
+      page.getByText(
+        'KendoMenu uses GoatCounter for cookie-free, aggregate usage statistics such as page paths, browser and operating-system categories, screen size, country, and short-lived session deduplication. Individual pageviews and referrer collection are disabled. Training plans, notes, and menu names are not intentionally sent to GoatCounter.',
+        { exact: true },
+      ),
+    ).toBeVisible();
     await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Got it' }).click();
@@ -920,8 +926,15 @@ test.describe('routed training flows', () => {
     await exercises.getByLabel('Duration', { exact: true }).fill('12.5');
     await page.getByRole('button', { name: 'Save session to dashboard' }).click();
 
-    await expect(page).toHaveURL(/\/app\/dashboard\?created=Monday%20footwork$/);
+    await expect(page).toHaveURL(/\/app\/dashboard$/);
+    const savedMenuUrl = new URL(page.url());
+    expect(savedMenuUrl.pathname).toBe('/app/dashboard');
+    expect(savedMenuUrl.search).toBe('');
+    expect(savedMenuUrl.hash).toBe('');
     expect(unexpectedDialogMessage).toBeNull();
+    await expect(page.locator('p[role="status"]')).toHaveText(
+      'Monday footwork saved to your dashboard.',
+    );
     await expect(page.getByRole('heading', { name: 'Monday footwork' })).toBeVisible();
     let customCard = dashboardCard(page, 'Monday footwork');
     await expect(customCard.getByText('Custom', { exact: true })).toBeVisible();
@@ -942,6 +955,10 @@ test.describe('routed training flows', () => {
       })
       .click();
 
+    await page.goto('/app/library');
+    await page.goBack();
+    await expect(page).toHaveURL(/\/app\/dashboard$/);
+    await expect(page.locator('p[role="status"]')).toHaveText('');
     await page.goto('/app/library');
     await expect(page.locator('.library-card')).toHaveCount(11);
     await expect(page.getByRole('heading', { name: 'Monday footwork', exact: true })).toHaveCount(
@@ -997,7 +1014,14 @@ test.describe('routed training flows', () => {
     await customExercises.getByLabel('Repetitions', { exact: true }).fill('24');
     await page.getByRole('button', { name: 'Save session to dashboard' }).click();
 
-    await expect(page).toHaveURL(/\/app\/dashboard\?created=High%20intensity%20custom%20menu$/);
+    await expect(page).toHaveURL(/\/app\/dashboard$/);
+    const customMenuUrl = new URL(page.url());
+    expect(customMenuUrl.pathname).toBe('/app/dashboard');
+    expect(customMenuUrl.search).toBe('');
+    expect(customMenuUrl.hash).toBe('');
+    await expect(page.locator('p[role="status"]')).toHaveText(
+      'High intensity custom menu saved to your dashboard.',
+    );
     const filter = page.getByLabel('Filter sessions');
     await expect(filter).toHaveValue('all');
     await expect(page.locator('.dashboard-card--compact')).toHaveCount(3);

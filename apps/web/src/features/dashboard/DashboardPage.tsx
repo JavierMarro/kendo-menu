@@ -7,7 +7,13 @@ import {
   type FocusEvent,
   type FormEvent,
 } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import {
+  Link,
+  NavigationType,
+  useLocation,
+  useNavigate,
+  useNavigationType,
+} from 'react-router-dom';
 
 import type {
   DashboardEntry,
@@ -40,6 +46,7 @@ import {
   type TrainingActivityRenderContext,
 } from '../../components/TrainingActivityList';
 import { TrainingSetTags } from '../../components/TrainingSetTags';
+import { getSavedMenuNavigationState } from '../../lib/navigation-state';
 import {
   getExplicitPersistenceUpdateLabel,
   getPersistenceUpdateLabel,
@@ -56,6 +63,13 @@ function getQuantityDraftValue(
 }
 
 const MAX_QUANTITY_DIGITS = 3;
+
+interface PendingNavigationStateClear {
+  readonly sourceKey: string;
+  readonly pathname: string;
+  readonly search: string;
+  readonly hash: string;
+}
 
 function hasAllowedQuantityDraftLength(value: string): boolean {
   if (value.includes('e') || value.includes('E') || value.includes('+')) {
@@ -81,11 +95,19 @@ export function DashboardPage() {
   const setActivityNote = useTrainingStore((state) => state.setActivityNote);
   const store = useTrainingStoreApi();
   const [removedEntry, setRemovedEntry] = useState<RemovedDashboardEntry | null>(null);
-  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navigationType = useNavigationType();
   const persistenceStatus = usePersistenceStatus();
   const [statusMessage, setStatusMessage] = useState('');
   const [dashboardFilter, setDashboardFilter] = useState<DashboardFilter>('all');
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const savedMenuNavigationState = getSavedMenuNavigationState(location.state);
+  const [createdName, setCreatedName] = useState<string | null>(
+    () => savedMenuNavigationState?.menuName ?? null,
+  );
+  const consumedNavigationKeyRef = useRef<string | null>(null);
+  const pendingNavigationStateClearRef = useRef<PendingNavigationStateClear | null>(null);
   const viewMoreButtonsRef = useRef(new Map<string, HTMLButtonElement>());
   const previousSelectedEntryIdRef = useRef<string | null>(null);
   const filteredEntries = useMemo(
@@ -99,7 +121,6 @@ export function DashboardPage() {
   const selectedTrainingSet =
     selectedEntry === undefined ? undefined : getDashboardTrainingSet(selectedEntry);
   const visibleSelectedEntryId = selectedEntry?.id ?? null;
-  const createdName = searchParams.get('created');
   const createdStatusMessage =
     createdName === null
       ? ''
@@ -108,6 +129,72 @@ export function DashboardPage() {
         : persistenceStatus.mode === 'session'
           ? `${createdName} was added for this session only.`
           : `${createdName} saved to your dashboard.`;
+
+  useEffect(() => {
+    if (savedMenuNavigationState === null) {
+      const pendingNavigationStateClear = pendingNavigationStateClearRef.current;
+      const isInternalStateClear =
+        pendingNavigationStateClear !== null &&
+        navigationType === NavigationType.Replace &&
+        pendingNavigationStateClear.pathname === location.pathname &&
+        pendingNavigationStateClear.search === location.search &&
+        pendingNavigationStateClear.hash === location.hash;
+
+      if (isInternalStateClear) {
+        pendingNavigationStateClearRef.current = null;
+        return;
+      }
+
+      pendingNavigationStateClearRef.current = null;
+      consumedNavigationKeyRef.current = null;
+      setCreatedName(null);
+      return;
+    }
+
+    if (consumedNavigationKeyRef.current === location.key) {
+      return;
+    }
+
+    consumedNavigationKeyRef.current = location.key;
+    setCreatedName(savedMenuNavigationState.menuName);
+    pendingNavigationStateClearRef.current = {
+      sourceKey: location.key,
+      pathname: location.pathname,
+      search: location.search,
+      hash: location.hash,
+    };
+
+    const resetPendingNavigationStateClear = () => {
+      if (pendingNavigationStateClearRef.current?.sourceKey === location.key) {
+        pendingNavigationStateClearRef.current = null;
+      }
+      if (consumedNavigationKeyRef.current === location.key) {
+        consumedNavigationKeyRef.current = null;
+      }
+    };
+
+    try {
+      const navigation = navigate(
+        {
+          pathname: location.pathname,
+          search: location.search,
+          hash: location.hash,
+        },
+        { replace: true, state: null },
+      );
+      void Promise.resolve(navigation).catch(resetPendingNavigationStateClear);
+    } catch {
+      resetPendingNavigationStateClear();
+    }
+  }, [
+    location.hash,
+    location.key,
+    location.pathname,
+    location.search,
+    navigate,
+    navigationType,
+    savedMenuNavigationState,
+  ]);
 
   useEffect(() => {
     if (visibleSelectedEntryId !== null) {
