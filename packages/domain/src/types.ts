@@ -40,6 +40,27 @@ export const TRAINING_QUANTITY_UNITS = [
 
 export const DURATION_UNITS = ['seconds', 'minutes'] as const;
 
+/**
+ * Generous bounds for untrusted authored and persisted training data. The current curated
+ * maxima are depth 3, 14 sections, 9 children, 45 activities, 73-character ids, and a
+ * 330-character description; these ceilings leave ample normal and migration headroom while
+ * bounding local-storage work.
+ */
+export const TRAINING_DATA_LIMITS = {
+  dashboardEntries: 128,
+  legacyCustomSetCollection: 128,
+  customSections: 64,
+  exercisesPerSection: 128,
+  totalActivitiesPerTrainingSet: 512,
+  activityNestingDepth: 8,
+  identifierCharacters: 256,
+  nameCharacters: 200,
+  descriptionCharacters: 4_000,
+  noteCharacters: 8_000,
+  dashboardRecordEntries: 512,
+  timestampCharacters: 64,
+} as const;
+
 export type TrainingQuantityUnit = (typeof TRAINING_QUANTITY_UNITS)[number];
 export type DurationUnit = (typeof DURATION_UNITS)[number];
 
@@ -225,6 +246,10 @@ function isNonBlankString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function isBoundedString(value: unknown, maximumLength: number): value is string {
+  return typeof value === 'string' && value.length <= maximumLength;
+}
+
 function hasOnlyProperties(
   value: Readonly<Record<string, unknown>>,
   allowedProperties: ReadonlySet<string>,
@@ -392,8 +417,32 @@ function validateOptionalText(
   path: string,
   issues: ValidationIssue[],
 ): void {
-  if (Object.hasOwn(value, property) && typeof value[property] !== 'string') {
+  if (!Object.hasOwn(value, property)) {
+    return;
+  }
+  const candidate = value[property];
+  if (typeof candidate !== 'string') {
     pushIssue(issues, path, 'must be a string when provided');
+    return;
+  }
+  const maximumLength =
+    property === 'description'
+      ? TRAINING_DATA_LIMITS.descriptionCharacters
+      : TRAINING_DATA_LIMITS.noteCharacters;
+  if (!isBoundedString(candidate, maximumLength)) {
+    pushIssue(issues, path, `must be no more than ${maximumLength} characters`);
+  }
+}
+
+function validateName(value: unknown, path: string, issues: ValidationIssue[]): void {
+  if (!isNonBlankString(value)) {
+    pushIssue(issues, path, 'must be a nonblank string');
+  } else if (!isBoundedString(value, TRAINING_DATA_LIMITS.nameCharacters)) {
+    pushIssue(
+      issues,
+      path,
+      `must be no more than ${TRAINING_DATA_LIMITS.nameCharacters} characters`,
+    );
   }
 }
 
@@ -439,6 +488,12 @@ function validateActivityId(
 ): void {
   if (!isNonBlankString(id)) {
     pushIssue(issues, path, 'must be a nonblank string');
+  } else if (!isBoundedString(id, TRAINING_DATA_LIMITS.identifierCharacters)) {
+    pushIssue(
+      issues,
+      path,
+      `must be no more than ${TRAINING_DATA_LIMITS.identifierCharacters} characters`,
+    );
   } else if (seenIds.has(id)) {
     pushIssue(issues, path, 'must be unique');
   } else {
@@ -466,17 +521,42 @@ const CURATED_ACTIVITY_PROPERTIES = new Set([
   'allowsSessionNotes',
 ]);
 
+interface ActivityValidationBudget {
+  count: number;
+  exceeded: boolean;
+}
+
 function validateTrainingActivity(
   value: unknown,
   path: string,
   issues: ValidationIssue[],
   seenIds: Set<string>,
   ancestors: Set<object>,
+  depth: number,
+  budget: ActivityValidationBudget,
 ): value is TrainingActivity {
   if (!isRecord(value)) {
     pushIssue(issues, path, 'must be an object');
     return false;
   }
+  if (depth > TRAINING_DATA_LIMITS.activityNestingDepth) {
+    pushIssue(
+      issues,
+      path,
+      `must not exceed ${TRAINING_DATA_LIMITS.activityNestingDepth} activity levels`,
+    );
+    return false;
+  }
+  if (budget.count >= TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet) {
+    budget.exceeded = true;
+    pushIssue(
+      issues,
+      path,
+      `must contain no more than ${TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet} activities`,
+    );
+    return false;
+  }
+  budget.count += 1;
   if (ancestors.has(value)) {
     pushIssue(issues, path, 'must not contain cyclic children');
     return false;
@@ -487,9 +567,7 @@ function validateTrainingActivity(
     pushIssue(issues, path, 'contains unsupported properties');
   }
   validateActivityId(value['id'], `${path}.id`, issues, seenIds);
-  if (!isNonBlankString(value['name'])) {
-    pushIssue(issues, `${path}.name`, 'must be a nonblank string');
-  }
+  validateName(value['name'], `${path}.name`, issues);
   validateOptionalQuantities(value, `${path}.quantities`, issues);
   validateOptionalText(value, 'notes', `${path}.notes`, issues);
   validateOptionalActivityMetadata(value, path, issues);
@@ -500,13 +578,27 @@ function validateTrainingActivity(
     ancestors.delete(value);
     return false;
   }
+  if (children.length > TRAINING_DATA_LIMITS.exercisesPerSection) {
+    pushIssue(
+      issues,
+      `${path}.children`,
+      `must contain no more than ${TRAINING_DATA_LIMITS.exercisesPerSection} activities`,
+    );
+    ancestors.delete(value);
+    return false;
+  }
   for (let index = 0; index < children.length; index += 1) {
+    if (budget.exceeded) {
+      break;
+    }
     validateTrainingActivity(
       children[index],
       `${path}.children[${index}]`,
       issues,
       seenIds,
       ancestors,
+      depth + 1,
+      budget,
     );
   }
   ancestors.delete(value);
@@ -523,9 +615,29 @@ function validateTrainingActivities(
     pushIssue(issues, path, 'must contain at least one activity');
     return false;
   }
+  if (value.length > TRAINING_DATA_LIMITS.customSections) {
+    pushIssue(
+      issues,
+      path,
+      `must contain no more than ${TRAINING_DATA_LIMITS.customSections} activities`,
+    );
+    return false;
+  }
   const ancestors = new Set<object>();
+  const budget: ActivityValidationBudget = { count: 0, exceeded: false };
   for (let index = 0; index < value.length; index += 1) {
-    validateTrainingActivity(value[index], `${path}[${index}]`, issues, seenIds, ancestors);
+    if (budget.exceeded) {
+      break;
+    }
+    validateTrainingActivity(
+      value[index],
+      `${path}[${index}]`,
+      issues,
+      seenIds,
+      ancestors,
+      1,
+      budget,
+    );
   }
   return true;
 }
@@ -609,7 +721,7 @@ function cloneCanonicalTrainingSet(
   });
 }
 
-export function validateTrainingSet(value: unknown): ValidationResult<TrainingSet> {
+function validateTrainingSetUnchecked(value: unknown): ValidationResult<TrainingSet> {
   const issues: ValidationIssue[] = [];
   if (!isRecord(value)) {
     return { success: false, issues: [{ path: '', message: 'must be an object' }] };
@@ -643,9 +755,7 @@ export function validateTrainingSet(value: unknown): ValidationResult<TrainingSe
   if (Object.hasOwn(value, 'sourceId') && !isValidCount(sourceId)) {
     pushIssue(issues, 'sourceId', 'must be a nonnegative safe integer when provided');
   }
-  if (!isNonBlankString(name)) {
-    pushIssue(issues, 'name', 'must be a nonblank string');
-  }
+  validateName(name, 'name', issues);
   validateOptionalText(value, 'description', 'description', issues);
   if (!isDrillCategory(category)) {
     pushIssue(issues, 'category', 'must be a supported category');
@@ -706,6 +816,18 @@ export function validateTrainingSet(value: unknown): ValidationResult<TrainingSe
   };
 }
 
+/** Validate an untrusted canonical runtime training set without leaking hostile getter errors. */
+export function validateTrainingSet(value: unknown): ValidationResult<TrainingSet> {
+  try {
+    return validateTrainingSetUnchecked(value);
+  } catch {
+    return {
+      success: false,
+      issues: [{ path: '', message: 'could not be inspected safely' }],
+    };
+  }
+}
+
 function validateTrainingExerciseInput(
   value: unknown,
   path: string,
@@ -718,9 +840,7 @@ function validateTrainingExerciseInput(
   if (!hasOnlyProperties(value, new Set(['name', 'quantities', 'notes']))) {
     pushIssue(issues, path, 'contains unsupported properties');
   }
-  if (!isNonBlankString(value['name'])) {
-    pushIssue(issues, `${path}.name`, 'must be a nonblank string');
-  }
+  validateName(value['name'], `${path}.name`, issues);
   validateOptionalQuantities(value, `${path}.quantities`, issues);
   if (
     isRecord(value['quantities']) &&
@@ -749,14 +869,20 @@ function validateTrainingSectionInput(
   if (!hasOnlyProperties(value, new Set(['name', 'quantities', 'notes', 'exercises']))) {
     pushIssue(issues, path, 'contains unsupported properties');
   }
-  if (!isNonBlankString(value['name'])) {
-    pushIssue(issues, `${path}.name`, 'must be a nonblank string');
-  }
+  validateName(value['name'], `${path}.name`, issues);
   validateOptionalQuantities(value, `${path}.quantities`, issues);
   validateOptionalText(value, 'notes', `${path}.notes`, issues);
 
   if (!Array.isArray(value['exercises'])) {
     pushIssue(issues, `${path}.exercises`, 'must be an array');
+    return false;
+  }
+  if (value['exercises'].length > TRAINING_DATA_LIMITS.exercisesPerSection) {
+    pushIssue(
+      issues,
+      `${path}.exercises`,
+      `must contain no more than ${TRAINING_DATA_LIMITS.exercisesPerSection} exercises`,
+    );
     return false;
   }
   for (let index = 0; index < value['exercises'].length; index += 1) {
@@ -765,7 +891,7 @@ function validateTrainingSectionInput(
   return true;
 }
 
-export function validateTrainingSetInput(value: unknown): ValidationResult<TrainingSetInput> {
+function validateTrainingSetInputUnchecked(value: unknown): ValidationResult<TrainingSetInput> {
   const issues: ValidationIssue[] = [];
   if (!isRecord(value)) {
     return { success: false, issues: [{ path: '', message: 'must be an object' }] };
@@ -783,9 +909,7 @@ export function validateTrainingSetInput(value: unknown): ValidationResult<Train
   const category = value['category'];
   const sections = value['sections'];
 
-  if (!isNonBlankString(name)) {
-    pushIssue(issues, 'name', 'must be a nonblank string');
-  }
+  validateName(name, 'name', issues);
   validateOptionalText(value, 'description', 'description', issues);
   if (category !== 'custom') {
     pushIssue(issues, 'category', 'custom sets must use the custom category');
@@ -798,9 +922,31 @@ export function validateTrainingSetInput(value: unknown): ValidationResult<Train
   }
   if (!Array.isArray(sections) || sections.length < 1) {
     pushIssue(issues, 'sections', 'must contain at least one section');
+  } else if (sections.length > TRAINING_DATA_LIMITS.customSections) {
+    pushIssue(
+      issues,
+      'sections',
+      `must contain no more than ${TRAINING_DATA_LIMITS.customSections} sections`,
+    );
   } else {
-    for (let index = 0; index < sections.length; index += 1) {
-      validateTrainingSectionInput(sections[index], `sections[${index}]`, issues);
+    let activityCount = 0;
+    for (const section of sections) {
+      activityCount += 1;
+      if (isRecord(section) && Array.isArray(section['exercises'])) {
+        activityCount += section['exercises'].length;
+      }
+    }
+    if (activityCount > TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet) {
+      pushIssue(
+        issues,
+        'sections',
+        `must contain no more than ${TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet} activities`,
+      );
+    }
+    if (activityCount <= TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet) {
+      for (let index = 0; index < sections.length; index += 1) {
+        validateTrainingSectionInput(sections[index], `sections[${index}]`, issues);
+      }
     }
   }
 
@@ -833,6 +979,18 @@ export function validateTrainingSetInput(value: unknown): ValidationResult<Train
   return { success: true, value: input };
 }
 
+/** Validate user-authored builder input without leaking hostile getter/proxy errors. */
+export function validateTrainingSetInput(value: unknown): ValidationResult<TrainingSetInput> {
+  try {
+    return validateTrainingSetInputUnchecked(value);
+  } catch {
+    return {
+      success: false,
+      issues: [{ path: '', message: 'could not be inspected safely' }],
+    };
+  }
+}
+
 function validateCuratedActivity(
   value: unknown,
   path: string,
@@ -840,11 +998,31 @@ function validateCuratedActivity(
   seenIds: Set<string>,
   requireExercises: boolean,
   ancestors: Set<object>,
+  depth: number,
+  budget: ActivityValidationBudget,
 ): value is CuratedActivity {
   if (!isRecord(value)) {
     pushIssue(issues, path, 'must be an object');
     return false;
   }
+  if (depth > TRAINING_DATA_LIMITS.activityNestingDepth) {
+    pushIssue(
+      issues,
+      path,
+      `must not exceed ${TRAINING_DATA_LIMITS.activityNestingDepth} activity levels`,
+    );
+    return false;
+  }
+  if (budget.count >= TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet) {
+    budget.exceeded = true;
+    pushIssue(
+      issues,
+      path,
+      `must contain no more than ${TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet} activities`,
+    );
+    return false;
+  }
+  budget.count += 1;
   if (ancestors.has(value)) {
     pushIssue(issues, path, 'must not contain cyclic exercises');
     return false;
@@ -854,9 +1032,7 @@ function validateCuratedActivity(
     pushIssue(issues, path, 'contains unsupported properties');
   }
   validateActivityId(value['id'], `${path}.id`, issues, seenIds);
-  if (!isNonBlankString(value['name'])) {
-    pushIssue(issues, `${path}.name`, 'must be a nonblank string');
-  }
+  validateName(value['name'], `${path}.name`, issues);
   validateOptionalQuantities(value, `${path}.quantities`, issues);
   validateOptionalText(value, 'notes', `${path}.notes`, issues);
   validateOptionalActivityMetadata(value, path, issues);
@@ -873,8 +1049,20 @@ function validateCuratedActivity(
     ancestors.delete(value);
     return false;
   }
+  if (Array.isArray(exercises) && exercises.length > TRAINING_DATA_LIMITS.exercisesPerSection) {
+    pushIssue(
+      issues,
+      `${path}.exercises`,
+      `must contain no more than ${TRAINING_DATA_LIMITS.exercisesPerSection} activities`,
+    );
+    ancestors.delete(value);
+    return false;
+  }
   if (Array.isArray(exercises)) {
     for (let index = 0; index < exercises.length; index += 1) {
+      if (budget.exceeded) {
+        break;
+      }
       validateCuratedActivity(
         exercises[index],
         `${path}.exercises[${index}]`,
@@ -882,6 +1070,8 @@ function validateCuratedActivity(
         seenIds,
         false,
         ancestors,
+        depth + 1,
+        budget,
       );
     }
   }
@@ -899,14 +1089,35 @@ function validateCuratedSections(
     pushIssue(issues, path, 'must contain at least one section');
     return false;
   }
+  if (value.length > TRAINING_DATA_LIMITS.customSections) {
+    pushIssue(
+      issues,
+      path,
+      `must contain no more than ${TRAINING_DATA_LIMITS.customSections} sections`,
+    );
+    return false;
+  }
   const ancestors = new Set<object>();
+  const budget: ActivityValidationBudget = { count: 0, exceeded: false };
   for (let index = 0; index < value.length; index += 1) {
-    validateCuratedActivity(value[index], `${path}[${index}]`, issues, seenIds, true, ancestors);
+    if (budget.exceeded) {
+      break;
+    }
+    validateCuratedActivity(
+      value[index],
+      `${path}[${index}]`,
+      issues,
+      seenIds,
+      true,
+      ancestors,
+      1,
+      budget,
+    );
   }
   return true;
 }
 
-export function validateCuratedDrills(value: unknown): ValidationResult<readonly CuratedDrill[]> {
+function validateCuratedDrillsUnchecked(value: unknown): ValidationResult<readonly CuratedDrill[]> {
   const issues: ValidationIssue[] = [];
   if (!isUnknownArray(value)) {
     return { success: false, issues: [{ path: '', message: 'must be an array' }] };
@@ -942,9 +1153,7 @@ export function validateCuratedDrills(value: unknown): ValidationResult<readonly
         seenSourceIds.add(sourceId);
       }
     }
-    if (!isNonBlankString(name)) {
-      pushIssue(issues, `${path}.name`, 'must be a nonblank string');
-    }
+    validateName(name, `${path}.name`, issues);
     validateOptionalText(item, 'description', `${path}.description`, issues);
     const sectionsAreValid = validateCuratedSections(
       item['sections'],
@@ -973,6 +1182,18 @@ export function validateCuratedDrills(value: unknown): ValidationResult<readonly
   }
 
   return issues.length > 0 ? { success: false, issues } : { success: true, value: drills };
+}
+
+/** Validate curated source trees without leaking hostile getter/proxy errors. */
+export function validateCuratedDrills(value: unknown): ValidationResult<readonly CuratedDrill[]> {
+  try {
+    return validateCuratedDrillsUnchecked(value);
+  } catch {
+    return {
+      success: false,
+      issues: [{ path: '', message: 'could not be inspected safely' }],
+    };
+  }
 }
 
 export function assertValidTrainingSetInput(value: unknown): asserts value is TrainingSetInput {

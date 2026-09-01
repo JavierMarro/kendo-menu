@@ -21,6 +21,7 @@ import type {
   TrainingQuantityUnit,
   TrainingSet,
 } from '@kendo-menu/domain';
+import { TRAINING_DATA_LIMITS } from '@kendo-menu/domain';
 import type { RemovedDashboardEntry } from '@kendo-menu/store';
 
 import {
@@ -531,6 +532,7 @@ export function DashboardTrainingSet({
             value={notesDraft}
             placeholder="What do you want to remember for this session?"
             rows={3}
+            maxLength={TRAINING_DATA_LIMITS.noteCharacters}
             onBlur={handleNotesBlur}
             onChange={handleNotesChange}
           />
@@ -709,6 +711,7 @@ function ActivityNotesEditor({ entry, activity, onSet }: ActivityNotesEditorProp
           id={textareaId}
           value={draft}
           rows={2}
+          maxLength={TRAINING_DATA_LIMITS.noteCharacters}
           aria-describedby={statusMessage.length > 0 ? statusId : undefined}
           placeholder="Add a note for this activity."
           onChange={(event) => {

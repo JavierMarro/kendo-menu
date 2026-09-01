@@ -11,7 +11,7 @@ import {
 } from 'react';
 import { Link, useBlocker, useNavigate } from 'react-router-dom';
 
-import { isCustomTrainingIntensity } from '@kendo-menu/domain';
+import { isCustomTrainingIntensity, TRAINING_DATA_LIMITS } from '@kendo-menu/domain';
 
 import {
   builderReducer,
@@ -28,6 +28,15 @@ const EMPTY_BUILDER_ERRORS: BuilderErrors = {};
 function getErrorTargetId(key: string): string {
   if (key === 'name') {
     return 'drill-name';
+  }
+  if (key === 'description') {
+    return 'drill-description';
+  }
+  if (key === 'sections' || key === 'activities') {
+    return 'activities-title';
+  }
+  if (key.startsWith('section-steps-')) {
+    return `exercises-title-${key.slice('section-steps-'.length)}`;
   }
   if (key.startsWith('section-')) {
     return `section-label-${key.slice('section-'.length)}`;
@@ -81,6 +90,13 @@ export function CreateDrillPage() {
   );
   const parseResult = useMemo(() => parseBuilderState(state), [state]);
   const errors: BuilderErrors = parseResult.success ? EMPTY_BUILDER_ERRORS : parseResult.errors;
+  const draftActivityCount = state.sections.reduce(
+    (total, section) => total + 1 + section.steps.length,
+    0,
+  );
+  const canAddSection =
+    state.sections.length < TRAINING_DATA_LIMITS.customSections &&
+    draftActivityCount + 2 <= TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet;
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -236,6 +252,7 @@ export function CreateDrillPage() {
                 id="drill-name"
                 name="name"
                 type="text"
+                maxLength={TRAINING_DATA_LIMITS.nameCharacters}
                 value={state.name}
                 aria-invalid={showError('name') && errors['name'] !== undefined}
                 aria-describedby={
@@ -257,9 +274,21 @@ export function CreateDrillPage() {
                 name="description"
                 value={state.description}
                 rows={2}
+                maxLength={TRAINING_DATA_LIMITS.descriptionCharacters}
+                aria-invalid={showError('description') && errors['description'] !== undefined}
+                aria-describedby={
+                  showError('description') && errors['description'] !== undefined
+                    ? 'drill-description-error'
+                    : undefined
+                }
                 onBlur={markTouched}
                 onChange={(event) => update({ type: 'set-description', value: event.target.value })}
               />
+              {showError('description') && errors['description'] !== undefined ? (
+                <span id="drill-description-error" className="form-error">
+                  {errors['description']}
+                </span>
+              ) : null}
             </div>
             <div className="field-group builder-intensity-field">
               <label htmlFor="drill-intensity">Intensity (optional)</label>
@@ -293,10 +322,18 @@ export function CreateDrillPage() {
             <button
               className="secondary-button"
               type="button"
+              disabled={!canAddSection}
+              aria-describedby="activities-limit-hint"
+              title={canAddSection ? undefined : 'The activity limit for this session is reached.'}
               onClick={() => update({ type: 'add-section' })}
             >
               Add activity
             </button>
+            <span id="activities-limit-hint" className="field-hint">
+              Up to {TRAINING_DATA_LIMITS.customSections} top-level activities,{' '}
+              {TRAINING_DATA_LIMITS.exercisesPerSection} exercises per activity, and{' '}
+              {TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet} activities in total.
+            </span>
           </div>
 
           <div className="builder-sections">
@@ -328,6 +365,7 @@ export function CreateDrillPage() {
                       id={`section-label-${section.id}`}
                       name={sectionErrorKey}
                       type="text"
+                      maxLength={TRAINING_DATA_LIMITS.nameCharacters}
                       value={section.label}
                       aria-invalid={
                         showError(sectionErrorKey) && errors[sectionErrorKey] !== undefined
@@ -356,6 +394,16 @@ export function CreateDrillPage() {
                   <fieldset className="builder-exercise-group" aria-labelledby={exercisesTitleId}>
                     <legend id={exercisesTitleId}>Exercises</legend>
                     <p className="field-hint">Measure each exercise by repetitions or duration.</p>
+                    {showError(`section-steps-${section.id}`) &&
+                    errors[`section-steps-${section.id}`] !== undefined ? (
+                      <span
+                        id={`section-steps-${section.id}-error`}
+                        className="form-error"
+                        role="alert"
+                      >
+                        {errors[`section-steps-${section.id}`]}
+                      </span>
+                    ) : null}
                     <ol className="builder-step-list">
                       {section.steps.map((step, stepIndex) => {
                         const labelErrorKey = `step-label-${step.id}`;
@@ -378,6 +426,7 @@ export function CreateDrillPage() {
                                 id={`step-label-${step.id}`}
                                 name={labelErrorKey}
                                 type="text"
+                                maxLength={TRAINING_DATA_LIMITS.nameCharacters}
                                 value={step.label}
                                 aria-invalid={
                                   showError(labelErrorKey) && errors[labelErrorKey] !== undefined
@@ -509,6 +558,17 @@ export function CreateDrillPage() {
                     <button
                       className="text-button builder-add-exercise"
                       type="button"
+                      disabled={
+                        section.steps.length >= TRAINING_DATA_LIMITS.exercisesPerSection ||
+                        draftActivityCount >= TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet
+                      }
+                      aria-describedby="activities-limit-hint"
+                      title={
+                        section.steps.length >= TRAINING_DATA_LIMITS.exercisesPerSection ||
+                        draftActivityCount >= TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet
+                          ? 'The exercise limit for this activity or session is reached.'
+                          : undefined
+                      }
                       onClick={() => update({ type: 'add-step', sectionId: section.id })}
                     >
                       Add exercise

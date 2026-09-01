@@ -9,6 +9,7 @@ import {
   getTrainingSetActivities,
   isTrainingQuantityUnit,
   isValidTrainingQuantityValue,
+  TRAINING_DATA_LIMITS,
   TrainingValidationError,
   validateTrainingSet,
   validateTrainingSetInput,
@@ -30,6 +31,7 @@ import {
   inspectTrainingStorage,
   migratePersistedTrainingState,
   parsePersistedTrainingStateV10,
+  serializePersistedTrainingStateV10,
   TRAINING_STORE_PERSISTENCE_VERSION,
   type PersistedTrainingStateV10,
   type TrainingStorageInspection,
@@ -80,6 +82,8 @@ export {
   parsePersistedTrainingWireStateV9,
   TrainingDurationOverrideMigrationConflictError,
   TrainingOverrideMigrationConflictError,
+  MAX_PERSISTED_JSON_CHARACTERS,
+  TRAINING_STORE_RAW_JSON_LIMIT,
   TRAINING_STORE_PERSISTENCE_VERSION,
 } from './persistence';
 export type {
@@ -200,8 +204,27 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isNonBlankString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
+function isNonBlankString(
+  value: unknown,
+  maximumLength = TRAINING_DATA_LIMITS.identifierCharacters,
+): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= maximumLength;
+}
+
+function isBoundedString(value: unknown, maximumLength: number): value is string {
+  return typeof value === 'string' && value.length <= maximumLength;
+}
+
+function assertDashboardEntryWithinLimits(value: unknown): asserts value is DashboardEntry {
+  if (parsePersistedTrainingStateV10({ dashboardEntries: [value] }) === null) {
+    throw new Error('Dashboard entry is invalid or exceeds a supported limit.');
+  }
+}
+
+function assertPersistedDashboardEntriesWithinLimits(
+  dashboardEntries: readonly DashboardEntry[],
+): void {
+  serializePersistedTrainingStateV10({ dashboardEntries });
 }
 
 function ensureWritableInspection(
@@ -254,14 +277,22 @@ function normalizeQuantityOverrides(value: unknown): DashboardQuantityOverrides 
   if (!isRecord(value)) {
     throw new Error('Dashboard quantity overrides must be an object.');
   }
+  if (Object.keys(value).length > TRAINING_DATA_LIMITS.dashboardRecordEntries) {
+    throw new Error(
+      `Dashboard quantity overrides must contain no more than ${TRAINING_DATA_LIMITS.dashboardRecordEntries} activities.`,
+    );
+  }
 
   const entries: [string, TrainingQuantityOverrides][] = [];
   for (const [activityId, activityValue] of Object.entries(value)) {
-    if (activityId.trim().length === 0) {
+    if (!isNonBlankString(activityId)) {
       throw new Error('Dashboard quantity override activity ids must not be blank.');
     }
     if (!isRecord(activityValue)) {
       throw new Error(`Dashboard quantity overrides for ${activityId} must be an object.`);
+    }
+    if (Object.keys(activityValue).length > TRAINING_DATA_LIMITS.dashboardRecordEntries) {
+      throw new Error(`Dashboard quantity overrides for ${activityId} contain too many units.`);
     }
 
     const unitEntries: [TrainingQuantityUnit, number][] = [];
@@ -288,10 +319,24 @@ function setDashboardActivityNote(
   activityId: string,
   note: string,
 ): DashboardActivityNotes {
+  const activityNoteCount = Object.keys(activityNotes).length;
+  if (activityNoteCount > TRAINING_DATA_LIMITS.dashboardRecordEntries) {
+    throw new Error(
+      `Dashboard activity notes must contain no more than ${TRAINING_DATA_LIMITS.dashboardRecordEntries} activities.`,
+    );
+  }
   const next: Record<string, string> = { ...activityNotes };
   if (note.trim().length === 0) {
     delete next[activityId];
   } else {
+    if (
+      !Object.hasOwn(activityNotes, activityId) &&
+      Object.keys(activityNotes).length >= TRAINING_DATA_LIMITS.dashboardRecordEntries
+    ) {
+      throw new Error(
+        `Dashboard activity notes must contain no more than ${TRAINING_DATA_LIMITS.dashboardRecordEntries} activities.`,
+      );
+    }
     next[activityId] = note;
   }
   return Object.freeze(next);
@@ -303,11 +348,25 @@ export function setDashboardQuantityOverride(
   unit: TrainingQuantityUnit,
   value: number,
 ): DashboardQuantityOverrides {
-  if (activityId.trim().length === 0) {
+  if (!isNonBlankString(activityId)) {
     throw new Error('Dashboard quantity override activity ids must not be blank.');
   }
   if (!isValidTrainingQuantityValue(unit, value)) {
     throw new Error(`Dashboard ${unit} override for ${activityId} is invalid.`);
+  }
+  const overrideActivityCount = Object.keys(overrides).length;
+  if (overrideActivityCount > TRAINING_DATA_LIMITS.dashboardRecordEntries) {
+    throw new Error(
+      `Dashboard quantity overrides must contain no more than ${TRAINING_DATA_LIMITS.dashboardRecordEntries} activities.`,
+    );
+  }
+  if (
+    !Object.hasOwn(overrides, activityId) &&
+    overrideActivityCount >= TRAINING_DATA_LIMITS.dashboardRecordEntries
+  ) {
+    throw new Error(
+      `Dashboard quantity overrides must contain no more than ${TRAINING_DATA_LIMITS.dashboardRecordEntries} activities.`,
+    );
   }
   return {
     ...overrides,
@@ -451,16 +510,26 @@ function createValidatedTrainingStore(
       (set, get) => ({
         dashboardEntries: [],
         addToDashboard: (trainingSetId) => {
+          if (!isNonBlankString(trainingSetId)) {
+            throw new Error('Training-set ids must not be blank or exceed the identifier limit.');
+          }
           let entryId = '';
           set((state) => {
+            if (state.dashboardEntries.length >= TRAINING_DATA_LIMITS.dashboardEntries) {
+              throw new Error(
+                `Dashboard must contain no more than ${TRAINING_DATA_LIMITS.dashboardEntries} entries.`,
+              );
+            }
             const usedIds = collectUsedIds(state);
             const source = findTrainingSetSource(trainingSetId);
             const entry =
               source === undefined
                 ? createDashboardEntry(trainingSetId, usedIds)
                 : createDashboardEntry(trainingSetId, usedIds, source);
+            const dashboardEntries = [...state.dashboardEntries, entry];
+            assertPersistedDashboardEntriesWithinLimits(dashboardEntries);
             entryId = entry.id;
-            return { dashboardEntries: [...state.dashboardEntries, entry] };
+            return { dashboardEntries };
           });
           return entryId;
         },
@@ -472,9 +541,17 @@ function createValidatedTrainingStore(
           if (patch.notes !== undefined && typeof patch.notes !== 'string') {
             throw new Error('Dashboard notes must be a string.');
           }
+          if (
+            patch.notes !== undefined &&
+            !isBoundedString(patch.notes, TRAINING_DATA_LIMITS.noteCharacters)
+          ) {
+            throw new Error(
+              `Dashboard notes must contain no more than ${TRAINING_DATA_LIMITS.noteCharacters} characters.`,
+            );
+          }
 
-          set((state) => ({
-            dashboardEntries: state.dashboardEntries.map((entry) =>
+          set((state) => {
+            const dashboardEntries = state.dashboardEntries.map((entry) =>
               entry.id === entryId
                 ? {
                     ...entry,
@@ -482,12 +559,14 @@ function createValidatedTrainingStore(
                     ...(patch.notes === undefined ? {} : { notes: patch.notes }),
                   }
                 : entry,
-            ),
-          }));
+            );
+            assertPersistedDashboardEntriesWithinLimits(dashboardEntries);
+            return { dashboardEntries };
+          });
         },
         setQuantityOverride: (entryId, activityId, unit, value) => {
-          set((state) => ({
-            dashboardEntries: state.dashboardEntries.map((entry) =>
+          set((state) => {
+            const dashboardEntries = state.dashboardEntries.map((entry) =>
               entry.id === entryId
                 ? {
                     ...entry,
@@ -499,12 +578,14 @@ function createValidatedTrainingStore(
                     ),
                   }
                 : entry,
-            ),
-          }));
+            );
+            assertPersistedDashboardEntriesWithinLimits(dashboardEntries);
+            return { dashboardEntries };
+          });
         },
         clearQuantityOverride: (entryId, activityId, unit) => {
-          set((state) => ({
-            dashboardEntries: state.dashboardEntries.map((entry) =>
+          set((state) => {
+            const dashboardEntries = state.dashboardEntries.map((entry) =>
               entry.id === entryId
                 ? {
                     ...entry,
@@ -515,8 +596,10 @@ function createValidatedTrainingStore(
                     ),
                   }
                 : entry,
-            ),
-          }));
+            );
+            assertPersistedDashboardEntriesWithinLimits(dashboardEntries);
+            return { dashboardEntries };
+          });
         },
         setActivityNote: (entryId, activityId, note) => {
           if (!isNonBlankString(entryId)) {
@@ -527,6 +610,11 @@ function createValidatedTrainingStore(
           }
           if (typeof note !== 'string') {
             throw new Error('Dashboard activity notes must be strings.');
+          }
+          if (!isBoundedString(note, TRAINING_DATA_LIMITS.noteCharacters)) {
+            throw new Error(
+              `Dashboard activity notes must contain no more than ${TRAINING_DATA_LIMITS.noteCharacters} characters.`,
+            );
           }
 
           const entry = get().dashboardEntries.find((candidate) => candidate.id === entryId);
@@ -545,11 +633,13 @@ function createValidatedTrainingStore(
           }
 
           const activityNotes = setDashboardActivityNote(entry.activityNotes, activityId, note);
-          set((state) => ({
-            dashboardEntries: state.dashboardEntries.map((candidate) =>
+          set((state) => {
+            const dashboardEntries = state.dashboardEntries.map((candidate) =>
               candidate.id === entryId ? { ...candidate, activityNotes } : candidate,
-            ),
-          }));
+            );
+            assertPersistedDashboardEntriesWithinLimits(dashboardEntries);
+            return { dashboardEntries };
+          });
         },
         removeFromDashboard: (entryId) => {
           let removed: RemovedDashboardEntry | null = null;
@@ -562,53 +652,72 @@ function createValidatedTrainingStore(
             if (entry === undefined) {
               return state;
             }
+            const dashboardEntries = [
+              ...state.dashboardEntries.slice(0, index),
+              ...state.dashboardEntries.slice(index + 1),
+            ];
+            assertPersistedDashboardEntriesWithinLimits(dashboardEntries);
             removed = { entry, index };
-            return {
-              dashboardEntries: [
-                ...state.dashboardEntries.slice(0, index),
-                ...state.dashboardEntries.slice(index + 1),
-              ],
-            };
+            return { dashboardEntries };
           });
           return removed;
         },
         restoreDashboardEntry: (removed) => {
+          assertDashboardEntryWithinLimits(removed.entry);
           set((state) => {
             if (state.dashboardEntries.some((entry) => entry.id === removed.entry.id)) {
               return state;
             }
+            if (state.dashboardEntries.length >= TRAINING_DATA_LIMITS.dashboardEntries) {
+              throw new Error(
+                `Dashboard must contain no more than ${TRAINING_DATA_LIMITS.dashboardEntries} entries.`,
+              );
+            }
             const index = Math.max(0, Math.min(removed.index, state.dashboardEntries.length));
             const dashboardEntries = [...state.dashboardEntries];
             dashboardEntries.splice(index, 0, removed.entry);
+            assertPersistedDashboardEntriesWithinLimits(dashboardEntries);
             return { dashboardEntries };
           });
         },
         undoRemoveFromDashboard: (removed) => {
+          assertDashboardEntryWithinLimits(removed.entry);
           set((state) => {
             if (state.dashboardEntries.some((entry) => entry.id === removed.entry.id)) {
               return state;
             }
+            if (state.dashboardEntries.length >= TRAINING_DATA_LIMITS.dashboardEntries) {
+              throw new Error(
+                `Dashboard must contain no more than ${TRAINING_DATA_LIMITS.dashboardEntries} entries.`,
+              );
+            }
             const index = Math.max(0, Math.min(removed.index, state.dashboardEntries.length));
             const dashboardEntries = [...state.dashboardEntries];
             dashboardEntries.splice(index, 0, removed.entry);
+            assertPersistedDashboardEntriesWithinLimits(dashboardEntries);
             return { dashboardEntries };
           });
         },
         createCustomTrainingSetAndAddToDashboard: (input) => {
           let result: CustomTrainingSetCreationResult | null = null;
           set((state) => {
+            if (state.dashboardEntries.length >= TRAINING_DATA_LIMITS.dashboardEntries) {
+              throw new Error(
+                `Dashboard must contain no more than ${TRAINING_DATA_LIMITS.dashboardEntries} entries.`,
+              );
+            }
             const usedIds = collectUsedIds(state);
             const trainingSet = buildCustomTrainingSet(input, usedIds);
             const dashboardEntry = createDashboardEntry(trainingSet.id, usedIds, trainingSet);
+            const dashboardEntries = [...state.dashboardEntries, dashboardEntry];
+            assertPersistedDashboardEntriesWithinLimits(dashboardEntries);
             result = {
               trainingSetId: trainingSet.id,
               dashboardEntryId: dashboardEntry.id,
               trainingSet,
               dashboardEntry,
             };
-            return {
-              dashboardEntries: [...state.dashboardEntries, dashboardEntry],
-            };
+            return { dashboardEntries };
           });
           if (result === null) {
             throw new Error('Custom training-set creation did not produce a result.');

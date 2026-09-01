@@ -10,6 +10,7 @@ import {
   RESEARCHED_LEAF_EXERCISE_COUNT,
   RESEARCHED_SECTION_COUNT,
   TrainingValidationError,
+  TRAINING_DATA_LIMITS,
   asTrainingSetId,
   assertValidRepetitionCount,
   assertValidTrainingSetInput,
@@ -56,6 +57,36 @@ function trainingSet(activities: readonly TrainingActivity[]): TrainingSet {
     activities,
     isBuiltIn: false,
   };
+}
+
+function repeatedText(length: number, character = 'x'): string {
+  return character.repeat(length);
+}
+
+function runtimeSet(
+  activities: readonly TrainingActivity[],
+  overrides: Readonly<{
+    readonly id?: string;
+    readonly name?: string;
+    readonly description?: string;
+  }> = {},
+): TrainingSet {
+  return {
+    id: asTrainingSetId(overrides.id ?? 'runtime-set'),
+    name: overrides.name ?? 'Runtime set',
+    ...(overrides.description === undefined ? {} : { description: overrides.description }),
+    category: 'custom',
+    activities,
+    isBuiltIn: false,
+  };
+}
+
+function runtimeActivityChain(depth: number): TrainingActivity {
+  let current = leaf(`depth-${depth}`, `Depth ${depth}`);
+  for (let level = depth - 1; level >= 1; level -= 1) {
+    current = activity(`depth-${level}`, `Depth ${level}`, [current]);
+  }
+  return current;
 }
 
 describe('training quantity validation', () => {
@@ -306,6 +337,266 @@ describe('recursive training-set validation and traversal', () => {
     expect(getEffectiveTrainingQuantity(activityWithMetadata, undefined, 'repetitions')).toBe(
       undefined,
     );
+  });
+});
+
+describe('training data limits', () => {
+  const validInput = {
+    name: 'Valid session',
+    description: '',
+    category: 'custom',
+    sections: [
+      {
+        name: 'Valid activity',
+        notes: '',
+        exercises: [{ name: 'Valid exercise', notes: '' }],
+      },
+    ],
+  } as const;
+
+  it('accepts exact authored text limits and rejects each one-character overflow', () => {
+    const exactName = repeatedText(TRAINING_DATA_LIMITS.nameCharacters);
+    const exactDescription = repeatedText(TRAINING_DATA_LIMITS.descriptionCharacters);
+    const exactNote = repeatedText(TRAINING_DATA_LIMITS.noteCharacters);
+    const exact = validateTrainingSetInput({
+      ...validInput,
+      name: exactName,
+      description: exactDescription,
+      sections: [
+        {
+          name: exactName,
+          notes: exactNote,
+          exercises: [{ name: exactName, notes: exactNote }],
+        },
+      ],
+    });
+    expect(exact.success).toBe(true);
+
+    const overflows = [
+      { name: repeatedText(TRAINING_DATA_LIMITS.nameCharacters + 1) },
+      { description: repeatedText(TRAINING_DATA_LIMITS.descriptionCharacters + 1) },
+      {
+        sections: [
+          {
+            name: exactName,
+            notes: repeatedText(TRAINING_DATA_LIMITS.noteCharacters + 1),
+            exercises: [{ name: exactName, notes: exactNote }],
+          },
+        ],
+      },
+      {
+        sections: [
+          {
+            name: exactName,
+            notes: exactNote,
+            exercises: [
+              { name: exactName, notes: repeatedText(TRAINING_DATA_LIMITS.noteCharacters + 1) },
+            ],
+          },
+        ],
+      },
+      {
+        sections: [
+          {
+            name: exactName,
+            notes: exactNote,
+            exercises: [
+              { name: repeatedText(TRAINING_DATA_LIMITS.nameCharacters + 1), notes: exactNote },
+            ],
+          },
+        ],
+      },
+      {
+        sections: [
+          {
+            name: repeatedText(TRAINING_DATA_LIMITS.nameCharacters + 1),
+            notes: exactNote,
+            exercises: [{ name: exactName, notes: exactNote }],
+          },
+        ],
+      },
+    ] as const;
+
+    for (const overrides of overflows) {
+      expect(validateTrainingSetInput({ ...validInput, ...overrides }).success).toBe(false);
+    }
+  });
+
+  it('accepts exact runtime text and identifier limits and rejects one-character overflows', () => {
+    const exactSetId = repeatedText(TRAINING_DATA_LIMITS.identifierCharacters, 'i');
+    const exactActivityId = repeatedText(TRAINING_DATA_LIMITS.identifierCharacters, 'j');
+    const exactName = repeatedText(TRAINING_DATA_LIMITS.nameCharacters);
+    const exactDescription = repeatedText(TRAINING_DATA_LIMITS.descriptionCharacters);
+    const exactNote = repeatedText(TRAINING_DATA_LIMITS.noteCharacters);
+    const exact = validateTrainingSet(
+      runtimeSet([leaf(exactActivityId, exactName, { notes: exactNote })], {
+        id: exactSetId,
+        name: exactName,
+        description: exactDescription,
+      }),
+    );
+    expect(exact.success).toBe(true);
+
+    const baseActivity = leaf('runtime-leaf', 'Runtime leaf', { notes: 'note' });
+    const overflowValues = [
+      runtimeSet([baseActivity], {
+        id: repeatedText(TRAINING_DATA_LIMITS.identifierCharacters + 1, 'i'),
+      }),
+      runtimeSet([baseActivity], { name: repeatedText(TRAINING_DATA_LIMITS.nameCharacters + 1) }),
+      runtimeSet([baseActivity], {
+        description: repeatedText(TRAINING_DATA_LIMITS.descriptionCharacters + 1),
+      }),
+      runtimeSet([
+        leaf('runtime-leaf', 'Runtime leaf', {
+          notes: repeatedText(TRAINING_DATA_LIMITS.noteCharacters + 1),
+        }),
+      ]),
+      runtimeSet([
+        leaf(repeatedText(TRAINING_DATA_LIMITS.identifierCharacters + 1, 'i'), 'Runtime leaf'),
+      ]),
+      runtimeSet([leaf('runtime-leaf', repeatedText(TRAINING_DATA_LIMITS.nameCharacters + 1))]),
+    ];
+    for (const candidate of overflowValues) {
+      expect(validateTrainingSet(candidate).success).toBe(false);
+    }
+  });
+
+  it('accepts exact section, child, total-activity, and nesting-depth limits', () => {
+    const authoredExactSections = Array.from(
+      { length: TRAINING_DATA_LIMITS.customSections },
+      (_, index) => ({ name: `Activity ${index}`, exercises: [] }),
+    );
+    expect(
+      validateTrainingSetInput({
+        name: 'Many activities',
+        category: 'custom',
+        sections: authoredExactSections,
+      }).success,
+    ).toBe(true);
+    expect(
+      validateTrainingSetInput({
+        name: 'Too many activities',
+        category: 'custom',
+        sections: [...authoredExactSections, { name: 'Activity over', exercises: [] }],
+      }).success,
+    ).toBe(false);
+
+    const authoredExactChildren = Array.from(
+      { length: TRAINING_DATA_LIMITS.exercisesPerSection },
+      (_, index) => ({ name: `Exercise ${index}` }),
+    );
+    expect(
+      validateTrainingSetInput({
+        name: 'Many exercises',
+        category: 'custom',
+        sections: [{ name: 'Activity', exercises: authoredExactChildren }],
+      }).success,
+    ).toBe(true);
+    expect(
+      validateTrainingSetInput({
+        name: 'Too many exercises',
+        category: 'custom',
+        sections: [
+          {
+            name: 'Activity',
+            exercises: [...authoredExactChildren, { name: 'Exercise over' }],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+
+    const authoredExactTotal = Array.from({ length: 4 }, (_, sectionIndex) => ({
+      name: `Activity ${sectionIndex}`,
+      exercises: Array.from(
+        { length: TRAINING_DATA_LIMITS.exercisesPerSection - 1 },
+        (_, exerciseIndex) => ({ name: `Exercise ${sectionIndex}-${exerciseIndex}` }),
+      ),
+    }));
+    expect(
+      validateTrainingSetInput({
+        name: 'Exact total',
+        category: 'custom',
+        sections: authoredExactTotal,
+      }).success,
+    ).toBe(true);
+    expect(
+      validateTrainingSetInput({
+        name: 'One over total',
+        category: 'custom',
+        sections: [
+          ...authoredExactTotal.slice(0, 3),
+          {
+            name: 'Activity over',
+            exercises: Array.from(
+              { length: TRAINING_DATA_LIMITS.exercisesPerSection },
+              (_, exerciseIndex) => ({ name: `Exercise over-${exerciseIndex}` }),
+            ),
+          },
+        ],
+      }).success,
+    ).toBe(false);
+
+    const exactSections = Array.from({ length: TRAINING_DATA_LIMITS.customSections }, (_, index) =>
+      leaf(`section-${index}`, `Section ${index}`),
+    );
+    expect(validateTrainingSet(runtimeSet(exactSections)).success).toBe(true);
+
+    const overSections = [...exactSections, leaf('section-over', 'Section over')];
+    expect(validateTrainingSet(runtimeSet(overSections)).success).toBe(false);
+
+    const exactChildren = Array.from(
+      { length: TRAINING_DATA_LIMITS.exercisesPerSection },
+      (_, index) => leaf(`child-${index}`, `Child ${index}`),
+    );
+    expect(
+      validateTrainingSet(runtimeSet([activity('section', 'Section', exactChildren)])).success,
+    ).toBe(true);
+    expect(
+      validateTrainingSet(
+        runtimeSet([
+          activity('section', 'Section', [...exactChildren, leaf('child-over', 'Child over')]),
+        ]),
+      ).success,
+    ).toBe(false);
+
+    const exactTotal = Array.from({ length: 4 }, (_, sectionIndex) =>
+      activity(
+        `total-section-${sectionIndex}`,
+        `Section ${sectionIndex}`,
+        Array.from({ length: TRAINING_DATA_LIMITS.exercisesPerSection - 1 }, (_, exerciseIndex) =>
+          leaf(
+            `total-child-${sectionIndex}-${exerciseIndex}`,
+            `Child ${sectionIndex}-${exerciseIndex}`,
+          ),
+        ),
+      ),
+    );
+    expect(validateTrainingSet(runtimeSet(exactTotal)).success).toBe(true);
+    expect(
+      validateTrainingSet(
+        runtimeSet([
+          ...exactTotal.slice(0, 3),
+          activity(
+            'total-section-over',
+            'Section over',
+            Array.from({ length: TRAINING_DATA_LIMITS.exercisesPerSection }, (_, exerciseIndex) =>
+              leaf(`total-over-child-${exerciseIndex}`, `Child ${exerciseIndex}`),
+            ),
+          ),
+        ]),
+      ).success,
+    ).toBe(false);
+
+    expect(
+      validateTrainingSet(
+        runtimeSet([runtimeActivityChain(TRAINING_DATA_LIMITS.activityNestingDepth)]),
+      ).success,
+    ).toBe(true);
+    expect(
+      validateTrainingSet(
+        runtimeSet([runtimeActivityChain(TRAINING_DATA_LIMITS.activityNestingDepth + 1)]),
+      ).success,
+    ).toBe(false);
   });
 });
 

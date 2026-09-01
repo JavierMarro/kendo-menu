@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { TRAINING_DATA_LIMITS } from '@kendo-menu/domain';
+
 import {
   builderReducer,
   createInitialBuilderState,
@@ -33,7 +35,148 @@ function requireValidInput(state: BuilderState) {
   return result.value;
 }
 
+function draftStep(sectionIndex: number, stepIndex: number): StepDraft {
+  return {
+    id: `section-${sectionIndex}-step-${stepIndex}`,
+    label: `Exercise ${sectionIndex}-${stepIndex}`,
+    reps: '1',
+    measurement: 'repetitions',
+    durationUnit: 'minutes',
+  };
+}
+
+function builderStateWithShape(sectionCount: number, stepsPerSection: number): BuilderState {
+  return {
+    name: 'Valid session',
+    description: '',
+    sections: Array.from({ length: sectionCount }, (_, sectionIndex) => ({
+      id: `section-${sectionIndex}`,
+      label: `Activity ${sectionIndex}`,
+      steps: Array.from({ length: stepsPerSection }, (_, stepIndex) =>
+        draftStep(sectionIndex, stepIndex),
+      ),
+    })),
+  };
+}
+
 describe('session builder state', () => {
+  it('enforces exact builder collection limits in reducer and parser boundaries', () => {
+    const exactSections = builderStateWithShape(TRAINING_DATA_LIMITS.customSections, 1);
+    const afterSectionLimit = builderReducer(exactSections, { type: 'add-section' });
+    expect(afterSectionLimit).toBe(exactSections);
+    expect(parseBuilderState(exactSections).success).toBe(true);
+    const overSections = builderStateWithShape(TRAINING_DATA_LIMITS.customSections + 1, 1);
+    expect(parseBuilderState(overSections)).toMatchObject({
+      success: false,
+      errors: {
+        sections: `Use no more than ${TRAINING_DATA_LIMITS.customSections} activities.`,
+      },
+    });
+
+    const exactSteps = builderStateWithShape(1, TRAINING_DATA_LIMITS.exercisesPerSection);
+    const section = requireSection(exactSteps);
+    const afterStepLimit = builderReducer(exactSteps, {
+      type: 'add-step',
+      sectionId: section.id,
+    });
+    expect(afterStepLimit).toEqual(exactSteps);
+    expect(parseBuilderState(exactSteps).success).toBe(true);
+    const overSteps = builderStateWithShape(1, TRAINING_DATA_LIMITS.exercisesPerSection + 1);
+    expect(parseBuilderState(overSteps)).toMatchObject({
+      success: false,
+      errors: {
+        [`section-steps-${requireSection(overSteps).id}`]: `Use no more than ${TRAINING_DATA_LIMITS.exercisesPerSection} exercises per activity.`,
+      },
+    });
+
+    const exactTotal = builderStateWithShape(4, TRAINING_DATA_LIMITS.exercisesPerSection - 1);
+    expect(parseBuilderState(exactTotal).success).toBe(true);
+    expect(builderReducer(exactTotal, { type: 'add-section' })).toBe(exactTotal);
+    const exactTotalSection = requireSection(exactTotal);
+    expect(
+      builderReducer(exactTotal, { type: 'add-step', sectionId: exactTotalSection.id }),
+    ).toEqual(exactTotal);
+    const overTotal = builderStateWithShape(4, TRAINING_DATA_LIMITS.exercisesPerSection - 1);
+    const overTotalLastSection = requireSection(overTotal, 3);
+    const overTotalWithOneExtra: BuilderState = {
+      ...overTotal,
+      sections: overTotal.sections.map((candidate, sectionIndex) =>
+        sectionIndex === 3
+          ? {
+              ...candidate,
+              steps: [
+                ...overTotalLastSection.steps,
+                draftStep(3, TRAINING_DATA_LIMITS.exercisesPerSection - 1),
+              ],
+            }
+          : candidate,
+      ),
+    };
+    expect(parseBuilderState(overTotalWithOneExtra)).toMatchObject({
+      success: false,
+      errors: {
+        activities: `Use no more than ${TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet} activities in total.`,
+      },
+    });
+  });
+
+  it('rejects one-over builder text limits while accepting exact values', () => {
+    const exact = builderStateWithShape(1, 1);
+    const exactSection = requireSection(exact);
+    const exactStep = requireStep(exactSection);
+    const exactTextState: BuilderState = {
+      ...exact,
+      name: 'n'.repeat(TRAINING_DATA_LIMITS.nameCharacters),
+      description: 'd'.repeat(TRAINING_DATA_LIMITS.descriptionCharacters),
+      sections: [
+        {
+          ...exactSection,
+          label: 's'.repeat(TRAINING_DATA_LIMITS.nameCharacters),
+          steps: [
+            {
+              ...exactStep,
+              label: 'e'.repeat(TRAINING_DATA_LIMITS.nameCharacters),
+            },
+          ],
+        },
+      ],
+    };
+    expect(parseBuilderState(exactTextState).success).toBe(true);
+    const overflowCases: readonly BuilderState[] = [
+      { ...exactTextState, name: 'n'.repeat(TRAINING_DATA_LIMITS.nameCharacters + 1) },
+      {
+        ...exactTextState,
+        description: 'd'.repeat(TRAINING_DATA_LIMITS.descriptionCharacters + 1),
+      },
+      {
+        ...exactTextState,
+        sections: [
+          {
+            ...exactSection,
+            label: 's'.repeat(TRAINING_DATA_LIMITS.nameCharacters + 1),
+          },
+        ],
+      },
+      {
+        ...exactTextState,
+        sections: [
+          {
+            ...exactSection,
+            steps: [
+              {
+                ...exactStep,
+                label: 'e'.repeat(TRAINING_DATA_LIMITS.nameCharacters + 1),
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    for (const state of overflowCases) {
+      expect(parseBuilderState(state).success).toBe(false);
+    }
+  });
+
   it('characterizes a valid ordered submission with trimmed mixed measurements', () => {
     const state: BuilderState = {
       name: '  Mixed keiko  ',

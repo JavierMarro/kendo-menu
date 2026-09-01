@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   DEFAULT_TRAINING_SETS,
+  TRAINING_DATA_LIMITS,
   asTrainingSetId,
+  validateTrainingSetInput,
   type DashboardEntry,
   type TrainingActivity,
   type TrainingSetInput,
@@ -12,11 +14,13 @@ import {
   TRAINING_STORE_PERSISTENCE_VERSION,
   TrainingStoreBootstrapError,
   classifyTrainingStorageValue,
+  createTrainingJSONStorage,
   createTrainingStore,
   createTrainingStoreAsync,
   encodePersistedTrainingState,
   getDashboardEffectiveTrainingQuantity,
   inspectTrainingStorage,
+  MAX_PERSISTED_JSON_CHARACTERS,
   migratePersistedTrainingState,
   migratePersistedTrainingStateV0ToV1,
   migratePersistedTrainingStateV1ToV2,
@@ -28,8 +32,15 @@ import {
   migratePersistedTrainingStateV7ToV8,
   migratePersistedTrainingStateV8ToV9,
   parsePersistedTrainingState,
+  parsePersistedTrainingStateV0,
+  parsePersistedTrainingStateV1,
+  parsePersistedTrainingStateV2,
+  parsePersistedTrainingStateV3,
   parsePersistedTrainingStateV8,
   parsePersistedTrainingStateV4,
+  parsePersistedTrainingStateV9,
+  parsePersistedTrainingStateV10,
+  parsePersistedTrainingWireStateV9,
   type LegacyDashboardEntry,
   type PersistedDashboardEntryV8,
   type StateStorage,
@@ -38,6 +49,7 @@ import {
 const STORAGE_KEY = 'test-kendo-menu';
 const STATE_SEQUENCE_STRESS_SEED = 0x4b454e44;
 const STATE_SEQUENCE_STRESS_ITERATIONS = 300;
+const HOSTILE_DEPTH = 2_000;
 
 const CUSTOM_SET_INPUT = {
   name: 'Footwork basics',
@@ -212,14 +224,28 @@ class MemoryStorage implements StateStorage {
 
 class AsyncMemoryStorage implements StateStorage {
   readonly #values = new Map<string, string>();
+  reads = 0;
+  writes = 0;
+
+  constructor(initialValue?: string) {
+    if (initialValue !== undefined) {
+      this.#values.set(STORAGE_KEY, initialValue);
+    }
+  }
 
   getItem(name: string): Promise<string | null> {
+    this.reads += 1;
     return Promise.resolve(this.#values.get(name) ?? null);
   }
 
   setItem(name: string, value: string): Promise<void> {
+    this.writes += 1;
     this.#values.set(name, value);
     return Promise.resolve();
+  }
+
+  read(): Promise<string | null> {
+    return this.getItem(STORAGE_KEY);
   }
 
   removeItem(name: string): Promise<void> {
@@ -230,6 +256,77 @@ class AsyncMemoryStorage implements StateStorage {
 
 function serializeState(state: unknown, version: number): string {
   return JSON.stringify({ state, version });
+}
+
+function repeatedText(length: number, character = 'x'): string {
+  return character.repeat(length);
+}
+
+function dashboardWireEntry(index: number, overrides: Readonly<Record<string, unknown>> = {}) {
+  return {
+    id: `entry-${index}`,
+    trainingSetId: asTrainingSetId(`unknown-session-${index}`),
+    quantityOverrides: {},
+    activityNotes: {},
+    notes: '',
+    createdAt: '',
+    ...overrides,
+  };
+}
+
+function customWireSet(index: number) {
+  return {
+    id: `custom-wire-${index}`,
+    name: `Custom wire ${index}`,
+    description: '',
+    category: 'custom' as const,
+    sections: [
+      {
+        id: `custom-wire-section-${index}`,
+        name: 'Main work',
+        exercises: [],
+      },
+    ],
+    isBuiltIn: false as const,
+  };
+}
+
+function maximumCustomSetInput(): TrainingSetInput {
+  const sectionCount = TRAINING_DATA_LIMITS.customSections;
+  const exerciseCount = TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet - sectionCount;
+  const exercisesPerSection = Math.floor(exerciseCount / sectionCount);
+  const sectionsWithOneExtraExercise = exerciseCount % sectionCount;
+  const note = repeatedText(TRAINING_DATA_LIMITS.noteCharacters);
+  return {
+    name: 'Maximum custom session',
+    description: repeatedText(TRAINING_DATA_LIMITS.descriptionCharacters),
+    category: 'custom',
+    sections: Array.from({ length: sectionCount }, (_, sectionIndex) => ({
+      name: `Activity ${sectionIndex}`,
+      notes: note,
+      exercises: Array.from(
+        {
+          length: exercisesPerSection + (sectionIndex < sectionsWithOneExtraExercise ? 1 : 0),
+        },
+        (_, exerciseIndex) => ({
+          name: `Exercise ${sectionIndex}-${exerciseIndex}`,
+          notes: note,
+        }),
+      ),
+    })),
+  };
+}
+
+function deepRuntimeActivity(depth: number): TrainingActivity {
+  let current: TrainingActivity = {
+    id: `deep-${depth}`,
+    name: `Deep ${depth}`,
+    children: [],
+  };
+  for (let level = depth - 1; level >= 1; level -= 1) {
+    current = { id: `deep-${level}`, name: `Deep ${level}`, children: [current] };
+  }
+  return current;
 }
 
 function requireString(value: string | null): string {
@@ -372,6 +469,459 @@ describe('custom training sets', () => {
     expect(() => store.getState().createCustomTrainingSetAndAddToDashboard(malformed)).toThrow();
     expect(store.getState().dashboardEntries).toEqual([]);
   });
+
+  it('rejects one-over authored limits without partially changing state', () => {
+    const storage = new MemoryStorage();
+    const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+    const sourceSection = CUSTOM_SET_INPUT.sections[0];
+    const sourceExercise = sourceSection?.exercises[0];
+    if (sourceSection === undefined || sourceExercise === undefined) {
+      throw new Error('Expected the custom input fixture to contain an exercise.');
+    }
+    const candidates: readonly TrainingSetInput[] = [
+      {
+        ...CUSTOM_SET_INPUT,
+        name: repeatedText(TRAINING_DATA_LIMITS.nameCharacters + 1),
+      },
+      {
+        ...CUSTOM_SET_INPUT,
+        description: repeatedText(TRAINING_DATA_LIMITS.descriptionCharacters + 1),
+      },
+      {
+        ...CUSTOM_SET_INPUT,
+        sections: [
+          {
+            ...sourceSection,
+            name: repeatedText(TRAINING_DATA_LIMITS.nameCharacters + 1),
+          },
+        ],
+      },
+      {
+        ...CUSTOM_SET_INPUT,
+        sections: [
+          {
+            ...sourceSection,
+            exercises: [
+              {
+                ...sourceExercise,
+                name: repeatedText(TRAINING_DATA_LIMITS.nameCharacters + 1),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        ...CUSTOM_SET_INPUT,
+        sections: [
+          {
+            ...sourceSection,
+            notes: repeatedText(TRAINING_DATA_LIMITS.noteCharacters + 1),
+          },
+        ],
+      },
+      {
+        ...CUSTOM_SET_INPUT,
+        sections: [
+          {
+            ...sourceSection,
+            exercises: [
+              {
+                ...sourceExercise,
+                notes: repeatedText(TRAINING_DATA_LIMITS.noteCharacters + 1),
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    for (const candidate of candidates) {
+      expect(() => store.getState().createCustomTrainingSetAndAddToDashboard(candidate)).toThrow();
+      expect(store.getState().dashboardEntries).toEqual([]);
+    }
+    expect(storage.writes).toBe(0);
+  });
+});
+
+describe('persistence resource limits', () => {
+  it('accepts exact dashboard and legacy custom-set collection limits and rejects one-over', () => {
+    const exactDashboard = Array.from(
+      { length: TRAINING_DATA_LIMITS.dashboardEntries },
+      (_, index) => dashboardWireEntry(index),
+    );
+    expect(parsePersistedTrainingStateV10({ dashboardEntries: exactDashboard })).not.toBeNull();
+    expect(
+      parsePersistedTrainingStateV10({
+        dashboardEntries: [
+          ...exactDashboard,
+          dashboardWireEntry(TRAINING_DATA_LIMITS.dashboardEntries),
+        ],
+      }),
+    ).toBeNull();
+
+    const exactCustomSets = Array.from(
+      { length: TRAINING_DATA_LIMITS.legacyCustomSetCollection },
+      (_, index) => customWireSet(index),
+    );
+    expect(
+      parsePersistedTrainingStateV9({ dashboardEntries: [], customTrainingSets: exactCustomSets }),
+    ).not.toBeNull();
+    expect(
+      parsePersistedTrainingStateV9({
+        dashboardEntries: [],
+        customTrainingSets: [
+          ...exactCustomSets,
+          customWireSet(TRAINING_DATA_LIMITS.legacyCustomSetCollection),
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it('bounds wire custom sections, exercises per section, and total activities', () => {
+    const exactSections = Array.from(
+      { length: TRAINING_DATA_LIMITS.customSections },
+      (_, index) => ({
+        id: `wire-section-${index}`,
+        name: `Wire section ${index}`,
+        exercises: [],
+      }),
+    );
+    const exactSectionSet = { ...customWireSet(1000), sections: exactSections };
+    expect(
+      parsePersistedTrainingStateV9({
+        dashboardEntries: [],
+        customTrainingSets: [exactSectionSet],
+      }),
+    ).not.toBeNull();
+    expect(
+      parsePersistedTrainingStateV9({
+        dashboardEntries: [],
+        customTrainingSets: [
+          {
+            ...exactSectionSet,
+            sections: [
+              ...exactSections,
+              { id: 'wire-section-over', name: 'Wire section over', exercises: [] },
+            ],
+          },
+        ],
+      }),
+    ).toBeNull();
+
+    const exactExercises = Array.from(
+      { length: TRAINING_DATA_LIMITS.exercisesPerSection },
+      (_, index) => ({ id: `wire-exercise-${index}`, name: `Wire exercise ${index}` }),
+    );
+    const exactExerciseSet = {
+      ...customWireSet(1001),
+      sections: [{ id: 'wire-exercise-section', name: 'Wire section', exercises: exactExercises }],
+    };
+    expect(
+      parsePersistedTrainingStateV9({
+        dashboardEntries: [],
+        customTrainingSets: [exactExerciseSet],
+      }),
+    ).not.toBeNull();
+    expect(
+      parsePersistedTrainingStateV9({
+        dashboardEntries: [],
+        customTrainingSets: [
+          {
+            ...exactExerciseSet,
+            sections: [
+              {
+                ...exactExerciseSet.sections[0],
+                exercises: [
+                  ...exactExercises,
+                  { id: 'wire-exercise-over', name: 'Wire exercise over' },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBeNull();
+
+    const exactTotalSections = Array.from({ length: 4 }, (_, sectionIndex) => ({
+      id: `wire-total-section-${sectionIndex}`,
+      name: `Wire total section ${sectionIndex}`,
+      exercises: Array.from(
+        { length: TRAINING_DATA_LIMITS.exercisesPerSection - 1 },
+        (_, exerciseIndex) => ({
+          id: `wire-total-exercise-${sectionIndex}-${exerciseIndex}`,
+          name: `Wire total exercise ${sectionIndex}-${exerciseIndex}`,
+        }),
+      ),
+    }));
+    const exactTotalSet = { ...customWireSet(1002), sections: exactTotalSections };
+    expect(
+      parsePersistedTrainingStateV9({
+        dashboardEntries: [],
+        customTrainingSets: [exactTotalSet],
+      }),
+    ).not.toBeNull();
+    expect(
+      parsePersistedTrainingStateV9({
+        dashboardEntries: [],
+        customTrainingSets: [
+          {
+            ...exactTotalSet,
+            sections: [
+              ...exactTotalSections.slice(0, 3),
+              {
+                id: 'wire-total-section-over',
+                name: 'Wire total section over',
+                exercises: Array.from(
+                  { length: TRAINING_DATA_LIMITS.exercisesPerSection },
+                  (_, exerciseIndex) => ({
+                    id: `wire-total-over-exercise-${exerciseIndex}`,
+                    name: `Wire total over exercise ${exerciseIndex}`,
+                  }),
+                ),
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it('accepts exact outer override/note records and text fields and rejects one-over values', () => {
+    const quantityOverrides = Object.fromEntries(
+      Array.from({ length: TRAINING_DATA_LIMITS.dashboardRecordEntries }, (_, index) => [
+        `activity-${index}`,
+        { repetitions: 0 },
+      ]),
+    );
+    const activityNotes = Object.fromEntries(
+      Array.from({ length: TRAINING_DATA_LIMITS.dashboardRecordEntries }, (_, index) => [
+        `activity-${index}`,
+        'note',
+      ]),
+    );
+    const exactEntry = dashboardWireEntry(0, {
+      quantityOverrides,
+      activityNotes,
+      notes: repeatedText(TRAINING_DATA_LIMITS.noteCharacters),
+      createdAt: repeatedText(TRAINING_DATA_LIMITS.timestampCharacters),
+      id: repeatedText(TRAINING_DATA_LIMITS.identifierCharacters, 'e'),
+      trainingSetId: asTrainingSetId(repeatedText(TRAINING_DATA_LIMITS.identifierCharacters, 's')),
+    });
+    expect(parsePersistedTrainingStateV10({ dashboardEntries: [exactEntry] })).not.toBeNull();
+
+    const overQuantityOverrides = {
+      ...quantityOverrides,
+      'activity-over': { repetitions: 0 },
+    };
+    const overActivityNotes = { ...activityNotes, 'activity-over': 'note' };
+    expect(
+      parsePersistedTrainingStateV10({
+        dashboardEntries: [{ ...exactEntry, quantityOverrides: overQuantityOverrides }],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersistedTrainingStateV10({
+        dashboardEntries: [{ ...exactEntry, activityNotes: overActivityNotes }],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersistedTrainingStateV10({
+        dashboardEntries: [
+          { ...exactEntry, notes: repeatedText(TRAINING_DATA_LIMITS.noteCharacters + 1) },
+        ],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersistedTrainingStateV10({
+        dashboardEntries: [
+          {
+            ...exactEntry,
+            createdAt: repeatedText(TRAINING_DATA_LIMITS.timestampCharacters + 1),
+          },
+        ],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersistedTrainingStateV10({
+        dashboardEntries: [
+          { ...exactEntry, id: repeatedText(TRAINING_DATA_LIMITS.identifierCharacters + 1) },
+        ],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersistedTrainingStateV10({
+        dashboardEntries: [
+          {
+            ...exactEntry,
+            trainingSetId: asTrainingSetId(
+              repeatedText(TRAINING_DATA_LIMITS.identifierCharacters + 1, 's'),
+            ),
+          },
+        ],
+      }),
+    ).toBeNull();
+    const overRecordKey = repeatedText(TRAINING_DATA_LIMITS.identifierCharacters + 1, 'a');
+    expect(
+      parsePersistedTrainingStateV10({
+        dashboardEntries: [
+          {
+            ...exactEntry,
+            quantityOverrides: { [overRecordKey]: { repetitions: 0 } },
+            activityNotes: { [overRecordKey]: 'note' },
+          },
+        ],
+      }),
+    ).toBeNull();
+
+    const exactCustom = {
+      ...customWireSet(0),
+      id: repeatedText(TRAINING_DATA_LIMITS.identifierCharacters, 'c'),
+      name: repeatedText(TRAINING_DATA_LIMITS.nameCharacters),
+      description: repeatedText(TRAINING_DATA_LIMITS.descriptionCharacters),
+      sections: [
+        {
+          id: repeatedText(TRAINING_DATA_LIMITS.identifierCharacters, 'a'),
+          name: repeatedText(TRAINING_DATA_LIMITS.nameCharacters),
+          notes: repeatedText(TRAINING_DATA_LIMITS.noteCharacters),
+          exercises: [
+            {
+              id: repeatedText(TRAINING_DATA_LIMITS.identifierCharacters, 'x'),
+              name: repeatedText(TRAINING_DATA_LIMITS.nameCharacters),
+              notes: repeatedText(TRAINING_DATA_LIMITS.noteCharacters),
+            },
+          ],
+        },
+      ],
+    };
+    expect(
+      parsePersistedTrainingStateV9({ dashboardEntries: [], customTrainingSets: [exactCustom] }),
+    ).not.toBeNull();
+    const customOverflowCases = [
+      { name: repeatedText(TRAINING_DATA_LIMITS.nameCharacters + 1) },
+      { description: repeatedText(TRAINING_DATA_LIMITS.descriptionCharacters + 1) },
+      {
+        sections: [
+          {
+            ...exactCustom.sections[0],
+            name: repeatedText(TRAINING_DATA_LIMITS.nameCharacters + 1),
+          },
+        ],
+      },
+      {
+        sections: [
+          {
+            ...exactCustom.sections[0],
+            notes: repeatedText(TRAINING_DATA_LIMITS.noteCharacters + 1),
+          },
+        ],
+      },
+    ] as const;
+    for (const overrides of customOverflowCases) {
+      expect(
+        parsePersistedTrainingStateV9({
+          dashboardEntries: [],
+          customTrainingSets: [{ ...exactCustom, ...overrides }],
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it('rejects oversized raw JSON before parsing and refuses oversized writes', () => {
+    const base = serializeState({ dashboardEntries: [] }, TRAINING_STORE_PERSISTENCE_VERSION);
+    const exact = `${base}${' '.repeat(MAX_PERSISTED_JSON_CHARACTERS - base.length)}`;
+    const over = `${exact} `;
+    expect(exact.length).toBe(MAX_PERSISTED_JSON_CHARACTERS);
+    expect(classifyTrainingStorageValue(exact)).toMatchObject({ status: 'ready' });
+
+    const parseSpy = vi.spyOn(JSON, 'parse').mockImplementation(() => {
+      throw new Error('oversized values must not be parsed');
+    });
+    try {
+      expect(classifyTrainingStorageValue(over)).toEqual({
+        status: 'corrupt',
+        kind: 'corrupt',
+        reason: 'resource-limit',
+      });
+      expect(parseSpy).not.toHaveBeenCalled();
+    } finally {
+      parseSpy.mockRestore();
+    }
+
+    const hugeNote = repeatedText(TRAINING_DATA_LIMITS.noteCharacters);
+    const largeState = {
+      dashboardEntries: Array.from(
+        { length: TRAINING_DATA_LIMITS.dashboardEntries },
+        (_, index) => {
+          const trainingSetId = asTrainingSetId(`large-custom-${index}`);
+          return {
+            id: `large-entry-${index}`,
+            trainingSetId,
+            trainingSet: {
+              id: trainingSetId,
+              name: `Large custom ${index}`,
+              description: repeatedText(TRAINING_DATA_LIMITS.descriptionCharacters),
+              category: 'custom' as const,
+              activities: [
+                {
+                  id: `large-section-${index}`,
+                  name: 'Large section',
+                  notes: hugeNote,
+                  children: [
+                    {
+                      id: `large-exercise-${index}`,
+                      name: 'Large exercise',
+                      notes: hugeNote,
+                      children: [],
+                    },
+                  ],
+                },
+              ],
+              isBuiltIn: false as const,
+            },
+            quantityOverrides: {},
+            activityNotes: {},
+            notes: hugeNote,
+            createdAt: '',
+          };
+        },
+      ),
+    } satisfies { readonly dashboardEntries: readonly DashboardEntry[] };
+    const storage = new MemoryStorage();
+    const persistStorage = createTrainingJSONStorage(storage);
+    expect(() =>
+      persistStorage.setItem(STORAGE_KEY, {
+        state: largeState,
+        version: TRAINING_STORE_PERSISTENCE_VERSION,
+      }),
+    ).toThrow(/exceeds/);
+    expect(storage.writes).toBe(0);
+  });
+
+  it('rejects an oversized custom creation atomically before state or storage mutation', () => {
+    const persistedBefore = serializeState(
+      { dashboardEntries: [] },
+      TRAINING_STORE_PERSISTENCE_VERSION,
+    );
+    const storage = new MemoryStorage(persistedBefore);
+    const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+    const input = maximumCustomSetInput();
+    const activityCount = input.sections.reduce(
+      (total, section) => total + 1 + section.exercises.length,
+      0,
+    );
+    expect(activityCount).toBe(TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet);
+    expect(validateTrainingSetInput(input).success).toBe(true);
+
+    const dashboardBefore = store.getState().dashboardEntries;
+    const writesBefore = storage.writes;
+    expect(() => store.getState().createCustomTrainingSetAndAddToDashboard(input)).toThrow(
+      /exceeds/,
+    );
+
+    expect(store.getState().dashboardEntries).toEqual(dashboardBefore);
+    expect(storage.writes).toBe(writesBefore);
+    expect(storage.read()).toBe(persistedBefore);
+  });
 });
 
 describe('dashboard quantity override APIs', () => {
@@ -484,6 +1034,39 @@ describe('dashboard quantity override APIs', () => {
 });
 
 describe('dashboard activity note APIs', () => {
+  it('accepts exact note limits and rejects one-over writes without changing state', () => {
+    const storage = new MemoryStorage();
+    const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+    const entryId = store
+      .getState()
+      .addToDashboard(asTrainingSetId('international-dojo-2-hour-session'));
+    const activityId = 'international-dojo-2-hour-session-warm-up-warm-up';
+    const exactNote = repeatedText(TRAINING_DATA_LIMITS.noteCharacters);
+
+    store.getState().setActivityNote(entryId, activityId, exactNote);
+    expect(store.getState().dashboardEntries[0]?.activityNotes[activityId]).toBe(exactNote);
+    const beforeOverflow = store.getState().dashboardEntries;
+    expect(() =>
+      store
+        .getState()
+        .setActivityNote(
+          entryId,
+          activityId,
+          repeatedText(TRAINING_DATA_LIMITS.noteCharacters + 1),
+        ),
+    ).toThrow();
+    expect(store.getState().dashboardEntries).toEqual(beforeOverflow);
+
+    store.getState().updateDashboardEntry(entryId, { notes: exactNote });
+    const beforeSessionOverflow = store.getState().dashboardEntries;
+    expect(() =>
+      store.getState().updateDashboardEntry(entryId, {
+        notes: repeatedText(TRAINING_DATA_LIMITS.noteCharacters + 1),
+      }),
+    ).toThrow();
+    expect(store.getState().dashboardEntries).toEqual(beforeSessionOverflow);
+  });
+
   it('starts entries empty, preserves meaningful whitespace, and removes blank notes', () => {
     const store = createTrainingStore({ storage: new MemoryStorage(), storageKey: STORAGE_KEY });
     const entryId = store
@@ -1414,6 +1997,79 @@ describe('persistence lifecycle', () => {
     expect(store.getState().dashboardEntries).toHaveLength(1);
   });
 
+  it('keeps sync and async storage classification and round-trip behavior equivalent', async () => {
+    const validRaw = serializeState({ dashboardEntries: [] }, TRAINING_STORE_PERSISTENCE_VERSION);
+    const corruptRaw = serializeState(
+      { dashboardEntries: [{ ...dashboardWireEntry(0), notes: 42 }] },
+      TRAINING_STORE_PERSISTENCE_VERSION,
+    );
+
+    const syncReadyStorage = new MemoryStorage(validRaw);
+    const asyncReadyStorage = new AsyncMemoryStorage(validRaw);
+    expect(inspectTrainingStorage(syncReadyStorage, STORAGE_KEY)).toEqual({
+      status: 'ready',
+      kind: 'ready',
+      version: TRAINING_STORE_PERSISTENCE_VERSION,
+      state: { dashboardEntries: [] },
+    });
+    await expect(inspectTrainingStorage(asyncReadyStorage, STORAGE_KEY)).resolves.toEqual(
+      inspectTrainingStorage(syncReadyStorage, STORAGE_KEY),
+    );
+
+    const syncCorruptStorage = new MemoryStorage(corruptRaw);
+    const asyncCorruptStorage = new AsyncMemoryStorage(corruptRaw);
+    expect(inspectTrainingStorage(syncCorruptStorage, STORAGE_KEY)).toEqual({
+      status: 'corrupt',
+      kind: 'corrupt',
+      reason: 'invalid-domain',
+    });
+    await expect(inspectTrainingStorage(asyncCorruptStorage, STORAGE_KEY)).resolves.toEqual(
+      inspectTrainingStorage(syncCorruptStorage, STORAGE_KEY),
+    );
+
+    const syncStorage = new MemoryStorage();
+    const syncRoundTrip = createTrainingStore({ storage: syncStorage, storageKey: STORAGE_KEY });
+    const roundTripEntryId = syncRoundTrip
+      .getState()
+      .addToDashboard(asTrainingSetId('international-dojo-2-hour-session'));
+    syncRoundTrip.getState().updateDashboardEntry(roundTripEntryId, { notes: 'Round trip.' });
+    const asyncRoundTripStorage = new AsyncMemoryStorage(requireString(syncStorage.read()));
+    const asyncRoundTrip = await createTrainingStoreAsync({
+      storage: asyncRoundTripStorage,
+      storageKey: STORAGE_KEY,
+    });
+    expect(asyncRoundTrip.getState().dashboardEntries).toEqual(
+      syncRoundTrip.getState().dashboardEntries,
+    );
+    expect(asyncRoundTripStorage.reads).toBe(2);
+    asyncRoundTrip
+      .getState()
+      .updateDashboardEntry(roundTripEntryId, { notes: 'Async round trip.' });
+    expect(asyncRoundTripStorage.writes).toBe(1);
+    const asyncWrittenRaw = requireString(await asyncRoundTripStorage.read());
+    expect(classifyTrainingStorageValue(asyncWrittenRaw)).toMatchObject({ status: 'ready' });
+    expect(asyncRoundTripStorage.reads).toBe(3);
+    const asyncReloadStorage = new AsyncMemoryStorage(asyncWrittenRaw);
+    const asyncReloaded = await createTrainingStoreAsync({
+      storage: asyncReloadStorage,
+      storageKey: STORAGE_KEY,
+    });
+    expect(asyncReloaded.getState().dashboardEntries).toEqual(
+      asyncRoundTrip.getState().dashboardEntries,
+    );
+    expect(asyncReloadStorage.reads).toBe(2);
+
+    const asyncCorruptBootstrapStorage = new AsyncMemoryStorage(corruptRaw);
+    await expect(
+      createTrainingStoreAsync({
+        storage: asyncCorruptBootstrapStorage,
+        storageKey: STORAGE_KEY,
+      }),
+    ).rejects.toThrow(TrainingStoreBootstrapError);
+    expect(asyncCorruptBootstrapStorage.reads).toBe(1);
+    expect(asyncCorruptBootstrapStorage.writes).toBe(0);
+  });
+
   it('reports data that becomes invalid between preflight and hydration', () => {
     const validValue = serializeState({ dashboardEntries: [] }, TRAINING_STORE_PERSISTENCE_VERSION);
     let reads = 0;
@@ -1548,6 +2204,203 @@ describe('persistence lifecycle', () => {
 });
 
 describe('untrusted persistence classification', () => {
+  it('returns null for hostile inputs across every exported parser', () => {
+    const throwingGetter = Object.defineProperty({}, 'dashboardEntries', {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        throw new Error('hostile getter');
+      },
+    });
+    const throwingProxy = new Proxy(
+      { dashboardEntries: [], customTrainingSets: [] },
+      {
+        get: () => {
+          throw new Error('hostile proxy');
+        },
+      },
+    );
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    const parsers = [
+      parsePersistedTrainingState,
+      parsePersistedTrainingStateV0,
+      parsePersistedTrainingStateV1,
+      parsePersistedTrainingStateV2,
+      parsePersistedTrainingStateV3,
+      parsePersistedTrainingStateV4,
+      parsePersistedTrainingStateV8,
+      parsePersistedTrainingStateV9,
+      parsePersistedTrainingStateV10,
+      parsePersistedTrainingWireStateV9,
+    ] as const;
+    const malformedValues: readonly unknown[] = [
+      undefined,
+      null,
+      42,
+      'not persisted state',
+      {},
+      throwingGetter,
+      throwingProxy,
+      revoked.proxy,
+    ];
+
+    for (const parser of parsers) {
+      for (const value of malformedValues) {
+        expect(() => parser(value)).not.toThrow();
+        expect(parser(value)).toBeNull();
+      }
+    }
+  });
+
+  it('returns null for cyclic and too-deep v9/v10 runtime trees', () => {
+    const cyclicNode: { id: string; name: string; children: unknown[] } = {
+      id: 'cyclic-node',
+      name: 'Cyclic node',
+      children: [],
+    };
+    cyclicNode.children.push(cyclicNode);
+    const cyclicCustomSet = {
+      id: 'cyclic-custom',
+      name: 'Cyclic custom',
+      category: 'custom' as const,
+      activities: [cyclicNode],
+      isBuiltIn: false as const,
+    };
+    const cyclicV9 = {
+      dashboardEntries: [],
+      customTrainingSets: [cyclicCustomSet],
+    };
+    const cyclicV10 = {
+      dashboardEntries: [
+        dashboardWireEntry(0, {
+          trainingSetId: asTrainingSetId('cyclic-custom'),
+          trainingSet: cyclicCustomSet,
+        }),
+      ],
+    };
+    expect(() => parsePersistedTrainingStateV9(cyclicV9)).not.toThrow();
+    expect(parsePersistedTrainingStateV9(cyclicV9)).toBeNull();
+    expect(() => parsePersistedTrainingStateV10(cyclicV10)).not.toThrow();
+    expect(parsePersistedTrainingStateV10(cyclicV10)).toBeNull();
+
+    const deepCustomSet = {
+      id: 'deep-custom',
+      name: 'Deep custom',
+      category: 'custom' as const,
+      activities: [deepRuntimeActivity(HOSTILE_DEPTH)],
+      isBuiltIn: false as const,
+    };
+    const deepV9 = { dashboardEntries: [], customTrainingSets: [deepCustomSet] };
+    const deepV10 = {
+      dashboardEntries: [
+        dashboardWireEntry(1, {
+          trainingSetId: asTrainingSetId('deep-custom'),
+          trainingSet: deepCustomSet,
+        }),
+      ],
+    };
+    expect(() => parsePersistedTrainingStateV9(deepV9)).not.toThrow();
+    expect(parsePersistedTrainingStateV9(deepV9)).toBeNull();
+    expect(() => parsePersistedTrainingStateV10(deepV10)).not.toThrow();
+    expect(parsePersistedTrainingStateV10(deepV10)).toBeNull();
+  });
+
+  it('contains hostile JSON.parse results on current and legacy classifier paths', () => {
+    const rawCurrent = serializeState({ dashboardEntries: [] }, TRAINING_STORE_PERSISTENCE_VERSION);
+    const rawLegacy = serializeState({ dashboardEntries: [], customTrainingSets: [] }, 9);
+    const throwingCurrent = new Proxy(
+      { state: { dashboardEntries: [] }, version: TRAINING_STORE_PERSISTENCE_VERSION },
+      {
+        get: () => {
+          throw new Error('throwing parsed current envelope');
+        },
+      },
+    );
+    const throwingLegacy = new Proxy(
+      { state: { dashboardEntries: [], customTrainingSets: [] }, version: 9 },
+      {
+        get: () => {
+          throw new Error('throwing parsed legacy envelope');
+        },
+      },
+    );
+    const deepSet = {
+      id: 'classifier-deep-custom',
+      name: 'Classifier deep custom',
+      category: 'custom' as const,
+      activities: [deepRuntimeActivity(HOSTILE_DEPTH)],
+      isBuiltIn: false as const,
+    };
+    const deepCurrent = {
+      state: {
+        dashboardEntries: [
+          dashboardWireEntry(2, {
+            trainingSetId: asTrainingSetId('classifier-deep-custom'),
+            trainingSet: deepSet,
+          }),
+        ],
+      },
+      version: TRAINING_STORE_PERSISTENCE_VERSION,
+    };
+    const deepLegacy = {
+      state: { dashboardEntries: [], customTrainingSets: [deepSet] },
+      version: 9,
+    };
+    const cyclicNode: { id: string; name: string; children: unknown[] } = {
+      id: 'classifier-cyclic-node',
+      name: 'Classifier cyclic node',
+      children: [],
+    };
+    cyclicNode.children.push(cyclicNode);
+    const cyclicSet = {
+      id: 'classifier-cyclic-custom',
+      name: 'Classifier cyclic custom',
+      category: 'custom' as const,
+      activities: [cyclicNode],
+      isBuiltIn: false as const,
+    };
+    const cyclicCurrent = {
+      state: {
+        dashboardEntries: [
+          dashboardWireEntry(3, {
+            trainingSetId: asTrainingSetId('classifier-cyclic-custom'),
+            trainingSet: cyclicSet,
+          }),
+        ],
+      },
+      version: TRAINING_STORE_PERSISTENCE_VERSION,
+    };
+    const cyclicLegacy = {
+      state: { dashboardEntries: [], customTrainingSets: [cyclicSet] },
+      version: 9,
+    };
+
+    const classifyHostileValues = (rawValue: string, values: readonly unknown[]): void => {
+      for (const hostileValue of values) {
+        const parseSpy = vi.spyOn(JSON, 'parse').mockImplementation(() => hostileValue);
+        try {
+          expect(() => classifyTrainingStorageValue(rawValue)).not.toThrow();
+          expect(classifyTrainingStorageValue(rawValue)).toMatchObject({ status: 'corrupt' });
+        } finally {
+          parseSpy.mockRestore();
+        }
+      }
+    };
+
+    classifyHostileValues(rawCurrent, [throwingCurrent, deepCurrent, cyclicCurrent]);
+    classifyHostileValues(rawLegacy, [throwingLegacy, deepLegacy, cyclicLegacy]);
+
+    const legacyConflict = versionFiveUchikomiState({
+      [LEGACY_UCHIKOMI_IDS[0]]: { repetitions: 4 },
+      [LEGACY_UCHIKOMI_IDS[1]]: { repetitions: 5 },
+    });
+    expect(classifyTrainingStorageValue(serializeState(legacyConflict, 5))).toMatchObject({
+      status: 'corrupt',
+      reason: 'override-migration-conflict',
+    });
+  });
+
   it('classifies empty, malformed, current, migrated, and future envelopes', () => {
     expect(classifyTrainingStorageValue(null).status).toBe('empty');
     expect(classifyTrainingStorageValue('{bad json')).toMatchObject({
@@ -1779,6 +2632,40 @@ describe('untrusted persistence classification', () => {
       TrainingStoreBootstrapError,
     );
     expect(storage.writes).toBe(0);
+  });
+
+  it('does not write or partially hydrate corrupt and over-limit current data', () => {
+    const exactEntries = Array.from({ length: TRAINING_DATA_LIMITS.dashboardEntries }, (_, index) =>
+      dashboardWireEntry(index),
+    );
+    const overLimitStorage = new MemoryStorage(
+      serializeState(
+        {
+          dashboardEntries: [
+            ...exactEntries,
+            dashboardWireEntry(TRAINING_DATA_LIMITS.dashboardEntries),
+          ],
+        },
+        TRAINING_STORE_PERSISTENCE_VERSION,
+      ),
+    );
+    expect(() =>
+      createTrainingStore({ storage: overLimitStorage, storageKey: STORAGE_KEY }),
+    ).toThrow(TrainingStoreBootstrapError);
+    expect(overLimitStorage.writes).toBe(0);
+
+    const corruptStorage = new MemoryStorage(
+      serializeState(
+        {
+          dashboardEntries: [{ ...dashboardWireEntry(0), notes: 42 }],
+        },
+        TRAINING_STORE_PERSISTENCE_VERSION,
+      ),
+    );
+    expect(() => createTrainingStore({ storage: corruptStorage, storageKey: STORAGE_KEY })).toThrow(
+      TrainingStoreBootstrapError,
+    );
+    expect(corruptStorage.writes).toBe(0);
   });
 
   it('reports unavailable storage without trying to repair it', () => {
