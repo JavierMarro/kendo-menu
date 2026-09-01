@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   DEFAULT_TRAINING_SETS,
@@ -13,6 +13,10 @@ import {
   CURATED_TRAINING_SET_COUNT,
   formatTrainingQuantity,
 } from '../lib/training-data';
+import {
+  COOKIE_NOTICE_ACKNOWLEDGEMENT_DURATION_MS,
+  COOKIE_NOTICE_ACKNOWLEDGEMENT_STORAGE_KEY,
+} from '../lib/cookie-notice';
 import { renderApp, createTestStore } from './test-utils';
 
 const SENIOR_HIGH_SCHOOL_DRILL_ID = asTrainingSetId('senior-high-school-kendo-club');
@@ -112,8 +116,10 @@ describe('KendoMenu application flows', () => {
     );
   });
 
-  it('shows a session-only cookie notice with policy details and dismisses without storage', async () => {
+  it('shows the cookie notice with policy details and stores a 21-day acknowledgement', async () => {
     const user = userEvent.setup();
+    const now = Date.UTC(2026, 7, 31, 12);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
 
     renderApp(createTestStore(), { initialEntries: ['/app'] });
 
@@ -129,11 +135,16 @@ describe('KendoMenu application flows', () => {
     await user.click(screen.getByRole('button', { name: 'Got it' }));
 
     expect(screen.queryByRole('complementary', { name: 'Cookie notice' })).not.toBeInTheDocument();
-    expect(window.localStorage.length).toBe(0);
+    expect(window.localStorage.getItem(COOKIE_NOTICE_ACKNOWLEDGEMENT_STORAGE_KEY)).toBe(
+      String(now + COOKIE_NOTICE_ACKNOWLEDGEMENT_DURATION_MS),
+    );
+    nowSpy.mockRestore();
   });
 
-  it('keeps the cookie notice dismissal across navigation but resets it for a fresh render', async () => {
+  it('keeps acknowledgement across renders until the exact 21-day expiry', async () => {
     const user = userEvent.setup();
+    const now = Date.UTC(2026, 7, 31, 12);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
     const view = renderApp(createTestStore(), { initialEntries: ['/app'] });
 
     await user.click(screen.getByRole('button', { name: 'Got it' }));
@@ -147,9 +158,33 @@ describe('KendoMenu application flows', () => {
     expect(screen.queryByRole('complementary', { name: 'Cookie notice' })).not.toBeInTheDocument();
 
     view.unmount();
+    const beforeExpiryView = renderApp(createTestStore(), { initialEntries: ['/app/dashboard'] });
+
+    expect(screen.queryByRole('complementary', { name: 'Cookie notice' })).not.toBeInTheDocument();
+
+    beforeExpiryView.unmount();
+    nowSpy.mockReturnValue(now + COOKIE_NOTICE_ACKNOWLEDGEMENT_DURATION_MS);
     renderApp(createTestStore(), { initialEntries: ['/app/dashboard'] });
 
     expect(screen.getByRole('complementary', { name: 'Cookie notice' })).toBeInTheDocument();
+    nowSpy.mockRestore();
+  });
+
+  it('dismisses the cookie notice for the page session when localStorage fails', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('Storage reads are unavailable.');
+    });
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('Storage writes are unavailable.');
+    });
+
+    renderApp(createTestStore(), { initialEntries: ['/app'] });
+    expect(screen.getByRole('complementary', { name: 'Cookie notice' })).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Got it' }));
+
+    expect(screen.queryByRole('complementary', { name: 'Cookie notice' })).not.toBeInTheDocument();
   });
 
   it('renders the cookie policy at /cookies inside the existing application shell', () => {
@@ -172,6 +207,9 @@ describe('KendoMenu application flows', () => {
     }
     expect(localStorageSection).toHaveTextContent(
       'This training data is separate from cookies, is not sent to a remote service',
+    );
+    expect(localStorageSection).toHaveTextContent(
+      'Small device-only preferences, including notice acknowledgements and installation prompt state, are stored locally in the same way.',
     );
 
     const analyticsSection = screen.getByRole('heading', { name: 'Analytics' }).closest('section');

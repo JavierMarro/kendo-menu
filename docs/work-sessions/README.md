@@ -26,6 +26,8 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-09-01 — phone installation eligibility and notice persistence](./2026-09-01-notice-persistence.md)
+- [2026-08-31 — landing mobile polish](./2026-08-31-landing-mobile-polish.md)
 - [2026-08-31 — Vercel preview readiness snapshot](./2026-08-31-vercel-preview-readiness.md)
 - [2026-08-31 — PWA installation](./2026-08-31-pwa-installation.md)
 - [2026-08-31 — dashboard save characterization](./2026-08-31-dashboard-save-characterization.md)

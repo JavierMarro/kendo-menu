@@ -1,4 +1,4 @@
-import { Component, useEffect, type ReactElement } from 'react';
+import { Component, useCallback, useEffect, useState, type ReactElement } from 'react';
 import {
   NavigationType,
   Outlet,
@@ -11,6 +11,10 @@ import { AppShell } from '../components/AppShell';
 import { CookieNotice } from '../components/CookieNotice';
 import { InstallExperienceProvider } from '../features/install/InstallExperience';
 import { NotFoundPage } from '../features/not-found/NotFoundPage';
+import {
+  persistCookieNoticeAcknowledgement,
+  readCookieNoticeAcknowledgement,
+} from '../lib/cookie-notice';
 
 const routeTitles: Readonly<Record<string, string>> = {
   '/app': 'Plan your keiko',
@@ -36,6 +40,30 @@ interface ScrollTransitionSnapshot {
 }
 
 const TOP_POSITION: ScrollPosition = { top: 0, left: 0 };
+
+function shouldShowBrowserCookieNotice(): boolean {
+  if (typeof window === 'undefined') {
+    return true;
+  }
+
+  try {
+    return !readCookieNoticeAcknowledgement(window.localStorage);
+  } catch {
+    return true;
+  }
+}
+
+function persistBrowserCookieNoticeAcknowledgement(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    persistCookieNoticeAcknowledgement(window.localStorage);
+  } catch {
+    // The notice still dismisses for the current page session when storage is unavailable.
+  }
+}
 
 function readScrollPosition(): ScrollPosition {
   return {
@@ -170,11 +198,17 @@ function RouteFocusAndTitle(): ReactElement {
 }
 
 export function RouteRoot() {
+  const [isCookieNoticeVisible, setIsCookieNoticeVisible] = useState(shouldShowBrowserCookieNotice);
+  const dismissCookieNotice = useCallback((): void => {
+    persistBrowserCookieNoticeAcknowledgement();
+    setIsCookieNoticeVisible(false);
+  }, []);
+
   return (
-    <InstallExperienceProvider>
+    <InstallExperienceProvider isAutomaticPromptBlocked={isCookieNoticeVisible}>
       <RouteFocusAndTitle />
       <Outlet />
-      <CookieNotice />
+      {isCookieNoticeVisible ? <CookieNotice onDismiss={dismissCookieNotice} /> : null}
     </InstallExperienceProvider>
   );
 }

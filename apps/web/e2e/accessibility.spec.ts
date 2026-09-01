@@ -55,6 +55,33 @@ async function getLandingRevealTransitionProperties(page: Page): Promise<readonl
     );
 }
 
+async function placeAtViewportRatio(locator: Locator, ratio: number): Promise<void> {
+  await locator.evaluate((element, targetRatio) => {
+    const scrollDelta = element.getBoundingClientRect().top - window.innerHeight * targetRatio;
+    window.scrollBy(0, scrollDelta);
+  }, ratio);
+
+  await expect
+    .poll(() =>
+      locator.evaluate((element) => element.getBoundingClientRect().top / window.innerHeight),
+    )
+    .toBeGreaterThan(ratio - 0.02);
+  await expect
+    .poll(() =>
+      locator.evaluate((element) => element.getBoundingClientRect().top / window.innerHeight),
+    )
+    .toBeLessThan(ratio + 0.02);
+}
+
+async function settleIntersectionObserver(page: Page): Promise<void> {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+}
+
 test.describe('accessibility and responsive layout', () => {
   test('has no blocking axe violations with the library dialog closed or open', async ({
     page,
@@ -518,6 +545,90 @@ test.describe('accessibility and responsive layout', () => {
     const finalRevealOpacities = await getLandingRevealOpacities(page);
     expect(finalRevealOpacities.every((opacity) => opacity === '1')).toBe(true);
     await expectNoBlockingAxeViolations(page);
+  });
+
+  test('starts phone landing reveals within the usable viewport and only reveals once', async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+
+    for (const viewport of [
+      { width: 375, height: 812 },
+      { width: 320, height: 568 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto('/app');
+
+      const stats = page.locator('.landing-stats[data-landing-reveal]');
+      await expect(page.locator('.landing-sections')).toHaveClass(/landing-motion-ready/);
+
+      await placeAtViewportRatio(stats, 0.78);
+      await settleIntersectionObserver(page);
+      await expect(stats).not.toHaveClass(/is-revealed/);
+
+      await placeAtViewportRatio(stats, 0.66);
+      await settleIntersectionObserver(page);
+      await expect(stats).toHaveClass(/is-revealed/);
+
+      await placeAtViewportRatio(stats, 0.78);
+      await settleIntersectionObserver(page);
+      await expect(stats).toHaveClass(/is-revealed/);
+    }
+  });
+
+  test('keeps the final landing action readable and inside its panel on narrow phones', async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+
+    for (const viewport of [
+      { width: 375, height: 812 },
+      { width: 320, height: 568 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto('/app');
+
+      const panel = page.locator('.landing-final-cta-panel');
+      const action = page.getByRole('link', { name: 'Record your first keiko' });
+      await panel.scrollIntoViewIfNeeded();
+
+      const panelBox = await getElementBox(panel);
+      const actionBox = await getElementBox(action);
+      expect(actionBox.x).toBeGreaterThanOrEqual(panelBox.x);
+      expect(actionBox.x + actionBox.width).toBeLessThanOrEqual(panelBox.x + panelBox.width);
+      expect(actionBox.height).toBeGreaterThanOrEqual(44);
+
+      const labelMetrics = await action.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const labelRange = document.createRange();
+        labelRange.selectNodeContents(element);
+
+        return {
+          clientHeight: element.clientHeight,
+          clientWidth: element.clientWidth,
+          fontSize: Number.parseFloat(style.fontSize),
+          lineCount: labelRange.getClientRects().length,
+          scrollHeight: element.scrollHeight,
+          scrollWidth: element.scrollWidth,
+          whiteSpace: style.whiteSpace,
+        };
+      });
+
+      expect(labelMetrics.fontSize).toBeGreaterThanOrEqual(14);
+      expect(labelMetrics.whiteSpace).toBe('normal');
+      expect(labelMetrics.scrollWidth).toBeLessThanOrEqual(labelMetrics.clientWidth);
+      expect(labelMetrics.scrollHeight).toBeLessThanOrEqual(labelMetrics.clientHeight);
+      if (viewport.width === 320) {
+        expect(labelMetrics.lineCount).toBeGreaterThanOrEqual(2);
+      }
+
+      const scrollWidth = await page.evaluate(() =>
+        Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+      );
+      expect(scrollWidth, `landing-page overflow at ${viewport.width}px`).toBeLessThanOrEqual(
+        viewport.width,
+      );
+    }
   });
 
   test('reveals a landing group when keyboard focus enters it', async ({ page }) => {

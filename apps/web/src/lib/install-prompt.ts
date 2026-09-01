@@ -1,5 +1,9 @@
 export const INSTALL_DISMISSAL_STORAGE_KEY = 'kendo-menu-install-dismissed';
 
+export const INSTALL_LANDING_VISIT_STORAGE_KEY = 'kendo-menu-install-landing-visits';
+
+export const INSTALL_LANDING_VISIT_REQUIRED_COUNT = 2;
+
 export const STANDALONE_DISPLAY_MODE_QUERY = '(display-mode: standalone)';
 
 export const FULLSCREEN_DISPLAY_MODE_QUERY = '(display-mode: fullscreen)';
@@ -29,6 +33,30 @@ declare global {
 }
 
 export type InstallInstructionsKind = 'chromium' | 'ios' | 'generic';
+
+export interface InstallLandingVisitResult {
+  readonly visitCount: number;
+  readonly isAutomaticPromptEligible: boolean;
+}
+
+export function isPhoneClassDevice(
+  userAgent: string,
+  platform: string,
+  maxTouchPoints: number,
+): boolean {
+  if (maxTouchPoints < 1) {
+    return false;
+  }
+
+  const normalizedUserAgent = userAgent.toLowerCase();
+  const normalizedPlatform = platform.toLowerCase();
+  const isApplePhone =
+    /iphone|ipod/.test(normalizedUserAgent) || /iphone|ipod/.test(normalizedPlatform);
+  const isAndroidPhone =
+    normalizedUserAgent.includes('android') && normalizedUserAgent.includes('mobile');
+
+  return isApplePhone || isAndroidPhone;
+}
 
 export function isIosDevice(userAgent: string, platform: string, maxTouchPoints: number): boolean {
   const normalizedUserAgent = userAgent.toLowerCase();
@@ -90,4 +118,42 @@ export function persistInstallDismissal(storage: Storage): void {
   } catch {
     // Installing remains available for this session if storage is unavailable.
   }
+}
+
+export function readInstallLandingVisitCount(storage: Pick<Storage, 'getItem'>): number {
+  try {
+    const rawCount = storage.getItem(INSTALL_LANDING_VISIT_STORAGE_KEY);
+    if (rawCount === null) {
+      return 0;
+    }
+
+    const count = Number(rawCount);
+    return Number.isSafeInteger(count) &&
+      count >= 0 &&
+      count <= INSTALL_LANDING_VISIT_REQUIRED_COUNT
+      ? count
+      : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function recordInstallLandingVisit(
+  storage: Pick<Storage, 'getItem' | 'setItem'>,
+): InstallLandingVisitResult {
+  const visitCount = Math.min(
+    readInstallLandingVisitCount(storage) + 1,
+    INSTALL_LANDING_VISIT_REQUIRED_COUNT,
+  );
+
+  try {
+    storage.setItem(INSTALL_LANDING_VISIT_STORAGE_KEY, String(visitCount));
+  } catch {
+    // A failed first write keeps the automatic prompt ineligible on the next page load.
+  }
+
+  return {
+    visitCount,
+    isAutomaticPromptEligible: visitCount >= INSTALL_LANDING_VISIT_REQUIRED_COUNT,
+  };
 }

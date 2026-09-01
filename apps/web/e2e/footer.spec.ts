@@ -36,6 +36,33 @@ function getRelativeLuminance(color: string): number {
   return red * 0.2126 + green * 0.7152 + blue * 0.0722;
 }
 
+function getContrastRatio(foreground: string, background: string): number {
+  const foregroundLuminance = getRelativeLuminance(foreground);
+  const backgroundLuminance = getRelativeLuminance(background);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+async function getInstallActionVisualState(action: Locator) {
+  return action.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      backgroundColor: style.backgroundColor,
+      color: style.color,
+      fontSize: Number.parseFloat(style.fontSize),
+      outlineStyle: style.outlineStyle,
+      outlineWidth: Number.parseFloat(style.outlineWidth),
+      textDecorationLine: style.textDecorationLine,
+    };
+  });
+}
+
+function expectAaTextContrast(state: Awaited<ReturnType<typeof getInstallActionVisualState>>) {
+  expect(getContrastRatio(state.color, state.backgroundColor)).toBeGreaterThanOrEqual(4.5);
+}
+
 async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): Promise<void> {
   await expect(footer.getByRole('link', { name: 'KendoMenu home' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'How it works' })).toBeVisible();
@@ -60,6 +87,36 @@ async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): P
   });
   expect(focusStyle.outlineStyle).not.toBe('none');
   expect(Number.parseFloat(focusStyle.outlineWidth)).toBeGreaterThanOrEqual(3);
+
+  const installAction = footer.getByRole('button', { name: 'Install KendoMenu' });
+  const sourceFontSize = await sourcesLink.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize),
+  );
+  const normalState = await getInstallActionVisualState(installAction);
+  expect(normalState.fontSize).toBeGreaterThan(sourceFontSize);
+  expect(normalState.textDecorationLine).toContain('underline');
+  expectAaTextContrast(normalState);
+
+  await installAction.focus();
+  const focusState = await getInstallActionVisualState(installAction);
+  expect(focusState.outlineStyle).not.toBe('none');
+  expect(focusState.outlineWidth).toBeGreaterThanOrEqual(3);
+  expect(focusState.textDecorationLine).toContain('underline');
+  expectAaTextContrast(focusState);
+
+  await installAction.hover();
+  const hoverState = await getInstallActionVisualState(installAction);
+  expect(hoverState.textDecorationLine).toContain('underline');
+  expectAaTextContrast(hoverState);
+
+  await page.mouse.down();
+  try {
+    const activeState = await getInstallActionVisualState(installAction);
+    expect(activeState.textDecorationLine).toContain('underline');
+    expectAaTextContrast(activeState);
+  } finally {
+    await page.mouse.up();
+  }
 }
 
 test.describe('responsive site footer', () => {

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
+import { useInstallLandingEntry } from '../install/install-context';
 import { CURATED_EXERCISE_COUNT, CURATED_TRAINING_SET_COUNT } from '../../lib/training-data';
 
 interface FaqItem {
@@ -78,7 +79,8 @@ function useLandingScrollReveal() {
     const revealTargets = Array.from(
       sections.querySelectorAll<HTMLElement>(LANDING_REVEAL_SELECTOR),
     );
-    const initialRevealBoundary = window.innerHeight * 0.88;
+    const isNarrowPhoneViewport = window.matchMedia('(max-width: 640px)').matches;
+    const initialRevealBoundary = window.innerHeight * (isNarrowPhoneViewport ? 0.72 : 0.88);
 
     for (const target of revealTargets) {
       const bounds = target.getBoundingClientRect();
@@ -100,7 +102,9 @@ function useLandingScrollReveal() {
           observer.unobserve(entry.target);
         }
       },
-      { rootMargin: '0px 0px -12% 0px', threshold: 0.08 },
+      isNarrowPhoneViewport
+        ? { rootMargin: '0px 0px -28% 0px', threshold: 0.04 }
+        : { rootMargin: '0px 0px -12% 0px', threshold: 0.08 },
     );
 
     const revealFocusedGroup = (event: FocusEvent) => {
@@ -133,6 +137,7 @@ function useLandingScrollReveal() {
 }
 
 export function LandingPage(): ReactElement {
+  useInstallLandingEntry();
   const [openFaqId, setOpenFaqId] = useState<string | null>(null);
   const sectionsRef = useLandingScrollReveal();
 

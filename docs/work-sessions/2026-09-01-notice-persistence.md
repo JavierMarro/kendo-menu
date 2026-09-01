@@ -1,0 +1,8 @@
+- Session: Phone installation eligibility and notice persistence
+- Date/duration: 2026-09-01; about 1 hour
+- Scope/start: The automatic install prompt used only browser installability and appeared on first visits and desktop; the cookieless notice was session-only and could stack with it.
+- Changes: Added typed phone and landing-entry eligibility, persisted a two-visit threshold, stored cookie-notice acknowledgement for 21 days, coordinated cookie-first display, added safe-area spacing, and documented local preferences.
+- Decisions: Require touch plus iPhone/iPod or Android Mobile markers; cap visit state at two; treat acknowledgement as valid only while its integer epoch expiry is greater than current time; keep manual footer installation available on desktops.
+- Roadblocks: The managed sandbox blocked Playwright's port 4173; the approved rerun passed without a code change.
+- Verification: Focused Vitest passed 77 tests plus a Strict Mode rerun 15/15; `pnpm check:web` passed typecheck, lint, 115 tests, and build; focused Chromium/mobile Playwright passed 5 with 3 project-specific skips.
+- Follow-up: None; no architectural TODO or deferred product work was needed.

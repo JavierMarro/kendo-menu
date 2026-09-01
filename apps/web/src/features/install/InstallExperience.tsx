@@ -7,13 +7,16 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import { useLocation } from 'react-router-dom';
 
 import { DialogShell } from '../../components/DialogShell';
 import {
   APP_DISPLAY_MODE_QUERIES,
   getInstallInstructionsKind,
+  isPhoneClassDevice,
   isStandaloneDisplayMode,
   persistInstallDismissal,
+  recordInstallLandingVisit,
   readInstallDismissal,
   type InstallInstructionsKind,
   type KendoBeforeInstallPromptEvent,
@@ -24,6 +27,7 @@ const INSTALL_DIALOG_TITLE_ID = 'install-kendomenu-dialog-title';
 
 interface InstallExperienceProviderProps {
   readonly children: ReactNode;
+  readonly isAutomaticPromptBlocked: boolean;
 }
 
 function readBrowserInstallDismissal(): boolean {
@@ -39,6 +43,30 @@ function persistBrowserInstallDismissal(): void {
     persistInstallDismissal(window.localStorage);
   } catch {
     // Installing remains available for this session if storage is unavailable.
+  }
+}
+
+function isBrowserPhoneClassDevice(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    return isPhoneClassDevice(
+      window.navigator.userAgent,
+      window.navigator.platform,
+      window.navigator.maxTouchPoints,
+    );
+  } catch {
+    return false;
+  }
+}
+
+function recordBrowserInstallLandingVisit(): boolean {
+  try {
+    return recordInstallLandingVisit(window.localStorage).isAutomaticPromptEligible;
+  } catch {
+    return false;
   }
 }
 
@@ -70,10 +98,14 @@ function subscribeToDisplayMode(mediaQueryList: MediaQueryList, listener: () => 
 
 export function InstallExperienceProvider({
   children,
+  isAutomaticPromptBlocked,
 }: InstallExperienceProviderProps): ReactElement {
+  const location = useLocation();
   const [deferredPrompt, setDeferredPrompt] = useState<KendoBeforeInstallPromptEvent | null>(null);
   const [isDismissed, setIsDismissed] = useState(readBrowserInstallDismissal);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [isPhoneEligible] = useState(isBrowserPhoneClassDevice);
+  const [isAutomaticPromptEligibleForEntry, setIsAutomaticPromptEligibleForEntry] = useState(false);
   const [isEnvironmentHidden, setIsEnvironmentHidden] = useState(() => {
     if (typeof window === 'undefined') {
       return false;
@@ -85,6 +117,11 @@ export function InstallExperienceProvider({
   const dialogTriggerRef = useRef<HTMLElement | null>(null);
   const installActionRef = useRef<HTMLButtonElement | null>(null);
   const hadOpenDialog = useRef(false);
+
+  const recordLandingEntry = useCallback((): void => {
+    const isEligible = isPhoneEligible && recordBrowserInstallLandingVisit();
+    setIsAutomaticPromptEligibleForEntry(isEligible && !isAutomaticPromptBlocked);
+  }, [isAutomaticPromptBlocked, isPhoneEligible]);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event: KendoBeforeInstallPromptEvent): void => {
@@ -226,14 +263,28 @@ export function InstallExperienceProvider({
   const contextValue = useMemo<InstallExperienceContextValue>(
     () => ({
       isInstallActionAvailable: !isEnvironmentHidden && !isInstalled,
+      recordLandingEntry,
       registerInstallAction,
       openInstallExperience,
     }),
-    [isEnvironmentHidden, isInstalled, openInstallExperience, registerInstallAction],
+    [
+      isEnvironmentHidden,
+      isInstalled,
+      openInstallExperience,
+      recordLandingEntry,
+      registerInstallAction,
+    ],
   );
 
   const isPromoVisible =
-    !isEnvironmentHidden && !isInstalled && !isDismissed && deferredPrompt !== null;
+    location.pathname === '/app' &&
+    isPhoneEligible &&
+    isAutomaticPromptEligibleForEntry &&
+    !isAutomaticPromptBlocked &&
+    !isEnvironmentHidden &&
+    !isInstalled &&
+    !isDismissed &&
+    deferredPrompt !== null;
 
   return (
     <InstallExperienceContext.Provider value={contextValue}>

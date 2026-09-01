@@ -34,7 +34,9 @@ export function CookiePolicyPage() {
           <p>
             Your dashboard training sessions are stored locally in your browser so KendoMenu can
             work without an account or a server. This training data is separate from cookies, is not
-            sent to a remote service and can be deleted by clearing site data in your browser.
+            sent to a remote service and can be deleted by clearing site data in your browser. Small
+            device-only preferences, including notice acknowledgements and installation prompt
+            state, are stored locally in the same way.
           </p>
         </section>
 
