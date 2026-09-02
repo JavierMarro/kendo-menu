@@ -8,7 +8,9 @@
     "vite.config.ts",
     "vitest.config.ts",
     "playwright.config.ts",
+    "playwright.preview.config.ts",
     "playwright.pwa.config.ts",
+    "vite.preview.config.ts",
     "e2e"
   ]
 }

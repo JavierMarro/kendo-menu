@@ -1,0 +1,8 @@
+- Session: responsive navigation font-metric hardening
+- Date/duration: 2026-09-02; not recorded
+- Scope/start: Fixed the Ubuntu-only 320px primary-navigation overflow and stabilized the web runner after worker-contention timeouts blocked release verification.
+- Changes: Tightened narrow navigation spacing and capped web Vitest at two workers so DOM-heavy integration tests receive predictable resources.
+- Decisions: Preserved labels, one-row wrapping, target sizes, production behavior, assertions, and timeouts; the concurrency cap affects only Vitest.
+- Roadblocks: Unrestricted Vitest workers contended under the DOM-heavy suite; affected tests passed independently and the complete suite passed with two workers.
+- Verification: Passed test:web (119 tests in 77.39s) and verify:full: check, production-preview E2E (125 passed; 3 skipped), and PWA E2E (3 passed).
+- Follow-up: Confirm the pushed branch's GitHub Actions result on Ubuntu.

@@ -44,6 +44,7 @@ pnpm check:web
 pnpm test
 pnpm check
 pnpm test:e2e
+pnpm test:e2e:preview
 pnpm test:e2e:pwa
 pnpm test:e2e:chromium
 pnpm test:e2e:mobile
@@ -54,8 +55,11 @@ pnpm session:check
 pnpm format
 ```
 
-Use `pnpm check` as the normal code gate. `pnpm verify:full` adds the default Playwright suite, while
-PWA coverage remains a separate `pnpm test:e2e:pwa` command.
+Use `pnpm check` as the normal code gate and `pnpm test:e2e` as the fast browser suite backed by the
+Vite development server. `pnpm test:e2e:preview` rebuilds the app and runs the complete non-PWA
+browser suite against Vite's production preview. `pnpm test:e2e:pwa` remains the dedicated PWA
+artifact suite. The release gate, `pnpm verify:full`, runs `pnpm check`, the preview suite, and the
+PWA suite without rerunning the development-server suite.
 
 Curated drill content is authored in `packages/domain/data/default-drills.json`, validated against
 `packages/domain/schema/kendo-drills.schema.json`, and adapted by

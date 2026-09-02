@@ -1,0 +1,8 @@
+- Session: release gate and CI
+- Date/duration: 2026-09-02; not recorded
+- Scope/start: Implemented Phase 2 verification truthfulness and repository CI from clean branch 24-release-gate-githubCI with Phase 1 protected.
+- Changes: Added the production-preview non-PWA alias, complete release gate, matching guidance/allowlist, and least-privilege GitHub Actions workflow.
+- Decisions: Kept test:e2e on the dev server; verify:full runs check, one preview suite, and the dedicated PWA suite; CI never deploys.
+- Roadblocks: Preview initially omitted the source-only recursive fixture; a test-only multi-entry Vite build fixed it without changing normal deploy output.
+- Verification: Passed session:check, check, test:e2e:preview (125 passed; 3 skipped), test:e2e:pwa (3), verify:full, and git diff --check.
+- Follow-up: After the first CI run, configure main branch protection to require the release-gate status.

@@ -12,6 +12,7 @@
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "test:e2e": "playwright test --config playwright.config.ts",
+    "test:e2e:preview": "playwright test --config playwright.preview.config.ts",
     "test:e2e:pwa": "playwright test pwa.spec.ts --config playwright.pwa.config.ts"
   },
   "dependencies": {
