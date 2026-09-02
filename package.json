@@ -21,6 +21,7 @@
     "check:store": "pnpm --filter @kendo-menu/store typecheck && pnpm --filter @kendo-menu/store lint && pnpm --filter @kendo-menu/store test",
     "check:web": "pnpm --filter @kendo-menu/web typecheck && pnpm --filter @kendo-menu/web lint && pnpm --filter @kendo-menu/web test && pnpm --filter @kendo-menu/web build",
     "test:e2e": "pnpm --filter @kendo-menu/web test:e2e",
+    "test:e2e:preview": "pnpm --filter @kendo-menu/web test:e2e:preview",
     "test:e2e:pwa": "pnpm --filter @kendo-menu/web test:e2e:pwa",
     "test:e2e:chromium": "pnpm --filter @kendo-menu/web exec playwright test --config playwright.config.ts --project=chromium",
     "test:e2e:mobile": "pnpm --filter @kendo-menu/web exec playwright test --config playwright.config.ts --project=mobile-chrome",
@@ -28,7 +29,7 @@
     "session:new": "./scripts/new-work-session.sh",
     "session:check": "./scripts/check-work-sessions.sh",
     "check": "pnpm session:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
-    "verify:full": "pnpm check && pnpm test:e2e"
+    "verify:full": "pnpm check && pnpm test:e2e:preview && pnpm test:e2e:pwa"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

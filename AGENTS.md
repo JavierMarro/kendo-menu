@@ -58,11 +58,14 @@ mobile usability, and non-color cues.
 | Domain or curated data | `CONTEXT.md`, JSON, schema, adapter, nearby tests  | `pnpm check:domain`                              |
 | Store or persistence   | domain contracts, store/persistence code and tests | `pnpm check:store`                               |
 | Web, UX, or routes     | `PRODUCT.md`, routes, nearby tests, matching skill | `pnpm check:web`; relevant E2E                   |
+| Non-PWA browser        | routes, E2E tests, default and preview configs     | `pnpm test:e2e`; release with `test:e2e:preview` |
 | PWA behavior           | manifest, service worker, install code, PWA tests  | `pnpm test:e2e:pwa` separately                   |
-| Cross-package/final    | every affected contract and test                   | `pnpm check`; `pnpm verify:full` for default E2E |
+| Cross-package/final    | every affected contract and test                   | `pnpm check`; `pnpm verify:full` for release     |
 | Documentation/skills   | affected guidance and session-history policy       | `pnpm session:check`; targeted validation        |
 
-`pnpm verify:full` runs `pnpm check` plus the default Playwright suite; it does not include PWA E2E.
+`pnpm test:e2e` is the fast development-server suite. `pnpm test:e2e:preview` runs that complete
+non-PWA suite against a freshly built Vite preview. `pnpm verify:full` runs `pnpm check`, the preview
+suite, and `pnpm test:e2e:pwa`; it does not rerun the development-server suite.
 
 ## Focused changes
 
