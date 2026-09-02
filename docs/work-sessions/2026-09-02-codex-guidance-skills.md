@@ -1,0 +1,8 @@
+- Session: Codex guidance and native skills
+- Date/duration: 2026-09-02; not recorded
+- Scope/start: Modernize Codex guidance and migrate five tracked project skills from clean HEAD 37cb71af66ac65f46b646a9bc19ab8a403756b40.
+- Changes: Slimmed AGENTS, aligned product terminology, moved project skills to native discovery, and allowlisted only their owned files.
+- Decisions: PRODUCT owns product/UX scope, CONTEXT owns terms, runtime guidance uses recursive activities, and PWA E2E stays separate.
+- Roadblocks: Bundled quick_validate could not import PyYAML; equivalent no-install validation passed for all five skills.
+- Verification: Passed pnpm check (63 domain, 68 store, 119 web, build), reference, ignore, protected-path, scope, and skill checks.
+- Follow-up: Phase 2 was intentionally not started.

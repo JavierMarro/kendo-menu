@@ -14,73 +14,71 @@ their practice routine.
 
 ## Product Purpose
 
-KendoMenu is a local-first kendo training planner. It lets practitioners browse curated training
-sets, add them to a dashboard, adjust exercise quantities, attach notes, and create custom training
-sets.
-Success means a practitioner can assemble and adapt a useful session quickly, with the session data
-available on the same device without account or server overhead.
+KendoMenu is a deployed, local-first production MVP. It lets practitioners browse curated training
+sessions, add them to a dashboard, adjust activity quantities, attach notes, and create custom
+training sessions. A practitioner can assemble and adapt a useful session on the same device without
+an account, server, or network dependency.
 
 ## Positioning
 
-KendoMenu combines a curated drill library with session-level adaptation and user-created training
-sets in a local-first workflow. The first milestone is useful without accounts, remote sync, or a
-server, while keeping the domain and state contracts ready for a future mobile app and later
-product decisions.
+KendoMenu combines a curated drill library with session-level adaptation and practitioner-authored
+training sessions. Built-in and custom sessions share one recursive activity model while browser
+storage keeps the workflow local-first.
 
 ## Operating Context
 
-Practitioners use the web SPA to prepare a day's keiko, select drills from the library, and shape
-the work for the current practice. A dashboard entry represents a selected training set for a
-session; its step quantities can be overridden by unit and notes can be attached. Browser storage
-is the free-tier persistence boundary for the first milestone.
+Practitioners use the web app to prepare a day's keiko, select a built-in or custom training session,
+and shape it for the current practice. A dashboard entry is the selected session snapshot whose
+activity quantities and notes can be adapted without mutating the built-in library.
 
 ## Capabilities and Constraints
 
-- The library contains exactly the 11 curated built-in training sets. User-created training sets
+- The library contains exactly 11 curated built-in training sessions. Custom training sessions
   appear on the dashboard only.
-- Practitioners can add training sets to a dashboard, adjust per-step quantities, attach notes, and
-  remove dashboard entries.
-- Built-in training data is immutable, marked `isBuiltIn: true`, and uses stable ids for sets and
-  steps. Dashboard quantity overrides are keyed first by step id and then by unit.
-- User-created data uses the same domain model and is marked `isBuiltIn: false`.
-- The first milestone is a React + Vite + TypeScript web SPA in a pnpm workspace. Domain contracts
-  live in `packages/domain`; the platform-neutral Zustand store lives in `packages/store` and
-  receives an injected storage adapter.
-- Zustand `persist` and browser LocalStorage are sufficient for the current small data set. Persisted
-  JSON is untrusted and must be versioned and migrated when its shape changes.
-- `apps/mobile` is reserved for an Expo app after the shared domain and state contracts are stable.
-- A server, accounts, remote sync, and paid tiers are later decisions, not requirements of this
-  milestone. TanStack Query, a database, and an API are likewise out of scope until remote data or
-  sync becomes real.
-- Future catalogue additions and the server, account, sync, and tier decisions are still open.
+- Practitioners can add sessions to the dashboard, adjust per-activity quantities, attach dashboard
+  and activity notes, and remove dashboard entries.
+- Runtime sessions contain recursive `TrainingActivity` values. Every session and activity has a
+  stable ID; quantity overrides are keyed by activity ID and then unit.
+- Built-in sessions are immutable and marked `isBuiltIn: true`. Practitioner-authored sessions use
+  the same model and are marked `isBuiltIn: false`.
+- Curated content is authored in `packages/domain/data/default-drills.json`, validated against
+  `packages/domain/schema/kendo-drills.schema.json`, and adapted by
+  `packages/domain/src/default-training-sets.ts`.
+- The production MVP is a React + Vite + TypeScript web app with React Router. Domain contracts live
+  in `packages/domain`; the platform-neutral Zustand store lives in `packages/store` and receives an
+  injected storage adapter.
+- Browser LocalStorage is sufficient for the current bounded dataset. Persisted JSON is untrusted
+  and must be validated, versioned, and migrated when its shape changes.
+- Server infrastructure, accounts, remote sync, paid tiers, databases, API work, and initialization
+  of `apps/mobile` remain out of scope until explicitly requested.
 
 ## Brand Commitments
 
-The established product name is KendoMenu. The existing product language uses kendo practice and
-keiko terminology. No additional brand assets, claims, or formal voice rules have been confirmed.
+The established product name is KendoMenu. Existing product language uses kendo practice and keiko
+terminology. No additional brand assets, claims, or formal voice rules have been confirmed.
 
 ## Evidence on Hand
 
-- `AGENTS.md` contains the confirmed product brief and engineering constraints.
-- `README.md` documents the local-first milestone, workspace boundaries, and future mobile direction.
-- `packages/domain/src/types.ts` contains the typed training-set and dashboard-entry contracts.
-- `packages/domain/src/default-training-sets.ts` contains the 11 researched built-in training sets;
-  future work must not fabricate additional drills, testimonials, customers, benchmarks, or other
-  proof.
+- `CONTEXT.md` defines the product and runtime vocabulary.
+- `packages/domain/src/types.ts` defines recursive training activities and dashboard entries.
+- `packages/domain/data/default-drills.json` and its schema contain the authored curated collection;
+  `packages/domain/src/default-training-sets.ts` validates and adapts it for runtime use.
 - `packages/store/src/index.ts` contains the injected-storage Zustand store factory.
-- `apps/web` contains the current React/Vite shell with dashboard and drill-library views.
+- `apps/web` contains the deployed React/Vite product, routed library, dashboard, and custom-session
+  builder.
+
+Do not fabricate drills, metrics, testimonials, customers, benchmarks, or other product proof.
 
 ## Product Principles
 
 - Keep core practice useful without accounts, servers, or network access.
-- Help practitioners shape the session they actually intend to do today.
-- Treat curated drills and user-created sets as one coherent training model while keeping curated
-  library defaults immutable and user-created sessions dashboard-owned.
-- Keep domain and state contracts portable so a future native app can reuse them.
+- Help practitioners shape the session they intend to do today.
+- Keep curated defaults immutable while dashboard entries own session-specific adaptation.
+- Keep domain and state contracts platform-neutral without initializing speculative clients.
 - Preserve a calm, focused practice experience with clear, accessible interactions.
 
 ## Accessibility & Inclusion
 
 The web experience must preserve keyboard access, visible focus, semantic headings and labels,
-useful empty/loading/error states, and communication that does not rely on color alone. Layouts must
-remain usable on mobile-sized screens.
+useful empty/loading/error states, communication that does not rely on color alone, and usability on
+mobile-sized screens.

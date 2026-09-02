@@ -88,7 +88,7 @@ deployment state.
 2. Review the failing output and changed files.
 3. Apply only scoped, reversible fixes that are within the user's request.
 4. Re-run the failed checks. Repeat review → fix → verify no more than three iterations.
-5. Invoke or read `tools/skills/code-reviewer-pre-commit/SKILL.md` for the semantic review stage.
+5. Use `$code-reviewer-pre-commit` for the semantic review stage.
 6. Stop with `NEEDS WORK` when failures remain, the toolchain is unavailable, or a required check
    could not be trusted.
 
