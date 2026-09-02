@@ -1,36 +1,36 @@
 # KendoMenu
 
-KendoMenu is a local-first kendo training planner. It will provide a small curated library of
-training sets, let practitioners add and adapt drills for a session, and support custom sets. The
-first tier stores data in the browser; a server-backed tier can be added later without changing the
-domain model.
+KendoMenu is a deployed, local-first production MVP for planning kendo training sessions.
+Practitioners can browse 11 curated built-in sessions, add sessions to a dashboard, adapt activity
+quantities, attach notes, and create custom sessions. Product data remains in browser storage; no
+account or server is required.
 
 ## Current stack
 
-- pnpm workspaces for one lockfile and shared packages
-- React + Vite + TypeScript for `apps/web`
-- Zustand `persist` with an injected storage adapter for local data
-- Shared typed domain contracts in `packages/domain`
-- Shared state factory in `packages/store`
-- Expo is reserved for `apps/mobile` once the web domain and interaction model are stable
+- pnpm workspaces with one root lockfile
+- React, React Router, Vite, and TypeScript in `apps/web`
+- Zustand `persist` with an injected storage adapter in `packages/store`
+- Shared recursive training contracts and curated-data validation in `packages/domain`
+- An uninitialized `apps/mobile` boundary reserved for explicitly requested future work
 
-pnpm is the package manager. Bun is not required for the current SPA. If an API is added later,
-Elysia can be introduced in an isolated `apps/api` package with its own runtime decision; there is
-no reason to carry a database or server into the LocalStorage-only first milestone.
+Server APIs, accounts, remote sync, paid tiers, databases, and other remote infrastructure are not
+part of the current product scope.
 
 ## Workspace layout
 
 ```text
 apps/
-  web/       React/Vite SPA
-  mobile/    Expo placeholder
+  web/       React/Vite production SPA
+  mobile/    Reserved Expo boundary
 packages/
-  domain/    Training-set types and curated defaults
-  store/     Zustand store factory with an injected persistence adapter
+  domain/    Training contracts, validation, and curated-data adapter
+  store/     Zustand store factory with injected persistence
   ui/        Reserved shared UI boundary
 ```
 
-## Commands
+## Development
+
+pnpm is the repository package manager. Common root commands are:
 
 ```bash
 pnpm install
@@ -44,6 +44,7 @@ pnpm check:web
 pnpm test
 pnpm check
 pnpm test:e2e
+pnpm test:e2e:pwa
 pnpm test:e2e:chromium
 pnpm test:e2e:mobile
 pnpm test:e2e:a11y
@@ -53,20 +54,17 @@ pnpm session:check
 pnpm format
 ```
 
-Use `pnpm check` as the normal code gate and `pnpm verify:full` as the final code-plus-browser gate.
-The package-specific and Playwright aliases avoid direct workspace filters for routine validation.
+Use `pnpm check` as the normal code gate. `pnpm verify:full` adds the default Playwright suite, while
+PWA coverage remains a separate `pnpm test:e2e:pwa` command.
 
-Curated drill content is authored in `packages/domain/data/default-drills.json`, with
-`packages/domain/schema/kendo-drills.schema.json` as its validation contract, and normalized by
-`packages/domain/src/default-training-sets.ts` into `DEFAULT_TRAINING_SETS`, the runtime interface
-used by store and web modules. Every activity needs a stable id because dashboard quantity
-overrides are keyed first by activity id and then by unit. The custom-set builder has a reserved
-feature boundary at `apps/web/src/features/custom-sets`.
+Curated drill content is authored in `packages/domain/data/default-drills.json`, validated against
+`packages/domain/schema/kendo-drills.schema.json`, and adapted by
+`packages/domain/src/default-training-sets.ts` into the recursive `TrainingActivity` runtime model.
+Every activity has a stable ID because dashboard quantities and activity notes are keyed by it.
 
-See [AGENTS.md](./AGENTS.md) for the working contract used by people and coding agents.
+See [PRODUCT.md](./PRODUCT.md) for product and UX scope, [CONTEXT.md](./CONTEXT.md) for terminology,
+and [AGENTS.md](./AGENTS.md) for the repository working contract. Development history is recorded in
+[`docs/work-sessions`](./docs/work-sessions/).
 
-Development history is recorded in [`docs/work-sessions`](./docs/work-sessions/), with one concise
-entry per working session.
-
-Project-local Codex workflows are indexed in [`tools/skills`](./tools/skills/). Read the applicable
-`SKILL.md` before heavy implementation, fuzz testing, verification, or semantic review.
+Project-owned Codex workflows are natively discoverable and indexed in
+[`.agents/skills`](./.agents/skills/). Load only the skill that matches the current workflow.

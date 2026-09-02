@@ -10,8 +10,21 @@ apps/web/playwright-report/
 *.log
 .DS_Store
 
-# User-global or plugin-managed third-party skills
-.agents/skills/
+# Project skills are ignored by default; only the project-owned discovery files are allowlisted.
+.agents/skills/*
+!.agents/skills/README.md
+!.agents/skills/code-reviewer-pre-commit/
+!.agents/skills/kendomenu-web-feature/
+!.agents/skills/pre-commit-verification/
+!.agents/skills/testing-fuzz-stress/
+!.agents/skills/work-session-history/
+.agents/skills/*/*
+!.agents/skills/*/SKILL.md
+!.agents/skills/*/agents/
+.agents/skills/*/agents/*
+!.agents/skills/*/agents/openai.yaml
+
+# User-global or plugin-managed third-party state
 .impeccable
 .codex/hooks.json
 
