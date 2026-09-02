@@ -26,6 +26,7 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-09-02 — responsive navigation font-metric hardening](./2026-09-02-navigation-font-metrics.md)
 - [2026-09-02 — release gate and repository CI](./2026-09-02-release-gate-ci.md)
 - [2026-09-02 — Codex guidance and native project skills](./2026-09-02-codex-guidance-skills.md)
 - [2026-09-01 — privacy and navigation cleanup](./2026-09-01-privacy-navigation-cleanup.md)
