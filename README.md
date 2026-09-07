@@ -68,7 +68,9 @@ Every activity has a stable ID because dashboard quantities and activity notes a
 
 See [PRODUCT.md](./PRODUCT.md) for product and UX scope, [CONTEXT.md](./CONTEXT.md) for terminology,
 and [AGENTS.md](./AGENTS.md) for the repository working contract. Development history is recorded in
-[`docs/work-sessions`](./docs/work-sessions/).
+[`docs/work-sessions`](./docs/work-sessions/). See the [architecture](./docs/ARCHITECTURE.md) and
+[deployment runbook](./docs/runbooks/DEPLOYMENT.md) for the current production boundaries and
+release procedure.
 
 Project-owned Codex workflows are natively discoverable and indexed in
 [`.agents/skills`](./.agents/skills/). Load only the skill that matches the current workflow.
