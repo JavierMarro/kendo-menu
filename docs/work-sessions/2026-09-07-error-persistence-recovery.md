@@ -1,0 +1,8 @@
+- Session: error handling and persistence recovery
+- Date/duration: 2026-09-07; not recorded
+- Scope/start: Focused application failure containment and local write-failure recovery; unrelated Dependabot file preserved.
+- Changes: Router-independent boundaries, allowlisted clipboard diagnostics, latched failed writes, validated live-state backups, recovery transitions, and regression tests.
+- Decisions: Preserve v10 format and protected bytes; reset trusts atomic removal without a fallible post-delete read; no dependencies, telemetry, import, or deployment changes.
+- Roadblocks: Browser tests required sandbox escalation for local ports; an existing notes test timed out under concurrent verification and passed isolated and sequential reruns.
+- Verification: Store check (68), web check (143), focused recovery E2E (14), pnpm check, reset/helper delta (17), and desktop/mobile fallback visual and accessibility checks passed; independent semantic/security review and preview (131 passed, 3 platform skips) passed.
+- Follow-up: None; dedicated PWA suite not run because PWA behavior was unchanged.

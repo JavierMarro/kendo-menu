@@ -1,5 +1,6 @@
 import {
   classifyTrainingStorageValue,
+  serializePersistedTrainingStateV10,
   type StateStorage,
   type TrainingStorageInspection,
 } from '@kendo-menu/store';
@@ -16,6 +17,10 @@ export type PersistenceInspection =
 export interface BrowserStorageOptions {
   readonly onReadError?: () => void;
   readonly onWriteError?: () => void;
+}
+
+export interface TrainingStorageController extends StateStorage {
+  readonly replace: (storage: StateStorage) => void;
 }
 
 function mapStorageInspection(
@@ -73,6 +78,13 @@ export function inspectBrowserTrainingStorage(
 }
 
 export function createBrowserTrainingStorage(options: BrowserStorageOptions = {}): StateStorage {
+  let writeFailed = false;
+
+  const markWriteFailed = () => {
+    writeFailed = true;
+    options.onWriteError?.();
+  };
+
   return {
     getItem: (name) => {
       try {
@@ -83,17 +95,25 @@ export function createBrowserTrainingStorage(options: BrowserStorageOptions = {}
       }
     },
     setItem: (name, value) => {
+      if (writeFailed) {
+        return;
+      }
+
       try {
         window.localStorage.setItem(name, value);
       } catch {
-        options.onWriteError?.();
+        markWriteFailed();
       }
     },
     removeItem: (name) => {
+      if (writeFailed) {
+        return;
+      }
+
       try {
         window.localStorage.removeItem(name);
       } catch {
-        options.onWriteError?.();
+        markWriteFailed();
       }
     },
   } satisfies StateStorage;
@@ -113,24 +133,63 @@ export function createMemoryTrainingStorage(): StateStorage {
   } satisfies StateStorage;
 }
 
+/**
+ * Keep the store's injected storage identity stable while explicitly replacing its backing
+ * adapter after a user chooses recovery or session-only mode.
+ */
+export function createTrainingStorageController(storage: StateStorage): TrainingStorageController {
+  let activeStorage = storage;
+
+  return {
+    getItem: (name) => activeStorage.getItem(name),
+    setItem: (name, value) => activeStorage.setItem(name, value),
+    removeItem: (name) => activeStorage.removeItem(name),
+    replace: (nextStorage) => {
+      activeStorage = nextStorage;
+    },
+  } satisfies TrainingStorageController;
+}
+
 export function downloadRawTrainingBackup(raw: string): void {
-  const blob = new Blob([raw], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
+  downloadTrainingBackupPayload(
+    raw,
+    `kendomenu-local-backup-${new Date().toISOString().slice(0, 10)}.json`,
+  );
+}
+
+/**
+ * Download the current validated v10 state held by the store.
+ *
+ * The state is encoded through the same serializer used by browser persistence so this backup
+ * always carries the current persistence version and never reads stale or failed storage bytes.
+ */
+export function downloadCurrentTrainingBackup(dashboardEntries: unknown): void {
+  const raw = serializePersistedTrainingStateV10({ dashboardEntries });
+  downloadTrainingBackupPayload(
+    raw,
+    `kendomenu-current-backup-${new Date().toISOString().slice(0, 10)}.json`,
+  );
+}
+
+function downloadTrainingBackupPayload(raw: string, filename: string): void {
+  let url: string | null = null;
 
   try {
+    const blob = new Blob([raw], { type: 'application/json' });
+    url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `kendomenu-local-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.download = filename;
     anchor.click();
   } finally {
-    URL.revokeObjectURL(url);
+    if (url !== null) {
+      URL.revokeObjectURL(url);
+    }
   }
 }
 
 export function resetBrowserTrainingStorage(storageKey: string = TRAINING_STORAGE_KEY): void {
+  // LocalStorage removal is atomic. A later read failure must not turn a completed reset into
+  // a reported failure; the gate independently inspects whether storage is available afterward.
   window.localStorage.removeItem(storageKey);
-
-  if (window.localStorage.getItem(storageKey) !== null) {
-    throw new Error('KendoMenu local data could not be removed.');
-  }
 }

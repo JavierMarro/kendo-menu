@@ -2913,6 +2913,36 @@ textarea[aria-invalid='true'] {
   padding: var(--space-6);
 }
 
+.persistence-warning {
+  width: min(100% - (var(--space-8)), 56rem);
+  margin: var(--space-4) auto 0;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid rgba(240, 120, 111, 0.62);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background: var(--danger-soft);
+}
+
+.persistence-warning h2 {
+  margin-top: var(--space-2);
+  font-size: var(--type-18);
+}
+
+.persistence-warning > p:not(.eyebrow):not(.form-error) {
+  max-width: 64ch;
+  margin: var(--space-2) 0 0;
+  color: var(--muted-strong);
+  line-height: 1.5;
+}
+
+.persistence-warning .form-error {
+  margin: var(--space-3) 0 0;
+}
+
+.persistence-warning .recovery-actions {
+  margin-top: var(--space-4);
+}
+
 .recovery-card {
   width: min(100%, 36rem);
   padding: clamp(var(--space-5), 5vw, var(--space-10));

@@ -1,0 +1,9 @@
+version: 2
+updates:
+  # pnpm 11 is outside GitHub's documented pnpm support (7–10).
+  # Enable npm-ecosystem PRs only after compatibility is verified; never downgrade pnpm.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
