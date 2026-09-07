@@ -1,0 +1,8 @@
+- Session: architecture and deployment documentation
+- Date/duration: 2026-09-02, reviewed 2026-09-07; not recorded
+- Scope/start: Phase 3 documentation from clean branch 25-architecture-deployment-docs with Phases 1 and 2 protected.
+- Changes: Added and independently reviewed the architecture and deployment runbook; corrected dependency/data flow, limit ownership, protected-branch release flow, safe smoke checks, and token-proportional agent guidance.
+- Decisions: Kept historical snapshots unchanged; made protected Git integration the normal release path, direct Preview promotion conditional, and dashboard details explicitly owner-confirmed.
+- Roadblocks: Public DNS/HTTPS probes required approved read-only network access outside the sandbox.
+- Verification: Sol High delta review passed; `pnpm format:check`, `pnpm session:check`, `git diff --check`, and the initial relative-link resolution passed.
+- Follow-up: Owner confirmation remains required for the Vercel Production Branch, automatic domain assignment, other dashboard settings, and exact pnpm build behavior.

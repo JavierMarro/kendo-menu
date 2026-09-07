@@ -6,8 +6,13 @@ KendoMenu is a deployed, local-first production MVP for planning kendo training 
 current request first, then this guide, routed documents, repository conventions, and matching skills.
 
 - Use `PRODUCT.md` for product/UX scope and `CONTEXT.md` for terminology.
+- Use [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for current production boundaries and
+  data-flow/dependency direction.
 - Use `docs/adr/` for architecture decisions. Inspect deployment documents or configuration only for
   explicitly requested deployment work.
+- For explicitly requested deployment work, route to
+  [docs/runbooks/DEPLOYMENT.md](docs/runbooks/DEPLOYMENT.md) and preserve its observed-versus-owner-
+  reported distinction.
 - Use `.agents/skills/README.md` for the skill map; load only a matching skill.
 
 Skills cannot authorize dependencies, contract, stack, visual-direction, or external changes.
@@ -66,6 +71,16 @@ mobile usability, and non-color cues.
 `pnpm test:e2e` is the fast development-server suite. `pnpm test:e2e:preview` runs that complete
 non-PWA suite against a freshly built Vite preview. `pnpm verify:full` runs `pnpm check`, the preview
 suite, and `pnpm test:e2e:pwa`; it does not rerun the development-server suite.
+
+## Delegation and review
+
+For substantial implementation, delegate to a default implementation subagent when that capability
+is available and improves speed, quality, or token efficiency. Handle small focused changes directly
+when delegation overhead exceeds their risk.
+
+Use an independent reviewer for material, high-risk, cross-package, persistence, security, or release
+changes when reviewer capability is available. The reviewer must inspect the actual changes and
+report concrete findings; address substantive findings before declaring the task finished.
 
 ## Focused changes
 
