@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 
 import { appRoutes } from './app/app-routes';
-import { PersistenceGate } from './features/persistence/PersistenceGate';
+import { ApplicationRecovery } from './features/errors/ApplicationRecovery';
 import { DataRouterModeProvider } from './lib/router-context';
 import './styles.css';
 
@@ -17,10 +17,10 @@ const router = createBrowserRouter(appRoutes);
 
 createRoot(rootElement).render(
   <StrictMode>
-    <PersistenceGate>
+    <ApplicationRecovery>
       <DataRouterModeProvider>
         <RouterProvider router={router} />
       </DataRouterModeProvider>
-    </PersistenceGate>
+    </ApplicationRecovery>
   </StrictMode>,
 );

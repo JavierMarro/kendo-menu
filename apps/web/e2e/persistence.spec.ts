@@ -151,4 +151,64 @@ test.describe('local persistence recovery', () => {
     await expect(page.getByText('Not saved to this device.')).toHaveCount(2);
     await expect(page.getByText('Saved locally.')).toHaveCount(0);
   });
+
+  test('downloads the latest in-memory state after a failed write', async ({ page }) => {
+    await page.addInitScript(() => {
+      const storage = window.localStorage;
+      const originalSetItem = storage.setItem.bind(storage);
+      Object.defineProperty(storage, 'setItem', {
+        configurable: true,
+        value: (name: string, value: string): void => {
+          if (name === 'kendo-menu') {
+            throw new DOMException('quota exceeded', 'QuotaExceededError');
+          }
+          originalSetItem(name, value);
+        },
+      });
+    });
+    await page.goto('/app/library');
+    const seniorHighSchoolCard = page
+      .getByRole('heading', { name: 'Senior High School dojo menu' })
+      .locator('xpath=ancestor::article');
+    await seniorHighSchoolCard.getByRole('link', { name: 'View session' }).click();
+    await page.getByRole('button', { name: 'Add to dashboard' }).click();
+    await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
+
+    const dashboardCard = page
+      .locator('.dashboard-card--compact')
+      .filter({ hasText: 'Senior High School dojo menu' })
+      .first();
+    await dashboardCard.getByRole('button', { name: 'View more' }).click();
+    const dashboardDialog = page.getByRole('dialog', {
+      name: 'Senior High School dojo menu',
+    });
+    const notes = dashboardDialog.getByLabel('Practice notes');
+    await notes.fill('Latest notes kept in memory.');
+    await notes.blur();
+    await expect(page.getByText('Not saved to this device.')).toBeVisible();
+
+    await dashboardDialog
+      .getByRole('button', { name: 'Close Senior High School dojo menu details.' })
+      .click();
+    await expect(dashboardDialog).toHaveCount(0);
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download current backup' }).click();
+    const download = await downloadPromise;
+    const downloadPath = await download.path();
+    if (downloadPath === null) {
+      throw new Error('The browser did not provide a current backup download path.');
+    }
+    const backup = JSON.parse(await readFile(downloadPath, 'utf8')) as unknown;
+    expect(backup).toEqual(
+      expect.objectContaining({
+        version: 10,
+        state: expect.objectContaining({
+          dashboardEntries: expect.arrayContaining([
+            expect.objectContaining({ notes: 'Latest notes kept in memory.' }),
+          ]),
+        }),
+      }),
+    );
+    expect(await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY)).toBeNull();
+  });
 });

@@ -1,5 +1,6 @@
 import { Navigate, type RouteObject } from 'react-router-dom';
 
+import { RouteErrorRethrow } from '../features/errors/RouteErrorRethrow';
 import { CreateDrillPage } from '../features/custom-sets/CreateDrillPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { LandingPage } from '../features/landing/LandingPage';
@@ -13,6 +14,7 @@ import { AppLayout, RouteRoot, StandaloneNotFoundPage } from './app-route-compon
 export const appRoutes: RouteObject[] = [
   {
     element: <RouteRoot />,
+    errorElement: <RouteErrorRethrow />,
     children: [
       { path: '/', element: <Navigate replace to="/app" /> },
       {

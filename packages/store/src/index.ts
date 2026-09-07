@@ -80,6 +80,7 @@ export {
   parsePersistedTrainingStateV9,
   parsePersistedTrainingStateV10,
   parsePersistedTrainingWireStateV9,
+  serializePersistedTrainingStateV10,
   TrainingDurationOverrideMigrationConflictError,
   TrainingOverrideMigrationConflictError,
   MAX_PERSISTED_JSON_CHARACTERS,

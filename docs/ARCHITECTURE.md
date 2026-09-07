@@ -83,7 +83,8 @@ The 2026-09-02 hardening is part of this boundary:
 - Custom snapshots retain a two-level wire shape (`sections` containing `exercises`) even though
   the runtime contract is recursive. Unsupported custom nesting is rejected with an exception;
   it is never silently truncated. Browser write failures are surfaced to the web persistence UI,
-  but a successful in-memory action may remain unsaved until storage is available again.
+  and the adapter stops further writes after a failure. The live state remains usable for the
+  session and can be explicitly downloaded through the same validated v10 serializer.
 
 ### Ordered migration chain
 
@@ -111,6 +112,13 @@ The web [`training-persistence.ts`](../apps/web/src/lib/training-persistence.ts)
 maps store inspection into UI states. [`PersistenceGate.tsx`](../apps/web/src/features/persistence/PersistenceGate.tsx)
 chooses local storage, exposes recovery/reset/backup actions, or explicitly falls back to an
 in-memory session. Local data is origin-specific and is not a server backup or cross-device sync.
+
+[`ApplicationRecovery.tsx`](../apps/web/src/features/errors/ApplicationRecovery.tsx) keeps an error
+boundary outside the router and inside the persistence gate, preserving the live store when the
+application fails. A second boundary protects the gate itself. The fallback offers reload and,
+when the gate remains available, access to the existing recovery screen. Explicitly copied
+diagnostics contain only the fixed `KENDOMENU_UNEXPECTED_UI_ERROR` code and a boolean recovery
+availability flag; they never consume exceptions, storage, URLs, or training state.
 
 ## Web, hosting, and external boundaries
 

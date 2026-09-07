@@ -26,6 +26,7 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-09-07 — error handling and persistence recovery](./2026-09-07-error-persistence-recovery.md)
 - [2026-09-02 — architecture and deployment documentation](./2026-09-02-architecture-deployment-docs.md)
 - [2026-09-02 — responsive navigation font-metric hardening](./2026-09-02-navigation-font-metrics.md)
 - [2026-09-02 — release gate and repository CI](./2026-09-02-release-gate-ci.md)
