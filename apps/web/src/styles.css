@@ -3684,3 +3684,128 @@ textarea[aria-invalid='true'] {
     animation-iteration-count: 1 !important;
   }
 }
+
+.glossary-page {
+  width: min(100%, 64rem);
+  margin-inline: auto;
+}
+
+.glossary-context,
+.glossary-search p,
+.glossary-group-terms > div > p,
+.glossary-references {
+  max-width: 72ch;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.glossary-search {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 38rem;
+  margin-bottom: var(--space-5);
+}
+
+.glossary-search p {
+  margin: 0;
+  font-size: var(--type-14);
+}
+
+.glossary-alphabet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-8);
+}
+
+.glossary-alphabet a {
+  display: grid;
+  place-items: center;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  font-weight: 700;
+}
+
+.glossary-page a {
+  color: var(--accent-hover);
+  text-underline-offset: 0.2em;
+}
+
+.glossary-page a:hover {
+  color: var(--accent-bright-hover);
+}
+
+.glossary-section {
+  display: grid;
+  grid-template-columns: minmax(5rem, 0.3fr) minmax(0, 1fr);
+  gap: var(--space-8);
+  padding-block: var(--space-8);
+  border-top: 1px solid var(--line-strong);
+}
+
+.glossary-section h2 {
+  color: var(--accent-hover);
+}
+
+.glossary-section h2:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.glossary-definitions {
+  margin: 0;
+  min-width: 0;
+}
+
+.glossary-entry + .glossary-entry {
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--line);
+}
+
+.glossary-entry dt {
+  font-size: var(--type-18);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.glossary-entry dd {
+  margin: var(--space-2) 0 0;
+  color: var(--muted-strong);
+  line-height: 1.65;
+}
+
+.glossary-entry p {
+  margin: 0;
+  max-width: 72ch;
+}
+
+.glossary-entry .glossary-aliases,
+.glossary-entry .glossary-note {
+  color: var(--muted);
+  font-size: var(--type-14);
+}
+
+.glossary-entry .glossary-aliases {
+  margin-bottom: var(--space-2);
+}
+
+.glossary-entry .glossary-note {
+  margin-top: var(--space-2);
+}
+
+.glossary-references {
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--line-strong);
+}
+
+.glossary-references li + li {
+  margin-top: var(--space-3);
+}
+
+@media (max-width: 600px) {
+  .glossary-section {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+}

@@ -8,6 +8,7 @@ import { LibraryPage } from '../features/library/LibraryPage';
 import { TrainingSetDetailPage } from '../features/library/TrainingSetDetailPage';
 import { NotFoundPage } from '../features/not-found/NotFoundPage';
 import { CookiePolicyPage } from '../features/privacy/CookiePolicyPage';
+import { GlossaryPage } from '../features/glossary/GlossaryPage';
 import { SourcesPage } from '../features/sources/SourcesPage';
 import { AppLayout, RouteRoot, StandaloneNotFoundPage } from './app-route-components';
 
@@ -27,6 +28,7 @@ export const appRoutes: RouteObject[] = [
           { path: 'library/:trainingSetId', element: <TrainingSetDetailPage /> },
           { path: 'drills/new', element: <CreateDrillPage /> },
           { path: 'sources', element: <SourcesPage /> },
+          { path: 'glossary', element: <GlossaryPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

@@ -26,8 +26,18 @@ const FAQ_ITEMS: readonly FaqItem[] = [
   {
     id: 'all-experience-levels',
     question: 'Is KendoMenu useful for all experience levels?',
-    answer:
-      'Yes. KendoMenu is intended for all experience levels. The curated menus cover different kinds of practice, and each plan can be adapted by changing repetitions or duration to suit your dojo and training goals.',
+    answer: (
+      <>
+        Yes. KendoMenu is intended for all experience levels. The curated menus cover different
+        kinds of practice, and each plan can be adapted by changing repetitions or duration to suit
+        your dojo and training goals. For beginners and experienced practitioners alike, check out
+        the{' '}
+        <Link className="landing-faq-source-link" to="/app/glossary">
+          Glossary
+        </Link>{' '}
+        for a quick refresher on the terms used in the menus.
+      </>
+    ),
   },
   {
     id: 'menu-sources',
