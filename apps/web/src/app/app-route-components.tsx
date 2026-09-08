@@ -15,6 +15,7 @@ import {
   persistCookieNoticeAcknowledgement,
   readCookieNoticeAcknowledgement,
 } from '../lib/cookie-notice';
+import { updateRouteMetadata } from '../lib/route-metadata';
 
 const routeTitles: Readonly<Record<string, string>> = {
   '/app': 'Plan your keiko',
@@ -190,7 +191,15 @@ function RouteFocusAndTitle(): ReactElement {
     const title =
       routeTitles[location.pathname] ??
       (location.pathname.startsWith('/app/library/') ? 'Session details' : 'KendoMenu');
-    document.title = `${title} · KendoMenu`;
+    updateRouteMetadata({
+      pathname: location.pathname,
+      search: location.search,
+      hash: location.hash,
+      title,
+    });
+  }, [location.hash, location.pathname, location.search]);
+
+  useEffect(() => {
     document.getElementById('main-content')?.focus({ preventScroll: true });
   }, [location.pathname]);
 

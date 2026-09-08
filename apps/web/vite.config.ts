@@ -44,7 +44,8 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,svg,jpg,jpeg}'],
+        globPatterns: ['**/*.{js,css,html,ico,svg,jpg,jpeg,avif,webp}'],
+        globIgnores: ['**/kendo-menu-social.jpg'],
         navigateFallback: 'index.html',
         navigateFallbackAllowlist: [/^\/(?:app(?:\/|$)|cookies(?:\/|$)|$)/],
         cleanupOutdatedCaches: true,

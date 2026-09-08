@@ -1,0 +1,8 @@
+- Session: production performance, metadata, and operations polish
+- Date/duration: 2026-09-08; not recorded
+- Scope/start: Oversized logo/hero delivery, missing social/crawl metadata, and rollback/account continuity documentation.
+- Changes: Responsive assets with originals outside public output, branded social card, canonical/noindex metadata, robots/sitemap, rollback/continuity procedures, and measurement report; complete precache reduced 64.38% to 1,547,391 bytes.
+- Decisions: Canonical www origin; sitemap /app only; preserve layout, v10 persistence, and all external production settings; all account controls owner verification required.
+- Roadblocks: Requested supply-chain document absent; browser checks require local-port/Chromium sandbox escalation; measure all actual SW entries because plugin summary omits included icon bytes.
+- Verification: pnpm check:web, preview (149 passed/3 platform skips), dedicated PWA (4), and final pnpm verify:full (289 unit, 149 preview, 4 PWA) passed; independent semantic review and exact final-build byte recheck passed.
+- Follow-up: Owner verification required for rollback eligibility/data compatibility and account/domain continuity controls; provide the missing supply-chain guidance if additional release controls apply.

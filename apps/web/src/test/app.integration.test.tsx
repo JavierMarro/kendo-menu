@@ -278,7 +278,7 @@ describe('KendoMenu application flows', () => {
         .getByRole('link', { name: 'KendoMenu home' })
         .querySelector('img')
         ?.getAttribute('src'),
-    ).toBe('/assets/kendo-menu-logo.jpeg');
+    ).toBe('/assets/kendo-menu-logo-88.jpeg');
     expect(
       screen.getByText(
         'Choose from 11 curated menus, shape the workload for your training and keep polishing mind, spirit and character through varied kendo practice.',

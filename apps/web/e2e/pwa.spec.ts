@@ -218,3 +218,31 @@ test.describe('production PWA shell', () => {
     }
   });
 });
+
+test('precaches responsive fallbacks without source originals or the social card', async ({
+  page,
+  request,
+}) => {
+  const worker = await request.get('/sw.js');
+  const workerSource = await worker.text();
+  expect(workerSource).not.toContain('kendo-menu-logo.jpeg');
+  expect(workerSource).not.toContain('kendo-menu-hero.jpeg');
+  expect(workerSource).not.toContain('kendo-menu-social.jpg');
+  await page.goto('/app');
+  await establishServiceWorkerControl(page);
+  await page.context().setOffline(true);
+  for (const format of ['avif', 'webp', 'jpeg']) {
+    for (const [name, widths] of [
+      ['logo', [44, 88, 176, 264]],
+      ['hero', [768, 1280, 1920, 2752]],
+    ] as const) {
+      for (const width of widths) {
+        const result = await page.evaluate(async (path) => {
+          const response = await fetch(path);
+          return { ok: response.ok, type: response.headers.get('content-type') };
+        }, `/assets/kendo-menu-${name}-${width}.${format}`);
+        expect(result).toEqual({ ok: true, type: `image/${format}` });
+      }
+    }
+  }
+});

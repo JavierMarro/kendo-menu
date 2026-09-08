@@ -382,6 +382,7 @@ function PersistenceRecovery({
 
   return (
     <main className="recovery-page" aria-labelledby="persistence-title">
+      <meta name="robots" content="noindex, nofollow" />
       <section className="recovery-card">
         <p className="eyebrow">Local data check</p>
         <h1 id="persistence-title" ref={headingRef} tabIndex={-1}>

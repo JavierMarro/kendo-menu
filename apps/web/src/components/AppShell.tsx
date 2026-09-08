@@ -45,7 +45,7 @@ export function AppShell() {
         Skip to content
       </a>
       <header className="top-bar">
-        <BrandLockup fetchPriority="high" onClick={closeMenu} />
+        <BrandLockup onClick={closeMenu} />
         <div
           className={writeFailed ? 'session-status is-error' : 'session-status'}
           aria-label={persistenceStatusLabel}

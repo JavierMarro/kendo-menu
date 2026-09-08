@@ -500,16 +500,17 @@ test.describe('accessibility and responsive layout', () => {
     }
   });
 
-  test('does not overscale the landing hero background at tablet widths', async ({ page }) => {
+  test('does not overscale the landing hero at tablet widths', async ({ page }) => {
     for (const width of [680, 800, 960]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/app');
 
-      const backgroundSize = await page
-        .locator('.landing-page')
-        .evaluate((element) => getComputedStyle(element).backgroundSize);
-
-      expect(backgroundSize, `hero background size at ${width}px`).toBe('cover, cover');
+      const hero = page.locator('.landing-hero img');
+      await expect(hero).toHaveCSS('object-fit', 'cover');
+      await expect(hero).toHaveCSS('object-position', '68% 50%');
+      const sectionBounds = await page.locator('.landing-page').boundingBox();
+      const imageBounds = await hero.boundingBox();
+      expect(imageBounds, `hero dimensions at ${width}px`).toEqual(sectionBounds);
     }
   });
 
