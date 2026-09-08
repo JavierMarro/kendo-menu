@@ -64,6 +64,7 @@ function AppErrorFallback({
 
   return (
     <main className="recovery-page" aria-labelledby="app-error-title">
+      <meta name="robots" content="noindex, nofollow" />
       <section className="recovery-card">
         <h1 id="app-error-title" ref={headingRef} tabIndex={-1}>
           KendoMenu couldn’t continue.

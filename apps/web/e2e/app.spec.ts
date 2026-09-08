@@ -141,10 +141,8 @@ test.describe('routed training flows', () => {
       await expect(page.locator('.session-status-label')).toBeVisible();
     }
 
-    const backgroundImage = await page
-      .locator('.landing-page')
-      .evaluate((element) => getComputedStyle(element).backgroundImage);
-    expect(backgroundImage).toContain('kendo-menu-hero.jpeg');
+    await expect(page.locator('.landing-hero img')).toBeVisible();
+    await expect(page.locator('.landing-hero img')).toHaveJSProperty('complete', true);
 
     const browseLibrary = page.getByRole('link', { name: 'Browse Keiko library' });
     await expect(browseLibrary).toHaveText('BROWSE KEIKO LIBRARY HERE →');

@@ -18,6 +18,7 @@ export function SiteFooter({ onNavigate }: SiteFooterProps): ReactElement {
       <div className="site-footer-grid">
         <div className="site-footer-column site-footer-brand-column">
           <BrandLockup
+            compact
             className="footer-brand-lockup"
             nameClassName="footer-brand-name"
             onClick={onNavigate}

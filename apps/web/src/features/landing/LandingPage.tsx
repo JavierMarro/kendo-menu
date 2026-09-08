@@ -144,6 +144,28 @@ export function LandingPage(): ReactElement {
   return (
     <>
       <section className="landing-page" aria-labelledby="landing-page-title">
+        <picture className="landing-hero" aria-hidden="true">
+          <source
+            type="image/avif"
+            srcSet="/assets/kendo-menu-hero-768.avif 768w, /assets/kendo-menu-hero-1280.avif 1280w, /assets/kendo-menu-hero-1920.avif 1920w, /assets/kendo-menu-hero-2752.avif 2752w"
+            sizes="(max-width: 679px) 200vw, (max-width: 960px) max(100vw, 941px), max(100vw, calc(179.167dvh - 129px))"
+          />
+          <source
+            type="image/webp"
+            srcSet="/assets/kendo-menu-hero-768.webp 768w, /assets/kendo-menu-hero-1280.webp 1280w, /assets/kendo-menu-hero-1920.webp 1920w, /assets/kendo-menu-hero-2752.webp 2752w"
+            sizes="(max-width: 679px) 200vw, (max-width: 960px) max(100vw, 941px), max(100vw, calc(179.167dvh - 129px))"
+          />
+          <img
+            src="/assets/kendo-menu-hero-1280.jpeg"
+            srcSet="/assets/kendo-menu-hero-768.jpeg 768w, /assets/kendo-menu-hero-1280.jpeg 1280w, /assets/kendo-menu-hero-1920.jpeg 1920w, /assets/kendo-menu-hero-2752.jpeg 2752w"
+            sizes="(max-width: 679px) 200vw, (max-width: 960px) max(100vw, 941px), max(100vw, calc(179.167dvh - 129px))"
+            alt=""
+            width="2752"
+            height="1536"
+            loading="eager"
+            fetchPriority="high"
+          />
+        </picture>
         <div className="landing-content">
           <p className="eyebrow">Kendo practice, curated for you</p>
           <h1 id="landing-page-title">Plan the keiko you need today.</h1>
