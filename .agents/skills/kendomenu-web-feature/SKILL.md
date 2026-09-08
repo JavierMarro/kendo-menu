@@ -10,16 +10,26 @@ workflow as project-specific coordination for existing skills, not as permission
 
 ## Establish the slice
 
-1. Read `AGENTS.md`, `PRODUCT.md`, `CONTEXT.md`, `.agents/skills/README.md`, nearby source and tests,
-   and the relevant package scripts.
-2. State the user behavior and identify only the layers it genuinely touches.
-3. Preserve the dependency direction: domain contracts and defaults in `packages/domain`;
-   platform-neutral actions and persistence in `packages/store`; browser APIs in `apps/web/src/lib`;
-   feature composition and rendering in `apps/web/src/features` and reusable web layout in
-   `apps/web/src/components`.
-4. Extend the existing React Router configuration for route work. Do not create alternate routing,
-   mobile, server, account, synchronization, query, IndexedDB, or shared-UI infrastructure for a
-   hypothetical need.
+Identify the requested user behavior and affected layers. Apply the task-specific context matrix in
+`AGENTS.md`, reusing context already established for the current work:
+
+- Product/UX: `PRODUCT.md`, affected routes, components, and nearby tests.
+- Domain/curated content: `CONTEXT.md`, contracts, JSON, schema, adapter, and nearby tests.
+- Store/persistence: domain contracts and affected store, storage, migration, and boundary tests.
+- Browser/PWA: affected browser code, routes, configuration, and relevant E2E tests.
+- Cross-package boundaries: `docs/ARCHITECTURE.md`; consult ADRs for affected architecture decisions.
+- Additional workflows: `.agents/skills/README.md` when selecting a matching skill.
+
+Use relevant package scripts for commands.
+
+Preserve the dependency direction: domain contracts and defaults in `packages/domain`;
+platform-neutral actions and persistence in `packages/store`; browser APIs in `apps/web/src/lib`;
+feature composition and rendering in `apps/web/src/features` and reusable web layout in
+`apps/web/src/components`.
+
+Extend the existing React Router configuration for route work. Do not create alternate routing,
+mobile, server, account, synchronization, query, IndexedDB, or shared-UI infrastructure for a
+hypothetical need.
 
 ## Implement safely
 
@@ -43,12 +53,15 @@ workflow as project-specific coordination for existing skills, not as permission
 
 ## Verify and hand off
 
-1. Run the narrowest package test and typecheck while developing.
-2. Exercise each affected user transition. For UI work, include applicable desktop, mobile-width,
-   keyboard, empty/error, reload, and persistence flows in a real browser.
-3. Run `pnpm check` for a cross-package slice.
-4. Use `$testing-fuzz-stress` when state-space or adversarial testing is requested,
-   `$pre-commit-verification` for the final quality gate, and `$code-reviewer-pre-commit` for semantic
-   changed-code review. Do not duplicate their full workflows here.
-5. Finish with `$work-session-history` and record facts, failed commands, deliberate exclusions, and
-   verified behavior.
+- Complete affected package and browser gates from `AGENTS.md`. Run `pnpm check` for a cross-package
+  slice and `pnpm verify:full` for release; preserve its separate non-PWA preview and PWA coverage.
+- Exercise affected user transitions in a real browser, including applicable desktop, mobile-width,
+  keyboard, empty/error, reload, and persistence flows.
+- Use `$testing-fuzz-stress` when state-space or adversarial testing is requested,
+  `$pre-commit-verification` when the request calls for its verification modes, and
+  `$code-reviewer-pre-commit` when semantic review is requested or required by repository risk policy.
+  Preserve independent review for the changes specified in `AGENTS.md`.
+- Reuse current verification evidence; repeat or broaden checks only for changed code, stale
+  evidence, failures, or unresolved concerns. Additional skills do not replace required gates.
+- Finish with `$work-session-history`, recording material verification evidence, exclusions,
+  and follow-up according to its evidence rules.

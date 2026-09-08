@@ -22,7 +22,9 @@ translate each check into the available commands.
 3. Use `rg` for source searches and exclude dependency/build directories. Do not print secret values.
 4. Keep checks read-only unless the selected mode explicitly allows safe local fixes. Never run
    `git reset --hard`, `git clean`, broad deletion, force-push, or dependency upgrades as a fix.
-5. Ask for approval before network-dependent audits or any command that needs elevated permissions.
+5. Network dependence alone does not require extra approval. Honor existing authorization and the
+   actual sandbox, privilege, data-transfer, production, and external-mutation permission boundaries;
+   request approval when those boundaries require it.
 
 ## Mode matrix
 
