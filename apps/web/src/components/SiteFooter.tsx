@@ -41,6 +41,9 @@ export function SiteFooter({ onNavigate }: SiteFooterProps): ReactElement {
             <Link className="footer-social-link" to="/cookies">
               Cookies
             </Link>
+            <Link className="footer-social-link" to="/app/glossary" onClick={onNavigate}>
+              Glossary
+            </Link>
             {isInstallActionAvailable ? (
               <button
                 ref={registerInstallAction}

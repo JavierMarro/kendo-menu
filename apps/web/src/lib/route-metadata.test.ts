@@ -28,7 +28,7 @@ describe('canonical and indexing boundaries', () => {
     expect(shouldNoIndexRoute(pathname, '', '')).toBe(true);
   });
 
-  it.each(['/app', '/app/library', '/app/sources', '/cookies'])(
+  it.each(['/app', '/app/library', '/app/sources', '/app/glossary', '/cookies'])(
     'canonicalizes the public route %s',
     (pathname) => {
       expect(getCanonicalUrl(`${pathname}/`)).toBe(`${CANONICAL_ORIGIN}${pathname}`);

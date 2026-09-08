@@ -23,6 +23,7 @@ const routeTitles: Readonly<Record<string, string>> = {
   '/app/library': 'Keiko library',
   '/app/drills/new': 'Create session',
   '/app/sources': 'Sources',
+  '/app/glossary': 'Glossary',
   '/cookies': 'Cookie Policy',
 };
 

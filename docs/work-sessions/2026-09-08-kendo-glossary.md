@@ -1,0 +1,8 @@
+- Session: User-facing kendo glossary
+- Date/duration: 2026-09-08; duration not recorded
+- Scope/start: Clean worktree; focused glossary route and existing footer/FAQ integration.
+- Changes: Added /app/glossary, 85 readonly main entries and 11 group labels, alphabetical semantic definitions, spelling-aware search, metadata, navigation and focused tests.
+- Decisions: Definitions condensed from supplied research; linked Quinlan, Kendo America and Kendo Guide references; descriptive dojo labels flagged; seven combo leaf names resolve through their component terms.
+- Roadblocks: None; no dependencies, domain data/contracts, persistence, CONTEXT.md or deployment changes.
+- Verification: pnpm check:web passed (165 tests, typecheck, lint, build); final glossary tests passed (6); glossary E2E passed on Chromium and mobile Chrome (2, zero axe violations); desktop/mobile screenshots inspected; independent review: ship, combo-label search intentionally excluded; targeted formatting and pnpm session:check passed.
+- Follow-up: No release or deployment performed; full preview and PWA suites not run for this focused non-PWA addition.
