@@ -1,0 +1,8 @@
+- Session: Astra repository instruction migration
+- Date/duration: 2026-09-08; not recorded
+- Scope/start: Clean worktree; focused migration of three project-owned instruction skills.
+- Changes: Conditional context routing, risk-based review artifacts, verification evidence reuse, and permission wording tied to actual boundaries.
+- Decisions: Retained AGENTS.md, skill map, fuzz/history skills, package/release gates, persistence invariants, and security boundaries; no new references needed for these short skills.
+- Roadblocks: Protected .agents writes required sandbox escalation; Skill Creator validator unavailable at runtime because Python lacks PyYAML; no dependency installed.
+- Verification: pnpm session:check passed (53 entries); all 111 retired files byte-identical to 86b7135 parent (27 design-system, 16 ui-styling, 68 ui-ux-pro-max); ignored, untracked, no symlinks or extra files; removed only those directories; application tests not run for documentation-only changes.
+- Follow-up: Run Skill Creator quick_validate.py for the three changed skills when PyYAML is available.

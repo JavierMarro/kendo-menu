@@ -26,6 +26,8 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-09-08 — Astra repository instruction migration](./2026-09-08-astra-instruction-migration.md)
+
 - [2026-09-08 — production performance, metadata, and operations polish](./2026-09-08-production-polish.md)
 - [2026-09-07 — error handling and persistence recovery](./2026-09-07-error-persistence-recovery.md)
 - [2026-09-02 — architecture and deployment documentation](./2026-09-02-architecture-deployment-docs.md)

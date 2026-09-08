@@ -9,40 +9,26 @@ Review behavior, not just syntax. This is a read-only review by default; do not 
 push, or open a pull request unless the user separately asks for implementation or coordination.
 Return `PASS` only when the evidence supports it. Do not rubber-stamp.
 
-## 0. Detect scope and toolchain
+## Scope and evidence
 
-- Accept optional file or directory paths. If none are supplied, collect tracked changes with
-  `git diff --name-only HEAD` and include relevant untracked files from `git status --short`.
-- Read `AGENTS.md`, `README.md`, and the newest work-session entry before reviewing.
-- Detect the toolchain from repository guidance, `package.json`/workspace manifests, lockfiles,
-  `Makefile`, `go.mod`, `Cargo.toml`, `pyproject.toml`, and CI configuration in that order of
-  relevance. For KendoMenu, use pnpm and TypeScript commands from the root package scripts.
-- Run typecheck and lint as an informational baseline when available. A baseline failure is evidence
-  for the report, not a reason to skip semantic analysis.
+- Accept optional file or directory paths. Otherwise collect tracked changes with
+  `git diff --name-only HEAD` and relevant untracked files from `git status --short`.
+- Apply `AGENTS.md` and read enough context to assess each change, including affected contracts,
+  callers, state boundaries, side effects, persistence, and error paths. Expand beyond diff hunks
+  where needed; consult README, session history, configuration, or whole files only when relevant.
+- For KendoMenu, use pnpm commands from root package scripts. Inspect configuration when a command
+  or its coverage is unclear.
+- Reuse verification evidence covering the current changes and configuration. Run checks when
+  evidence is absent, stale, or relevant to a finding; preserve repository-required gates.
+  A baseline failure belongs in the report and does not prevent semantic analysis.
+- Account for deleted, renamed, untracked, and generated files where they affect behavior;
+  explain material scope exclusions.
 
-## 1. Read all changed files
+Use function tracing tables when complexity or risk makes them useful, not for every touched
+function. Check affected inputs, outputs, nullable values, async errors, mutations, and caller
+invariants.
 
-Read every changed file completely, not only the diff hunk. For each file identify its language,
-framework, public exports, state boundaries, side effects, persistence, and error paths. Read nearby
-callers, types, tests, and configuration when needed to understand the contract. Treat generated or
-lock files separately and do not spend review effort inventing logic inside them.
-
-Include a scope note when a file is deleted, renamed, untracked, generated, or excluded, and explain
-why it is or is not part of the semantic review.
-
-## 2. Function tracing table
-
-Create a table for every touched function, method, hook, component with meaningful behavior, or
-exported factory:
-
-| Function | File        | Parameters   | Return type  | Behavior summary                     |
-| -------- | ----------- | ------------ | ------------ | ------------------------------------ |
-| `name`   | `path:line` | typed inputs | typed output | observable behavior and side effects |
-
-Check that parameter and return types match actual behavior, nullable values are handled, async
-errors are observable, mutations are intentional, and callers receive the invariants they expect.
-
-## 3. Data-flow analysis
+## Data-flow analysis
 
 For each critical route, trace creation → validation → transformation → storage/transport →
 consumption. Cover whichever are present:
@@ -57,7 +43,7 @@ consumption. Cover whichever are present:
 At each boundary identify the invariant, trust level, failure behavior, and whether sensitive data is
 logged or exposed. If a route is not present, state `N/A`; do not fabricate a security conclusion.
 
-## 4. Review checklist
+## Review concerns
 
 Look for concrete evidence of:
 
@@ -75,50 +61,19 @@ Look for concrete evidence of:
 Use repository conventions as the source of truth. Do not demand a framework, dependency, or pattern
 that the project has deliberately not adopted.
 
-## 5. Counter-hypothesis
+## Risk-based investigation
 
-For every critical function or data route, write at least one concrete counter-hypothesis: a scenario
-in which the implementation could fail despite the happy path. Try to disprove it with code, tests,
-types, or a small read-only reproduction. Record the result as confirmed, disproved, or unresolved.
-
-Examples include: storage hydration completes after render; two updates serialize out of order; a
-custom id collides; a malformed response bypasses validation; a mobile adapter lacks a browser API;
-or an empty collection is treated as a valid selected item.
+Use counter-hypotheses for plausible failure modes in risky or complex changes, rather than requiring
+one per function. Investigate material concerns with code, types, existing tests, or a read-only
+reproduction. Distinguish confirmed defects, disproved concerns, and unresolved risks.
 
 ## Output
 
-Return structured Markdown with evidence and file:line locations:
-
-```markdown
-## Scope and baseline
-
-## Function Tracing Table
-
-## Data Flow Analysis
-
-## Critical Issues
-
-<!-- correctness or security defects that should block the change -->
-
-## Warnings
-
-<!-- material risks or missing safeguards -->
-
-## Suggestions
-
-<!-- non-blocking improvements -->
-
-## Counter-Hypothesis Results
-
-<!-- one result for each critical function or route -->
-
-## Security
-
-## Verdict
-
-PASS or NEEDS WORK
-```
+Report scope, verification evidence (reused or newly run), findings, material limitations, and a
+`PASS` or `NEEDS WORK` verdict. Include tracing tables or counter-hypothesis results only when they
+help explain findings or the user requests them.
 
 Every issue must include impact, reproduction or reasoning, and a precise `file:line` location when
-available. Distinguish observed defects from recommendations. Use `NEEDS WORK` for any unresolved
-critical issue, security issue, broken baseline, or counter-hypothesis that could not be disproved.
+available. Distinguish observed defects from recommendations. Use `NEEDS WORK` for unresolved
+critical or security issues, a broken required baseline, or a material risk that prevents confidence
+in the change. Do not treat an unsupported hypothetical as a confirmed defect.
