@@ -49,8 +49,27 @@ activity quantities and notes can be adapted without mutating the built-in libra
   injected storage adapter.
 - Browser LocalStorage is sufficient for the current bounded dataset. Persisted JSON is untrusted
   and must be validated, versioned, and migrated when its shape changes.
-- Server infrastructure, accounts, remote sync, paid tiers, databases, API work, and initialization
-  of `apps/mobile` remain out of scope until explicitly requested.
+- Accounts, synchronization, server APIs, and databases are not currently implemented. Their
+  approved future product scope is described below; this document does not authorize scaffolding
+  or provisioning. Paid tiers and initialization of `apps/mobile` remain out of scope.
+
+## Approved product direction — not implemented
+
+Anonymous use remains fully supported and free. Optional Google-only KendoMenu accounts will add
+cross-device continuity through local-first, whole-dashboard synchronization with explicit conflict
+handling. Guest and account workspaces remain separate; signing in does not silently combine them.
+
+A blocking Yes/No guest-adoption choice applies only when a **new KendoMenu account has an empty
+cloud dashboard and this browser contains an eligible, non-empty guest workspace**. Yes uploads the
+complete validated guest dashboard, creates the account cache, and deletes the guest workspace only
+after server acknowledgement. No preserves the hidden guest workspace, which reappears after logout.
+There is no dismiss action. Eligibility for returning empty accounts still requires owner confirmation.
+
+Realtime connections, CRDTs, automatic field merging, collaboration, paid tiers, and public sharing
+are excluded. Optional accounts and cross-device continuity are approved direction, not current
+production functionality.
+See the [account and synchronization design](docs/ACCOUNT_SYNC.md) for accepted decisions,
+recommendations awaiting confirmation, and the gates before Job 3.
 
 ## Brand Commitments
 

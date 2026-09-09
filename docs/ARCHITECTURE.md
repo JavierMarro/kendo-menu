@@ -143,10 +143,36 @@ no SPA route or custom-event analytics pipeline, and training plans, notes, and 
 intentionally sent to GoatCounter. Analytics availability is therefore separate from the local
 planning workflow.
 
-## Current non-goals
+## Current production exclusions
 
 There is no server, account system, remote sync, database, paid tier, API, or initialized mobile
 app. `apps/mobile` remains a reserved boundary and `packages/ui` remains reserved for genuinely
 shared platform-neutral UI.
 
 For the original recursive-model decision, see [ADR 0001](./adr/0001-recursive-training-activities.md).
+
+## Proposed target architecture — not implemented
+
+Optional accounts and synchronization are now an approved product direction, but the production
+behavior above still has no account, application-session, API, database, or synchronization
+implementation. The accepted decisions are [identity and application sessions](adr/0002-identity-application-sessions.md),
+[workspace separation and guest adoption](adr/0003-workspaces-guest-adoption.md), and
+[whole-dashboard synchronization](adr/0004-whole-dashboard-sync.md).
+
+The recommended target puts backend application modules in `apps/api`, with separate standalone
+Node and minimal Vercel function adapters. The web workspace module selects isolated guest/account
+stores; the synchronization module exchanges validated whole dashboards with the backend over a
+same-origin interface. Domain validation remains platform-neutral. Injected storage is still a
+local persistence seam, not a replacement for revision checks, acknowledgements, or retries.
+
+The [account and synchronization design](ACCOUNT_SYNC.md) distinguishes owner-approved decisions,
+recommended technology and behavior, mandatory correctness/security requirements, and Job 3 gates.
+The existing local JSON limit counts 2,097,152 JavaScript UTF-16 code units, not network bytes;
+cloud transport limits must be evaluated separately. No production routing or runtime compatibility
+is claimed from this proposed diagram:
+
+```text
+Browser workspace → local store/storage
+        └→ synchronization → same-origin /api/* → Vercel adapter → backend application → PostgreSQL
+                                                        local Node adapter ─┘
+```
