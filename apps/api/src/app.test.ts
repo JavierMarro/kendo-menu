@@ -3,8 +3,8 @@ import { Elysia } from 'elysia';
 import { WebStandardAdapter } from 'elysia/adapter/web-standard';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import vercelHandler from '../../../api/[...path]';
-import { createApp } from './app';
+import vercelHandler from '../../../api/[...path].js';
+import { createApp } from './app.js';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -61,8 +61,8 @@ it('imports and handles requests without starting a listener or making external 
     throw new Error('Unexpected listener');
   });
   const fetch = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected network'));
-  const { createApp: freshApp } = await import('./app');
-  const { default: freshAdapter } = await import('../../../api/[...path]');
+  const { createApp: freshApp } = await import('./app.js');
+  const { default: freshAdapter } = await import('../../../api/[...path].js');
   expect((await freshApp().handle(new Request('http://localhost/api/health'))).status).toBe(200);
   expect((await freshAdapter.fetch(new Request('http://localhost/api/missing'))).status).toBe(404);
   expect(listen).not.toHaveBeenCalled();

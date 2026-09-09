@@ -1,2 +1,2 @@
-export { createApp } from './app';
-export type { App } from './app';
+export { createApp } from './app.js';
+export type { App } from './app.js';
