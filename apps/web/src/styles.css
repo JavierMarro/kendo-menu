@@ -645,6 +645,52 @@ a {
   box-shadow: 0 1rem 3rem rgba(3, 10, 22, 0.42);
 }
 
+.update-notice {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-5);
+  align-items: center;
+  width: min(40rem, calc(100% - var(--space-8)));
+  margin: var(--space-4) auto;
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid rgba(200, 155, 60, 0.72);
+  border-radius: var(--radius-lg);
+  color: var(--muted-strong);
+  background: var(--surface-raised);
+  box-shadow: 0 1rem 3rem rgba(3, 10, 22, 0.42);
+}
+
+.update-notice-copy {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: var(--type-14);
+  line-height: 1.5;
+}
+
+.update-notice-copy p {
+  margin: 0;
+}
+
+.update-notice-copy p + p {
+  max-width: 48ch;
+  margin-top: var(--space-2);
+  color: var(--muted);
+  font-size: var(--type-14);
+}
+
+.update-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.update-notice-actions .text-button {
+  white-space: nowrap;
+}
+
 body:has(.cookie-notice) .install-promo {
   bottom: calc(var(--space-4) + 6.5rem);
 }
@@ -3227,6 +3273,12 @@ textarea[aria-invalid='true'] {
     padding: var(--space-4) var(--space-5);
   }
 
+  .update-notice {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-5);
+  }
+
   body:has(.cookie-notice) .install-promo {
     bottom: calc(var(--space-4) + 11rem);
   }
@@ -3239,6 +3291,16 @@ textarea[aria-invalid='true'] {
 
   .install-promo-actions .primary-button,
   .install-promo-actions .text-button {
+    flex: 1 1 10rem;
+  }
+
+  .update-notice-actions {
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .update-notice-actions .primary-button,
+  .update-notice-actions .text-button {
     flex: 1 1 10rem;
   }
 
@@ -3487,6 +3549,16 @@ textarea[aria-invalid='true'] {
 
   .install-promo-actions .primary-button,
   .install-promo-actions .text-button {
+    width: 100%;
+    flex: 0 0 auto;
+  }
+
+  .update-notice-actions {
+    flex-direction: column;
+  }
+
+  .update-notice-actions .primary-button,
+  .update-notice-actions .text-button {
     width: 100%;
     flex: 0 0 auto;
   }

@@ -134,8 +134,14 @@ while client-side routes receive the SPA entry point.
 [`vite.config.ts`](../apps/web/vite.config.ts) uses `vite-plugin-pwa` to generate the manifest and
 service worker. The manifest starts at `/app`, has `/` scope, and requests standalone display. The
 Workbox navigation fallback is limited to the app's supported document paths and its cache is
-independent of LocalStorage. Installation is prompt-based; the service worker is an asset/navigation
-boundary, not a data-sync or backup system.
+independent of LocalStorage. The application owns one React service-worker registration and offers
+updates through a nonmodal notice. “Later” leaves the running page intact; “Update now” authorizes
+activation and reload for that page. Activation from another tab does not authorize a reload of an
+unfinished form. Installation remains a separate browser experience; the service worker is an
+asset/navigation boundary, not a data-sync or backup system.
+Clients still running a bundle from before this notice was added cannot render the new prompt;
+closing all app tabs/windows after the new worker downloads allows its normal activation. No
+automatic reload bridge is installed for those older clients.
 
 [`index.html`](../apps/web/index.html) is the only analytics integration boundary: it loads the
 external GoatCounter document script for cookie-free aggregate document-load statistics. There is

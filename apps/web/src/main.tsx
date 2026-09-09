@@ -4,6 +4,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 
 import { appRoutes } from './app/app-routes';
 import { ApplicationRecovery } from './features/errors/ApplicationRecovery';
+import { ApplicationUpdateNotice } from './features/update/ApplicationUpdateNotice';
 import { DataRouterModeProvider } from './lib/router-context';
 import './styles.css';
 
@@ -16,11 +17,14 @@ if (rootElement === null) {
 const router = createBrowserRouter(appRoutes);
 
 createRoot(rootElement).render(
-  <StrictMode>
-    <ApplicationRecovery>
-      <DataRouterModeProvider>
-        <RouterProvider router={router} />
-      </DataRouterModeProvider>
-    </ApplicationRecovery>
-  </StrictMode>,
+  <>
+    <ApplicationUpdateNotice />
+    <StrictMode>
+      <ApplicationRecovery>
+        <DataRouterModeProvider>
+          <RouterProvider router={router} />
+        </DataRouterModeProvider>
+      </ApplicationRecovery>
+    </StrictMode>
+  </>,
 );

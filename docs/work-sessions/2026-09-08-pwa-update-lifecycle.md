@@ -1,0 +1,8 @@
+- Session: Explicit PWA application updates
+- Date/duration: 2026-09-08–2026-09-09; duration not recorded
+- Scope/start: Clean worktree; prompt-mode service worker had no user-facing refresh lifecycle.
+- Changes: Added accessible update notice, per-tab reload consent, one React registration owner, focused unit and real-worker PWA tests, and architecture guidance.
+- Decisions: Preserve install experience and LocalStorage; no backend, authentication, schema, hosting changes, deployment, or commit.
+- Roadblocks: React virtual registration requires direct workbox-window dependency under pnpm/Vite; reused locked 7.4.1; Vitest uses a test-only virtual-module resolver.
+- Verification: pnpm check:web passed (170 tests, types, lint, build); pnpm test:e2e:pwa passed 7/7 (real updates, consent, keyboard, storage, cross-tab, standalone simulation, axe and notice nonoverlap); independent lifecycle review PASS; formatting, diff and session checks passed.
+- Follow-up: Old bundles cannot display the new notice; after the new worker downloads, close all app tabs/windows to allow normal activation; native installed-device smoke remains unperformed.

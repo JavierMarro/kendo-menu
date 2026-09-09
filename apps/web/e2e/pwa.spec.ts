@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 
 const STORAGE_KEY = 'kendo-menu';
 const OFFLINE_PATHS = ['/app', '/app/dashboard', '/app/library'] as const;
@@ -245,4 +246,130 @@ test('precaches responsive fallbacks without source originals or the social card
       }
     }
   }
+});
+
+// Exercise real Workbox installation/activation against the production build. A byte change
+// represents a second deployment without replacing browser service-worker APIs with mocks.
+const workerPath = new URL('../dist/sw.js', import.meta.url);
+
+for (const standalone of [false, true]) {
+  test(`defers and confirms a real update in ${standalone ? 'standalone' : 'browser'} mode`, async ({
+    page,
+    context,
+  }) => {
+    const { readFile, writeFile } = await import('node:fs/promises');
+    const originalWorker = await readFile(workerPath, 'utf8');
+    if (standalone) {
+      await context.addInitScript(() => {
+        const originalMatchMedia = window.matchMedia.bind(window);
+        window.matchMedia = (query) => {
+          const result = originalMatchMedia(query);
+          if (query === '(display-mode: standalone)') {
+            Object.defineProperty(result, 'matches', { value: true });
+          }
+          return result;
+        };
+      });
+      await page.setViewportSize({ width: 390, height: 844 });
+    }
+    await page.goto('/app/drills/new');
+    await establishServiceWorkerControl(page);
+    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+      key: STORAGE_KEY,
+      value: OFFLINE_STORAGE_RAW,
+    });
+    await page.getByLabel('Session name').fill('Unfinished keiko');
+    const initialTime = await page.evaluate(() => performance.timeOrigin);
+    const otherTab = await context.newPage();
+    await otherTab.goto('/app/drills/new');
+    await otherTab.getByLabel('Session name').fill('Other unfinished keiko');
+    const otherTime = await otherTab.evaluate(() => performance.timeOrigin);
+    try {
+      await writeFile(workerPath, `${originalWorker}\n// Update lifecycle test ${standalone}\n`);
+      await page.evaluate(async () => {
+        await (await navigator.serviceWorker.ready).update();
+      });
+      const update = page.getByRole('button', { name: 'Update now', exact: true });
+      await expect(update).toBeVisible();
+      await expect(
+        page
+          .getByLabel('Application update', { exact: true })
+          .getByText('A new version of KendoMenu is available.', { exact: true }),
+      ).toBeVisible();
+      await expect(page.getByLabel('Session name')).toHaveValue('Unfinished keiko');
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(initialTime);
+      expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+      const noticeBox = await page.getByLabel('Application update', { exact: true }).boundingBox();
+      const cookieBox = await page.locator('.cookie-notice').boundingBox();
+      if (noticeBox !== null && cookieBox !== null) {
+        expect(
+          noticeBox.y + noticeBox.height <= cookieBox.y ||
+            cookieBox.y + cookieBox.height <= noticeBox.y ||
+            noticeBox.x + noticeBox.width <= cookieBox.x ||
+            cookieBox.x + cookieBox.width <= noticeBox.x,
+        ).toBe(true);
+      }
+      await update.focus();
+      await page.keyboard.press('Tab');
+      await expect(page.getByRole('button', { name: 'Later', exact: true })).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(update).toBeHidden();
+      await expect(page.getByLabel('Session name')).toHaveValue('Unfinished keiko');
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(initialTime);
+      expect(
+        await page.evaluate(async () => (await navigator.serviceWorker.ready).waiting !== null),
+      ).toBe(true);
+
+      // Returning to a page with a waiting worker must offer the notice again.
+      await page.reload();
+      await expect(update).toBeVisible();
+      const beforeConfirmation = await page.evaluate(() => performance.timeOrigin);
+      await update.focus();
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(
+        (previous) => performance.timeOrigin !== previous,
+        beforeConfirmation,
+      );
+      await expect(update).toBeHidden();
+      await expect(page.getByLabel('Session name')).toBeVisible();
+      expect(
+        await page.evaluate(async () => (await navigator.serviceWorker.ready).waiting),
+      ).toBeNull();
+      expect(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)).toBe(
+        OFFLINE_STORAGE_RAW,
+      );
+      await expect(otherTab.getByLabel('Session name')).toHaveValue('Other unfinished keiko');
+      expect(await otherTab.evaluate(() => performance.timeOrigin)).toBe(otherTime);
+      await otherTab.getByRole('button', { name: 'Update now', exact: true }).click();
+      await otherTab.waitForFunction((previous) => performance.timeOrigin !== previous, otherTime);
+      await expect(otherTab.getByRole('button', { name: 'Update now', exact: true })).toBeHidden();
+      expect(
+        await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length),
+      ).toBe(1);
+      await expect(page.locator('script[src*="registerSW"]')).toHaveCount(0);
+    } finally {
+      await writeFile(workerPath, originalWorker);
+      await otherTab.close();
+    }
+  });
+}
+
+test('shows no update notice when the installed worker is current', async ({ page }) => {
+  await page.addInitScript(() => {
+    const register = navigator.serviceWorker.register.bind(navigator.serviceWorker);
+    let calls = 0;
+    navigator.serviceWorker.register = (...args) => {
+      document.documentElement.dataset['registrationCalls'] = String(++calls);
+      return register(...args);
+    };
+  });
+  await page.goto('/app');
+  await establishServiceWorkerControl(page);
+  await page.evaluate(async () => {
+    await (await navigator.serviceWorker.ready).update();
+  });
+  await expect(page.locator('html')).toHaveAttribute('data-registration-calls', '1');
+  await expect(page.getByRole('button', { name: 'Update now', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Later', exact: true })).toHaveCount(0);
+  expect(await page.evaluate(async () => (await navigator.serviceWorker.ready).waiting)).toBeNull();
 });

@@ -26,6 +26,8 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-09-08 — explicit PWA application updates](./2026-09-08-pwa-update-lifecycle.md)
+
 - [2026-09-08 — user-facing kendo glossary](./2026-09-08-kendo-glossary.md)
 
 - [2026-09-08 — Astra repository instruction migration](./2026-09-08-astra-instruction-migration.md)
