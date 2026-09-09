@@ -9,6 +9,6 @@ identity provider. KendoMenu owns an opaque server-side application session, wit
 Secure, HttpOnly cookies and never LocalStorage, separating provider identity from application
 access rather than making a Google token or browser-readable bearer token the application session.
 
-This is accepted target architecture, not implemented production behavior. Provider libraries,
-session lifetimes, and deployment choices remain recommendations in the
+This is accepted target architecture, not implemented production behavior. The Google library and hosting direction are accepted in [ADR 0005](0005-node-elysia-api-foundation.md);
+session lifetimes and remaining operational choices remain recommendations in the
 [account and synchronization design](../ACCOUNT_SYNC.md).

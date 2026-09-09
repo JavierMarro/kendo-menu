@@ -127,9 +127,11 @@ dashboard, library, library details, custom-session creation, sources, and an ap
 `/cookies`, and a top-level not-found route. `/` redirects to `/app`; direct refreshes rely on the
 hosting fallback.
 
-The root [`vercel.json`](../vercel.json) runs `pnpm build`, serves `apps/web/dist`, and rewrites
-`/(.*)` to `/index.html`. Static files take precedence, so generated PWA assets remain addressable
-while client-side routes receive the SPA entry point.
+The root [`vercel.json`](../vercel.json) runs `pnpm build` and serves `apps/web/dist`. The Job 3
+checkout adds API dispatch before the existing SPA fallback to `/index.html`, retaining static
+file precedence. Combined Vercel function discovery and routing remain unverified; this configuration
+change has not been deployed. The existing production observations are recorded in the deployment
+runbook.
 
 [`vite.config.ts`](../apps/web/vite.config.ts) uses `vite-plugin-pwa` to generate the manifest and
 service worker. The manifest starts at `/app`, has `/` scope, and requests standalone display. The
@@ -145,13 +147,13 @@ planning workflow.
 
 ## Current production exclusions
 
-There is no server, account system, remote sync, database, paid tier, API, or initialized mobile
-app. `apps/mobile` remains a reserved boundary and `packages/ui` remains reserved for genuinely
+There is no production server API, account system, remote sync, database, paid tier, or initialized
+mobile app. `apps/mobile` remains a reserved boundary and `packages/ui` remains reserved for genuinely
 shared platform-neutral UI.
 
 For the original recursive-model decision, see [ADR 0001](./adr/0001-recursive-training-activities.md).
 
-## Proposed target architecture — not implemented
+## Local API scaffold and accepted later architecture
 
 Optional accounts and synchronization are now an approved product direction, but the production
 behavior above still has no account, application-session, API, database, or synchronization
@@ -159,14 +161,20 @@ implementation. The accepted decisions are [identity and application sessions](a
 [workspace separation and guest adoption](adr/0003-workspaces-guest-adoption.md), and
 [whole-dashboard synchronization](adr/0004-whole-dashboard-sync.md).
 
-The recommended target puts backend application modules in `apps/api`, with separate standalone
-Node and minimal Vercel function adapters. The web workspace module selects isolated guest/account
+The Job 3 local scaffold puts Elysia application behavior in `apps/api`, with separate standalone
+Node and minimal root Vercel function adapters. The `createApp()` interface handles standard Requests
+without starting a listener. Only health and JSON errors exist; no frontend integration, domain/store
+dependency, database, or authentication is introduced. Node 24 is the declared target; the local
+runtime remains Node 25. See [ADR 0005](adr/0005-node-elysia-api-foundation.md).
+
+In the later target, the web workspace module selects isolated guest/account
 stores; the synchronization module exchanges validated whole dashboards with the backend over a
 same-origin interface. Domain validation remains platform-neutral. Injected storage is still a
 local persistence seam, not a replacement for revision checks, acknowledgements, or retries.
 
 The [account and synchronization design](ACCOUNT_SYNC.md) distinguishes owner-approved decisions,
-recommended technology and behavior, mandatory correctness/security requirements, and Job 3 gates.
+accepted technology, unapproved behavior/operational recommendations, mandatory correctness/security
+requirements, and later implementation gates.
 The existing local JSON limit counts 2,097,152 JavaScript UTF-16 code units, not network bytes;
 cloud transport limits must be evaluated separately. No production routing or runtime compatibility
 is claimed from this proposed diagram:

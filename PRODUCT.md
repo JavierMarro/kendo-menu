@@ -49,7 +49,8 @@ activity quantities and notes can be adapted without mutating the built-in libra
   injected storage adapter.
 - Browser LocalStorage is sufficient for the current bounded dataset. Persisted JSON is untrusted
   and must be validated, versioned, and migrated when its shape changes.
-- Accounts, synchronization, server APIs, and databases are not currently implemented. Their
+- Accounts, synchronization, and databases are not currently implemented. A local API health
+  scaffold exists separately from the production frontend; it has not been deployed. Their
   approved future product scope is described below; this document does not authorize scaffolding
   or provisioning. Paid tiers and initialization of `apps/mobile` remain out of scope.
 
@@ -69,7 +70,7 @@ Realtime connections, CRDTs, automatic field merging, collaboration, paid tiers,
 are excluded. Optional accounts and cross-device continuity are approved direction, not current
 production functionality.
 See the [account and synchronization design](docs/ACCOUNT_SYNC.md) for accepted decisions,
-recommendations awaiting confirmation, and the gates before Job 3.
+recommendations awaiting confirmation, and the gates for later implementation jobs.
 
 ## Brand Commitments
 

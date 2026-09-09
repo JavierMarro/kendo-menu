@@ -1,0 +1,27 @@
+{
+  "name": "@kendo-menu/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/node.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@elysia/node": "1.4.6",
+    "@sinclair/typebox": "0.34.52",
+    "elysia": "1.4.30",
+    "openapi-types": "12.1.3",
+    "file-type": "22.0.2",
+    "exact-mirror": "0.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "4.23.13"
+  }
+}

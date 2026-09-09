@@ -1,8 +1,8 @@
-# Accounts and synchronization — Job 2
+# Accounts and synchronization
 
 Documentation baseline: 2026-09-09. **No account or synchronization implementation exists.**
-This document records approved direction and recommendations; it authorizes neither Job 3
-scaffolding nor dependencies, configuration, infrastructure, accounts, secrets, or deployment.
+The owner separately authorized the Job 3 local API scaffold and accepted the stack below.
+This does not authorize provider provisioning, credentials, production configuration, or deployment.
 
 The owner-supplied **KendoMenu cloud-readiness decision memo — 8 September 2026** is discovery
 evidence, not an accepted architecture. Its recommendation to defer a backend was superseded by
@@ -22,8 +22,8 @@ independently observed, owner-reported, and unverified deployment facts.
 
 ## 1. Approved decisions
 
-Only the decisions below, including the owner's corrected adoption condition, are accepted.
-Approving this documentation plan did not approve the technology or unresolved defaults in section 2.
+The product decisions below and the Job 3 technical stack are owner accepted. Product and
+operational recommendations remain unapproved until the jobs that implement them.
 
 - Anonymous use remains fully supported and free. Google is the sole identity provider.
 - KendoMenu owns an opaque server-side application session. Session credentials use Secure,
@@ -43,36 +43,34 @@ See accepted ADRs [0002](adr/0002-identity-application-sessions.md),
 [0003](adr/0003-workspaces-guest-adoption.md), and [0004](adr/0004-whole-dashboard-sync.md).
 These are target decisions, not descriptions of current production functionality.
 
-## 2. Recommended defaults awaiting confirmation
+### Owner-accepted technical stack — Job 3
 
-### Minimum stack and repository layout
+- Retain one TypeScript pnpm monorepo and the root lockfile; align backend and intended Vercel
+  runtime with Node 24 LTS.
+- Implement Elysia in `apps/api`, with a standalone Node entry using `@elysia/node` and a separate
+  minimal root Vercel Function adapter using standard Request/Response handling.
+- Keep `/api/*` in the existing Vercel project and origin, dispatched ahead of the SPA fallback.
+- Later persistence uses Neon managed PostgreSQL, Drizzle's node-postgres integration and `pg`,
+  with reviewed Drizzle SQL migrations. No database dependency, connection, or migration in Job 3.
+- Later server-side Google authorization-code OIDC uses `google-auth-library`. KendoMenu opaque
+  application sessions are stored as token hashes in PostgreSQL. Neither is implemented in Job 3.
 
-**Owner confirmation required before scaffolding** for the stack/layout recommendations in this
-section. Comparisons explain the recommendation; they do not leave multiple simultaneous defaults.
-Package names identify the proposed inventory, not installed dependencies or verified version pins.
+See accepted [ADR 0005](adr/0005-node-elysia-api-foundation.md) for alternatives and consequences.
+`@vercel/functions` and `attachDatabasePool` remain **provisional** until the database job verifies
+exact stable-version, Node 24, and Vercel execution-mode compatibility. Local HTTPS tooling and
+all product/operational recommendations below remain unapproved.
 
-| Area                 | One recommended default                                                   | Main alternative and trade-off                                                                                                               |
-| -------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Backend              | Elysia in `apps/api`, on Node; Node 24 LTS alignment                      | Retaining the observed local Node 25 would diverge from the recommended supported deployment line; no Bun or runtime-family change.          |
-| Managed database     | Neon PostgreSQL                                                           | Supabase also supplies PostgreSQL, but its Auth/Realtime/client platform adds no needed capability to this Google-only, server-owned design. |
-| Database queries     | `drizzle-orm` with `drizzle-orm/node-postgres` and `pg`                   | Prisma adds generated-client machinery; hand-written SQL alone reduces tooling but increases manual typing/migration coordination.           |
-| Migrations           | `drizzle-kit`, generated SQL reviewed and checked in before execution     | Schema push or request-time migrations hide release ordering and are unsuitable for deliberate production changes.                           |
-| Google identity      | `google-auth-library` for server-side authorization-code OpenID Connect   | Arctic plus separate ID-token verification adds another library; a complete auth framework adds unneeded identity/session policy.            |
-| Application sessions | Node crypto and PostgreSQL session records containing token hashes        | JWT sessions complicate immediate revocation; Redis would introduce another operational store.                                               |
-| Development/testing  | `tsx`, existing TypeScript/Vitest/Playwright, disposable local PostgreSQL | Routine live-Google/cloud tests introduce accounts, nondeterminism, and remote dependencies.                                                 |
-| Deployment pooling   | Provisionally `@vercel/functions` and `attachDatabasePool`                | Keep the platform lifecycle hook out of the application module; exact stable-version compatibility with Node 24 is unverified.               |
+### Job 3 dependency evidence
 
-Proposed additions are `elysia`, `@elysia/node` (standalone entry), `drizzle-orm`, `pg`,
-`google-auth-library`; development tooling is `drizzle-kit`, `@types/pg`, and `tsx`, reusing existing
-TypeScript, Vitest, and Playwright. API-package `@types/node` is a provisional inventory item: the
-existing declaration belongs to `apps/web` and does not supply the new package automatically.
-Elysia's published pnpm guidance also calls for `@sinclair/typebox` and `openapi-types`; these are
-provisional API-package peers, subject to the selected stable release's actual peer requirements
-and the Node 24 compatibility gate.
-`@vercel/functions` remains **provisional**, not a confirmed dependency. No Neon HTTP/WebSocket
-serverless driver, browser auth SDK, ORM alternative, or separate session product is selected.
-Use pnpm and the existing root lockfile only. Verify exact stable versions, engines, peers, and
-Node 24 compatibility before Job 3 installs anything; do not copy prerelease install examples.
+The selected stable registry versions are Elysia 1.4.30, `@elysia/node` 1.4.6, and `tsx` 4.23.13.
+Elysia requires TypeBox (`>=0.34.0 <1`), `openapi-types` (`>=12`), `file-type` (`>=20`), and
+`exact-mirror` (`>=0.0.9`, also listed in Elysia's own dependencies). Explicitly selected peers are
+TypeBox 0.34.52, `openapi-types` 12.1.3, `file-type` 22.0.2, and `exact-mirror` 0.2.7. The latter
+matches Elysia's own range and requires TypeBox `^0.34.15`, avoiding an unnecessary second major. Optional Bun types are not required.
+`@elysia/node` requires Elysia `>=1.4.0`. Elysia and its Node adapter publish no engine range;
+`tsx` requires Node `>=18`, and `file-type` requires Node `>=22`. These metadata checks support
+Node 24 selection but do not prove execution under Node 24. Reuse existing TypeScript/Vitest and
+Node 24 types; the lockfile records the resolved inventory. Do not install later-job libraries.
 
 Primary evidence: [Elysia Node adapter](https://elysiajs.com/integrations/node),
 [Elysia Vercel/pnpm guidance](https://elysiajs.com/integrations/vercel),
@@ -81,36 +79,40 @@ Primary evidence: [Elysia Node adapter](https://elysiajs.com/integrations/node),
 [Drizzle migrations](https://orm.drizzle.team/docs/migrations),
 [Google's maintained Node authentication library](https://github.com/googleapis/google-cloud-node-core/tree/main/packages/google-auth-library-nodejs),
 [Supabase PostgreSQL](https://supabase.com/docs/guides/database/overview). Repository engines declare
-`>=20.19.0`; local inspection observed `v25.2.1`. Neither proves the deployed Node version.
+`24.x`; local inspection observed `v25.2.1`, while CI declares `24.12.0`. Neither proves the deployed
+Node version or a local Node 24 test run.
 
 ### Application module and deployment seam
 
-Recommend `apps/api` for backend implementation with an application factory accepting dependencies
-and exposing a request-handling interface. Separate a standalone entry using `@elysia/node` and a
-minimal project-root `api/` Vercel function adapter delegating standard requests to that interface.
-The application module contains no listener startup, Vercel configuration, or platform pool hooks.
-Vercel documents a standard `fetch` export in `api/`; `@elysia/node` is recommended for standalone
-execution, **not assumed necessary for the Vercel handler**.
+The local scaffold in `apps/api` exposes `createApp()` and its Request-handling interface without
+starting a listener. It contains only fixed health behavior and JSON error responses, with
+`Cache-Control: private, no-store`. The standalone entry supplies `@elysia/node`; the root Vercel
+adapter delegates the original Request and Response without Node adapter or platform pool hooks.
+No speculative authentication, database, repository, or synchronization interfaces are introduced.
 [Vercel Node function formats](https://vercel.com/docs/functions/runtimes/node-js)
 
-The checked-in configuration serves `apps/web/dist` and rewrites `/(.*)` to `/index.html`; there is
-currently no backend entry. Vercel documents filesystem precedence over rewrites, but an output
-folder alone neither creates a function nor proves how this monorepo will bundle one.
-Recommend a same-project, same-origin `/api/*` interface with API dispatch resolved before the SPA
-fallback. The eventual adapter must preserve method, path, query, body, and multiple Set-Cookie
-headers. Unknown API paths must return API errors rather than successful SPA HTML.
-[Routing/output configuration](https://vercel.com/docs/project-configuration/vercel-json)
+The checked-in configuration retains `apps/web/dist` and the SPA fallback, adding API dispatch
+before that fallback. `GET /api/health` returns `{"status":"ok"}`; unknown API paths return JSON
+404s. The frontend does not call the API. This is an implemented local scaffold, **not deployed
+production functionality**.
 
-**Verification status:** source/configuration and primary-document inspection only; no combined
-function build, project linking, routing change, or deployment was performed. A later authorized
-Job 3 build must inspect function discovery and workspace dependency bundling alongside the SPA
-output, then exercise API/auth/callback paths, unknown API paths, static assets, and SPA deep links.
-Do not claim standalone Elysia auto-detection proves this combined deployment. If the proposed
-adapter cannot satisfy that routing contract, report the blocker before choosing another deployment.
+**Deployment verification gate:** direct application/adapter tests and Vite browser tests do not
+prove Vercel function discovery, workspace bundling, or combined API-before-SPA routing. No Vercel
+CLI is installed locally, and the documented build workflow uses locally cached project settings
+from `vercel pull`; no authentication, linking, settings/env download, or deployment is authorized.
+Keep combined function artifact inspection, API health/404/cache behavior, static assets, and SPA
+deep links as an explicit Preview gate for later authorized verification.
+[Vercel local build](https://vercel.com/docs/cli/build)
+
+Auth callbacks and cookie forwarding are separate later authentication-job gates. Never infer their
+correctness from health tests or standalone Elysia auto-detection.
+
+## 2. Recommendations awaiting confirmation
 
 ### One database connection strategy
 
-Recommend PostgreSQL/TLS via **`pg` everywhere**, with Drizzle's node-postgres integration:
+The accepted driver direction is PostgreSQL via **`pg` everywhere**, with Drizzle's node-postgres
+integration. The following operational details remain recommendations for the database job:
 
 - Runtime requests use Neon's pooled endpoint. Create a bounded `pg.Pool` once per warm function
   instance, not per request; start with a small pool (maximum 5, idle timeout 5 seconds).
@@ -133,7 +135,8 @@ These support the strategy, not an assertion that exact package versions were co
 
 ### Product and operational defaults
 
-**Owner confirmation required before scaffolding** for every row below. All remain recommendations.
+**Owner confirmation required before the jobs implementing these behaviors**, not before the
+isolated Job 3 health scaffold. Every row below remains a recommendation.
 
 | Decision                     | Recommended default                                                                                                                                             | Main trade-off                                                                                                                                                                 |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -236,14 +239,15 @@ References: [Google OIDC](https://developers.google.com/identity/openid-connect/
   neither the CDN nor service worker caches them. Network failures must not produce a cached
   authenticated response from another account or a successful SPA HTML response to an API request.
 
-## 3. Decisions that must be resolved before Job 3 begins
+## 3. Remaining gates for later jobs
 
 ### Owner decisions
 
-Confirm or revise the stack/layout and product/operational rows in section 2 as grouped decisions:
+Confirm or revise the remaining recommendations before their implementation:
 
-- [ ] Elysia/Neon/Drizzle/Google library selection, Node 24 alignment, same-project hosting, and local
-      HTTPS tooling. Provisional Vercel pool tooling remains subject to the technical gate below.
+- [x] Elysia/Neon/Drizzle/Google library selection, Node 24 alignment, and same-project hosting
+      accepted in Job 3; later libraries are not installed or implemented by the health scaffold.
+- [ ] Local HTTPS tooling before authentication development; pool tooling remains provisional.
 - [ ] Guest eligibility (including returning empty accounts), cloud byte limits, and consequences
       for locally valid but oversized guest data; preserve the approved blocking Yes/No interaction.
 - [ ] Conflict interaction, synchronization triggers, offline account access, cache retention,
@@ -255,17 +259,17 @@ Confirm or revise the stack/layout and product/operational rows in section 2 as 
 
 ### Engineering feasibility gates — evidence, not owner votes
 
-Before Job 3 installs anything, verify exact stable package versions, engines and peer dependencies
-against Node 24. In particular, **`@vercel/functions` and `attachDatabasePool` are provisional**:
+Before each later job installs dependencies, verify exact stable versions, engines and peers
+against Node 24. In the database job, **`@vercel/functions` and `attachDatabasePool` are provisional**:
 verify the chosen stable version's compatibility and execution-mode requirements; this task has not
 tested or approved a version. Confirm the proposed `pg` transaction/pooling strategy and compatible
 PostgreSQL major version for Neon and disposable tests. Do not mix in a Neon-driver alternative.
 
-During later authorized scaffolding, before declaring the deployment seam ready, inspect the
-combined build artifact and test API discovery, workspace bundling, SPA fallback ordering, API 404s,
-auth callbacks, cookie forwarding, and no-cache behavior. No configuration or infrastructure changes
-are authorized by this document. Confirm Google callback environment isolation and provider log
-redaction before real credentials or users; if either cannot be demonstrated, stop that integration.
+Before declaring the deployment seam ready, complete the Preview gate above. In the later
+authentication job, additionally test auth callbacks, cookie forwarding, and no-cache behavior.
+No infrastructure or production changes are authorized by this document. Confirm Google callback
+environment isolation and provider log redaction before real credentials or users; if either cannot
+be demonstrated, stop that integration.
 
 ### Required future tests and Job 2 validation
 

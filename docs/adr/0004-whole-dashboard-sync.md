@@ -10,5 +10,5 @@ of ownership while making concurrent edits explicit instead of claiming automati
 
 Realtime connections, CRDTs, automatic field merging, collaboration, paid tiers, and public sharing
 are excluded. This is accepted target architecture, not implemented behavior; conflict interaction,
-retry scheduling, and technology remain specified separately in the
+retry scheduling, and the separately accepted Job 3 stack are specified in the
 [account and synchronization design](../ACCOUNT_SYNC.md).
