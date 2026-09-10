@@ -1,6 +1,7 @@
 # Accounts and synchronization
 
-Documentation baseline: 2026-09-09. **No account or synchronization implementation exists.**
+Documentation baseline: 2026-09-10. **No operational authentication or synchronization exists.**
+Job 4A adds local PostgreSQL authentication persistence; it is not connected to HTTP requests.
 The owner separately authorized the Job 3 local API scaffold and accepted the stack below.
 This does not authorize provider provisioning, credentials, production configuration, or deployment.
 
@@ -28,6 +29,11 @@ operational recommendations remain unapproved until the jobs that implement them
 - Anonymous use remains fully supported and free. Google is the sole identity provider.
 - KendoMenu owns an opaque server-side application session. Session credentials use Secure,
   HttpOnly cookies and never LocalStorage.
+- Application sessions use seven-day idle expiry and 30-day absolute expiry; fresh authentication
+  starts a new lifetime. Job 4B owns policy enforcement and credential generation/delivery.
+- Google subject is the unique identity. A supplied verified Google email may replace nullable
+  display metadata; missing or unverified email leaves existing metadata unchanged. First login
+  without verified email stores null. Email is never unique identity; no name/photo is stored.
 - Guest and authenticated workspaces remain separate.
 - A blocking Yes/No adoption choice appears only when **a new KendoMenu account has an empty cloud
   dashboard and the browser contains an eligible, non-empty guest workspace**. No dismiss action
@@ -56,9 +62,9 @@ These are target decisions, not descriptions of current production functionality
   application sessions are stored as token hashes in PostgreSQL. Neither is implemented in Job 3.
 
 See accepted [ADR 0005](adr/0005-node-elysia-api-foundation.md) for alternatives and consequences.
-`@vercel/functions` and `attachDatabasePool` remain **provisional** until the database job verifies
-exact stable-version, Node 24, and Vercel execution-mode compatibility. Local HTTPS tooling and
-all product/operational recommendations below remain unapproved.
+`@vercel/functions` remains uninstalled; `attachDatabasePool` integration is deferred until a
+database-backed Vercel request path exists. Local HTTPS tooling and the remaining
+product/operational recommendations below remain unapproved.
 
 ### Job 3 dependency evidence
 
@@ -80,7 +86,8 @@ Primary evidence: [Elysia Node adapter](https://elysiajs.com/integrations/node),
 [Google's maintained Node authentication library](https://github.com/googleapis/google-cloud-node-core/tree/main/packages/google-auth-library-nodejs),
 [Supabase PostgreSQL](https://supabase.com/docs/guides/database/overview). Repository engines declare
 `24.x`; local inspection observed `v25.2.1`, while CI declares `24.12.0`. Neither proves the deployed
-Node version or a local Node 24 test run.
+Node version or a local Node 24 test run at the time of Job 3. Job 4A local Node 24 evidence is
+recorded separately below.
 
 ### Application module and deployment seam
 
@@ -88,7 +95,8 @@ The local scaffold in `apps/api` exposes `createApp()` and its Request-handling 
 starting a listener. It contains only fixed health behavior and JSON error responses, with
 `Cache-Control: private, no-store`. The standalone entry supplies `@elysia/node`; the root Vercel
 adapter delegates the original Request and Response without Node adapter or platform pool hooks.
-No speculative authentication, database, repository, or synchronization interfaces are introduced.
+Job 4A adds the separate persistence boundary described below; the HTTP scaffold still has no
+authentication or database-backed request path.
 [Vercel Node function formats](https://vercel.com/docs/functions/runtimes/node-js)
 
 The checked-in configuration retains `apps/web/dist` and the SPA fallback, adding API dispatch
@@ -107,18 +115,19 @@ deep links as an explicit Preview gate for later authorized verification.
 Auth callbacks and cookie forwarding are separate later authentication-job gates. Never infer their
 correctness from health tests or standalone Elysia auto-detection.
 
-## 2. Recommendations awaiting confirmation
+## 2. Connection strategy and remaining recommendations
 
 ### One database connection strategy
 
 The accepted driver direction is PostgreSQL via **`pg` everywhere**, with Drizzle's node-postgres
-integration. The following operational details remain recommendations for the database job:
+integration. Job 4A implements the local pool, transaction, and migration foundation. Neon
+endpoints, adoption, and Vercel execution remain later-job work:
 
-- Runtime requests use Neon's pooled endpoint. Create a bounded `pg.Pool` once per warm function
-  instance, not per request; start with a small pool (maximum 5, idle timeout 5 seconds).
-- The Vercel adapter provisionally attaches that pool once with `attachDatabasePool`. Verify its
-  exact stable package version against Node 24 and the project's function execution mode before
-  installation. Do not silently substitute Neon HTTP/WebSocket lifecycle rules if verification fails.
+- The local adapter caches a bounded `pg.Pool` per warm module instance (maximum 5, idle timeout
+  5 seconds). A Neon pooled endpoint remains the later runtime target; no HTTP request uses it yet.
+- The Vercel adapter does not attach a database pool. Defer `attachDatabasePool` until a
+  database-backed request path exists, then verify its stable version and execution mode. Do not
+  substitute a Neon HTTP/WebSocket driver.
 - Conditional writes and adoption use real SQL transactions on the same checked-out connection.
   Release borrowed clients in `finally`; never run a transaction across independent `pool.query`
   calls. Do not call `pool.end()` per request or depend on connection-local state across requests.
@@ -131,7 +140,8 @@ integration. The following operational details remain recommendations for the da
 Evidence: [Neon pooling](https://neon.com/docs/connect/connection-pooling),
 [node-postgres transactions](https://node-postgres.com/features/transactions), and
 [Vercel connection lifecycle](https://vercel.com/kb/guide/connection-pooling-with-functions).
-These support the strategy, not an assertion that exact package versions were compatibility-tested.
+These support the strategy; the Job 4A evidence below separately records exact locally tested
+versions without claiming Neon or Vercel compatibility.
 
 ### Product and operational defaults
 
@@ -146,7 +156,6 @@ isolated Job 3 health scaffold. Every row below remains a recommendation.
 | Conflict interaction         | Pause uploads; explicit choice of local or cloud whole dashboard, with export/preservation before discarding the losing local copy                              | More visible friction, but no silent loss or field merging.                                                                                                                    |
 | Account cache/offline access | Retain account-scoped data hidden on logout; reopen only after reauthentication; an already-open account workspace remains editable offline with uploads paused | Supports continuity but retains readable data on a shared browser; a fresh uncached device cannot load cloud data offline.                                                     |
 | Logout/account switching     | Preserve pending account-scoped edits, stop uploads, hide account data, and reveal the guest workspace; disclose unsynchronized work                            | Prioritizes local work retention over clearing all account data on logout. Offline logout remains locally immediate, with revocation completed before later authenticated use. |
-| Application-session lifetime | Seven-day idle expiry and 30-day absolute expiry; fresh authentication starts a new lifetime                                                                    | Balances repeated sign-in against exposure from a retained device session.                                                                                                     |
 | Cloud payload budget         | Maximum 2 MiB UTF-8 for the complete request envelope; reject whole requests over it                                                                            | Some currently valid guest dashboards may not be eligible; owner acceptance is required before narrowing cloud eligibility.                                                    |
 | Region                       | Colocate API and database in an EU region offered by both providers                                                                                             | Reduces regional latency and unnecessary transfers, but does not establish legal jurisdiction or compliance.                                                                   |
 | Operating owner and cost     | Repository owner operates it; start a non-production evaluation on available free allocations with no automatic paid upgrade                                    | Keeps a personal project proportionate; free quotas and durability may not meet production recovery needs. Approve a numeric spending ceiling before provisioning.             |
@@ -239,6 +248,117 @@ References: [Google OIDC](https://developers.google.com/identity/openid-connect/
   neither the CDN nor service worker caches them. Network failures must not produce a cached
   authenticated response from another account or a successful SPA HTML response to an API request.
 
+## Job 4A — local authentication persistence
+
+The API persistence boundary owns three PostgreSQL tables: users identified by immutable unique
+Google subject; single-use browser-bound login transactions; and application sessions linked to an
+internal user UUID. Email is nullable mutable metadata with no uniqueness constraint. Session and
+CSRF values enter persistence only as SHA-256 hashes. Google name/photo, provider tokens,
+authorization codes, ID tokens, and dashboard data are absent.
+
+Login transactions store hashes of state/browser binding/nonce, the callback's required PKCE
+verifier, and a bounded application-relative return path defaulting to `/`. Job 4B validates return
+paths against its allowlist before persistence. Transactions last at most ten minutes. Atomic
+consumption distinguishes missing, expired, consumed, and binding-mismatch outcomes and clears
+callback material on success. Explicit cleanup removes at most 100 rows per call after their expiry
+is at least ten minutes past; replay classification is available while the marker remains. There is
+no timer or background service. PKCE verifier storage is the intentional callback-secret exception;
+raw state, nonce, browser binding, session tokens, and CSRF tokens are never persisted.
+
+Session lookup excludes revoked and expired records without recording activity. Explicit activity
+updates remain monotonic and cap idle expiry at absolute expiry. Timestamp ordering and validity
+are constrained in SQL; seven-day/30-day duration policy belongs to Job 4B's session module, not
+permanent SQL constraints. Explicit session replacement validates and locks the expected same-user
+active predecessor, inserts its replacement, and revokes the predecessor in one transaction;
+failure rolls back everything. CSRF generation and delivery also belong to Job 4B.
+
+### Local commands and environment
+
+All backend commands inherit exported process environment variables. Vite does not load backend
+variables, and these commands do not automatically read environment files. The tracked root
+`.env.example` contains comments and empty placeholders only. Supply credentials privately through
+the process environment; never place connection strings in command arguments, chat, logs, or docs.
+
+- `DATABASE_URL`: lazy runtime persistence connection; unnecessary for health or unit tests.
+- `MIGRATION_DATABASE_URL`: direct connection used only by `pnpm db:migrate`.
+- `TEST_DATABASE_URL`: local `kendomenu_test` connection required by `pnpm test:api:integration`.
+- `pnpm db:generate`: generate SQL and Drizzle metadata after schema edits; review generated SQL,
+  including search-path-safe references, before applying. No connection is needed.
+- `pnpm db:check`: validate the migration metadata chain without a database.
+- `pnpm db:migrate`: apply reviewed migration files on a dedicated connection, closing it afterward.
+  Migrations never run on import, startup, or requests. Do not use schema push as migration strategy.
+- `pnpm test:api:persistence`: database-independent unit tests.
+- `pnpm test:api:integration`: real PostgreSQL migrations, queries, constraints, and transactions.
+  Missing configuration fails explicitly. The harness accepts only a local test database, confirms
+  its identity, creates unique schemas for tables and migration bookkeeping, and removes only
+  run-owned resources. It never resets the database or shared public schema.
+
+Runtime pools are lazy and cached per module instance, with maximum five connections and a
+five-second idle timeout. Checked-out clients are released in finally blocks; transaction operations
+share one client. Shutdown belongs to process/test lifecycle, never an individual request.
+
+### Locally verified — Job 4A, 2026-09-10
+
+Node 24.12.0 executed the API and persistence checks using the official checksum-verified temporary
+runtime; no installed Node configuration changed. PostgreSQL was **17.11 (Postgres.app)** in the
+owner-created `kendomenu_test` database. No development, Neon, Vercel, or production database was
+migrated. Each real integration test uses a fresh uniquely named schema and checks normal teardown.
+
+| Command                                              | Result                                                                                                                                    |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm test:api:persistence`                          | PASS: 12 database-independent tests                                                                                                       |
+| `pnpm test:api:integration`                          | PASS: 30 real PostgreSQL tests, including migration from empty schemas, repeat migration, concurrency, constraints, rollback, and cleanup |
+| `env -u TEST_DATABASE_URL pnpm test:api:integration` | Expected exit 1 with a fixed configuration error; no silent skip                                                                          |
+| `pnpm db:generate`                                   | PASS: initial reviewed SQL/metadata generated; repeat reports no schema changes                                                           |
+| `pnpm db:check`                                      | PASS: migration metadata chain                                                                                                            |
+| `pnpm check:api`                                     | PASS: strict types, lint, 47 API/unit tests, root adapter checks                                                                          |
+| `pnpm check`                                         | PASS: 343 unit tests, types, lint, formatting, and production web build                                                                   |
+
+These pnpm runs set `pnpm_config_verify_deps_before_run=false` to prevent pnpm 11 from automatically
+reinstalling dependencies when switching runtime/store context, and prepend the temporary Node 24
+binary directory to PATH. This changes dependency-repair behavior only; no test/check is bypassed.
+Local socket permission was required for tsx IPC and PostgreSQL. Earlier integration fixture failures
+were corrected: an idle-expired session cannot be revived, and cleanup assertions need isolated
+fixtures. Node 25.2.1 review checks provide separate useful evidence, not Node 24 verification.
+
+Independent review covered schema/migrations, concurrency/rollback, secrets/error leakage, pool and
+client lifecycle, test validity, and scope. Findings about stale activity, replacement timestamps,
+client-close error reporting, and documentation were resolved. The final technical review found no
+remaining defects. Session history, targeted formatting, diff, and secret/debug/unsafe-type/artifact
+scans passed. A documentation-link scan found two pre-existing broken history-index links, left
+unchanged: `2026-08-22-responsive-site-footer.md` and `2026-08-21-landing-page-polish.md`.
+
+The approved dependency set has now executed locally under Node 24; deployed Node compatibility and
+Vercel lifecycle behavior remain unverified. `pnpm db:migrate` was not run against a shared schema:
+the integration suite exercises the same dedicated-connection migration function in isolated schemas.
+
+### Dependency evidence and remaining gates
+
+Selected exact versions: `drizzle-orm` 0.45.2, `drizzle-kit` 0.31.10, `pg` 8.23.0, and `@types/pg`
+8.23.1. Published metadata accepts `pg >=8` for Drizzle; pg's Node `>=16` engine permits Node 24 but
+does not prove compatibility. ORM and Kit publish no Node engine range. Optional alternative
+drivers are not installed. Local Node 25 results are useful evidence, not Node 24 verification.
+Primary sources: [ORM metadata](https://registry.npmjs.org/drizzle-orm/0.45.2),
+[Kit metadata](https://registry.npmjs.org/drizzle-kit/0.31.10),
+[pg metadata](https://registry.npmjs.org/pg/8.23.0),
+[types metadata](https://registry.npmjs.org/@types%2fpg/8.23.1),
+[Drizzle node-postgres integration](https://orm.drizzle.team/docs/get-started-postgresql), and
+[Drizzle migrations](https://orm.drizzle.team/docs/migrations).
+
+Dependency audit: the selected Kit dependency tree includes development-only esbuild 0.18.20
+through `@esbuild-kit/esm-loader` and `@esbuild-kit/core-utils`. `pnpm audit` reports the moderate
+[esbuild development-server advisory](https://github.com/advisories/GHSA-67mh-4wv8-2f99).
+This job runs migration generation/checking, not esbuild's serve feature; no development server is
+exposed by these commands. The approved versions remain pinned without an unreviewed override.
+The audit finding remains recorded for a later compatible tooling update.
+
+`@vercel/functions` remains uninstalled. Official [Vercel pooling guidance](https://vercel.com/kb/guide/connection-pooling-with-functions)
+describes pg with Fluid compute, but `attachDatabasePool` integration and actual lifecycle testing
+remain deferred until a database-backed Vercel request path exists. No package version or platform
+compatibility is asserted here. Neon is neither provisioned nor connected. Local HTTPS, Google
+credentials/verification, callbacks, state/nonce/PKCE generation, cookies, CSRF delivery, session
+HTTP endpoints, provider-log redaction, and production verification remain Job 4B or later gates.
+
 ## 3. Remaining gates for later jobs
 
 ### Owner decisions
@@ -252,18 +372,18 @@ Confirm or revise the remaining recommendations before their implementation:
       for locally valid but oversized guest data; preserve the approved blocking Yes/No interaction.
 - [ ] Conflict interaction, synchronization triggers, offline account access, cache retention,
       unsynchronized logout, and account-switch behavior.
-- [ ] Application-session lifetime, account deletion, retention, remaining device copies, and
-      encryption expectations.
+- [x] Application-session lifetime and verified-email metadata policy accepted in Job 4A.
+- [ ] Account deletion, retention, remaining device copies, and encryption expectations.
 - [ ] Provider/API regions, operational responsibility, budget, recovery requirements, and processor
       terms/jurisdiction assessment. Recommendations do not establish provider guarantees.
 
 ### Engineering feasibility gates — evidence, not owner votes
 
 Before each later job installs dependencies, verify exact stable versions, engines and peers
-against Node 24. In the database job, **`@vercel/functions` and `attachDatabasePool` are provisional**:
-verify the chosen stable version's compatibility and execution-mode requirements; this task has not
-tested or approved a version. Confirm the proposed `pg` transaction/pooling strategy and compatible
-PostgreSQL major version for Neon and disposable tests. Do not mix in a Neon-driver alternative.
+against Node 24. `@vercel/functions` is uninstalled and no version is asserted here. When a
+database-backed Vercel request path exists, verify `attachDatabasePool` compatibility and actual
+execution-mode behavior. Local pg/Drizzle behavior is tested on PostgreSQL 17.11; Neon endpoint,
+major-version, region, and lifecycle compatibility remain unverified. Do not mix in another driver.
 
 Before declaring the deployment seam ready, complete the Preview gate above. In the later
 authentication job, additionally test auth callbacks, cookie forwarding, and no-cache behavior.

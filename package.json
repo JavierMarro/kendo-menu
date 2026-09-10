@@ -33,7 +33,12 @@
     "session:check": "./scripts/check-work-sessions.sh",
     "check": "pnpm session:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
     "verify:full": "pnpm check && pnpm test:e2e:preview && pnpm test:e2e:pwa",
-    "dev:api": "pnpm --filter @kendo-menu/api dev"
+    "dev:api": "pnpm --filter @kendo-menu/api dev",
+    "test:api:persistence": "pnpm --filter @kendo-menu/api test:persistence",
+    "test:api:integration": "pnpm --filter @kendo-menu/api test:integration",
+    "db:generate": "pnpm --filter @kendo-menu/api db:generate",
+    "db:check": "pnpm --filter @kendo-menu/api db:check",
+    "db:migrate": "pnpm --filter @kendo-menu/api db:migrate"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,12 +1,14 @@
 import { Server } from 'node:net';
 import { Elysia } from 'elysia';
 import { WebStandardAdapter } from 'elysia/adapter/web-standard';
+import { Client, Pool } from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import vercelHandler from '../../../api/[...path].js';
 import { createApp } from './app.js';
 
 afterEach(() => vi.restoreAllMocks());
+afterEach(() => vi.unstubAllEnvs());
 
 const composedApp = new Elysia({ adapter: WebStandardAdapter }).use(createApp());
 
@@ -67,4 +69,23 @@ it('imports and handles requests without starting a listener or making external 
   expect((await freshAdapter.fetch(new Request('http://localhost/api/missing'))).status).toBe(404);
   expect(listen).not.toHaveBeenCalled();
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it('keeps health and adapter imports independent of database configuration and connections', async () => {
+  vi.resetModules();
+  for (const variable of ['DATABASE_URL', 'MIGRATION_DATABASE_URL', 'TEST_DATABASE_URL']) {
+    vi.stubEnv(variable, undefined);
+  }
+  const poolConnect = vi.spyOn(Pool.prototype, 'connect').mockImplementation(() => {
+    throw new Error('UNEXPECTED_DATABASE_CONNECTION');
+  });
+  const clientConnect = vi.spyOn(Client.prototype, 'connect').mockImplementation(() => {
+    throw new Error('UNEXPECTED_DATABASE_CONNECTION');
+  });
+  const { createApp: freshApp } = await import('./app.js');
+  const { default: freshAdapter } = await import('../../../api/[...path].js');
+  expect((await freshApp().handle(new Request('http://localhost/api/health'))).status).toBe(200);
+  expect((await freshAdapter.fetch(new Request('http://localhost/api/health'))).status).toBe(200);
+  expect(poolConnect).not.toHaveBeenCalled();
+  expect(clientConnect).not.toHaveBeenCalled();
 });

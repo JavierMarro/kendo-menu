@@ -155,17 +155,22 @@ For the original recursive-model decision, see [ADR 0001](./adr/0001-recursive-t
 
 ## Local API scaffold and accepted later architecture
 
-Optional accounts and synchronization are now an approved product direction, but the production
-behavior above still has no account, application-session, API, database, or synchronization
-implementation. The accepted decisions are [identity and application sessions](adr/0002-identity-application-sessions.md),
+Optional accounts and synchronization are an approved product direction. There is no deployed
+account or synchronization behavior, and no database-backed HTTP request path. The local scaffold
+and persistence implementation below are separate from production behavior. The accepted decisions
+are [identity and application sessions](adr/0002-identity-application-sessions.md),
 [workspace separation and guest adoption](adr/0003-workspaces-guest-adoption.md), and
 [whole-dashboard synchronization](adr/0004-whole-dashboard-sync.md).
 
 The Job 3 local scaffold puts Elysia application behavior in `apps/api`, with separate standalone
 Node and minimal root Vercel function adapters. The `createApp()` interface handles standard Requests
-without starting a listener. Only health and JSON errors exist; no frontend integration, domain/store
-dependency, database, or authentication is introduced. Node 24 is the declared target; the local
-runtime remains Node 25. See [ADR 0005](adr/0005-node-elysia-api-foundation.md).
+without starting a listener. Only health and JSON errors are exposed; there is no frontend integration or domain/store
+dependency. Job 4A adds isolated PostgreSQL authentication persistence under `apps/api/src/persistence`,
+using Drizzle and pg for users, login transactions, and application sessions. Its intent-oriented
+interface hides schema, transactions, errors, and pool lifecycle. It is not imported by the HTTP
+application or adapters. Explicit migration commands live under `apps/api/src/database`, with
+reviewed SQL and metadata under `apps/api/drizzle`. Database-independent unit tests and isolated
+real-PostgreSQL integration tests are separate commands. Node 24 is the declared target. See [ADR 0005](adr/0005-node-elysia-api-foundation.md).
 
 In the later target, the web workspace module selects isolated guest/account
 stores; the synchronization module exchanges validated whole dashboards with the backend over a

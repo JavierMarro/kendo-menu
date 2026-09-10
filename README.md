@@ -14,8 +14,9 @@ account or server is required.
 - Elysia local API scaffold in `apps/api`, with separate Node and Vercel adapters (not deployed)
 - An uninitialized `apps/mobile` boundary reserved for explicitly requested future work
 
-Optional accounts and synchronization are accepted future direction. Only the local health API
-scaffold is implemented; accounts, remote sync, databases, and provider resources remain absent.
+Optional accounts and synchronization are accepted future direction. The local health API and isolated PostgreSQL
+authentication persistence foundation are implemented; operational authentication, remote sync,
+and provider resources remain absent.
 See [the account design](docs/ACCOUNT_SYNC.md) for decision status and later gates.
 
 ## Workspace layout

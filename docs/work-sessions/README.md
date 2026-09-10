@@ -26,6 +26,8 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-09-10 — authentication persistence foundation](./2026-09-10-auth-persistence-foundation.md)
+
 - [2026-09-09 — Node and Elysia API foundation](./2026-09-09-node-elysia-api.md)
 
 - [2026-09-09 — account and synchronization architecture](./2026-09-09-account-sync-architecture.md)
