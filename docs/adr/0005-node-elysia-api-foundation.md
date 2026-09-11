@@ -12,8 +12,8 @@ ahead of the SPA fallback. Importing the application does not start a listener.
 
 Later persistence uses Neon managed PostgreSQL with Drizzle, `pg`, and reviewed SQL migrations.
 Later Google authorization-code OIDC uses Google's maintained `google-auth-library`; KendoMenu
-owns opaque application sessions stored as token hashes in PostgreSQL. Pool lifecycle tooling
-(`@vercel/functions` and `attachDatabasePool`) remains provisional pending database-job validation.
+owns opaque application sessions stored as token hashes in PostgreSQL. Job 4B adds pool lifecycle tooling (`@vercel/functions` and `attachDatabasePool`) at root Vercel
+composition; actual Fluid Compute lifecycle remains a live-integration gate.
 
 ## Considered alternatives
 

@@ -1,6 +1,3 @@
-import { node } from '@elysia/node';
-import { Elysia } from 'elysia';
+import { createNodeApp } from './node-app.js';
 
-import { createApp } from './app.js';
-
-new Elysia({ adapter: node() }).use(createApp()).listen(3000);
+createNodeApp().listen(3000);

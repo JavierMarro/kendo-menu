@@ -178,6 +178,21 @@ describe('isolated PostgreSQL migrations', () => {
 });
 
 describe('users', () => {
+  it('reads public metadata by internal ID without exposing identity or mutating timestamps', async () => {
+    const user = await createUser(uniqueName('lookup'), 'display@example.test');
+    const before = await storedRows('users');
+    await expect(persistence().users.findPublicById(user.id)).resolves.toEqual({
+      id: user.id,
+      verifiedGoogleEmail: 'display@example.test',
+    });
+    await expect(
+      persistence().users.findPublicById('00000000-0000-0000-0000-000000000000'),
+    ).resolves.toBeNull();
+    await expect(persistence().users.findPublicById('invalid')).rejects.toEqual(
+      new PersistenceError('INVALID_INPUT'),
+    );
+    expect(await storedRows('users')).toEqual(before);
+  });
   it('creates a user by Google subject and keeps the subject as identity', async () => {
     const googleSub = uniqueName('subject');
     const created = await createUser(googleSub, 'first@example.test');

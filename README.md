@@ -11,12 +11,12 @@ account or server is required.
 - React, React Router, Vite, and TypeScript in `apps/web`
 - Zustand `persist` with an injected storage adapter in `packages/store`
 - Shared recursive training contracts and curated-data validation in `packages/domain`
-- Elysia local API scaffold in `apps/api`, with separate Node and Vercel adapters (not deployed)
+- Elysia local backend in `apps/api`, with separate Node and Vercel adapters (not deployed)
 - An uninitialized `apps/mobile` boundary reserved for explicitly requested future work
 
-Optional accounts and synchronization are accepted future direction. The local health API and isolated PostgreSQL
-authentication persistence foundation are implemented; operational authentication, remote sync,
-and provider resources remain absent.
+Optional accounts and synchronization are accepted product direction. The local backend implements
+Google OIDC and opaque application sessions using PostgreSQL. Real provider/HTTPS integration,
+production authentication, remote sync, and provider resources remain absent.
 See [the account design](docs/ACCOUNT_SYNC.md) for decision status and later gates.
 
 ## Workspace layout
@@ -67,7 +67,8 @@ browser suite against Vite's production preview. `pnpm test:e2e:pwa` remains the
 artifact suite. The release gate, `pnpm verify:full`, runs `pnpm check`, the preview suite, and the
 PWA suite without rerunning the development-server suite.
 
-`pnpm dev:api` serves the standalone health API on local port 3000. The web development server
+`pnpm dev:api` serves the standalone API on local port 3000. Authentication requires the server-only
+configuration documented in the account design; real browser login additionally needs HTTPS. The web development server
 remains separate and does not call it. API request tests cover the application and root Vercel
 adapter without opening a listener; combined Vercel discovery/routing still requires an authorized
 Preview verification. No environment file or credentials are required for the health scaffold.

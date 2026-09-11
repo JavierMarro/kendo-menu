@@ -40,6 +40,11 @@ export interface UserRecord {
   readonly updatedAt: Date;
 }
 
+export interface PublicUserRecord {
+  readonly id: UserId;
+  readonly verifiedGoogleEmail: string | null;
+}
+
 export interface ResolveGoogleUserInput {
   readonly googleSub: string;
   /** Undefined/null means missing or unverified; only a verified value replaces metadata. */
@@ -146,6 +151,7 @@ export interface SessionReplacementInput {
 
 export interface KendoPersistence {
   readonly users: {
+    findPublicById(userId: UserId): Promise<PublicUserRecord | null>;
     resolveByGoogleSubject(input: ResolveGoogleUserInput): Promise<UserRecord>;
   };
   readonly loginTransactions: {

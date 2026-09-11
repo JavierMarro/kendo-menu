@@ -53,6 +53,7 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "@kendo-menu/api": "workspace:*"
+    "@kendo-menu/api": "workspace:*",
+    "@vercel/functions": "3.9.7"
   }
 }

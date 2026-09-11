@@ -38,6 +38,8 @@ import {
 import { applicationSessions, loginTransactions, users } from '../schema.js';
 
 export interface PostgresPersistence extends KendoPersistence {
+  /** Concrete runtime composition only; never exposed through KendoPersistence. */
+  readonly pool: pg.Pool;
   /** Close the module's pool at a process or test lifecycle boundary. */
   close(): Promise<void>;
 }
@@ -338,6 +340,16 @@ export function createPostgresPersistence(
 
   const implementation: KendoPersistence = {
     users: {
+      findPublicById: (userId: string) =>
+        safeOperation(async () => {
+          const id = validateUuid(userId);
+          const rows = await database
+            .select({ id: users.id, verifiedGoogleEmail: users.verifiedGoogleEmail })
+            .from(users)
+            .where(eq(users.id, id))
+            .limit(1);
+          return rows[0] ?? null;
+        }),
       resolveByGoogleSubject: (input: ResolveGoogleUserInput) =>
         safeOperation(async () => {
           const googleSub = validateGoogleSub(input.googleSub);
@@ -685,6 +697,7 @@ export function createPostgresPersistence(
 
   return {
     ...implementation,
+    pool,
     close: () => {
       closePromise ??= safeOperation(async () => {
         await pool.end();

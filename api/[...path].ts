@@ -1,6 +1,9 @@
-import { createApp } from '@kendo-menu/api';
+import { createApp, createRuntimeAuthentication } from '@kendo-menu/api';
+import { attachDatabasePool } from '@vercel/functions';
 
-const app = createApp();
+const app = createApp({
+  authentication: createRuntimeAuthentication({ onPoolCreated: attachDatabasePool }),
+});
 
 export default {
   fetch(request: Request) {

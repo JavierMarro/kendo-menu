@@ -49,8 +49,9 @@ activity quantities and notes can be adapted without mutating the built-in libra
   injected storage adapter.
 - Browser LocalStorage is sufficient for the current bounded dataset. Persisted JSON is untrusted
   and must be validated, versioned, and migrated when its shape changes.
-- Accounts, synchronization, and databases are not currently implemented. A local API health
-  scaffold exists separately from the production frontend; it has not been deployed. Their
+- Production accounts, synchronization, and databases are not available. A local backend with
+  Google OIDC and opaque sessions exists separately from the production frontend; it has not been
+  deployed or connected to real Google accounts. Their
   approved future product scope is described below; this document does not authorize scaffolding
   or provisioning. Paid tiers and initialization of `apps/mobile` remain out of scope.
 

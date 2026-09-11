@@ -156,19 +156,20 @@ For the original recursive-model decision, see [ADR 0001](./adr/0001-recursive-t
 ## Local API scaffold and accepted later architecture
 
 Optional accounts and synchronization are an approved product direction. There is no deployed
-account or synchronization behavior, and no database-backed HTTP request path. The local scaffold
-and persistence implementation below are separate from production behavior. The accepted decisions
+account or synchronization behavior. The local backend authentication and persistence implementation
+below is separate from production behavior. The accepted decisions
 are [identity and application sessions](adr/0002-identity-application-sessions.md),
 [workspace separation and guest adoption](adr/0003-workspaces-guest-adoption.md), and
 [whole-dashboard synchronization](adr/0004-whole-dashboard-sync.md).
 
 The Job 3 local scaffold puts Elysia application behavior in `apps/api`, with separate standalone
-Node and minimal root Vercel function adapters. The `createApp()` interface handles standard Requests
-without starting a listener. Only health and JSON errors are exposed; there is no frontend integration or domain/store
-dependency. Job 4A adds isolated PostgreSQL authentication persistence under `apps/api/src/persistence`,
+Node and minimal root Vercel function adapters. The `createApp({ authentication })` interface handles standard Requests
+without starting a listener. Job 4B adds Google start/callback and session GET/DELETE routes behind
+one injected authentication module; there is no frontend integration or domain/store dependency. Job 4A adds isolated PostgreSQL authentication persistence under `apps/api/src/persistence`,
 using Drizzle and pg for users, login transactions, and application sessions. Its intent-oriented
-interface hides schema, transactions, errors, and pool lifecycle. It is not imported by the HTTP
-application or adapters. Explicit migration commands live under `apps/api/src/database`, with
+interface hides schema, transactions, and driver errors. Job 4B runtime composition injects
+persistence lazily; only root Vercel composition imports its pool attachment helper. The concrete
+PostgreSQL adapter exposes its pool to runtime composition, never to authentication contracts. Explicit migration commands live under `apps/api/src/database`, with
 reviewed SQL and metadata under `apps/api/drizzle`. Database-independent unit tests and isolated
 real-PostgreSQL integration tests are separate commands. Node 24 is the declared target. See [ADR 0005](adr/0005-node-elysia-api-foundation.md).
 

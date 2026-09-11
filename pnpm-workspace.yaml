@@ -3,3 +3,7 @@ packages:
   - 'packages/*'
 allowBuilds:
   esbuild: true
+minimumReleaseAgeExclude:
+  - '@vercel/cli-config@0.2.6'
+  - '@vercel/functions@3.9.7'
+  - '@vercel/oidc@3.8.7'
