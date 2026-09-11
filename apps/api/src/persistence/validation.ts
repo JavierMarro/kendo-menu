@@ -1,3 +1,10 @@
+/**
+ * Runtime validation performed before values reach SQL.
+ *
+ * These checks produce the persistence module's fixed typed errors. Matching
+ * database constraints remain deliberate defense in depth for direct SQL,
+ * concurrency, or future callers that do not pass through this implementation.
+ */
 import { PersistenceError } from './contracts.js';
 
 export const LOGIN_TRANSACTION_MAX_LIFETIME_MS = 10 * 60 * 1000;
@@ -91,6 +98,9 @@ export function validatePkceCodeVerifier(value: unknown): string {
 export function validateReturnPath(value: unknown): string {
   const returnPath = value === undefined ? '/' : value;
 
+  // Accept an application-relative path only. Scheme-relative URLs, backslashes,
+  // and control characters are rejected so stored callback state cannot later
+  // become an external redirect target.
   if (
     typeof returnPath !== 'string' ||
     returnPath.length === 0 ||
@@ -140,6 +150,9 @@ export function validateSessionTimes(
   idleExpiresAt: Date,
   absoluteExpiresAt: Date,
 ): void {
+  // These relationships make the absolute deadline a hard ceiling. Neither
+  // delayed activity nor a future clock value can construct a session whose
+  // idle window outlives its maximum lifetime.
   if (
     createdAt.getTime() > lastActivityAt.getTime() ||
     lastActivityAt.getTime() > idleExpiresAt.getTime() ||

@@ -34,6 +34,7 @@ export type PersistenceClock = () => Date;
 
 export interface UserRecord {
   readonly id: UserId;
+  /** Immutable external identity. Email is mutable display metadata, never identity. */
   readonly googleSub: string;
   readonly verifiedGoogleEmail: string | null;
   readonly createdAt: Date;
@@ -86,6 +87,8 @@ export interface ConsumedLoginTransaction {
 }
 
 export type ConsumeLoginTransactionResult =
+  // Explicit outcomes let authentication return one generic public failure while
+  // tests and cleanup retain enough meaning to verify replay and expiry policy.
   | { readonly outcome: 'success'; readonly transaction: ConsumedLoginTransaction }
   | { readonly outcome: 'missing' }
   | { readonly outcome: 'expired' }
@@ -102,6 +105,8 @@ export interface LoginTransactionCleanupResult {
 }
 
 export interface SessionRecord {
+  // Raw and hashed browser credentials are intentionally absent. Callers can
+  // authorize by session identity without being able to re-export stored hashes.
   readonly id: SessionId;
   readonly userId: UserId;
   readonly createdAt: Date;
@@ -157,11 +162,14 @@ export interface KendoPersistence {
   readonly loginTransactions: {
     create(input: LoginTransactionCreationInput): Promise<LoginTransactionReceipt>;
     consume(input: ConsumeLoginTransactionInput): Promise<ConsumeLoginTransactionResult>;
+    /** Delete only a bounded batch so request-triggered maintenance has fixed work. */
     cleanupExpired(input?: LoginTransactionCleanupInput): Promise<LoginTransactionCleanupResult>;
   };
   readonly sessions: {
     create(input: SessionCreationInput): Promise<SessionRecord>;
+    /** Revoke the active predecessor and insert its fresh replacement atomically. */
     replace(input: SessionReplacementInput): Promise<SessionRecord>;
+    /** Return only sessions that are present, unrevoked, and inside both deadlines. */
     findActiveByTokenHash(input: SessionLookupInput): Promise<SessionRecord | null>;
     touch(input: SessionActivityInput): Promise<SessionRecord | null>;
     revoke(input: SessionRevocationInput): Promise<boolean>;

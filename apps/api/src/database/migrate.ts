@@ -1,3 +1,8 @@
+/**
+ * Applies reviewed Drizzle migrations through one short-lived PostgreSQL client.
+ * Connection and driver details are collapsed into fixed failures so command
+ * output cannot leak credentials or database diagnostics.
+ */
 import { fileURLToPath } from 'node:url';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
@@ -15,6 +20,9 @@ export async function migrateDatabase({ connectionString, schema = 'public' }: M
   }
   let client: Client;
   try {
+    // The schema name is validated before being placed in PostgreSQL options.
+    // A statement timeout also bounds a stuck migration instead of holding the
+    // dedicated connection indefinitely.
     client = new Client({
       connectionString,
       connectionTimeoutMillis: 5_000,
@@ -28,6 +36,9 @@ export async function migrateDatabase({ connectionString, schema = 'public' }: M
   let failed = false;
   try {
     await client.connect();
+    // Drizzle records applied files in the selected schema. Tests can therefore
+    // exercise the production migration chain in isolation without modifying
+    // `public` or maintaining a second test-only schema definition.
     await migrate(drizzle(client), {
       migrationsFolder: fileURLToPath(new URL('../../drizzle', import.meta.url)),
       migrationsSchema: schema,
@@ -35,6 +46,8 @@ export async function migrateDatabase({ connectionString, schema = 'public' }: M
   } catch {
     failed = true;
   } finally {
+    // Closing is part of command correctness: a migration is not reported as
+    // successful when its dedicated client cannot be shut down cleanly.
     try {
       await client.end();
     } catch {

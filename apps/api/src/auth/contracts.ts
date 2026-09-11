@@ -1,3 +1,11 @@
+/**
+ * Small interfaces for the authentication module and its injected adapters.
+ *
+ * The Google adapter reduces provider output to immutable `sub` identity plus
+ * optional verified-email metadata. Clock, randomness, persistence, and runtime
+ * configuration are injected so tests cross the same interface as production
+ * without real credentials, network access, or a live database.
+ */
 import type { KendoPersistence } from '../persistence/contracts.js';
 
 export const LOGIN_TRANSACTION_LIFETIME_MS = 10 * 60 * 1_000;
@@ -5,6 +13,9 @@ export const SESSION_IDLE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1_000;
 export const SESSION_ABSOLUTE_LIFETIME_MS = 30 * 24 * 60 * 60 * 1_000;
 export const GOOGLE_CLOCK_SKEW_SECONDS = 300;
 
+// `__Host-` tells supporting browsers to accept these cookies only when they are
+// Secure, host-only, and scoped to `/`. That prevents a sibling subdomain from
+// planting a cookie with the same authentication name.
 export const LOGIN_COOKIE_NAME = '__Host-kendomenu-login';
 export const SESSION_COOKIE_NAME = '__Host-kendomenu-session';
 export const CSRF_COOKIE_NAME = '__Host-kendomenu-csrf';
@@ -81,6 +92,9 @@ export type AuthenticationPersistenceProvider =
   KendoPersistence | (() => KendoPersistence | Promise<KendoPersistence>);
 
 export interface AuthenticationDependencies {
+  // Infrastructure is supplied at composition time rather than imported here.
+  // This keeps the authentication policy testable and prevents handlers from
+  // silently reaching a second database, clock, or source of randomness.
   readonly persistence: AuthenticationPersistenceProvider;
   readonly getGoogleConfiguration: () =>
     GoogleOperationConfiguration | Promise<GoogleOperationConfiguration>;

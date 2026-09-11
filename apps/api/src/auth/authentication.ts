@@ -1,3 +1,11 @@
+/**
+ * Orchestrates KendoMenu's Google-only sign-in and opaque application sessions.
+ *
+ * Provider tokens stay inside the Google adapter. This module receives only
+ * a validated Google subject and optional verified-email metadata, then stores
+ * hashes of browser credentials through the persistence interface. Keeping the
+ * four HTTP flows here makes their cookie and public-error behavior consistent.
+ */
 import {
   PersistenceError,
   type KendoPersistence,
@@ -138,6 +146,9 @@ function clearInvalidSessionResponse(): Response {
   );
 }
 
+// Internal exceptions are reduced to a small allow-list before logging. Raw
+// provider responses, database errors, cookies, identity claims, and stack traces
+// never become log fields or public error bodies through this path.
 function errorCodeForLog(error: unknown): AuthenticationInternalCode {
   if (error instanceof InvalidAuthenticationInput) {
     return 'AUTH_INPUT_REJECTED';
@@ -245,6 +256,9 @@ function isIdentityRecord(value: object): value is IdentityRecord {
   );
 }
 
+// Treat the adapter result as untrusted despite its TypeScript return type.
+// Types disappear at runtime, and an injected or future adapter could otherwise
+// pass malformed identity data into the account lookup.
 function validateIdentity(identity: unknown): {
   readonly googleSub: string;
   readonly verifiedGoogleEmail: string | null;
@@ -356,6 +370,8 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
   const random = dependencies.randomBytes ?? defaultSecureRandomBytes;
 
   return {
+    // Begin a browser-bound, single-use login transaction. State and nonce bind
+    // the callback to this attempt; PKCE binds the later code exchange.
     start: async (request: Request): Promise<Response> => {
       try {
         validateRequestMethod(request, 'GET');
@@ -396,6 +412,9 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
       }
     },
 
+    // Finish the one-time browser transaction and exchange Google's code on the
+    // server. Successful verification creates fresh KendoMenu credentials; no
+    // Google access token, refresh token, or ID token is returned to the browser.
     callback: async (request: Request): Promise<Response> => {
       try {
         validateRequestMethod(request, 'GET');
@@ -447,6 +466,9 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
         if (consumed.outcome !== 'success') {
           throw new AuthenticationFailed();
         }
+        // Consumption happens before the provider exchange. A callback can
+        // therefore never be replayed, even when exchange or verification fails;
+        // the user starts a new attempt instead.
         const returnPath = validateStoredReturnPath(consumed.transaction.returnPath);
         if (providerError !== undefined) {
           throw new AuthenticationFailed();
@@ -489,6 +511,9 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
         const sessionToken = generateOpaqueValue(random);
         const csrfToken = generateOpaqueValue(random);
         const { idleExpiresAt, absoluteExpiresAt } = sessionDeadlines(sessionNow);
+        // Fresh credentials prevent fixation. An active same-account session is
+        // replaced atomically; an active different-account credential in this
+        // browser requires an explicit logout before switching accounts.
         if (predecessorToken === undefined) {
           await persistence.sessions.create({
             userId: user.id,
@@ -546,6 +571,9 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
       }
     },
 
+    // This read proves the current server-side session and returns minimal public
+    // metadata. It deliberately does not extend the idle deadline; later
+    // authenticated writes are the only operations reserved to record activity.
     getSession: async (request: Request): Promise<Response> => {
       try {
         validateRequestMethod(request, 'GET');
@@ -597,6 +625,10 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
       }
     },
 
+    // Logout is a cookie-authenticated mutation: exact Origin is checked before
+    // the session-bound CSRF proof. Valid credentials are cleared only after
+    // revocation succeeds; indeterminate storage failures preserve them so the
+    // client is not told a session ended when the server cannot prove it did.
     logout: async (request: Request): Promise<Response> => {
       try {
         validateRequestMethod(request, 'DELETE');
@@ -642,6 +674,9 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
         const now = readClock(clock);
         const sessionHash = sha256(sessionToken);
         const csrfHash = sha256(csrfHeader);
+        // The first lookup distinguishes an invalid application session from a
+        // valid session carrying a wrong CSRF proof. The second lookup binds that
+        // proof to this exact session before allowing revocation.
         const activeSession = await persistence.sessions.findActiveByTokenHash({
           sessionTokenHash: sessionHash,
           at: now,

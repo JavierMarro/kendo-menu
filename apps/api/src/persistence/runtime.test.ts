@@ -1,3 +1,11 @@
+/**
+ * Verifies lazy runtime pool ownership: concurrent initialization is shared,
+ * failed initialization is recoverable, and close remains lifecycle-scoped.
+ *
+ * Pool creation is instrumented rather than connected to PostgreSQL. This makes
+ * resource-leak and retry behaviour deterministic while the adapter integration
+ * suite remains responsible for real-driver behaviour.
+ */
 import pg from 'pg';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 

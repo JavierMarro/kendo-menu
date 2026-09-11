@@ -1,3 +1,10 @@
+/**
+ * PostgreSQL adapter for the small authentication-persistence interface.
+ *
+ * It validates every caller input, owns a bounded pool, maps driver failures to
+ * fixed application errors, and concentrates locking/transaction rules here so
+ * authentication callers do not need to understand SQL or connection lifecycle.
+ */
 import { asc, and, eq, gt, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
@@ -126,6 +133,8 @@ function toPersistenceError(error: unknown): PersistenceError {
     return error;
   }
 
+  // Only the driver code crosses this inspection. Messages, SQL text, details,
+  // and connection information are deliberately discarded.
   const code = readDriverCode(error);
   if (code === '23505') {
     return new PersistenceError('CONFLICT');
@@ -143,6 +152,9 @@ function toPersistenceError(error: unknown): PersistenceError {
 }
 
 async function safeOperation<T>(operation: () => Promise<T>): Promise<T> {
+  // Every public adapter operation passes through the same error translation.
+  // This prevents one less-common driver path from leaking SQL or connection
+  // details simply because its caller forgot a local catch block.
   try {
     return await operation();
   } catch (error) {
@@ -298,6 +310,9 @@ export function createPostgresPersistence(
 
   let pool: pg.Pool;
   try {
+    // A small pool matches the serverless workload and limits database pressure
+    // when several function instances start together. Short idle and connection
+    // timeouts keep unavailable storage from tying up resources indefinitely.
     pool = new pg.Pool({
       connectionString,
       max: POOL_MAX_CONNECTIONS,
@@ -329,6 +344,7 @@ export function createPostgresPersistence(
       try {
         await client.query('ROLLBACK');
       } catch {
+        // A client with uncertain transaction state must not return to the pool.
         destroyClient = true;
       }
       throw error;
@@ -360,6 +376,9 @@ export function createPostgresPersistence(
             : undefined;
           const now = currentTime(clock);
 
+          // One PostgreSQL upsert handles two simultaneous first logins without
+          // creating duplicate accounts. Missing/unverified email never erases a
+          // previously verified value; Google `sub` remains the conflict key.
           if (hasVerifiedEmail) {
             const rows = await database
               .insert(users)
@@ -426,6 +445,9 @@ export function createPostgresPersistence(
           const browserBindingHash = validateSha256Hash(input.browserBindingHash);
           const at = validateNow(clock, input.at);
 
+          // One statement locks the attempt, conditionally consumes it, clears
+          // callback secrets, and returns enough pre-update state to distinguish
+          // replay, expiry, and browser-binding mismatch without a race window.
           const result = await database.execute<ConsumeLoginTransactionRow>(sql`
             WITH locked AS MATERIALIZED (
               SELECT
@@ -522,6 +544,8 @@ export function createPostgresPersistence(
           const cutoff = new Date(at.getTime() - LOGIN_TRANSACTION_CLEANUP_GRACE_MS);
 
           return runTransaction(async (transaction) => {
+            // SKIP LOCKED lets concurrent bounded cleanups make progress without
+            // waiting on a callback that is currently consuming the same row.
             const candidates = await transaction
               .select({ id: loginTransactions.id })
               .from(loginTransactions)
@@ -572,6 +596,8 @@ export function createPostgresPersistence(
           }
 
           return runTransaction(async (transaction) => {
+            // Locking the predecessor makes revoke-plus-insert one indivisible
+            // fixation-prevention operation. Any failure rolls both changes back.
             const predecessorRows = await transaction
               .select()
               .from(applicationSessions)
@@ -636,6 +662,9 @@ export function createPostgresPersistence(
             );
           }
 
+          // Activity and absolute expiry are enforced in the query, not after
+          // returning the row. A revoked or expired credential therefore never
+          // leaves this adapter as an apparently active session.
           const rows = await database
             .select()
             .from(applicationSessions)
@@ -654,6 +683,9 @@ export function createPostgresPersistence(
             throw new PersistenceError('INVALID_INPUT');
           }
 
+          // Out-of-order requests may finish late. GREATEST prevents time moving
+          // backwards, while LEAST prevents idle activity exceeding the absolute
+          // deadline; expired or revoked sessions cannot be revived.
           const rows = await database
             .update(applicationSessions)
             .set({
@@ -699,6 +731,8 @@ export function createPostgresPersistence(
     ...implementation,
     pool,
     close: () => {
+      // Share one close promise across repeated lifecycle signals. Pool shutdown
+      // is attempted once, and every caller observes the same sanitized result.
       closePromise ??= safeOperation(async () => {
         await pool.end();
       });

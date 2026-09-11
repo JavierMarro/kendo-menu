@@ -1,3 +1,10 @@
+/**
+ * Destructive-test containment for real PostgreSQL integration checks.
+ *
+ * Only the designated local `kendomenu_test` database is accepted. Each run
+ * owns a random schema, applies the production migrations there, and removes
+ * only that schema during teardown—never the shared public schema or database.
+ */
 import { randomUUID } from 'node:crypto';
 
 import { Client } from 'pg';
@@ -33,7 +40,7 @@ export interface TestDatabase {
 /**
  * Validate a test connection before any socket is opened.
  *
- * The test harness intentionally accepts only the owner-created local test database.
+ * The test harness intentionally accepts only the designated local test database.
  * Query parameters are rejected because libpq/pg options can otherwise redirect the
  * connection or change TLS/search-path behavior without being visible in the harness.
  */
@@ -72,6 +79,8 @@ export function validateTestDatabaseUrl(value: string | undefined): string {
 }
 
 function quoteIdentifier(identifier: string): string {
+  // Schema identifiers cannot use query parameters, so validate the complete
+  // generated shape before quoting it. Only harness-created names reach SQL.
   if (!/^km_test_[a-f0-9]{32}$/.test(identifier)) {
     throw new Error(TEST_DATABASE_CONFIGURATION_INVALID);
   }
@@ -100,6 +109,8 @@ function createClient(connectionString: string, schema?: string): Client {
 }
 
 async function verifyTestDatabase(client: Client): Promise<void> {
+  // URL inspection alone is not enough: the server confirms the database that
+  // accepted the connection before any CREATE or DROP statement is issued.
   const result = await client.query<{ database_name: string }>(
     'SELECT current_database() AS database_name',
   );
@@ -170,6 +181,9 @@ export async function createTestDatabase(options: TestDatabaseOptions = {}): Pro
           return;
         }
         closed = true;
+        // Attempt every teardown step even if an earlier one fails. The fixed
+        // final error reports that manual inspection may be needed without
+        // exposing connection or driver details.
         let teardownFailed = false;
         try {
           await persistence.close();
@@ -207,6 +221,9 @@ export async function createTestDatabase(options: TestDatabaseOptions = {}): Pro
 }
 
 async function dropSchema(connectionString: string, schema: string): Promise<void> {
+  // CASCADE is intentionally limited to the validated random schema owned by
+  // this test run. The database itself and its shared `public` schema are never
+  // deletion targets for this harness.
   const client = createClient(connectionString);
   let failed = false;
   try {

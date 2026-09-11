@@ -1,3 +1,12 @@
+/**
+ * Tests the Google adapter as a hostile-provider seam: generated authorization
+ * URLs and returned claims must satisfy KendoMenu's stricter contract before an
+ * identity can leave the adapter.
+ *
+ * A deliberately small fake Google client supplies malformed URLs, tokens, and
+ * claims deterministically. No test depends on a real Google account, current
+ * network conditions, or production client credentials.
+ */
 import { LoginTicket, type TokenPayload } from 'google-auth-library';
 import { describe, expect, it } from 'vitest';
 

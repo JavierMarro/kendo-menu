@@ -1,8 +1,15 @@
+/**
+ * Drizzle schema for internal users, one-time Google login transactions, and
+ * opaque application sessions. Database checks repeat critical application
+ * invariants so malformed direct SQL is rejected when it violates those checks.
+ */
 import { sql } from 'drizzle-orm';
 import { check, index, pgTable, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 
 const SHA256_HEX_CHECK = sql`~ '^[0-9a-f]{64}$'`;
 
+// The generated UUID is KendoMenu's internal identity. Google `sub` is the
+// unique external identity; verified email remains nullable, mutable metadata.
 export const users = pgTable(
   'users',
   {
@@ -29,6 +36,10 @@ export const users = pgTable(
   ],
 );
 
+// Short-lived callback state. The unique state hash locates one login attempt;
+// browser binding then proves that the callback returned to its starting browser.
+// Consumption clears PKCE/nonce/browser-binding material while retaining a
+// marker long enough to classify replay attempts.
 export const loginTransactions = pgTable(
   'login_transactions',
   {
@@ -84,6 +95,10 @@ export const loginTransactions = pgTable(
   ],
 );
 
+// Raw session and CSRF values never enter this table; only SHA-256 hashes do.
+// A database disclosure therefore does not directly reveal the cookie values.
+// Both idle and absolute deadlines must pass for a session to authenticate, and
+// revocation provides an immediate server-side kill switch.
 export const applicationSessions = pgTable(
   'application_sessions',
   {

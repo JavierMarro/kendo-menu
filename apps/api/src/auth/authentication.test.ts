@@ -1,3 +1,12 @@
+/**
+ * Application-level authentication tests using deterministic Google and
+ * persistence adapters. These exercise public responses, cookie policy, replay,
+ * fixation, account switching, expiry, and CSRF without network or PostgreSQL.
+ *
+ * The fakes expose stored hashes and operation order so the tests can assert
+ * security effects, not just HTTP status codes. Real PostgreSQL locking and
+ * constraints are covered separately by the persistence integration suite.
+ */
 import { describe, expect, it } from 'vitest';
 
 import type {

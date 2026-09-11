@@ -1,3 +1,11 @@
+/**
+ * Google OIDC adapter for the server-side authorization-code flow.
+ *
+ * The established Google library performs code exchange and signature
+ * verification. This adapter additionally enforces KendoMenu's exact scopes,
+ * callback, issuer, audience, time, nonce, and claim policy before reducing the
+ * provider response to the small identity shape used by the application.
+ */
 import { OAuth2Client, CodeChallengeMethod } from 'google-auth-library';
 import type { GenerateAuthUrlOpts, GetTokenOptions, TokenPayload } from 'google-auth-library';
 
@@ -55,6 +63,9 @@ export interface GoogleAuthenticationAdapterOptions {
 }
 
 function defaultClientFactory(config: GoogleConfiguration): GoogleOAuthClient {
+  // Keep the third-party client behind the narrow local interface above. The
+  // wrapper exposes only the ID token needed for identity verification and does
+  // not return or persist Google's access and refresh tokens.
   const client = new OAuth2Client({
     clientId: config.clientId,
     clientSecret: config.clientSecret,
@@ -82,6 +93,9 @@ function requireUniqueParameter(url: URL, name: string, expected: string): void 
 }
 
 function validateAuthorizationUrl(value: unknown, input: GoogleAuthorizationInput): string {
+  // The URL produced by a dependency is checked as data before redirecting the
+  // browser. Exact origin, path, singleton parameters, scopes, state, nonce, and
+  // PKCE rules prevent a changed dependency result becoming an open redirect.
   if (typeof value !== 'string' || value.length === 0 || value.length > 8_192) {
     throw new AuthenticationFailed();
   }
@@ -142,6 +156,9 @@ function validateTokenPayload(
   payload: TokenPayload | undefined,
   input: GoogleExchangeInput,
 ): GoogleIdentity {
+  // Library signature verification is necessary but not the complete policy.
+  // KendoMenu rechecks who issued the token, which client it targets, its usable
+  // time window, the original nonce, and the exact claims allowed downstream.
   if (payload === undefined || typeof payload !== 'object') {
     throw new AuthenticationFailed();
   }
@@ -219,6 +236,9 @@ async function retrieveIdToken(
   code: string,
   codeVerifier: string,
 ): Promise<string> {
+  // The authorization code and PKCE verifier are sent directly to Google. Only
+  // the bounded ID token is retained long enough for verification; the complete
+  // token response is never exposed to authentication callers.
   try {
     const tokenResponse = await client.getToken({
       client_id: config.clientId,

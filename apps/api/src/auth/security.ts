@@ -1,3 +1,10 @@
+/**
+ * Fail-closed primitives shared by every authentication flow.
+ *
+ * This module bounds and parses untrusted URL/cookie input, creates and hashes
+ * opaque values, serializes the fixed cookie policy, builds non-cacheable
+ * responses, and restricts logs to generated request IDs plus fixed codes.
+ */
 import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from 'node:crypto';
 
 import {
@@ -70,6 +77,9 @@ export function readClock(clock: Clock): Date {
 }
 
 export function generateOpaqueValue(random: SecureRandomBytes): string {
+  // Every browser credential starts with 256 bits from the injected secure
+  // random source. Exact byte-length validation prevents a faulty test or runtime
+  // adapter from silently issuing shorter, guessable values.
   let bytes: Uint8Array;
   try {
     bytes = random(TOKEN_ENTROPY_BYTES);
@@ -93,6 +103,8 @@ export function pkceChallenge(verifier: string): string {
 }
 
 export function hashesEqual(left: string, right: string): boolean {
+  // Equal-length checking is required before Node's constant-time primitive.
+  // Callers compare hashes rather than raw browser credentials.
   const leftBytes = Buffer.from(left, 'utf8');
   const rightBytes = Buffer.from(right, 'utf8');
   return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
@@ -391,6 +403,8 @@ export function parseCookies(request: Request): ParsedCookies {
       throw new InvalidAuthenticationInput();
     }
 
+    // Duplicate security-cookie names are ambiguous across parsers/proxies;
+    // each branch rejects them instead of selecting one occurrence.
     if (name === LOGIN_COOKIE_NAME) {
       if (login !== undefined) {
         throw new InvalidAuthenticationInput();
@@ -419,6 +433,9 @@ export interface CookieAttributes {
 }
 
 export function serializeCookie(name: string, value: string, attributes: CookieAttributes): string {
+  // All authentication cookies share the same host-only, whole-application
+  // policy: Secure, SameSite=Lax, Path=/, and no Domain attribute. HttpOnly is
+  // enabled for credentials and deliberately omitted only for the CSRF echo.
   if (attributes.maxAgeSeconds !== undefined) {
     if (!Number.isSafeInteger(attributes.maxAgeSeconds) || attributes.maxAgeSeconds < 0) {
       throw new AuthenticationUnavailable();
@@ -497,6 +514,8 @@ export function setSessionCookies(
       expires: absoluteExpiresAt,
     }),
   );
+  // JavaScript must read the CSRF value to echo it in a custom header. The
+  // authentication credential remains separate and HttpOnly.
   appendSetCookie(
     headers,
     serializeCookie(CSRF_COOKIE_NAME, csrfToken, {
@@ -558,6 +577,9 @@ export function logSafe(
   random: SecureRandomBytes,
   code: AuthenticationInternalCode,
 ): void {
+  // Authentication logging is intentionally lossy. A random correlation ID and
+  // fixed code are enough to count failures without retaining tokens, claims,
+  // provider payloads, database messages, or user-controlled text.
   if (logger === undefined) {
     return;
   }

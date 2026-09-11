@@ -1,3 +1,10 @@
+/**
+ * Guards the command-only database tooling against accidental connections to a
+ * development, remote, or ambiguously configured database.
+ *
+ * These tests run without opening a socket. Their purpose is to prove that an
+ * unsafe URL or migration option is rejected before PostgreSQL can be touched.
+ */
 import { describe, expect, it } from 'vitest';
 
 import { migrateDatabase } from './migrate.js';

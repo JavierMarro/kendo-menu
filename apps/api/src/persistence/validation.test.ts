@@ -1,3 +1,10 @@
+/**
+ * Pure validation tests for values accepted by the persistence interface before
+ * any PostgreSQL operation is attempted.
+ *
+ * Boundary values are tested on both sides of each limit so future refactors do
+ * not accidentally widen accepted hashes, identifiers, timestamps, or PKCE data.
+ */
 import { describe, expect, it } from 'vitest';
 
 import { PersistenceError } from './contracts.js';

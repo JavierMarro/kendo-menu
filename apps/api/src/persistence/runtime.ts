@@ -1,3 +1,8 @@
+/**
+ * Owns the lazily initialized PostgreSQL adapter used by runtime requests.
+ * Concurrent first requests share one initialization promise; a failed attempt
+ * is evicted so a later request can recover after configuration or storage does.
+ */
 import type { Pool } from 'pg';
 
 import { PersistenceError, type KendoPersistence } from './contracts.js';
@@ -13,6 +18,9 @@ export function createRuntimePersistence(options: RuntimePersistenceOptions = {}
   let cached: Promise<PostgresPersistence> | undefined;
 
   async function initialize(): Promise<PostgresPersistence> {
+    // Read DATABASE_URL only when persistence is first requested. Importing the
+    // API remains side-effect free, and health/non-auth routes do not create a
+    // database pool merely because the process started.
     const connectionString = options.connectionString
       ? options.connectionString()
       : process.env['DATABASE_URL'];
@@ -39,6 +47,8 @@ export function createRuntimePersistence(options: RuntimePersistenceOptions = {}
   return {
     get: (): Promise<KendoPersistence> => {
       if (cached === undefined) {
+        // Cache the in-flight promise, not only the finished adapter, so a burst
+        // of first requests cannot create parallel pools in one process.
         cached = initialize().catch(() => {
           cached = undefined;
           throw new PersistenceError('UNAVAILABLE');
@@ -47,6 +57,8 @@ export function createRuntimePersistence(options: RuntimePersistenceOptions = {}
       return cached;
     },
     close: async (): Promise<void> => {
+      // Capture the exact pending instance so close cannot clear a newer cache
+      // value installed by a later lifecycle transition.
       const pending = cached;
       if (pending === undefined) return;
       try {

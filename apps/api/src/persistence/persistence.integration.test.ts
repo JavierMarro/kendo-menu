@@ -1,3 +1,12 @@
+/**
+ * Real-PostgreSQL verification of migrations, constraints, locking, concurrency,
+ * rollback, cleanup, and account isolation. Every run uses a disposable schema
+ * inside the explicitly guarded local `kendomenu_test` database.
+ *
+ * These cases complement the fast in-memory authentication tests: transaction
+ * interleavings and database constraints cannot be proved faithfully by mocks.
+ * Teardown removes the per-run schema even after a failing assertion.
+ */
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
