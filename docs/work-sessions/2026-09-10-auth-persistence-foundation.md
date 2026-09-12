@@ -1,0 +1,8 @@
+- Session: Authentication persistence foundation (Job 4A)
+- Date/duration: 2026-09-10; duration not recorded
+- Scope/start: Clean codex/account-sync-integration with Job 3 health scaffold; isolated local database work only.
+- Changes: Added typed pg/Drizzle persistence for Google-sub users, single-use login transactions, hash-only application sessions, reviewed migrations, isolated integration harness, and environment/operation guidance.
+- Decisions: Verified email updates only; bounded return paths and expiry-based cleanup; session durations/CSRF generation deferred to Job 4B; no HTTP authentication, frontend, provider, or deployment changes.
+- Roadblocks: pnpm runtime/store auto-repair disabled for checks; local sockets required sandbox approval; selected Kit has one moderate development-only esbuild serve advisory, recorded without changing approved versions.
+- Verification: Node 24.12.0 and PostgreSQL 17.11; persistence unit 12, real integration 30, check:api 47, check 343/build/types/lint/format, migration generation/check/replay passed; independent review completed and findings resolved.
+- Follow-up: Retain Job 4B, HTTPS/Google callbacks, Neon and database-backed Vercel lifecycle gates; no commit, push, merge, or deployment.

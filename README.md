@@ -11,16 +11,20 @@ account or server is required.
 - React, React Router, Vite, and TypeScript in `apps/web`
 - Zustand `persist` with an injected storage adapter in `packages/store`
 - Shared recursive training contracts and curated-data validation in `packages/domain`
+- Elysia local backend in `apps/api`, with separate Node and Vercel adapters (not deployed)
 - An uninitialized `apps/mobile` boundary reserved for explicitly requested future work
 
-Server APIs, accounts, remote sync, paid tiers, databases, and other remote infrastructure are not
-part of the current product scope.
+Optional accounts and synchronization are accepted product direction. The local backend implements
+Google OIDC and opaque application sessions using PostgreSQL. Real provider/HTTPS integration,
+production authentication, remote sync, and provider resources remain absent.
+See [the account design](docs/ACCOUNT_SYNC.md) for decision status and later gates.
 
 ## Workspace layout
 
 ```text
 apps/
   web/       React/Vite production SPA
+  api/       Elysia application and standalone Node entry
   mobile/    Reserved Expo boundary
 packages/
   domain/    Training contracts, validation, and curated-data adapter
@@ -30,11 +34,13 @@ packages/
 
 ## Development
 
-pnpm is the repository package manager. Common root commands are:
+Node 24 LTS is the declared runtime; pnpm is the repository package manager. Common root commands are:
 
 ```bash
 pnpm install
 pnpm dev
+pnpm dev:api
+pnpm check:api
 pnpm test:domain
 pnpm test:store
 pnpm test:web
@@ -60,6 +66,12 @@ Vite development server. `pnpm test:e2e:preview` rebuilds the app and runs the c
 browser suite against Vite's production preview. `pnpm test:e2e:pwa` remains the dedicated PWA
 artifact suite. The release gate, `pnpm verify:full`, runs `pnpm check`, the preview suite, and the
 PWA suite without rerunning the development-server suite.
+
+`pnpm dev:api` serves the standalone API on local port 3000. Authentication requires the server-only
+configuration documented in the account design; real browser login additionally needs HTTPS. The web development server
+remains separate and does not call it. API request tests cover the application and root Vercel
+adapter without opening a listener; combined Vercel discovery/routing still requires an authorized
+Preview verification. No environment file or credentials are required for the health scaffold.
 
 Curated drill content is authored in `packages/domain/data/default-drills.json`, validated against
 `packages/domain/schema/kendo-drills.schema.json`, and adapted by

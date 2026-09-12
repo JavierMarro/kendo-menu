@@ -127,9 +127,11 @@ dashboard, library, library details, custom-session creation, sources, and an ap
 `/cookies`, and a top-level not-found route. `/` redirects to `/app`; direct refreshes rely on the
 hosting fallback.
 
-The root [`vercel.json`](../vercel.json) runs `pnpm build`, serves `apps/web/dist`, and rewrites
-`/(.*)` to `/index.html`. Static files take precedence, so generated PWA assets remain addressable
-while client-side routes receive the SPA entry point.
+The root [`vercel.json`](../vercel.json) runs `pnpm build` and serves `apps/web/dist`. The Job 3
+checkout adds API dispatch before the existing SPA fallback to `/index.html`, retaining static
+file precedence. Combined Vercel function discovery and routing remain unverified; this configuration
+change has not been deployed. The existing production observations are recorded in the deployment
+runbook.
 
 [`vite.config.ts`](../apps/web/vite.config.ts) uses `vite-plugin-pwa` to generate the manifest and
 service worker. The manifest starts at `/app`, has `/` scope, and requests standalone display. The
@@ -143,10 +145,70 @@ no SPA route or custom-event analytics pipeline, and training plans, notes, and 
 intentionally sent to GoatCounter. Analytics availability is therefore separate from the local
 planning workflow.
 
-## Current non-goals
+## Current production exclusions
 
-There is no server, account system, remote sync, database, paid tier, API, or initialized mobile
-app. `apps/mobile` remains a reserved boundary and `packages/ui` remains reserved for genuinely
+There is no production server API, account system, remote sync, database, paid tier, or initialized
+mobile app. `apps/mobile` remains a reserved boundary and `packages/ui` remains reserved for genuinely
 shared platform-neutral UI.
 
 For the original recursive-model decision, see [ADR 0001](./adr/0001-recursive-training-activities.md).
+
+## Local API scaffold and accepted later architecture
+
+Optional accounts and synchronization are an approved product direction. There is no deployed
+account or synchronization behavior. The local backend authentication and persistence implementation
+below is separate from production behavior. The accepted decisions
+are [identity and application sessions](adr/0002-identity-application-sessions.md),
+[workspace separation and guest adoption](adr/0003-workspaces-guest-adoption.md), and
+[whole-dashboard synchronization](adr/0004-whole-dashboard-sync.md).
+
+The Job 3 local scaffold puts Elysia application behavior in `apps/api`, with separate standalone
+Node and minimal root Vercel function adapters. The `createApp({ authentication })` interface handles standard Requests
+without starting a listener. Job 4B adds Google start/callback and session GET/DELETE routes behind
+one injected authentication module; there is no frontend integration. Job 4A adds isolated PostgreSQL authentication persistence under `apps/api/src/persistence`,
+using Drizzle and pg for users, login transactions, and application sessions. Its intent-oriented
+interface hides schema, transactions, and driver errors. Job 4B runtime composition injects
+persistence lazily; only root Vercel composition imports its pool attachment helper. The concrete
+PostgreSQL adapter exposes its pool to runtime composition, never to authentication contracts. Explicit migration commands live under `apps/api/src/database`, with
+reviewed SQL and metadata under `apps/api/drizzle`. Database-independent unit tests and isolated
+real-PostgreSQL integration tests are separate commands. Node 24 is the declared target. See [ADR 0005](adr/0005-node-elysia-api-foundation.md).
+
+### Job 5A protected dashboard foundation
+
+The API now depends on the platform-neutral domain workspace for strict v10 dashboard wire
+validation. The [domain codec](../packages/domain/src/dashboard-persistence.ts) owns current wire
+DTOs; store aliases preserve its existing imports, migrations and local serialization behavior.
+Node-compatible relative imports and a JSON import attribute let the same domain source work in
+the API's NodeNext and the web's bundler configurations. Neither React nor Zustand enters the API.
+
+[Shared session authorization](../apps/api/src/auth/session-authorization.ts) now serves session
+GET, logout and injected protected application operations. It never touches session activity.
+Logout requires equal CSRF cookie/header credentials bound to the active session. Invalid sessions
+clear application cookies; Origin/CSRF rejection and indeterminate failures preserve them.
+
+The [dashboard application](../apps/api/src/dashboard/dashboard.ts) implements the Request/Response
+trust pipeline against an injected [protected persistence interface](../apps/api/src/persistence/dashboard-contracts.ts).
+Strict byte/JSON boundaries, canonical hashing and lossless v10 validation precede persistence.
+Current-catalogue compatibility remains separate so retained receipts can be checked first.
+**Dashboard routes remain unregistered, dashboard schema remains absent, and production runtime
+composition is unchanged.** Fake adapters demonstrate application outcomes only; database atomicity,
+revisions, receipt retention and activity guarantees remain Job 5B obligations. See the
+[stable foundation handoff](DASHBOARD_FOUNDATION.md) for contracts, policy and boundaries.
+
+In the later target, the web workspace module selects isolated guest/account
+stores; the synchronization module exchanges validated whole dashboards with the backend over a
+same-origin interface. Domain validation remains platform-neutral. Injected storage is still a
+local persistence seam, not a replacement for revision checks, acknowledgements, or retries.
+
+The [account and synchronization design](ACCOUNT_SYNC.md) distinguishes owner-approved decisions,
+accepted technology, unapproved behavior/operational recommendations, mandatory correctness/security
+requirements, and later implementation gates.
+The existing local JSON limit counts 2,097,152 JavaScript UTF-16 code units, not network bytes;
+cloud transport limits must be evaluated separately. No production routing or runtime compatibility
+is claimed from this proposed diagram:
+
+```text
+Browser workspace → local store/storage
+        └→ synchronization → same-origin /api/* → Vercel adapter → backend application → PostgreSQL
+                                                        local Node adapter ─┘
+```
