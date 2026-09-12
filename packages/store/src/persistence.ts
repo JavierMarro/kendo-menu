@@ -14,13 +14,19 @@ import {
   type DashboardEntry,
   type DashboardQuantityOverrides,
   type DrillCategory,
-  type CustomTrainingIntensity,
   type TrainingActivity,
   type TrainingQuantities,
   type TrainingQuantityOverrides,
   type TrainingQuantityUnit,
   type TrainingSet,
 } from '@kendo-menu/domain';
+import type {
+  PersistedCustomTrainingSet as DomainPersistedCustomTrainingSet,
+  PersistedDashboardEntryV10 as DomainPersistedDashboardEntryV10,
+  PersistedTrainingExercise as DomainPersistedTrainingExercise,
+  PersistedTrainingSection as DomainPersistedTrainingSection,
+  PersistedTrainingWireStateV10 as DomainPersistedTrainingWireStateV10,
+} from '@kendo-menu/domain/dashboard-persistence';
 import { type PersistStorage, type StateStorage, type StorageValue } from 'zustand/middleware';
 
 export const TRAINING_STORE_PERSISTENCE_VERSION = 10;
@@ -43,32 +49,10 @@ export interface PersistedTrainingStateV10 {
   readonly dashboardEntries: readonly DashboardEntry[];
 }
 
-/** The v5-v9 storage DTO retained for the on-disk two-level sections/exercises shape. */
-export interface PersistedTrainingExercise {
-  readonly id: string;
-  readonly name: string;
-  readonly quantities?: TrainingQuantities;
-  readonly notes?: string;
-}
-
-export interface PersistedTrainingSection {
-  readonly id: string;
-  readonly name: string;
-  readonly quantities?: TrainingQuantities;
-  readonly notes?: string;
-  readonly exercises: readonly PersistedTrainingExercise[];
-}
-
-export interface PersistedCustomTrainingSet {
-  readonly id: string;
-  readonly sourceId?: never;
-  readonly name: string;
-  readonly description?: string;
-  readonly category: 'custom';
-  readonly customIntensity?: CustomTrainingIntensity;
-  readonly sections: readonly PersistedTrainingSection[];
-  readonly isBuiltIn: false;
-}
+/** Compatibility aliases for the domain-owned two-level wire DTO. */
+export type PersistedTrainingExercise = DomainPersistedTrainingExercise;
+export type PersistedTrainingSection = DomainPersistedTrainingSection;
+export type PersistedCustomTrainingSet = DomainPersistedCustomTrainingSet;
 
 export interface PersistedTrainingWireState {
   readonly dashboardEntries: readonly DashboardEntry[];
@@ -79,19 +63,8 @@ export interface PersistedTrainingWireState {
 export type PersistedTrainingWireStateV9 = PersistedTrainingWireState;
 
 /** Current embedded custom snapshot wire shape. */
-export interface PersistedDashboardEntryV10 {
-  readonly id: string;
-  readonly trainingSetId: TrainingSet['id'];
-  readonly trainingSet?: PersistedCustomTrainingSet;
-  readonly quantityOverrides: DashboardQuantityOverrides;
-  readonly activityNotes: DashboardActivityNotes;
-  readonly notes: string;
-  readonly createdAt: string;
-}
-
-export interface PersistedTrainingWireStateV10 {
-  readonly dashboardEntries: readonly PersistedDashboardEntryV10[];
-}
+export type PersistedDashboardEntryV10 = DomainPersistedDashboardEntryV10;
+export type PersistedTrainingWireStateV10 = DomainPersistedTrainingWireStateV10;
 
 /** Dashboard entries as persisted by versions 5 through 8, before activity notes existed. */
 export interface PersistedDashboardEntryV8 {

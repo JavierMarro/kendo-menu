@@ -3,6 +3,8 @@
 Documentation baseline: 2026-09-11. **No production authentication or synchronization exists.**
 Job 4B connects local Google OIDC and opaque-session HTTP behavior to Job 4A PostgreSQL persistence;
 real Google, Neon, HTTPS-browser, and Vercel integration remain unverified.
+Job 5A adds an unregistered protected dashboard application foundation and shared authorization;
+it does not add dashboard SQL persistence or reachable dashboard endpoints.
 The owner separately authorized the Job 3 local API scaffold and accepted the stack below.
 This does not authorize provider provisioning, credentials, production configuration, or deployment.
 
@@ -44,6 +46,10 @@ operational recommendations remain unapproved until the jobs that implement them
   it reappears after logout.
 - Signed-in dashboards use local-first, whole-dashboard synchronization. Cloud writes use optimistic
   revisions and never silently apply last-write-wins.
+- Job 5A accepts a complete cloud-write limit of 2,097,152 UTF-8 bytes, including metadata,
+  whitespace and JSON escapes. Locally valid Unicode-heavy dashboards may exceed that limit.
+  Retain at most 1,024 successful-write receipts per account; seven days is cleanup eligibility,
+  not a hard replay deadline. Check retained IDs before cleanup; only new successful writes clean up.
 - No realtime connections, CRDTs, automatic field merging, collaboration, paid tiers, or public sharing.
 
 See accepted ADRs [0002](adr/0002-identity-application-sessions.md),
@@ -156,7 +162,6 @@ isolated Job 3 health scaffold. Every row below remains a recommendation.
 | Conflict interaction         | Pause uploads; explicit choice of local or cloud whole dashboard, with export/preservation before discarding the losing local copy                              | More visible friction, but no silent loss or field merging.                                                                                                                    |
 | Account cache/offline access | Retain account-scoped data hidden on logout; reopen only after reauthentication; an already-open account workspace remains editable offline with uploads paused | Supports continuity but retains readable data on a shared browser; a fresh uncached device cannot load cloud data offline.                                                     |
 | Logout/account switching     | Preserve pending account-scoped edits, stop uploads, hide account data, and reveal the guest workspace; disclose unsynchronized work                            | Prioritizes local work retention over clearing all account data on logout. Offline logout remains locally immediate, with revocation completed before later authenticated use. |
-| Cloud payload budget         | Maximum 2 MiB UTF-8 for the complete request envelope; reject whole requests over it                                                                            | Some currently valid guest dashboards may not be eligible; owner acceptance is required before narrowing cloud eligibility.                                                    |
 | Region                       | Colocate API and database in an EU region offered by both providers                                                                                             | Reduces regional latency and unnecessary transfers, but does not establish legal jurisdiction or compliance.                                                                   |
 | Operating owner and cost     | Repository owner operates it; start a non-production evaluation on available free allocations with no automatic paid upgrade                                    | Keeps a personal project proportionate; free quotas and durability may not meet production recovery needs. Approve a numeric spending ceiling before provisioning.             |
 | Recovery and retention       | Keep the current cloud dashboard; daily recoverable database backup, seven-day backup retention, 24-hour recovery-point and 48-hour recovery-time targets       | No user-facing historical versions; provider plan capabilities and cost must be checked rather than promised.                                                                  |
@@ -164,7 +169,7 @@ isolated Job 3 health scaffold. Every row below remains a recommendation.
 | Encryption                   | TLS and provider-managed encryption at rest, without application end-to-end encryption                                                                          | Simpler recovery and validation; the provider/operator may access stored data.                                                                                                 |
 
 The local serializer limits `.length` to 2,097,152 UTF-16 code units and permits 128 dashboard
-entries. This is not a 2 MiB network-byte guarantee: Unicode JSON can exceed the proposed byte budget
+entries. This is not a 2 MiB network-byte guarantee: Unicode JSON can exceed the accepted byte budget
 and [Vercel's 4.5 MB request/response limit](https://vercel.com/docs/functions/limitations).
 Measure actual UTF-8 bytes including metadata. Never truncate, upload a subset, or remove the guest
 workspace to fit. If the owner requires every locally valid dashboard to be adoptable, the byte cap
@@ -481,6 +486,27 @@ Apply an external request-rate limit to the public Google start route before pro
 make it reachable; bounded expired-row cleanup limits retention but is deliberately not a burst-rate
 control.
 
+## Job 5A — protected dashboard application foundation
+
+The [foundation handoff](DASHBOARD_FOUNDATION.md) records the established transport types, strict
+codec, canonical representation, HTTP outcomes and protected persistence obligations. The API
+consumes a domain workspace dependency, with no new third-party package. Historical store
+migrations and the local character ceiling remain unchanged. The complete request envelope is
+byte-bounded after authorization, decoded as strict UTF-8 and lexically checked before JSON.parse.
+Canonicalization preserves unpaired surrogates as escapes before UTF-8 hashing.
+
+Session GET and logout now use shared read/write authorization. Logout additionally requires the
+CSRF cookie to equal the header, with both bound to the authenticated session. No authorization
+read or retained-replay application path touches activity. The handler passes a server-established
+proof and validated immutable intent to injected persistence; catalogue checks for new writes remain
+separate from structural validation so the later adapter can recover retained acknowledgements.
+
+`/api/dashboard` remains JSON 404 in the production application and runtime adapters. No dashboard
+schema, migration `0001`, PostgreSQL dashboard adapter, or runtime composition is included. Job 5B
+requires the owner-committed, independently reviewed Job 5A state. Fake-persistence tests establish
+HTTP behavior, not database transaction/revision/receipt guarantees. Local authentication database
+tests retain their existing isolated-schema harness; no production migration is run.
+
 ## 3. Remaining gates for later jobs
 
 ### Owner decisions
@@ -490,8 +516,8 @@ Confirm or revise the remaining recommendations before their implementation:
 - [x] Elysia/Neon/Drizzle/Google library selection, Node 24 alignment, and same-project hosting
       accepted in Job 3; later libraries are not installed or implemented by the health scaffold.
 - [ ] Local HTTPS tooling before real browser/provider integration; Fluid Compute lifecycle remains unverified.
-- [ ] Guest eligibility (including returning empty accounts), cloud byte limits, and consequences
-      for locally valid but oversized guest data; preserve the approved blocking Yes/No interaction.
+- [x] Cloud byte limit and consequences for locally valid oversized dashboards accepted in Job 5A.
+- [ ] Guest eligibility (including returning empty accounts); preserve the approved blocking Yes/No interaction.
 - [ ] Conflict interaction, synchronization triggers, offline account access, cache retention,
       unsynchronized logout, and account-switch behavior.
 - [x] Application-session lifetime and verified-email metadata policy accepted in Job 4A.

@@ -96,7 +96,11 @@ function harness() {
 }
 
 function logoutRequest(origin: string | null, csrf: string | null): Request {
-  const headers = new Headers({ cookie: SESSION_COOKIE });
+  const cookies = [SESSION_COOKIE];
+  if (csrf !== null && csrf.length <= 512) {
+    cookies.push(`__Host-kendomenu-csrf=${csrf}`);
+  }
+  const headers = new Headers({ cookie: cookies.join('; ') });
   if (origin !== null) headers.set('origin', origin);
   if (csrf !== null) headers.set('X-CSRF-Token', csrf);
   return new Request(`${ORIGIN}/api/session`, { method: 'DELETE', headers });
@@ -203,21 +207,25 @@ describe('Request authentication rejection matrix', () => {
     `${ORIGIN}, https://evil.test`,
     'https://user@app.example.test',
     'x'.repeat(2_049),
-  ])('rejects missing or deceptive Origin before persistence', async (origin) => {
+  ])('rejects missing or deceptive Origin without mutation', async (origin) => {
     const h = harness();
     const response = await h.authentication.logout(logoutRequest(origin, CSRF));
     await assertFixed(response, 403, 'FORBIDDEN');
-    expect(h.provider).not.toHaveBeenCalled();
+    expect(h.provider).toHaveBeenCalledOnce();
+    expect(h.lookup).toHaveBeenCalledOnce();
+    expect(h.revoke).not.toHaveBeenCalled();
     expect(response.headers.getSetCookie()).toEqual([]);
   });
 
   it.each([null, '', 'malformed', `${CSRF}=`, `${CSRF},${CSRF}`, 'x'.repeat(513)])(
-    'rejects missing or malformed CSRF before persistence',
+    'rejects missing or malformed CSRF without mutation',
     async (csrf) => {
       const h = harness();
       const response = await h.authentication.logout(logoutRequest(ORIGIN, csrf));
       await assertFixed(response, 403, 'FORBIDDEN');
-      expect(h.provider).not.toHaveBeenCalled();
+      expect(h.provider).toHaveBeenCalledOnce();
+      expect(h.lookup).toHaveBeenCalledOnce();
+      expect(h.revoke).not.toHaveBeenCalled();
       expect(response.headers.getSetCookie()).toEqual([]);
     },
   );

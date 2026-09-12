@@ -377,14 +377,45 @@ export interface ParsedCookies {
   readonly csrf: string | undefined;
 }
 
-export function parseCookies(request: Request): ParsedCookies {
+export interface SessionAuthorizationCookies {
+  readonly session: string | undefined;
+  readonly csrf: string | undefined;
+  /** Duplicate or overlong CSRF cookies cannot be used for a write proof. */
+  readonly csrfAmbiguous: boolean;
+}
+
+function readCookieHeader(request: Request): string | null {
   const raw = request.headers.get('cookie');
   if (raw === null) {
-    return { login: undefined, session: undefined, csrf: undefined };
+    return null;
   }
 
   if (raw.length > MAX_COOKIE_HEADER_LENGTH || hasControlCharacters(raw)) {
     throw new InvalidAuthenticationInput();
+  }
+
+  return raw;
+}
+
+function readCookiePair(pair: string): { readonly name: string; readonly value: string } {
+  const separator = pair.indexOf('=');
+  if (separator <= 0) {
+    throw new InvalidAuthenticationInput();
+  }
+
+  const name = pair.slice(0, separator).trim();
+  const value = pair.slice(separator + 1).trim();
+  if (name.length === 0) {
+    throw new InvalidAuthenticationInput();
+  }
+
+  return { name, value };
+}
+
+export function parseCookies(request: Request): ParsedCookies {
+  const raw = readCookieHeader(request);
+  if (raw === null) {
+    return { login: undefined, session: undefined, csrf: undefined };
   }
 
   let login: string | undefined;
@@ -392,14 +423,8 @@ export function parseCookies(request: Request): ParsedCookies {
   let csrf: string | undefined;
   const pairs = raw.split(';');
   for (const pair of pairs) {
-    const separator = pair.indexOf('=');
-    if (separator <= 0) {
-      throw new InvalidAuthenticationInput();
-    }
-
-    const name = pair.slice(0, separator).trim();
-    const value = pair.slice(separator + 1).trim();
-    if (name.length === 0 || value.length > MAX_COOKIE_VALUE_LENGTH) {
+    const { name, value } = readCookiePair(pair);
+    if (value.length > MAX_COOKIE_VALUE_LENGTH) {
       throw new InvalidAuthenticationInput();
     }
 
@@ -424,6 +449,51 @@ export function parseCookies(request: Request): ParsedCookies {
   }
 
   return { login, session, csrf };
+}
+
+/**
+ * Parse only the credentials used by protected application operations. A
+ * duplicate or overlong CSRF cookie is retained as an ambiguity marker so a
+ * valid session can still authenticate reads while writes fail with FORBIDDEN.
+ * Session-cookie ambiguity remains an invalid session and throws immediately.
+ * Login and unrelated cookies are ignored after the whole-header safety check.
+ */
+export function parseSessionAuthorizationCookies(request: Request): SessionAuthorizationCookies {
+  const raw = readCookieHeader(request);
+  if (raw === null) {
+    return { session: undefined, csrf: undefined, csrfAmbiguous: false };
+  }
+
+  let session: string | undefined;
+  let csrf: string | undefined;
+  let csrfAmbiguous = false;
+  for (const pair of raw.split(';')) {
+    const separator = pair.indexOf('=');
+    const name = (separator < 0 ? pair : pair.slice(0, separator)).trim();
+    // Recognize malformed protected names with trailing whitespace-separated
+    // material, but never reinterpret unrelated names/values as credentials.
+    const credentialName = name.split(/\s/u, 1)[0];
+    if (credentialName !== SESSION_COOKIE_NAME && credentialName !== CSRF_COOKIE_NAME) {
+      continue;
+    }
+
+    const malformed = separator < 0 || name !== credentialName;
+    const value = separator < 0 ? '' : pair.slice(separator + 1).trim();
+    if (credentialName === SESSION_COOKIE_NAME) {
+      if (malformed || value.length > MAX_COOKIE_VALUE_LENGTH || session !== undefined) {
+        throw new InvalidAuthenticationInput();
+      }
+      session = value;
+    } else {
+      if (malformed || value.length > MAX_COOKIE_VALUE_LENGTH || csrf !== undefined) {
+        csrfAmbiguous = true;
+      } else {
+        csrf = value;
+      }
+    }
+  }
+
+  return { session, csrf, csrfAmbiguous };
 }
 
 export interface CookieAttributes {

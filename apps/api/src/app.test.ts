@@ -12,6 +12,8 @@ afterEach(() => vi.restoreAllMocks());
 afterEach(() => vi.unstubAllEnvs());
 
 const composedApp = new Elysia({ adapter: WebStandardAdapter }).use(createApp());
+const TEST_SESSION = Buffer.alloc(32, 1).toString('base64url');
+const TEST_CSRF = Buffer.alloc(32, 2).toString('base64url');
 
 const handlers = {
   composed: (request: Request) => composedApp.handle(request),
@@ -54,7 +56,17 @@ for (const [name, handle] of Object.entries(handlers)) {
       ]) {
         vi.stubEnv(variable, undefined);
       }
-      const response = await handle(new Request(`https://app.example.test${path}`, { method }));
+      const response = await handle(
+        new Request(`https://app.example.test${path}`, {
+          method,
+          headers: {
+            cookie: `__Host-kendomenu-session=${TEST_SESSION}; __Host-kendomenu-csrf=${TEST_CSRF}`,
+            ...(method === 'DELETE'
+              ? { origin: 'https://app.example.test', 'x-csrf-token': TEST_CSRF }
+              : {}),
+          },
+        }),
+      );
       expect(response.status).toBe(503);
       expect(response.headers.get('cache-control')).toBe('private, no-store');
       await expect(response.json()).resolves.toEqual({ error: 'AUTH_UNAVAILABLE' });
@@ -111,6 +123,8 @@ for (const [name, handle] of Object.entries(handlers)) {
     it.each([
       ['/api', 'GET'],
       ['/api/', 'GET'],
+      ['/api/dashboard', 'GET'],
+      ['/api/dashboard', 'PUT'],
       ['/api/unknown/nested?probe=1', 'GET'],
       ['/api/health', 'POST'],
       ['/api/health', 'PUT'],

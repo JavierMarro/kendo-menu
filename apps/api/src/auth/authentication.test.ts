@@ -546,7 +546,7 @@ describe('authentication application module', () => {
         method: 'DELETE',
         headers: {
           origin: APP_ORIGIN,
-          cookie: cookieHeader([SESSION_COOKIE_NAME, session]),
+          cookie: cookieHeader([SESSION_COOKIE_NAME, session], [CSRF_COOKIE_NAME, csrf]),
           'x-csrf-token': csrf,
         },
       }),
@@ -579,7 +579,7 @@ describe('authentication application module', () => {
         method: 'DELETE',
         headers: {
           origin: 'https://evil.example.test',
-          cookie: cookieHeader([SESSION_COOKIE_NAME, session]),
+          cookie: cookieHeader([SESSION_COOKIE_NAME, session], [CSRF_COOKIE_NAME, csrf]),
           'x-csrf-token': csrf,
         },
       }),
@@ -590,7 +590,10 @@ describe('authentication application module', () => {
         method: 'DELETE',
         headers: {
           origin: APP_ORIGIN,
-          cookie: cookieHeader([SESSION_COOKIE_NAME, session]),
+          cookie: cookieHeader(
+            [SESSION_COOKIE_NAME, session],
+            [CSRF_COOKIE_NAME, Buffer.alloc(32, 8).toString('base64url')],
+          ),
           'x-csrf-token': Buffer.alloc(32, 8).toString('base64url'),
         },
       }),

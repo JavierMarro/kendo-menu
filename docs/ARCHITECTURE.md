@@ -165,13 +165,35 @@ are [identity and application sessions](adr/0002-identity-application-sessions.m
 The Job 3 local scaffold puts Elysia application behavior in `apps/api`, with separate standalone
 Node and minimal root Vercel function adapters. The `createApp({ authentication })` interface handles standard Requests
 without starting a listener. Job 4B adds Google start/callback and session GET/DELETE routes behind
-one injected authentication module; there is no frontend integration or domain/store dependency. Job 4A adds isolated PostgreSQL authentication persistence under `apps/api/src/persistence`,
+one injected authentication module; there is no frontend integration. Job 4A adds isolated PostgreSQL authentication persistence under `apps/api/src/persistence`,
 using Drizzle and pg for users, login transactions, and application sessions. Its intent-oriented
 interface hides schema, transactions, and driver errors. Job 4B runtime composition injects
 persistence lazily; only root Vercel composition imports its pool attachment helper. The concrete
 PostgreSQL adapter exposes its pool to runtime composition, never to authentication contracts. Explicit migration commands live under `apps/api/src/database`, with
 reviewed SQL and metadata under `apps/api/drizzle`. Database-independent unit tests and isolated
 real-PostgreSQL integration tests are separate commands. Node 24 is the declared target. See [ADR 0005](adr/0005-node-elysia-api-foundation.md).
+
+### Job 5A protected dashboard foundation
+
+The API now depends on the platform-neutral domain workspace for strict v10 dashboard wire
+validation. The [domain codec](../packages/domain/src/dashboard-persistence.ts) owns current wire
+DTOs; store aliases preserve its existing imports, migrations and local serialization behavior.
+Node-compatible relative imports and a JSON import attribute let the same domain source work in
+the API's NodeNext and the web's bundler configurations. Neither React nor Zustand enters the API.
+
+[Shared session authorization](../apps/api/src/auth/session-authorization.ts) now serves session
+GET, logout and injected protected application operations. It never touches session activity.
+Logout requires equal CSRF cookie/header credentials bound to the active session. Invalid sessions
+clear application cookies; Origin/CSRF rejection and indeterminate failures preserve them.
+
+The [dashboard application](../apps/api/src/dashboard/dashboard.ts) implements the Request/Response
+trust pipeline against an injected [protected persistence interface](../apps/api/src/persistence/dashboard-contracts.ts).
+Strict byte/JSON boundaries, canonical hashing and lossless v10 validation precede persistence.
+Current-catalogue compatibility remains separate so retained receipts can be checked first.
+**Dashboard routes remain unregistered, dashboard schema remains absent, and production runtime
+composition is unchanged.** Fake adapters demonstrate application outcomes only; database atomicity,
+revisions, receipt retention and activity guarantees remain Job 5B obligations. See the
+[stable foundation handoff](DASHBOARD_FOUNDATION.md) for contracts, policy and boundaries.
 
 In the later target, the web workspace module selects isolated guest/account
 stores; the synchronization module exchanges validated whole dashboards with the backend over a

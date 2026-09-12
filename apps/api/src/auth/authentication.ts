@@ -43,13 +43,11 @@ import {
   uniqueQueryParameter,
   validateBase64UrlToken,
   validateCallbackCode,
-  validateCsrfHeader,
   validateGoogleConfiguration,
   validateProviderError,
   validateRequestMethod,
   validateReturnPathParameter,
   validateStoredReturnPath,
-  validateAppOrigin,
 } from './security.js';
 import {
   AUTHENTICATION_ERROR_CODES,
@@ -61,9 +59,11 @@ import {
   type AuthenticationInternalCode,
   type GoogleOperationConfiguration,
 } from './contracts.js';
+import {
+  createSessionAuthorization,
+  sessionAuthorizationFailureResponse,
+} from './session-authorization.js';
 
-const JSON_STATUS_UNAUTHENTICATED = 401;
-const JSON_STATUS_FORBIDDEN = 403;
 const JSON_STATUS_UNAVAILABLE = 503;
 const JSON_STATUS_INVALID_REQUEST = 400;
 const JSON_STATUS_ACCOUNT_SWITCH = 409;
@@ -91,16 +91,6 @@ async function resolveGoogleConfiguration(
 ): Promise<GoogleOperationConfiguration> {
   try {
     return validateGoogleConfiguration(await getter());
-  } catch {
-    throw new AuthenticationUnavailable();
-  }
-}
-
-async function resolveAppOrigin(
-  getter: AuthenticationDependencies['getAppOrigin'],
-): Promise<string> {
-  try {
-    return validateAppOrigin({ appOrigin: await getter() });
   } catch {
     throw new AuthenticationUnavailable();
   }
@@ -134,16 +124,6 @@ function callbackSuccessResponse(
   setSessionCookies(headers, sessionToken, csrfToken, now, absoluteExpiresAt);
   clearLoginCookie(headers);
   return makeEmptyResponse(303, headers);
-}
-
-function clearInvalidSessionResponse(): Response {
-  const headers = makeResponseHeaders();
-  clearSessionCookies(headers);
-  return makeJsonResponse(
-    JSON_STATUS_UNAUTHENTICATED,
-    AUTHENTICATION_ERROR_CODES.unauthenticated,
-    headers,
-  );
 }
 
 // Internal exceptions are reduced to a small allow-list before logging. Raw
@@ -227,7 +207,7 @@ function handleSessionError(
 ): Response {
   logFailure(dependencies, random, error);
   if (error instanceof InvalidAuthenticationInput) {
-    return clearInvalidSessionResponse();
+    return sessionAuthorizationFailureResponse('UNAUTHENTICATED');
   }
   return publicErrorResponse(JSON_STATUS_UNAVAILABLE, AUTHENTICATION_ERROR_CODES.unavailable);
 }
@@ -239,7 +219,7 @@ function handleLogoutError(
 ): Response {
   logFailure(dependencies, random, error);
   if (error instanceof InvalidAuthenticationInput) {
-    return clearInvalidSessionResponse();
+    return sessionAuthorizationFailureResponse('UNAUTHENTICATED');
   }
   return publicErrorResponse(JSON_STATUS_UNAVAILABLE, AUTHENTICATION_ERROR_CODES.unavailable);
 }
@@ -303,18 +283,14 @@ function validateIdentity(identity: unknown): {
   }
 }
 
-function readSessionToken(cookies: ReturnType<typeof parseCookies>): string | undefined {
-  if (cookies.session === undefined) {
-    return undefined;
-  }
-  return validateBase64UrlToken(cookies.session);
-}
-
 function readOptionalPredecessorToken(
   cookies: ReturnType<typeof parseCookies>,
 ): string | undefined {
   try {
-    return readSessionToken(cookies);
+    if (cookies.session === undefined) {
+      return undefined;
+    }
+    return validateBase64UrlToken(cookies.session);
   } catch (error) {
     if (error instanceof InvalidAuthenticationInput) {
       // A stale or malformed predecessor must not prevent a fresh, otherwise
@@ -325,32 +301,9 @@ function readOptionalPredecessorToken(
   }
 }
 
-function exactOrigin(request: Request, appOrigin: string): boolean {
-  const origin = request.headers.get('origin');
-  return (
-    origin !== null &&
-    origin.length > 0 &&
-    origin.length <= 2_048 &&
-    !hasControlCharacters(origin) &&
-    origin === appOrigin
-  );
-}
-
 function validateAuthenticationRequestOrigin(url: URL, appOrigin: string): void {
   if (url.origin !== appOrigin) {
     throw new AuthenticationUnavailable();
-  }
-}
-
-function readCsrfHeader(request: Request): string | undefined {
-  const value = request.headers.get('x-csrf-token');
-  if (value === null || value.length > 512) {
-    return undefined;
-  }
-  try {
-    return validateCsrfHeader(value);
-  } catch {
-    return undefined;
   }
 }
 
@@ -368,6 +321,15 @@ function sessionDeadlines(now: Date): {
 export function createAuthentication(dependencies: AuthenticationDependencies): Authentication {
   const clock = dependencies.clock ?? defaultClock;
   const random = dependencies.randomBytes ?? defaultSecureRandomBytes;
+  const getPersistence = (): Promise<KendoPersistence> =>
+    resolvePersistence(dependencies.persistence);
+  const sessionAuthorization = createSessionAuthorization({
+    persistence: getPersistence,
+    getAppOrigin: dependencies.getAppOrigin,
+    clock,
+    randomBytes: random,
+    ...(dependencies.logger === undefined ? {} : { logger: dependencies.logger }),
+  });
 
   return {
     // Begin a browser-bound, single-use login transaction. State and nonce bind
@@ -380,7 +342,7 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
         const returnPath = validateReturnPathParameter(url.searchParams);
         const config = await resolveGoogleConfiguration(dependencies.getGoogleConfiguration);
         validateAuthenticationRequestOrigin(url, config.appOrigin);
-        const persistence = await resolvePersistence(dependencies.persistence);
+        const persistence = await getPersistence();
         const now = readClock(clock);
         await persistence.loginTransactions.cleanupExpired({ at: now });
         const state = generateOpaqueValue(random);
@@ -441,7 +403,7 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
 
         const config = await resolveGoogleConfiguration(dependencies.getGoogleConfiguration);
         validateAuthenticationRequestOrigin(url, config.appOrigin);
-        const persistence = await resolvePersistence(dependencies.persistence);
+        const persistence = await getPersistence();
         const state = stateParameter;
         if (state === undefined) {
           throw new InvalidAuthenticationInput();
@@ -589,22 +551,13 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
           }
           throw error;
         }
-        const cookies = parseCookies(request);
-        const sessionToken = readSessionToken(cookies);
-        const persistence = await resolvePersistence(dependencies.persistence);
-        if (sessionToken === undefined) {
-          throw new InvalidAuthenticationInput();
+        const authorization = await sessionAuthorization.authorizeRead(request);
+        if (authorization.status === 'rejected') {
+          return authorization.response;
         }
-        const now = readClock(clock);
-        const session = await persistence.sessions.findActiveByTokenHash({
-          sessionTokenHash: sha256(sessionToken),
-          at: now,
-        });
-        if (session === null) {
-          throw new InvalidAuthenticationInput();
-        }
-        const user = await persistence.users.findPublicById(session.userId);
-        if (user === null || user.id !== session.userId) {
+        const persistence = await getPersistence();
+        const user = await persistence.users.findPublicById(authorization.proof.userId);
+        if (user === null || user.id !== authorization.proof.userId) {
           throw new InvalidAuthenticationInput();
         }
         const headers = makeResponseHeaders();
@@ -619,7 +572,7 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
       } catch (error) {
         if (error instanceof InvalidAuthenticationInput) {
           logFailure(dependencies, random, error);
-          return clearInvalidSessionResponse();
+          return sessionAuthorizationFailureResponse('UNAUTHENTICATED');
         }
         return handleSessionError(dependencies, random, error);
       }
@@ -633,74 +586,16 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
       try {
         validateRequestMethod(request, 'DELETE');
         parseRequestUrl(request);
-        const cookies = parseCookies(request);
-        const appOrigin = await resolveAppOrigin(dependencies.getAppOrigin);
-        const originMatches = exactOrigin(request, appOrigin);
-        if (!originMatches) {
-          const headers = makeResponseHeaders();
-          return makeJsonResponse(
-            JSON_STATUS_FORBIDDEN,
-            AUTHENTICATION_ERROR_CODES.forbidden,
-            headers,
-          );
-        }
-        if (cookies.csrf !== undefined) {
-          try {
-            validateBase64UrlToken(cookies.csrf);
-          } catch {
-            const headers = makeResponseHeaders();
-            return makeJsonResponse(
-              JSON_STATUS_FORBIDDEN,
-              AUTHENTICATION_ERROR_CODES.forbidden,
-              headers,
-            );
-          }
-        }
-        const sessionToken = readSessionToken(cookies);
-        const csrfHeader = readCsrfHeader(request);
-        if (sessionToken === undefined) {
-          throw new InvalidAuthenticationInput();
-        }
-        if (csrfHeader === undefined) {
-          const headers = makeResponseHeaders();
-          return makeJsonResponse(
-            JSON_STATUS_FORBIDDEN,
-            AUTHENTICATION_ERROR_CODES.forbidden,
-            headers,
-          );
+        const authorization = await sessionAuthorization.authorizeWrite(request);
+        if (authorization.status === 'rejected') {
+          return authorization.response;
         }
 
-        const persistence = await resolvePersistence(dependencies.persistence);
+        const persistence = await getPersistence();
         const now = readClock(clock);
-        const sessionHash = sha256(sessionToken);
-        const csrfHash = sha256(csrfHeader);
-        // The first lookup distinguishes an invalid application session from a
-        // valid session carrying a wrong CSRF proof. The second lookup binds that
-        // proof to this exact session before allowing revocation.
-        const activeSession = await persistence.sessions.findActiveByTokenHash({
-          sessionTokenHash: sessionHash,
-          at: now,
-        });
-        if (activeSession === null) {
-          throw new InvalidAuthenticationInput();
-        }
-        const matchedSession = await persistence.sessions.findActiveByTokenHash({
-          sessionTokenHash: sessionHash,
-          csrfTokenHash: csrfHash,
-          at: now,
-        });
-        if (matchedSession === null) {
-          const headers = makeResponseHeaders();
-          return makeJsonResponse(
-            JSON_STATUS_FORBIDDEN,
-            AUTHENTICATION_ERROR_CODES.forbidden,
-            headers,
-          );
-        }
-
         const revoked = await persistence.sessions.revoke({
-          sessionId: matchedSession.id,
-          userId: matchedSession.userId,
+          sessionId: authorization.proof.sessionId,
+          userId: authorization.proof.userId,
           at: now,
         });
         if (!revoked) {
@@ -712,7 +607,7 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
       } catch (error) {
         if (error instanceof InvalidAuthenticationInput) {
           logFailure(dependencies, random, error);
-          return clearInvalidSessionResponse();
+          return sessionAuthorizationFailureResponse('UNAUTHENTICATED');
         }
         return handleLogoutError(dependencies, random, error);
       }

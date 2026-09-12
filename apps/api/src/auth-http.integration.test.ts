@@ -496,12 +496,58 @@ describe('real PostgreSQL HTTP authentication integration', () => {
       googleSub: 'csrf-account-b',
       verifiedGoogleEmail: 'b@example.test',
     });
-    const crossAccount = await current.nodeApp.handle(
+    const missingCsrf = await current.app.handle(
       new Request(`${APP_ORIGIN}/api/session`, {
         method: 'DELETE',
         headers: {
           origin: APP_ORIGIN,
           cookie: cookieHeader([SESSION_COOKIE_NAME, first.cookies.session]),
+          'x-csrf-token': first.cookies.csrf,
+        },
+      }),
+    );
+    expect(missingCsrf.status).toBe(403);
+    expect(hasSetCookie(missingCsrf, SESSION_COOKIE_NAME)).toBe(false);
+    expect(hasSetCookie(missingCsrf, CSRF_COOKIE_NAME)).toBe(false);
+    const firstSessionHash = createHash('sha256')
+      .update(first.cookies.session, 'utf8')
+      .digest('hex');
+    const afterMissingCsrf = await storedSessionRows();
+    expect(
+      afterMissingCsrf.find((row) => row.session_token_hash === firstSessionHash)?.revoked_at,
+    ).toBeNull();
+
+    const duplicateCsrf = await current.app.handle(
+      new Request(`${APP_ORIGIN}/api/session`, {
+        method: 'DELETE',
+        headers: {
+          origin: APP_ORIGIN,
+          cookie: cookieHeader(
+            [SESSION_COOKIE_NAME, first.cookies.session],
+            [CSRF_COOKIE_NAME, first.cookies.csrf],
+            [CSRF_COOKIE_NAME, first.cookies.csrf],
+          ),
+          'x-csrf-token': first.cookies.csrf,
+        },
+      }),
+    );
+    expect(duplicateCsrf.status).toBe(403);
+    expect(hasSetCookie(duplicateCsrf, SESSION_COOKIE_NAME)).toBe(false);
+    expect(hasSetCookie(duplicateCsrf, CSRF_COOKIE_NAME)).toBe(false);
+    const afterDuplicateCsrf = await storedSessionRows();
+    expect(
+      afterDuplicateCsrf.find((row) => row.session_token_hash === firstSessionHash)?.revoked_at,
+    ).toBeNull();
+
+    const crossAccount = await current.nodeApp.handle(
+      new Request(`${APP_ORIGIN}/api/session`, {
+        method: 'DELETE',
+        headers: {
+          origin: APP_ORIGIN,
+          cookie: cookieHeader(
+            [SESSION_COOKIE_NAME, first.cookies.session],
+            [CSRF_COOKIE_NAME, second.cookies.csrf],
+          ),
           'x-csrf-token': second.cookies.csrf,
         },
       }),
@@ -515,7 +561,10 @@ describe('real PostgreSQL HTTP authentication integration', () => {
         method: 'DELETE',
         headers: {
           origin: APP_ORIGIN,
-          cookie: cookieHeader([SESSION_COOKIE_NAME, second.cookies.session]),
+          cookie: cookieHeader(
+            [SESSION_COOKIE_NAME, second.cookies.session],
+            [CSRF_COOKIE_NAME, second.cookies.csrf],
+          ),
           'x-csrf-token': second.cookies.csrf,
         },
       }),
@@ -544,7 +593,10 @@ describe('real PostgreSQL HTTP authentication integration', () => {
         method: 'DELETE',
         headers: {
           origin: APP_ORIGIN,
-          cookie: cookieHeader([SESSION_COOKIE_NAME, first.cookies.session]),
+          cookie: cookieHeader(
+            [SESSION_COOKIE_NAME, first.cookies.session],
+            [CSRF_COOKIE_NAME, first.cookies.csrf],
+          ),
           'x-csrf-token': first.cookies.csrf,
         },
       }),
@@ -683,7 +735,10 @@ describe('real PostgreSQL HTTP authentication integration', () => {
         method: 'DELETE',
         headers: {
           origin: APP_ORIGIN,
-          cookie: cookieHeader([SESSION_COOKIE_NAME, signedIn.cookies.session]),
+          cookie: cookieHeader(
+            [SESSION_COOKIE_NAME, signedIn.cookies.session],
+            [CSRF_COOKIE_NAME, signedIn.cookies.csrf],
+          ),
           'x-csrf-token': signedIn.cookies.csrf,
         },
       }),
