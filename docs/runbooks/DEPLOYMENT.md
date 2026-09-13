@@ -11,16 +11,16 @@ The checked-in settings are the source of truth for the build:
 | Setting                  | Declared value                                      | Source                                    |
 | ------------------------ | --------------------------------------------------- | ----------------------------------------- |
 | Package manager          | `pnpm@11.22.0` (`packageManager`)                   | [`package.json`](../../package.json)      |
-| Node requirement         | `>=20.19.0` (`engines.node`)                        | [`package.json`](../../package.json)      |
+| Node requirement         | `24.x` (`engines.node`)                             | [`package.json`](../../package.json)      |
 | Checked-in Vercel config | Repository root: [`vercel.json`](../../vercel.json) | [`vercel.json`](../../vercel.json)        |
 | Build command            | `pnpm build`                                        | [`vercel.json`](../../vercel.json)        |
 | Build implementation     | `pnpm --filter @kendo-menu/web build`               | root [`package.json`](../../package.json) |
 | Output directory         | `apps/web/dist`                                     | [`vercel.json`](../../vercel.json)        |
-| SPA rewrite              | `/(.*)` → `/index.html`                             | [`vercel.json`](../../vercel.json)        |
+| SPA rewrite              | Non-API paths → `/index.html`                       | [`vercel.json`](../../vercel.json)        |
 
-The root lockfile is `pnpm-lock.yaml`; no alternate package manager or lockfile is declared. No
-`installCommand`, framework override, function, API, or provider-specific environment value is
-checked into `vercel.json`. Vercel documents package-manager detection and the `packageManager`
+The root lockfile is `pnpm-lock.yaml`; no alternate package manager or lockfile is declared. The Job 3 checkout adds a root API function and API dispatch ahead of the SPA fallback; this is
+not a deployed or verified combined Vercel artifact. No `installCommand`, framework override, or
+provider-specific environment value is checked into `vercel.json`. Vercel documents package-manager detection and the `packageManager`
 field in its [Package Managers guide](https://vercel.com/docs/package-managers), build/output and
 root-directory settings in [Configuring a Build](https://vercel.com/docs/builds/configure-a-build),
 and the SPA pattern in [Rewrites on Vercel](https://vercel.com/docs/routing/rewrites).

@@ -1,4 +1,4 @@
-import defaultDrillsSource from '../data/default-drills.json';
+import defaultDrillsSource from '../data/default-drills.json' with { type: 'json' };
 
 import {
   RESEARCHED_ACTIVITY_COUNT,
@@ -20,7 +20,7 @@ import {
   type TrainingQuantityUnit,
   type TrainingQuantityUnits,
   type TrainingSet,
-} from './types';
+} from './types.js';
 
 type BuiltInDrillCategory = Extract<DrillCategory, 'intense-drill' | 'high-intensity-drill'>;
 
