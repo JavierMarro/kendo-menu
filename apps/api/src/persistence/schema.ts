@@ -1,7 +1,7 @@
 /**
- * Drizzle schema for internal users, one-time Google login transactions, and
- * opaque application sessions. Database checks repeat critical application
- * invariants so malformed direct SQL is rejected when it violates those checks.
+ * Drizzle schema for identity, opaque sessions, dashboard snapshots, and write receipts.
+ * Application validation remains the first boundary; database constraints repeat critical
+ * invariants so malformed direct SQL or a future adapter cannot persist unsafe state.
  */
 import { sql } from 'drizzle-orm';
 import {

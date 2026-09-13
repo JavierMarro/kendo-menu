@@ -1,3 +1,8 @@
+/**
+ * Bounded JSON transport parsing for complete-dashboard writes.
+ * Header preflight avoids acquiring rejected bodies, while fatal UTF-8 decoding and a strict
+ * lexical scan reject ambiguous JSON before ordinary JSON.parse creates application values.
+ */
 import { MAX_DASHBOARD_REQUEST_BYTES } from './contracts.js';
 
 /** Public transport failures produced before dashboard schema validation. */
@@ -312,6 +317,8 @@ function validateJsonNumber(lexical: string): void {
   }
 }
 
+// JSON.parse accepts duplicate object keys and rounds some numeric spellings.
+// This scanner rejects those ambiguous forms and caps nesting before parsing.
 class StrictJsonScanner {
   readonly #text: string;
   #index = 0;

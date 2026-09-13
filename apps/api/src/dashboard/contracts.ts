@@ -1,3 +1,8 @@
+/**
+ * Wire-level dashboard identifiers, messages, and resource limits shared by HTTP and SQL.
+ * Validated strings are branded to keep untrusted input out of trusted call sites; revisions
+ * remain decimal strings so JavaScript never narrows PostgreSQL bigint values.
+ */
 import type { PersistedTrainingWireStateV10 } from '@kendo-menu/domain/dashboard-persistence';
 
 declare const accountWorkspaceIdBrand: unique symbol;
@@ -52,7 +57,7 @@ export interface DashboardWriteAcknowledgement {
   readonly updatedAt: Timestamp;
 }
 
-/** Application-level limits; receipt policies are obligations for the later SQL adapter. */
+/** Shared transport/storage bounds; persistence enforces the receipt policies atomically. */
 export const MAX_DASHBOARD_REQUEST_BYTES = 2_097_152;
 export const MAX_DASHBOARD_RECEIPTS_PER_ACCOUNT = 1_024;
 export const DASHBOARD_RECEIPT_CLEANUP_AGE_MS = 7 * 24 * 60 * 60 * 1_000;

@@ -1,3 +1,8 @@
+/**
+ * Converts parsed dashboard JSON into immutable, branded application values.
+ * Structural validation is deliberately separate from current-catalogue compatibility so
+ * persistence can recover an older retained acknowledgement before applying today's catalogue.
+ */
 import { DEFAULT_TRAINING_SETS, type TrainingSet } from '@kendo-menu/domain';
 import {
   isDashboardCatalogueCompatible,
@@ -255,6 +260,8 @@ export function validateDashboardAcknowledgement(
   value: unknown,
   intent: ValidatedDashboardWrite,
 ): DashboardWriteAcknowledgement | null {
+  // A persistence adapter is not trusted to construct the public response. The
+  // acknowledgement must prove it belongs to this exact optimistic write.
   try {
     if (
       !isRecord(value) ||

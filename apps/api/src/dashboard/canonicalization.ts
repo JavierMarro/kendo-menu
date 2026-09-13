@@ -1,3 +1,8 @@
+/**
+ * Deterministic strict-JSON serialization for dashboard storage and idempotency hashes.
+ * Only plain data is accepted: accessors, sparse arrays, non-finite numbers, and exotic
+ * prototypes fail closed instead of producing environment-dependent representations.
+ */
 import { createHash } from 'node:crypto';
 
 /** Error raised when a value cannot be represented as strict JSON. */
@@ -96,6 +101,8 @@ function canonicalizeValue(value: unknown): string {
     return canonicalizeNumber(value);
   }
   if (Array.isArray(value)) {
+    // Array holes and extra named properties are rejected because JSON.stringify
+    // would silently normalize or omit them, making two different inputs hash alike.
     try {
       if (Object.getPrototypeOf(value) !== Array.prototype) {
         throw canonicalizationError();
@@ -121,6 +128,8 @@ function canonicalizeValue(value: unknown): string {
     }
   }
   if (typeof value === 'object') {
+    // Sorting plain-object keys makes the same logical dashboard produce one byte
+    // sequence regardless of property insertion order.
     try {
       if (!isPlainObject(value)) {
         throw canonicalizationError();

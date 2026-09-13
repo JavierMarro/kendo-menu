@@ -1,9 +1,9 @@
 /**
- * PostgreSQL adapter for the small authentication-persistence interface.
+ * PostgreSQL composition adapter for authentication and protected dashboards.
  *
  * It validates every caller input, owns a bounded pool, maps driver failures to
- * fixed application errors, and concentrates locking/transaction rules here so
- * authentication callers do not need to understand SQL or connection lifecycle.
+ * fixed application errors, and shares one pool plus checked-out-client transaction runner.
+ * Feature adapters own their SQL without duplicating connection or commit semantics.
  */
 import { asc, and, eq, gt, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';

@@ -1,3 +1,8 @@
+/**
+ * Protected dashboard request orchestration independent of Elysia and PostgreSQL.
+ * It rejects methods and headers before expensive work, authorizes before reading a PUT body,
+ * and validates both inbound requests and persistence results before they cross the HTTP boundary.
+ */
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -58,9 +63,9 @@ function failure(outcome: DashboardPersistenceFailure): Response {
 }
 
 /**
- * Unregistered Request/Response application foundation. Job 5B can register this same handle
- * for GET/PUT/HEAD and other methods; PUT MUST use Elysia parse: 'none'. No runtime provider,
- * database implementation, session touch, or production route is installed by this module.
+ * Build the transport-neutral handler around injected authorization, persistence, and catalogue
+ * seams. Its HTTP adapter must leave PUT parsing disabled so this handler retains byte-limit and
+ * authorization-before-body control.
  */
 export function createDashboard(dependencies: DashboardDependencies): Dashboard {
   const catalogue = dependencies.catalogue ?? createDashboardCatalogue();
@@ -115,6 +120,8 @@ export function createDashboard(dependencies: DashboardDependencies): Dashboard 
         return sessionAuthorizationFailureResponse('AUTH_UNAVAILABLE');
 
       if (request.method === 'GET') {
+        // Reads are validated again against the current catalogue before stored
+        // content is exposed, so corrupt or obsolete database rows fail closed.
         try {
           const persistence =
             typeof dependencies.persistence === 'function'
@@ -130,6 +137,8 @@ export function createDashboard(dependencies: DashboardDependencies): Dashboard 
       }
 
       let value: unknown;
+      // No body reader is acquired until authorization succeeds. Random callers
+      // therefore cannot force the application to buffer a two-megabyte payload.
       try {
         value = await readDashboardRequestBody(request);
       } catch (error) {
@@ -158,6 +167,8 @@ export function createDashboard(dependencies: DashboardDependencies): Dashboard 
         switch (outcome.status) {
           case 'written':
           case 'replayed': {
+            // Treat adapter acknowledgements as untrusted output: they must bind
+            // to this account, request ID, and exactly the expected next revision.
             const acknowledgement = validateDashboardAcknowledgement(
               outcome.acknowledgement,
               validation.intent,

@@ -1,3 +1,8 @@
+/**
+ * Persistence port between dashboard HTTP orchestration and durable storage.
+ * Its outcome union keeps storage failures sanitized, while the interface records the ordering,
+ * isolation, and idempotency guarantees every concrete adapter must preserve.
+ */
 import type { SessionAuthorizationProof } from '../auth/session-authorization.js';
 import type {
   DashboardReadResponse,
@@ -27,8 +32,6 @@ export type DashboardWriteOutcome =
   | DashboardPersistenceFailure;
 
 /**
- * Protected application seam, intentionally unimplemented in Job 5A.
- *
  * Every operation must revalidate the server-established proof against the active session.
  * The proof's user is authoritative; the request workspace is only a mismatch guard.
  * Reads, failures and retained retries must not touch activity, cookies or receipts.
@@ -42,7 +45,7 @@ export type DashboardWriteOutcome =
  * commit dashboard + receipt + cleanup + final session touch. Only successful new writes remove
  * receipts aged >= seven days and then evict oldest revisions to the 1,024/account cap. Expiry,
  * revocation, revision exhaustion and ambiguous commits fail closed; never retry writes here.
- * The SQL implementation and its locking/failure-injection evidence belong exclusively to Job 5B.
+ * Concrete adapters must prove these guarantees with their own locking and failure-injection tests.
  */
 export interface DashboardPersistence {
   read(proof: SessionAuthorizationProof): Promise<DashboardReadOutcome>;

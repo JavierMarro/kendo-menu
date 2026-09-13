@@ -83,6 +83,8 @@ export interface SessionAuthorization {
 async function resolvePersistence(
   provider: AuthenticationPersistenceProvider,
 ): Promise<KendoPersistence> {
+  // Providers may be lazy so imports and public health checks remain database-free.
+  // Provider failures are collapsed here before any protected route can expose details.
   try {
     const persistence = typeof provider === 'function' ? await provider() : provider;
     if (typeof persistence !== 'object' || persistence === null) {
@@ -179,6 +181,9 @@ function readOwnProperty(value: object, property: string): unknown {
 }
 
 function isActiveSession(value: unknown, at: Date): value is SessionRecord {
+  // Persistence results are treated as untrusted at this boundary. Reading own
+  // data properties avoids invoking accessors while the ordering checks prevent
+  // malformed timestamps from being mistaken for an active session.
   if (typeof value !== 'object' || value === null) {
     return false;
   }

@@ -29,7 +29,11 @@ export interface SessionTouchQuery {
 
 export type SessionRow = typeof applicationSessions.$inferSelect;
 
-/** Update activity monotonically, never revive a revoked/expired session. */
+/**
+ * Update activity monotonically without reviving a revoked or expired session.
+ * Dashboard writes call this with their checked-out transaction client, so a failed touch rolls
+ * back the dashboard and receipt rather than committing data under an invalid session.
+ */
 export async function touchSessionInDatabase(
   database: PersistenceDatabase,
   input: SessionTouchQuery,

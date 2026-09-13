@@ -1,3 +1,8 @@
+/**
+ * Listener-free Elysia route table shared by the Vercel and standalone Node adapters.
+ * Runtime services are composed lazily by default, while tests can inject service boundaries;
+ * every API response is private and dashboard PUT parsing remains owned by its bounded handler.
+ */
 import { Elysia } from 'elysia';
 import { WebStandardAdapter } from 'elysia/adapter/web-standard';
 
@@ -17,10 +22,7 @@ function methodNotAllowed(allow: string): Response {
   });
 }
 
-/**
- * Build the HTTP application without binding a port or reading runtime state.
- * Runtime adapters compose this application with their own transport wiring.
- */
+/** Optional service overrides for isolated Request/Response and listener tests. */
 export interface AppOptions {
   readonly authentication?: Authentication;
   readonly dashboard?: Dashboard;
@@ -31,6 +33,8 @@ export const createApp = (options: AppOptions = {}) => {
     options.authentication !== undefined && options.dashboard !== undefined
       ? { authentication: options.authentication, dashboard: options.dashboard }
       : { ...createRuntimeServices(), ...options };
+  // This route table is the single ordering point shared by both runtime adapters.
+  // Dashboard PUT opts out of framework parsing so its bounded handler sees the raw body.
   return new Elysia({ adapter: WebStandardAdapter })
     .onRequest(({ request, set }) => {
       set.headers['cache-control'] = CACHE_CONTROL;

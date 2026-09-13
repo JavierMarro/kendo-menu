@@ -384,6 +384,7 @@ export interface SessionAuthorizationCookies {
   readonly csrfAmbiguous: boolean;
 }
 
+/** Bound the shared Cookie header once before either purpose-specific parser examines it. */
 function readCookieHeader(request: Request): string | null {
   const raw = request.headers.get('cookie');
   if (raw === null) {

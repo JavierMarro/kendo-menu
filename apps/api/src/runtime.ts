@@ -1,3 +1,8 @@
+/**
+ * Production service composition for Google authentication and protected dashboards.
+ * Both services close over one lazy persistence provider, preserving one pool and one account
+ * model without opening sockets or reading configuration during module import.
+ */
 import { createAuthentication } from './auth/authentication.js';
 import { readAppOrigin, readGoogleConfiguration } from './auth/configuration.js';
 import { createGoogleAuthenticationAdapter } from './auth/google.js';
@@ -25,5 +30,7 @@ export function createRuntimeServices(options: RuntimePersistenceOptions = {}) {
 }
 
 export function createRuntimeAuthentication(options: RuntimePersistenceOptions = {}) {
+  // Retained for callers that need only the authentication service; construction
+  // is still side-effect free because persistence remains lazy.
   return createRuntimeServices(options).authentication;
 }

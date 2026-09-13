@@ -145,6 +145,9 @@ function dashboardRevision(value: bigint): Revision {
 }
 
 function storedDashboardSnapshot(value: string): DashboardSnapshot {
+  // Canonical text is an integrity boundary as well as a storage format. Parsing,
+  // domain validation, and byte-for-byte re-canonicalization detect malformed or
+  // non-canonical rows without rewriting potentially recoverable data.
   if (Buffer.byteLength(value, 'utf8') > MAX_DASHBOARD_REQUEST_BYTES) {
     throw new PersistenceError('FAILED');
   }
@@ -425,7 +428,7 @@ export function createPostgresDashboardPersistence(
       let validatedIntent: ValidatedDashboardWrite;
       try {
         values = dashboardProofValues(proof, true);
-        // ValidatedDashboardWrite is the Job 5A strict codec boundary. Consume
+        // ValidatedDashboardWrite is the strict transport-codec boundary. Consume
         // its canonical fields directly; SQL does not reimplement that codec.
         validatedIntent = intent;
       } catch (error) {

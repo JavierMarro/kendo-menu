@@ -321,6 +321,9 @@ function sessionDeadlines(now: Date): {
 export function createAuthentication(dependencies: AuthenticationDependencies): Authentication {
   const clock = dependencies.clock ?? defaultClock;
   const random = dependencies.randomBytes ?? defaultSecureRandomBytes;
+  // Session inspection and logout deliberately reuse the same authorization
+  // service as other protected routes. This keeps cookie parsing, CSRF checks,
+  // and active-session semantics from drifting between account endpoints.
   const getPersistence = (): Promise<KendoPersistence> =>
     resolvePersistence(dependencies.persistence);
   const sessionAuthorization = createSessionAuthorization({

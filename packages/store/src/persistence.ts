@@ -1,3 +1,8 @@
+/**
+ * Versioned, bounded persistence boundary for the local-first Zustand dashboard store.
+ * Every stored value is treated as untrusted and must pass its historical parser/migration chain;
+ * the current v10 wire DTO is shared with the domain cloud codec to prevent format drift.
+ */
 import {
   DEFAULT_TRAINING_SETS,
   asTrainingSetId,

@@ -1,3 +1,8 @@
+/**
+ * Platform-neutral v10 dashboard codec shared by browser storage and the cloud API.
+ * Parsing establishes strict bounded structure without silently repairing data; catalogue checks
+ * stay separate so idempotent retries can be resolved before today's built-ins are consulted.
+ */
 import { DEFAULT_TRAINING_SETS } from './default-training-sets.js';
 import {
   asTrainingSetId,
@@ -86,6 +91,8 @@ const CUSTOM_SET_PROPERTIES = new Set([
 const SECTION_PROPERTIES = new Set(['id', 'name', 'quantities', 'notes', 'exercises']);
 const EXERCISE_PROPERTIES = new Set(['id', 'name', 'quantities', 'notes']);
 
+// Exact property allow-lists prevent a newer or attacker-controlled payload from
+// being accepted after unknown fields have been silently discarded.
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
@@ -558,6 +565,9 @@ function encodeCustomTrainingSet(value: unknown): PersistedCustomTrainingSet {
 }
 
 function areValuesStructurallyEqual(left: unknown, right: unknown): boolean {
+  // Built-in snapshots are allowed only when they are byte-meaningfully equivalent
+  // to the canonical catalogue value; accepting merely matching IDs would let a
+  // client smuggle altered built-in content into a supposedly immutable reference.
   if (Object.is(left, right)) {
     return true;
   }
