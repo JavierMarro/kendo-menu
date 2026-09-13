@@ -190,10 +190,31 @@ The [dashboard application](../apps/api/src/dashboard/dashboard.ts) implements t
 trust pipeline against an injected [protected persistence interface](../apps/api/src/persistence/dashboard-contracts.ts).
 Strict byte/JSON boundaries, canonical hashing and lossless v10 validation precede persistence.
 Current-catalogue compatibility remains separate so retained receipts can be checked first.
-**Dashboard routes remain unregistered, dashboard schema remains absent, and production runtime
-composition is unchanged.** Fake adapters demonstrate application outcomes only; database atomicity,
-revisions, receipt retention and activity guarantees remain Job 5B obligations. See the
+Job 5A left dashboard routes unregistered and dashboard schema absent. Job 5B consumes those
+committed contracts directly; its local implementation is described below. See the
 [stable foundation handoff](DASHBOARD_FOUNDATION.md) for contracts, policy and boundaries.
+
+### Job 5B local PostgreSQL dashboard integration
+
+`GET /api/dashboard` and `PUT /api/dashboard` now delegate to the existing application handler.
+Explicit HEAD and unsupported-method handlers reject without authorization or body consumption;
+PUT disables Elysia automatic parsing. `createRuntimeServices()` composes authentication and
+dashboard authorization/persistence around one lazy provider. The root function attaches that
+provider's pool once, and the Node adapter retains repeated Set-Cookie headers. Imports and health
+remain independent of database configuration/connectivity.
+
+The focused [dashboard adapter](../apps/api/src/persistence/postgres/dashboard-adapter.ts) stores
+canonical snapshot text in `cloud_dashboards` and bounded acknowledgement history in
+`dashboard_write_receipts`. Migration `0001_dashboard_persistence` extends the preserved Job 4A
+migration. A write locks/revalidates the session, then locks its internal user before inspecting
+receipts or revisions. New dashboard content, its receipt, receipt cleanup and final session
+activity commit together. Retained identical requests return the original acknowledgement without
+activity or cleanup; uncertain commit outcomes return a fixed unavailable response and require
+the unchanged request ID for recovery. There is no server-side write retry or reset operation.
+
+These are local backend changes, with no frontend account/sync integration or production migration.
+See [Job 5B evidence and migration guidance](DASHBOARD_PERSISTENCE.md) for verification and the
+remaining Google/HTTPS/Neon/Vercel/Fluid Compute gates.
 
 In the later target, the web workspace module selects isolated guest/account
 stores; the synchronization module exchanges validated whole dashboards with the backend over a

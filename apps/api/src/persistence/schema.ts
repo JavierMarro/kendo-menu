@@ -4,7 +4,19 @@
  * invariants so malformed direct SQL is rejected when it violates those checks.
  */
 import { sql } from 'drizzle-orm';
-import { check, index, pgTable, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  check,
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
 
 const SHA256_HEX_CHECK = sql`~ '^[0-9a-f]{64}$'`;
 
@@ -149,3 +161,93 @@ export const applicationSessions = pgTable(
     ),
   ],
 );
+
+// A dashboard is one complete canonical v10 snapshot per account. The payload is
+// deliberately text rather than json/jsonb: jsonb conversion rejects escaped NULs
+// and unpaired UTF-16 surrogates, and this boundary performs no SQL JSON conversion.
+// The byte check mirrors the HTTP envelope limit and bounds database storage even
+// when a future caller bypasses the application parser.
+export const cloudDashboards = pgTable(
+  'cloud_dashboards',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    revision: bigint('revision', { mode: 'bigint' }).notNull(),
+    transportVersion: integer('transport_version').notNull(),
+    catalogueDigest: varchar('catalogue_digest', { length: 64 }).notNull(),
+    dashboardJson: text('dashboard_json').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('cloud_dashboards_revision_positive', sql`(${table.revision} > 0)`),
+    check('cloud_dashboards_transport_version', sql`(${table.transportVersion} = 1)`),
+    check(
+      'cloud_dashboards_catalogue_digest_format',
+      sql`(${table.catalogueDigest} ~ '^[0-9a-f]{64}$')`,
+    ),
+    check(
+      'cloud_dashboards_dashboard_json_bytes',
+      sql`(octet_length(${table.dashboardJson}) <= 2097152)`,
+    ),
+    check(
+      'cloud_dashboards_finite_timestamps',
+      sql`(isfinite(${table.createdAt}) AND isfinite(${table.updatedAt}))`,
+    ),
+    check('cloud_dashboards_timestamp_order', sql`(${table.updatedAt} >= ${table.createdAt})`),
+  ],
+);
+
+// Receipts are bounded idempotency history. The composite key scopes a request
+// identifier to its account, while the revision uniqueness prevents two retained
+// acknowledgements from claiming the same account revision.
+export const dashboardWriteReceipts = pgTable(
+  'dashboard_write_receipts',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    requestId: uuid('request_id').notNull(),
+    requestDigest: varchar('request_digest', { length: 64 }).notNull(),
+    acknowledgedRevision: bigint('acknowledged_revision', { mode: 'bigint' }).notNull(),
+    acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.requestId], name: 'dashboard_write_receipts_pk' }),
+    uniqueIndex('dashboard_write_receipts_user_revision_key').on(
+      table.userId,
+      table.acknowledgedRevision,
+    ),
+    check(
+      'dashboard_write_receipts_request_digest_format',
+      sql`(${table.requestDigest} ~ '^[0-9a-f]{64}$')`,
+    ),
+    check(
+      'dashboard_write_receipts_request_id_format',
+      sql`(${table.requestId}::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')`,
+    ),
+    check('dashboard_write_receipts_revision_positive', sql`(${table.acknowledgedRevision} > 0)`),
+    check(
+      'dashboard_write_receipts_finite_timestamps',
+      sql`(isfinite(${table.acknowledgedAt}) AND isfinite(${table.createdAt}))`,
+    ),
+    check(
+      'dashboard_write_receipts_timestamp_order',
+      sql`(${table.acknowledgedAt} >= ${table.createdAt})`,
+    ),
+  ],
+);
+
+/** One schema object is shared by every Drizzle database bound to a checked-out client. */
+export const persistenceSchema = {
+  applicationSessions,
+  cloudDashboards,
+  dashboardWriteReceipts,
+  loginTransactions,
+  users,
+};

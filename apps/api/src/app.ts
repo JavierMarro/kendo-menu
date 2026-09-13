@@ -2,7 +2,8 @@ import { Elysia } from 'elysia';
 import { WebStandardAdapter } from 'elysia/adapter/web-standard';
 
 import type { Authentication } from './auth/contracts.js';
-import { createRuntimeAuthentication } from './runtime.js';
+import type { Dashboard } from './dashboard/dashboard.js';
+import { createRuntimeServices } from './runtime.js';
 
 const CACHE_CONTROL = 'private, no-store';
 
@@ -22,10 +23,14 @@ function methodNotAllowed(allow: string): Response {
  */
 export interface AppOptions {
   readonly authentication?: Authentication;
+  readonly dashboard?: Dashboard;
 }
 
 export const createApp = (options: AppOptions = {}) => {
-  const authentication = options.authentication ?? createRuntimeAuthentication();
+  const { authentication, dashboard } =
+    options.authentication !== undefined && options.dashboard !== undefined
+      ? { authentication: options.authentication, dashboard: options.dashboard }
+      : { ...createRuntimeServices(), ...options };
   return new Elysia({ adapter: WebStandardAdapter })
     .onRequest(({ request, set }) => {
       set.headers['cache-control'] = CACHE_CONTROL;
@@ -58,7 +63,11 @@ export const createApp = (options: AppOptions = {}) => {
     .head('/api/auth/google/callback', () => methodNotAllowed('GET'))
     .get('/api/session', ({ request }) => authentication.getSession(request))
     .head('/api/session', () => methodNotAllowed('GET, DELETE'))
-    .delete('/api/session', ({ request }) => authentication.logout(request));
+    .delete('/api/session', ({ request }) => authentication.logout(request))
+    .get('/api/dashboard', ({ request }) => dashboard.handle(request))
+    .put('/api/dashboard', ({ request }) => dashboard.handle(request), { parse: 'none' })
+    .head('/api/dashboard', ({ request }) => dashboard.handle(request))
+    .all('/api/dashboard', ({ request }) => dashboard.handle(request), { parse: 'none' });
 };
 
 export type App = ReturnType<typeof createApp>;

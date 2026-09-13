@@ -5,7 +5,7 @@
  */
 import type { Pool } from 'pg';
 
-import { PersistenceError, type KendoPersistence } from './contracts.js';
+import { PersistenceError } from './contracts.js';
 import { createPostgresPersistence, type PostgresPersistence } from './postgres/adapter.js';
 
 export interface RuntimePersistenceOptions {
@@ -45,7 +45,7 @@ export function createRuntimePersistence(options: RuntimePersistenceOptions = {}
   }
 
   return {
-    get: (): Promise<KendoPersistence> => {
+    get: (): Promise<PostgresPersistence> => {
       if (cached === undefined) {
         // Cache the in-flight promise, not only the finished adapter, so a burst
         // of first requests cannot create parallel pools in one process.

@@ -6,7 +6,7 @@
  * authentication callers do not need to understand SQL or connection lifecycle.
  */
 import { asc, and, eq, gt, inArray, isNull, lte, sql } from 'drizzle-orm';
-import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 
 import {
@@ -42,11 +42,16 @@ import {
   validateVerifiedGoogleEmail,
   validateClock,
 } from '../validation.js';
-import { applicationSessions, loginTransactions, users } from '../schema.js';
+import { applicationSessions, loginTransactions, persistenceSchema, users } from '../schema.js';
+import { createPostgresDashboardPersistence } from './dashboard-adapter.js';
+import type { PersistenceDatabase, PersistenceTransactionOptions } from './session-sql.js';
+import { touchSessionInDatabase } from './session-sql.js';
 
 export interface PostgresPersistence extends KendoPersistence {
   /** Concrete runtime composition only; never exposed through KendoPersistence. */
   readonly pool: pg.Pool;
+  /** Protected dashboard persistence backed by this adapter's same pool. */
+  readonly dashboards: ReturnType<typeof createPostgresDashboardPersistence>;
   /** Close the module's pool at a process or test lifecycle boundary. */
   close(): Promise<void>;
 }
@@ -62,12 +67,8 @@ const DEFAULT_CLEANUP_LIMIT = 100;
 const POOL_MAX_CONNECTIONS = 5;
 const POOL_IDLE_TIMEOUT_MS = 5_000;
 const POOL_CONNECTION_TIMEOUT_MS = 5_000;
-
-const schema = {
-  applicationSessions,
-  loginTransactions,
-  users,
-};
+const DASHBOARD_LOCK_TIMEOUT = '5s';
+const DASHBOARD_STATEMENT_TIMEOUT = '15s';
 
 type UserRow = typeof users.$inferSelect;
 type LoginTransactionRow = typeof loginTransactions.$inferSelect;
@@ -325,27 +326,42 @@ export function createPostgresPersistence(
     throw new PersistenceError('INVALID_INPUT');
   }
 
-  const database: NodePgDatabase<typeof schema> = drizzle({ client: pool, schema });
+  const database: PersistenceDatabase = drizzle({ client: pool, schema: persistenceSchema });
   const runTransaction = async <T>(
-    callback: (transaction: NodePgDatabase<typeof schema>) => Promise<T>,
+    callback: (transaction: PersistenceDatabase) => Promise<T>,
+    options: PersistenceTransactionOptions = {},
   ): Promise<T> => {
     const client = await pool.connect();
     let destroyClient = false;
+    let commitAttempted = false;
     try {
       await client.query('BEGIN');
-      const transactionDatabase: NodePgDatabase<typeof schema> = drizzle({
+      await client.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+      if (options.dashboardWrite === true) {
+        await client.query(`SET LOCAL lock_timeout = '${DASHBOARD_LOCK_TIMEOUT}'`);
+        await client.query(`SET LOCAL statement_timeout = '${DASHBOARD_STATEMENT_TIMEOUT}'`);
+      }
+      const transactionDatabase: PersistenceDatabase = drizzle({
         client,
-        schema,
+        schema: persistenceSchema,
       });
       const result = await callback(transactionDatabase);
+      // Once COMMIT is sent, a connection failure leaves the outcome
+      // indeterminate. Do not issue ROLLBACK in that state or return the client
+      // to the pool; callers receive a fixed unavailable result.
+      commitAttempted = true;
       await client.query('COMMIT');
       return result;
     } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch {
-        // A client with uncertain transaction state must not return to the pool.
+      if (commitAttempted) {
         destroyClient = true;
+      } else {
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          // A client with uncertain transaction state must not return to the pool.
+          destroyClient = true;
+        }
       }
       throw error;
     } finally {
@@ -353,6 +369,11 @@ export function createPostgresPersistence(
     }
   };
   let closePromise: Promise<void> | undefined;
+  const dashboards = createPostgresDashboardPersistence({
+    database,
+    clock,
+    runTransaction,
+  });
 
   const implementation: KendoPersistence = {
     users: {
@@ -683,28 +704,15 @@ export function createPostgresPersistence(
             throw new PersistenceError('INVALID_INPUT');
           }
 
-          // Out-of-order requests may finish late. GREATEST prevents time moving
-          // backwards, while LEAST prevents idle activity exceeding the absolute
-          // deadline; expired or revoked sessions cannot be revived.
-          const rows = await database
-            .update(applicationSessions)
-            .set({
-              lastActivityAt: sql`GREATEST(${applicationSessions.lastActivityAt}, ${at})`,
-              idleExpiresAt: sql`CASE WHEN ${at} >= ${applicationSessions.lastActivityAt} THEN LEAST(GREATEST(${applicationSessions.idleExpiresAt}, ${idleExpiresAt}), ${applicationSessions.absoluteExpiresAt}) ELSE ${applicationSessions.idleExpiresAt} END`,
-            })
-            .where(
-              and(
-                eq(applicationSessions.id, sessionId),
-                eq(applicationSessions.userId, userId),
-                isNull(applicationSessions.revokedAt),
-                lte(applicationSessions.createdAt, at),
-                gt(applicationSessions.idleExpiresAt, at),
-                gt(applicationSessions.absoluteExpiresAt, at),
-              ),
-            )
-            .returning();
-          const row = rows[0];
-          return row === undefined ? null : mapSession(row);
+          // Out-of-order requests may finish late. The shared helper uses
+          // GREATEST/LEAST to keep activity monotonic and cap idle expiry.
+          const row = await touchSessionInDatabase(database, {
+            sessionId,
+            userId,
+            at,
+            idleExpiresAt,
+          });
+          return row === null ? null : mapSession(row);
         }),
       revoke: (input: SessionRevocationInput) =>
         safeOperation(async () => {
@@ -729,6 +737,7 @@ export function createPostgresPersistence(
 
   return {
     ...implementation,
+    dashboards,
     pool,
     close: () => {
       // Share one close promise across repeated lifecycle signals. Pool shutdown

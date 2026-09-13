@@ -501,11 +501,24 @@ read or retained-replay application path touches activity. The handler passes a 
 proof and validated immutable intent to injected persistence; catalogue checks for new writes remain
 separate from structural validation so the later adapter can recover retained acknowledgements.
 
-`/api/dashboard` remains JSON 404 in the production application and runtime adapters. No dashboard
-schema, migration `0001`, PostgreSQL dashboard adapter, or runtime composition is included. Job 5B
-requires the owner-committed, independently reviewed Job 5A state. Fake-persistence tests establish
-HTTP behavior, not database transaction/revision/receipt guarantees. Local authentication database
-tests retain their existing isolated-schema harness; no production migration is run.
+Job 5A left `/api/dashboard` unregistered and dashboard SQL absent. Its reviewed owner commit is
+`07dbace0c557c32ae54cc68c77688d31ec65ed5c`. Fake-persistence tests establish HTTP behavior,
+not database transaction/revision/receipt guarantees.
+
+## Job 5B — local PostgreSQL dashboards and routes
+
+The local API now registers the established GET/PUT handler, explicit HEAD/method rejection and
+disabled automatic PUT parsing. Authentication and dashboards share one lazy persistence provider
+and pool attachment hook. Migration `0001_dashboard_persistence` adds per-user canonical text
+snapshots and bounded write receipts, preserving `0000_auth_persistence`. Transactional session
+credential checks and account locks serialize new writes; acknowledgements, cleanup and final
+activity updates commit atomically. Retained replay remains read-only and precedes compatibility
+and revision comparisons. No automatic write retries or account/dashboard deletion is introduced.
+
+[Job 5B's implementation evidence](DASHBOARD_PERSISTENCE.md) records migration guidance,
+documentation/version reconciliation, checks, review findings and environmental limitations.
+Only the existing local test database's uniquely owned schemas are migration targets in these
+tests. No production migration, deployment, external configuration or frontend sync is included.
 
 ## 3. Remaining gates for later jobs
 

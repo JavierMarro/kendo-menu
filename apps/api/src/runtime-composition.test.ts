@@ -25,8 +25,8 @@ async function loadAdapter() {
 
 const sessionCookie = `__Host-kendomenu-session=${Buffer.alloc(32, 1).toString('base64url')}`;
 
-function sessionRequest(): Request {
-  return new Request('https://app.example.test/api/session', {
+function sessionRequest(path = '/api/session'): Request {
+  return new Request(`https://app.example.test${path}`, {
     headers: { cookie: sessionCookie },
   });
 }
@@ -44,6 +44,11 @@ describe('root Vercel pool composition', () => {
     expect(response.headers.getSetCookie()).toEqual([]);
     expect(attach).not.toHaveBeenCalled();
     expect(connect).not.toHaveBeenCalled();
+    const dashboard = await adapter.fetch(sessionRequest('/api/dashboard'));
+    expect(dashboard.status).toBe(503);
+    expect(await dashboard.json()).toEqual({ error: 'AUTH_UNAVAILABLE' });
+    expect(attach).not.toHaveBeenCalled();
+    expect(connect).not.toHaveBeenCalled();
   });
 
   it('attaches the actual pg pool once and preserves credentials on unavailable queries', async () => {
@@ -56,7 +61,7 @@ describe('root Vercel pool composition', () => {
     try {
       const responses = await Promise.all([
         adapter.fetch(sessionRequest()),
-        adapter.fetch(sessionRequest()),
+        adapter.fetch(sessionRequest('/api/dashboard')),
       ]);
       expect(attach).toHaveBeenCalledTimes(1);
       expect(attach).toHaveBeenCalledWith(expect.any(Pool));

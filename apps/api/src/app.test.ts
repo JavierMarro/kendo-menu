@@ -123,8 +123,6 @@ for (const [name, handle] of Object.entries(handlers)) {
     it.each([
       ['/api', 'GET'],
       ['/api/', 'GET'],
-      ['/api/dashboard', 'GET'],
-      ['/api/dashboard', 'PUT'],
       ['/api/unknown/nested?probe=1', 'GET'],
       ['/api/health', 'POST'],
       ['/api/health', 'PUT'],
