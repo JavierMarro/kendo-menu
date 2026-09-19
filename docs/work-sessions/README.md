@@ -26,6 +26,8 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-09-19 — authoritative adoption and account recovery](./2026-09-19-authoritative-adoption.md)
+
 - [2026-09-13 — PostgreSQL dashboard persistence and routes](./2026-09-13-dashboard-postgres-persistence.md)
 
 - [2026-09-12 — protected dashboard application foundation](./2026-09-12-dashboard-foundation.md)

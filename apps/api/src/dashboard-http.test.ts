@@ -68,6 +68,8 @@ function persistenceHarness() {
   const unexpectedPersistenceCall = (): Promise<never> =>
     Promise.reject(new Error('UNEXPECTED_PERSISTENCE_CALL'));
   const persistence: KendoPersistence = {
+    accounts: { completeGoogleLogin: unexpectedPersistenceCall },
+    adoptions: { getStatus: unexpectedPersistenceCall, decide: unexpectedPersistenceCall },
     users: {
       findPublicById: unexpectedPersistenceCall,
       resolveByGoogleSubject: unexpectedPersistenceCall,

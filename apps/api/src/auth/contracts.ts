@@ -29,6 +29,19 @@ export const AUTHENTICATION_ERROR_CODES = {
   unavailable: 'AUTH_UNAVAILABLE',
 } as const;
 
+// Callback failures leave the OAuth transaction boundary and return to the
+// application shell. Keep this allow-list deliberately separate from the JSON
+// API errors: these values are safe to place in the fixed `/app` URL and do not
+// disclose provider or persistence details.
+export const AUTHENTICATION_CALLBACK_ERROR_CODES = {
+  cancellation: 'cancelled',
+  failure: 'failed',
+  unavailable: 'unavailable',
+} as const;
+
+export type AuthenticationCallbackErrorCode =
+  (typeof AUTHENTICATION_CALLBACK_ERROR_CODES)[keyof typeof AUTHENTICATION_CALLBACK_ERROR_CODES];
+
 export type AuthenticationErrorCode =
   (typeof AUTHENTICATION_ERROR_CODES)[keyof typeof AUTHENTICATION_ERROR_CODES];
 

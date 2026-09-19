@@ -7,6 +7,7 @@ import { Elysia } from 'elysia';
 import { WebStandardAdapter } from 'elysia/adapter/web-standard';
 
 import type { Authentication } from './auth/contracts.js';
+import type { Adoption } from './adoption/adoption.js';
 import type { Dashboard } from './dashboard/dashboard.js';
 import { createRuntimeServices } from './runtime.js';
 
@@ -26,15 +27,25 @@ function methodNotAllowed(allow: string): Response {
 export interface AppOptions {
   readonly authentication?: Authentication;
   readonly dashboard?: Dashboard;
+  readonly adoption?: Adoption;
 }
 
 export const createApp = (options: AppOptions = {}) => {
-  const { authentication, dashboard } =
-    options.authentication !== undefined && options.dashboard !== undefined
-      ? { authentication: options.authentication, dashboard: options.dashboard }
-      : { ...createRuntimeServices(), ...options };
+  const runtime =
+    options.authentication === undefined ||
+    options.dashboard === undefined ||
+    options.adoption === undefined
+      ? createRuntimeServices()
+      : undefined;
+  const authentication = options.authentication ?? runtime?.authentication;
+  const dashboard = options.dashboard ?? runtime?.dashboard;
+  const adoption = options.adoption ?? runtime?.adoption;
+  if (authentication === undefined || dashboard === undefined || adoption === undefined) {
+    throw new Error('RUNTIME_SERVICES_NOT_COMPOSED');
+  }
   // This route table is the single ordering point shared by both runtime adapters.
-  // Dashboard PUT opts out of framework parsing so its bounded handler sees the raw body.
+  // Dashboard PUT and adoption POST opt out of framework parsing so their bounded
+  // handlers see raw bodies and can authenticate before reading them.
   return new Elysia({ adapter: WebStandardAdapter })
     .onRequest(({ request, set }) => {
       set.headers['cache-control'] = CACHE_CONTROL;
@@ -71,6 +82,9 @@ export const createApp = (options: AppOptions = {}) => {
     .get('/api/dashboard', ({ request }) => dashboard.handle(request))
     .put('/api/dashboard', ({ request }) => dashboard.handle(request), { parse: 'none' })
     .head('/api/dashboard', ({ request }) => dashboard.handle(request))
+    .post('/api/dashboard/adoption', ({ request }) => adoption.handle(request), { parse: 'none' })
+    .head('/api/dashboard/adoption', ({ request }) => adoption.handle(request), { parse: 'none' })
+    .all('/api/dashboard/adoption', ({ request }) => adoption.handle(request), { parse: 'none' })
     .all('/api/dashboard', ({ request }) => dashboard.handle(request), { parse: 'none' });
 };
 

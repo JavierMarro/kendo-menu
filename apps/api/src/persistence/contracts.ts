@@ -6,6 +6,9 @@
  * checked-out clients, or driver errors.
  */
 
+import type { DashboardWriteAcknowledgement, Revision } from '../dashboard/contracts.js';
+import type { ValidatedDashboardWrite } from '../dashboard/validation.js';
+
 export type UserId = string;
 export type SessionId = string;
 export type Sha256Hash = string;
@@ -154,7 +157,109 @@ export interface SessionReplacementInput {
   readonly at?: Date;
 }
 
+/** Inputs for the one transaction that finishes a verified Google callback. */
+export interface CompleteGoogleLoginInput {
+  readonly googleSub: string;
+  /** Undefined/null means missing or unverified provider metadata. */
+  readonly verifiedGoogleEmail?: string | null;
+  readonly sessionTokenHash: Sha256Hash;
+  readonly csrfTokenHash: Sha256Hash;
+  readonly idleExpiresAt: Date;
+  readonly absoluteExpiresAt: Date;
+  readonly createdAt?: Date;
+  readonly lastActivityAt?: Date;
+  readonly at?: Date;
+  /** The current browser's session, if one was supplied to the callback. */
+  readonly predecessorSessionTokenHash?: Sha256Hash;
+}
+
+export type CompleteGoogleLoginResult =
+  | {
+      readonly status: 'completed';
+      readonly user: UserRecord;
+      readonly session: SessionRecord;
+    }
+  | { readonly status: 'account-switch' };
+
+export type AdoptionDecision = 'yes' | 'no';
+
+export type AdoptionStatus =
+  | { readonly status: 'pending' | 'unavailable'; readonly capability: boolean }
+  | {
+      readonly status: 'accepted';
+      readonly capability: false;
+      readonly completion: {
+        readonly decision: 'yes';
+        readonly requestId: string;
+        readonly acknowledgedRevision: Revision;
+        readonly timestamp: Date;
+      };
+    }
+  | {
+      readonly status: 'declined';
+      readonly capability: false;
+      readonly completion: { readonly decision: 'no'; readonly requestId: string };
+    };
+
+export interface AdoptionStatusInput {
+  readonly userId: UserId;
+  readonly sessionId: SessionId;
+  readonly sessionTokenHash: Sha256Hash;
+}
+
+export type AdoptionDecisionInput =
+  | {
+      readonly decision: 'yes';
+      readonly expectedAccountWorkspaceId: UserId;
+      /** Session-bound CSRF proof revalidated inside the adoption transaction. */
+      readonly csrfTokenHash: Sha256Hash;
+      readonly intent: ValidatedDashboardWrite;
+    }
+  | {
+      readonly decision: 'no';
+      readonly expectedAccountWorkspaceId: UserId;
+      /** Session-bound CSRF proof revalidated inside the adoption transaction. */
+      readonly csrfTokenHash: Sha256Hash;
+      readonly requestId: string;
+      /** Digest of the complete canonical No envelope, including metadata. */
+      readonly requestDigest: Sha256Hash;
+    };
+
+export type AdoptionDecisionOutcome =
+  | {
+      readonly status: 'accepted' | 'replayed';
+      readonly acknowledgement: DashboardWriteAcknowledgement;
+      readonly completion: {
+        readonly decision: 'yes';
+        readonly requestId: string;
+        readonly acknowledgedRevision: Revision;
+        readonly timestamp: Date;
+      };
+    }
+  | {
+      readonly status: 'declined';
+      readonly completion: { readonly decision: 'no'; readonly requestId: string };
+    }
+  | {
+      readonly status: 'replayed-declined';
+      readonly completion: { readonly decision: 'no'; readonly requestId: string };
+    }
+  | { readonly status: 'ineligible' }
+  | { readonly status: 'capability-unavailable' }
+  | { readonly status: 'revision-conflict'; readonly currentRevision: Revision }
+  | { readonly status: 'request-id-reused' }
+  | { readonly status: 'decision-conflict' }
+  | { readonly status: 'catalogue-incompatible' }
+  | { readonly status: 'workspace-mismatch' }
+  | { readonly status: 'unauthenticated' }
+  | { readonly status: 'auth-unavailable' }
+  | { readonly status: 'unavailable' };
+
 export interface KendoPersistence {
+  readonly accounts: {
+    /** Resolve identity, create the first session/capability, and rotate credentials atomically. */
+    completeGoogleLogin(input: CompleteGoogleLoginInput): Promise<CompleteGoogleLoginResult>;
+  };
   readonly users: {
     findPublicById(userId: UserId): Promise<PublicUserRecord | null>;
     resolveByGoogleSubject(input: ResolveGoogleUserInput): Promise<UserRecord>;
@@ -173,5 +278,13 @@ export interface KendoPersistence {
     findActiveByTokenHash(input: SessionLookupInput): Promise<SessionRecord | null>;
     touch(input: SessionActivityInput): Promise<SessionRecord | null>;
     revoke(input: SessionRevocationInput): Promise<boolean>;
+  };
+  readonly adoptions: {
+    /** Read-only status; this method never normalizes or touches session activity. */
+    getStatus(input: AdoptionStatusInput): Promise<AdoptionStatus>;
+    decide(
+      input: AdoptionDecisionInput & AdoptionStatusInput,
+      isCatalogueCompatible?: (intent: ValidatedDashboardWrite) => boolean,
+    ): Promise<AdoptionDecisionOutcome>;
   };
 }

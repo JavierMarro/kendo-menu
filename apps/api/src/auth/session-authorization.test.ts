@@ -96,6 +96,8 @@ function makeAuthorization(
   const forbidden = (): Promise<never> =>
     Promise.reject(new Error('UNEXPECTED_PERSISTENCE_OPERATION'));
   const persistence: KendoPersistence = options.persistence ?? {
+    accounts: { completeGoogleLogin: forbidden },
+    adoptions: { getStatus: forbidden, decide: forbidden },
     users: {
       findPublicById: () => Promise.resolve(null),
       resolveByGoogleSubject: forbidden,
@@ -349,6 +351,8 @@ describe('session authorization', () => {
     const forbidden = (): Promise<never> =>
       Promise.reject(new Error('UNEXPECTED_PERSISTENCE_OPERATION'));
     const failingPersistence: KendoPersistence = {
+      accounts: { completeGoogleLogin: forbidden },
+      adoptions: { getStatus: forbidden, decide: forbidden },
       users: { findPublicById: forbidden, resolveByGoogleSubject: forbidden },
       loginTransactions: {
         create: forbidden,

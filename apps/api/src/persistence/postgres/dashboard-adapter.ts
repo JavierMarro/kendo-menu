@@ -42,7 +42,13 @@ import type {
   DashboardWriteOutcome,
 } from '../dashboard-contracts.js';
 import { validateDate, validateSha256Hash, validateUuid } from '../validation.js';
-import { applicationSessions, cloudDashboards, dashboardWriteReceipts, users } from '../schema.js';
+import {
+  accountAdoptions,
+  applicationSessions,
+  cloudDashboards,
+  dashboardWriteReceipts,
+  users,
+} from '../schema.js';
 import {
   type PersistenceDatabase,
   type PersistenceTransactionRunner,
@@ -442,6 +448,19 @@ export function createPostgresDashboardPersistence(
       try {
         return await runTransaction(
           async (transaction): Promise<DashboardWriteOutcome> => {
+            // All account mutations lock the user before sessions and adoption.
+            // That shared first lock serializes this account's dashboard and
+            // receipt work with adoption and callback mutations.
+            const lockedUsers = await transaction
+              .select()
+              .from(users)
+              .where(eq(users.id, values.userId))
+              .limit(1)
+              .for('no key update');
+            const user = lockedUsers[0];
+            if (user === undefined || user.id !== values.userId) {
+              throw new DashboardAuthorizationFailure();
+            }
             const lockedSessions = await transaction
               .select()
               .from(applicationSessions)
@@ -459,29 +478,70 @@ export function createPostgresDashboardPersistence(
             if (session === undefined) {
               throw new DashboardAuthorizationFailure();
             }
-            // This clock read happens after the session-row lock and closes the
-            // lock-wait expiry window before account work begins.
+            // Clock reads after each lock close the expiry window introduced by
+            // waiting for the account and session rows.
             assertActiveSession(session, validateDate(clock()));
-            // The session row supplies the server-established internal user. A
-            // client workspace selector can never influence which account row is
-            // locked.
             if (validatedIntent.request.expectedAccountWorkspaceId !== session.userId) {
               throw new DashboardWorkspaceMismatch();
             }
 
-            const lockedUsers = await transaction
+            const adoptionRows = await transaction
               .select()
-              .from(users)
-              .where(eq(users.id, session.userId))
+              .from(accountAdoptions)
+              .where(eq(accountAdoptions.userId, user.id))
               .limit(1)
-              .for('no key update');
-            const user = lockedUsers[0];
-            if (user === undefined || user.id !== values.userId) {
-              throw new DashboardAuthorizationFailure();
+              .for('update');
+            const adoption = adoptionRows[0];
+            let pendingAdoption = adoption?.state === 'pending';
+            const normalizeAdoption = async (at: Date): Promise<void> => {
+              if (!pendingAdoption || adoption === undefined) return;
+              const updatedAt = new Date(Math.max(at.getTime(), adoption.updatedAt.getTime()));
+              const normalized = await transaction
+                .update(accountAdoptions)
+                .set({ state: 'unavailable', creatingSessionId: null, updatedAt })
+                .where(
+                  and(eq(accountAdoptions.userId, user.id), eq(accountAdoptions.state, 'pending')),
+                )
+                .returning({ userId: accountAdoptions.userId });
+              if (normalized.length !== 1) throw new PersistenceError('CONFLICT');
+              pendingAdoption = false;
+            };
+            if (
+              pendingAdoption &&
+              adoption?.creatingSessionId !== undefined &&
+              adoption.creatingSessionId !== null
+            ) {
+              const creators = await transaction
+                .select()
+                .from(applicationSessions)
+                .where(
+                  and(
+                    eq(applicationSessions.id, adoption.creatingSessionId),
+                    eq(applicationSessions.userId, user.id),
+                  ),
+                )
+                .limit(1);
+              const creator = creators[0];
+              const existingCloud = await transaction
+                .select({ userId: cloudDashboards.userId })
+                .from(cloudDashboards)
+                .where(eq(cloudDashboards.userId, user.id))
+                .limit(1);
+              const at = validateDate(clock());
+              // Normalize expired/revoked capability even if this mutation is
+              // later rejected. A still-eligible capability is consumed only
+              // together with a successful ordinary dashboard write.
+              if (
+                existingCloud[0] !== undefined ||
+                creator === undefined ||
+                creator.revokedAt !== null ||
+                creator.createdAt > at ||
+                creator.idleExpiresAt <= at ||
+                creator.absoluteExpiresAt <= at
+              ) {
+                await normalizeAdoption(at);
+              }
             }
-            // Account writes serialize here even before a dashboard row exists.
-            // Refreshing after this lock covers an account lock wait.
-            assertActiveSession(session, validateDate(clock()));
 
             // Request IDs are looked up before revision comparison and cleanup.
             const retainedReceipts = await transaction
@@ -540,6 +600,7 @@ export function createPostgresDashboardPersistence(
                 ? undefined
                 : validateCloudDashboardRow(storedDashboard, user.id);
             const currentRevision = validatedStored?.revision ?? 0n;
+            if (currentRevision > 0n) await normalizeAdoption(validateDate(clock()));
             const expectedRevision = BigInt(validatedIntent.request.expectedRevision);
             if (currentRevision !== expectedRevision) {
               const current =
@@ -610,6 +671,8 @@ export function createPostgresDashboardPersistence(
               }
               nextRevision = updatedRow.revision;
             }
+
+            await normalizeAdoption(mutationAt);
 
             await transaction.insert(dashboardWriteReceipts).values({
               userId: user.id,

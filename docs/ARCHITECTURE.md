@@ -206,7 +206,7 @@ remain independent of database configuration/connectivity.
 The focused [dashboard adapter](../apps/api/src/persistence/postgres/dashboard-adapter.ts) stores
 canonical snapshot text in `cloud_dashboards` and bounded acknowledgement history in
 `dashboard_write_receipts`. Migration `0001_dashboard_persistence` extends the preserved Job 4A
-migration. A write locks/revalidates the session, then locks its internal user before inspecting
+migration. With Job 6A, a write locks its internal user, then locks/revalidates the session before inspecting
 receipts or revisions. New dashboard content, its receipt, receipt cleanup and final session
 activity commit together. Retained identical requests return the original acknowledgement without
 activity or cleanup; uncertain commit outcomes return a fixed unavailable response and require
@@ -215,6 +215,20 @@ the unchanged request ID for recovery. There is no server-side write retry or re
 These are local backend changes, with no frontend account/sync integration or production migration.
 See [Job 5B evidence and migration guidance](DASHBOARD_PERSISTENCE.md) for verification and the
 remaining Google/HTTPS/Neon/Vercel/Fluid Compute gates.
+
+### Job 6A authoritative adoption
+
+The approved Job 6A boundary adds account-level adoption state and one terminal receipt, with the
+pending capability tied to the session that creates the account. Account creation, session creation,
+and capability issuance are atomic. Returning accounts receive no new capability. Session inspection
+computes availability without writing and lets later authenticated sessions recover accepted or
+declined completion without retaining another dashboard representation.
+
+The adoption POST shares the dashboard transport and authenticated request boundary, with explicit
+Yes/No decisions, account mismatch protection, complete-envelope byte limits, and terminal replay.
+Google callback failures use fixed application redirects and consume authenticated browser-bound
+login attempts before handling provider cancellation or exchange failure. See
+[the Job 6A handoff](ADOPTION.md) for scope, verification, and remaining gates.
 
 In the later target, the web workspace module selects isolated guest/account
 stores; the synchronization module exchanges validated whole dashboards with the backend over a

@@ -50,6 +50,14 @@ export class AuthenticationFailed extends Error {
   }
 }
 
+/** Provider cancellation is a terminal, user-visible outcome distinct from a failed exchange. */
+export class AuthenticationCancelled extends Error {
+  constructor() {
+    super('Authentication was cancelled');
+    this.name = 'AuthenticationCancelled';
+  }
+}
+
 export class AccountSwitchRequiresLogout extends Error {
   constructor() {
     super('Account switch requires logout');

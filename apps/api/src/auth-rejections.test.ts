@@ -55,6 +55,7 @@ function harness() {
   const revoke = vi.fn(() => Promise.resolve(true));
   const forbiddenOperation = () => Promise.reject(new Error('UNEXPECTED_PERSISTENCE_OPERATION'));
   const persistence: KendoPersistence = {
+    accounts: { completeGoogleLogin: forbiddenOperation },
     users: {
       resolveByGoogleSubject: forbiddenOperation,
       findPublicById: () => Promise.resolve({ id: userId, verifiedGoogleEmail: null }),
@@ -66,6 +67,10 @@ function harness() {
       findActiveByTokenHash: lookup,
       revoke,
       touch: forbiddenOperation,
+    },
+    adoptions: {
+      getStatus: () => Promise.resolve({ status: 'unavailable', capability: false }),
+      decide: forbiddenOperation,
     },
   };
   const provider = vi.fn(() => persistence);
@@ -112,6 +117,19 @@ async function assertFixed(response: Response, status: number, code: string): Pr
   expect(await response.json()).toEqual({ error: code });
 }
 
+async function assertCallbackFailure(response: Response, code: string): Promise<void> {
+  expect(response.status).toBe(303);
+  expect(response.headers.get('location')).toBe(`/app?authError=${code}`);
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+  await expect(response.text()).resolves.toBe('');
+  const cookies = response.headers.getSetCookie();
+  expect(cookies).toHaveLength(1);
+  expect(cookies[0]).toContain('__Host-kendomenu-login=;');
+  expect(cookies.some((cookie) => cookie.startsWith('__Host-kendomenu-session='))).toBe(false);
+  expect(cookies.some((cookie) => cookie.startsWith('__Host-kendomenu-csrf='))).toBe(false);
+}
+
 describe('Request authentication rejection matrix', () => {
   it.each([
     `?state=${TOKEN}`,
@@ -128,10 +146,7 @@ describe('Request authentication rejection matrix', () => {
     const response = await h.authentication.callback(
       new Request(`${CALLBACK}${query}`, { headers: { cookie: LOGIN_COOKIE } }),
     );
-    await assertFixed(response, 400, 'INVALID_AUTH_REQUEST');
-    expect(response.headers.get('referrer-policy')).toBe('no-referrer');
-    expect(response.headers.getSetCookie()).toHaveLength(1);
-    expect(response.headers.getSetCookie()[0]).toContain('__Host-kendomenu-login=;');
+    await assertCallbackFailure(response, 'failed');
     expect(h.consume).not.toHaveBeenCalled();
     expect(h.exchange).not.toHaveBeenCalled();
   });
@@ -146,9 +161,8 @@ describe('Request authentication rejection matrix', () => {
           headers: { cookie: LOGIN_COOKIE },
         }),
       );
-      await assertFixed(response, 401, 'AUTHENTICATION_FAILED');
+      await assertCallbackFailure(response, 'failed');
       expect(h.exchange).not.toHaveBeenCalled();
-      expect(response.headers.getSetCookie()).toHaveLength(1);
     },
   );
 
@@ -157,10 +171,9 @@ describe('Request authentication rejection matrix', () => {
     const response = await h.authentication.callback(
       new Request(`${CALLBACK}?state=${TOKEN}&code=private-code`),
     );
-    expect(response.status).toBe(401);
+    await assertCallbackFailure(response, 'failed');
     expect(h.consume).not.toHaveBeenCalled();
     expect(h.exchange).not.toHaveBeenCalled();
-    expect(response.headers.get('referrer-policy')).toBe('no-referrer');
   });
 
   it('rejects malformed browser binding before resolving persistence', async () => {
@@ -170,11 +183,10 @@ describe('Request authentication rejection matrix', () => {
         headers: { cookie: '__Host-kendomenu-login=malformed' },
       }),
     );
-    expect(response.status).toBe(400);
+    await assertCallbackFailure(response, 'failed');
     expect(h.provider).not.toHaveBeenCalled();
     expect(h.consume).not.toHaveBeenCalled();
     expect(h.exchange).not.toHaveBeenCalled();
-    expect(response.headers.getSetCookie()).toHaveLength(1);
   });
 
   it('sanitizes provider failures and logs only generated request IDs and fixed codes', async () => {
@@ -184,7 +196,7 @@ describe('Request authentication rejection matrix', () => {
         headers: { cookie: LOGIN_COOKIE },
       }),
     );
-    await assertFixed(response, 401, 'AUTHENTICATION_FAILED');
+    await assertCallbackFailure(response, 'failed');
     expect(h.logs).toHaveLength(1);
     expect(h.logs[0]).toEqual({
       requestId: Buffer.alloc(32, 9).toString('base64url'),
@@ -255,7 +267,11 @@ describe('Request authentication rejection matrix', () => {
       new Request(`${ORIGIN}/api/session`, { headers: { cookie: SESSION_COOKIE } }),
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ userId, verifiedGoogleEmail: null });
+    expect(await response.json()).toEqual({
+      userId,
+      verifiedGoogleEmail: null,
+      adoption: { status: 'unavailable', capability: false },
+    });
     expect(response.headers.getSetCookie()).toEqual([]);
     expect((await h.authentication.logout(logoutRequest(ORIGIN, CSRF))).status).toBe(204);
     expect(h.googleConfiguration).not.toHaveBeenCalled();

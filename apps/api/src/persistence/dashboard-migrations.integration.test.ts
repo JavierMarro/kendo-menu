@@ -36,8 +36,10 @@ async function authRows() {
 
 /** Reconstruct the preceding schema only inside this harness-owned empty fixture. */
 async function previousSchemaWithAuthentication() {
-  await database.client.query('DROP TABLE dashboard_write_receipts, cloud_dashboards');
-  await database.client.query('DELETE FROM "__drizzle_migrations" WHERE created_at = $1', [
+  await database.client.query(
+    'DROP TABLE account_adoptions, dashboard_write_receipts, cloud_dashboards',
+  );
+  await database.client.query('DELETE FROM "__drizzle_migrations" WHERE created_at >= $1', [
     readMigrationFiles({ migrationsFolder: migrationFolder })[1]?.folderMillis,
   ]);
   const user = await database.persistence.users.resolveByGoogleSubject({
@@ -67,9 +69,9 @@ async function previousSchemaWithAuthentication() {
 }
 
 describe('dashboard migration chain', () => {
-  it('applies both migrations from empty, repeats without changes, and matches SQL hashes', async () => {
+  it('applies the migration chain from empty, repeats without changes, and matches SQL hashes', async () => {
     const migrations = readMigrationFiles({ migrationsFolder: migrationFolder });
-    expect(migrations).toHaveLength(2);
+    expect(migrations).toHaveLength(3);
     const readJournal = async () =>
       (
         await database.client.query<{ hash: string; created_at: string }>(

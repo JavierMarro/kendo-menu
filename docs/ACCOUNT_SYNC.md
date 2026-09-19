@@ -152,12 +152,13 @@ versions without claiming Neon or Vercel compatibility.
 ### Product and operational defaults
 
 **Owner confirmation required before the jobs implementing these behaviors**, not before the
-isolated Job 3 health scaffold. Every row below remains a recommendation.
+isolated Job 3 health scaffold. These were Job 2 recommendations; the returning-account rule is
+now approved for Job 6A as recorded below. Other rows retain their stated decision status.
 
 | Decision                     | Recommended default                                                                                                                                             | Main trade-off                                                                                                                                                                 |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Guest eligibility            | Non-empty guest data accepted by existing validation/migration and approved cloud byte bounds                                                                   | Reject corrupt, future-version, migration-conflicting, or oversized data without alteration; eligibility cannot silently shrink the approved complete-adoption promise.        |
-| Returning empty accounts     | Do not automatically offer adoption                                                                                                                             | Avoid accidental reuse of another device/browser's guest dashboard; the exact eligibility policy still needs approval.                                                         |
+| Returning empty accounts     | Approved in Job 6A: do not issue a new adoption capability                                                                                                      | Only the creating session of a new account can adopt; later sessions can recover terminal completion.                                                                          |
 | Synchronization triggers     | Debounce saved edits for one second; also check on reconnect/focus and explicit retry                                                                           | Simple foreground continuity without persistent connections or background-worker synchronization.                                                                              |
 | Conflict interaction         | Pause uploads; explicit choice of local or cloud whole dashboard, with export/preservation before discarding the losing local copy                              | More visible friction, but no silent loss or field merging.                                                                                                                    |
 | Account cache/offline access | Retain account-scoped data hidden on logout; reopen only after reauthentication; an already-open account workspace remains editable offline with uploads paused | Supports continuity but retains readable data on a shared browser; a fresh uncached device cannot load cloud data offline.                                                     |
@@ -520,6 +521,17 @@ documentation/version reconciliation, checks, review findings and environmental 
 Only the existing local test database's uniquely owned schemas are migration targets in these
 tests. No production migration, deployment, external configuration or frontend sync is included.
 
+## Job 6A — authoritative adoption and recovery
+
+The approved Job 6A plan binds pending adoption to the session that creates a new account. Existing
+accounts receive no new capability, even with an empty dashboard. Accepted and declined receipts
+remain recoverable by later authenticated sessions; an unavailable capability is not a decline.
+The server owns atomic Yes/No decisions and terminal replay. Browser adoption, workspace cleanup,
+and account entry points remain work for Jobs 6B–6D.
+
+The [Job 6A handoff](ADOPTION.md) records the request/status contracts, lifecycle, local verification,
+and remaining gates. All database tests target only isolated schemas in local `kendomenu_test`.
+
 ## 3. Remaining gates for later jobs
 
 ### Owner decisions
@@ -530,7 +542,9 @@ Confirm or revise the remaining recommendations before their implementation:
       accepted in Job 3; later libraries are not installed or implemented by the health scaffold.
 - [ ] Local HTTPS tooling before real browser/provider integration; Fluid Compute lifecycle remains unverified.
 - [x] Cloud byte limit and consequences for locally valid oversized dashboards accepted in Job 5A.
-- [ ] Guest eligibility (including returning empty accounts); preserve the approved blocking Yes/No interaction.
+- [x] Job 6A server eligibility: only the new account's active creating session at revision zero;
+      returning accounts receive no capability. Browser guest validation and the blocking Yes/No
+      interaction remain later-job work.
 - [ ] Conflict interaction, synchronization triggers, offline account access, cache retention,
       unsynchronized logout, and account-switch behavior.
 - [x] Application-session lifetime and verified-email metadata policy accepted in Job 4A.

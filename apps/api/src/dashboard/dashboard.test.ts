@@ -71,6 +71,8 @@ function harness() {
       : null;
   });
   const authPersistence: KendoPersistence = {
+    accounts: { completeGoogleLogin: unexpected },
+    adoptions: { getStatus: unexpected, decide: unexpected },
     users: { findPublicById: unexpected, resolveByGoogleSubject: unexpected },
     loginTransactions: { create: unexpected, consume: unexpected, cleanupExpired: unexpected },
     sessions: {

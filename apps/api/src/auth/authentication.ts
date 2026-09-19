@@ -6,11 +6,11 @@
  * hashes of browser credentials through the persistence interface. Keeping the
  * four HTTP flows here makes their cookie and public-error behavior consistent.
  */
+import { PersistenceError, type KendoPersistence } from '../persistence/contracts.js';
 import {
-  PersistenceError,
-  type KendoPersistence,
-  type UserRecord,
-} from '../persistence/contracts.js';
+  validateAdoptionStatus,
+  type AdoptionStatus as PublicAdoptionStatus,
+} from '../adoption/contracts.js';
 import {
   GOOGLE_SUB_MAX_LENGTH,
   VERIFIED_EMAIL_MAX_LENGTH,
@@ -19,6 +19,7 @@ import {
 } from '../persistence/validation.js';
 import {
   AccountSwitchRequiresLogout,
+  AuthenticationCancelled,
   AuthenticationFailed,
   AuthenticationUnavailable,
   InvalidAuthenticationInput,
@@ -51,6 +52,7 @@ import {
 } from './security.js';
 import {
   AUTHENTICATION_ERROR_CODES,
+  AUTHENTICATION_CALLBACK_ERROR_CODES,
   LOGIN_TRANSACTION_LIFETIME_MS,
   SESSION_ABSOLUTE_LIFETIME_MS,
   SESSION_IDLE_LIFETIME_MS,
@@ -66,8 +68,8 @@ import {
 
 const JSON_STATUS_UNAVAILABLE = 503;
 const JSON_STATUS_INVALID_REQUEST = 400;
-const JSON_STATUS_ACCOUNT_SWITCH = 409;
-const JSON_STATUS_AUTHENTICATION_FAILED = 401;
+const GOOGLE_CANCELLATION_ERROR = 'access_denied';
+const GOOGLE_TEMPORARY_ERROR = 'temporarily_unavailable';
 
 async function resolvePersistence(
   provider: AuthenticationDependencies['persistence'],
@@ -103,13 +105,25 @@ function publicErrorResponse(
   return makeJsonResponse(status, code);
 }
 
-function callbackErrorResponse(
-  status: number,
-  code: (typeof AUTHENTICATION_ERROR_CODES)[keyof typeof AUTHENTICATION_ERROR_CODES],
+function callbackRedirectResponse(
+  code: (typeof AUTHENTICATION_CALLBACK_ERROR_CODES)[keyof typeof AUTHENTICATION_CALLBACK_ERROR_CODES],
 ): Response {
   const headers = makeCallbackHeaders();
+  headers.set('location', `/app?authError=${encodeURIComponent(code)}`);
   clearLoginCookie(headers);
-  return makeJsonResponse(status, code, headers);
+  return makeEmptyResponse(303, headers);
+}
+
+function callbackProviderError(
+  error: string,
+): AuthenticationCancelled | AuthenticationFailed | AuthenticationUnavailable {
+  if (error === GOOGLE_CANCELLATION_ERROR) {
+    return new AuthenticationCancelled();
+  }
+  if (error === GOOGLE_TEMPORARY_ERROR) {
+    return new AuthenticationUnavailable();
+  }
+  return new AuthenticationFailed();
 }
 
 function callbackSuccessResponse(
@@ -132,6 +146,9 @@ function callbackSuccessResponse(
 function errorCodeForLog(error: unknown): AuthenticationInternalCode {
   if (error instanceof InvalidAuthenticationInput) {
     return 'AUTH_INPUT_REJECTED';
+  }
+  if (error instanceof AuthenticationCancelled) {
+    return 'AUTH_PROVIDER_REJECTED';
   }
   if (error instanceof AccountSwitchRequiresLogout) {
     return 'AUTH_ACCOUNT_SWITCH_REJECTED';
@@ -179,25 +196,16 @@ function handleCallbackError(
   error: unknown,
 ): Response {
   logFailure(dependencies, random, error);
-  if (error instanceof InvalidAuthenticationInput) {
-    return callbackErrorResponse(
-      JSON_STATUS_INVALID_REQUEST,
-      AUTHENTICATION_ERROR_CODES.invalidRequest,
-    );
+  if (error instanceof AuthenticationCancelled) {
+    return callbackRedirectResponse(AUTHENTICATION_CALLBACK_ERROR_CODES.cancellation);
   }
-  if (error instanceof AccountSwitchRequiresLogout) {
-    return callbackErrorResponse(
-      JSON_STATUS_ACCOUNT_SWITCH,
-      AUTHENTICATION_ERROR_CODES.accountSwitchRequiresLogout,
-    );
+  if (error instanceof AuthenticationUnavailable || error instanceof PersistenceError) {
+    return callbackRedirectResponse(AUTHENTICATION_CALLBACK_ERROR_CODES.unavailable);
   }
-  if (error instanceof AuthenticationFailed) {
-    return callbackErrorResponse(
-      JSON_STATUS_AUTHENTICATION_FAILED,
-      AUTHENTICATION_ERROR_CODES.authenticationFailed,
-    );
-  }
-  return callbackErrorResponse(JSON_STATUS_UNAVAILABLE, AUTHENTICATION_ERROR_CODES.unavailable);
+  // Invalid callback input, provider exchange failures, account-switch
+  // protection, and unknown internal failures all use the same safe application
+  // failure code. No provider or persistence detail reaches the redirect.
+  return callbackRedirectResponse(AUTHENTICATION_CALLBACK_ERROR_CODES.failure);
 }
 
 function handleSessionError(
@@ -281,6 +289,74 @@ function validateIdentity(identity: unknown): {
   } catch {
     throw new AuthenticationFailed();
   }
+}
+
+function readOwnValue(value: object, property: string): unknown {
+  try {
+    return Object.getOwnPropertyDescriptor(value, property)?.value;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Persistence returns Date values while the HTTP contract uses canonical UTC
+ * strings. Copy only the allow-listed completion fields before the strict
+ * public validator sees them; a malformed adapter result becomes a fixed 503.
+ */
+function publicAdoptionStatus(value: unknown): PublicAdoptionStatus {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new AuthenticationUnavailable();
+  }
+
+  const status = readOwnValue(value, 'status');
+  const capability = readOwnValue(value, 'capability');
+  if (status === 'pending' || status === 'unavailable') {
+    const validated = validateAdoptionStatus({ status, capability });
+    if (validated === null) throw new AuthenticationUnavailable();
+    return validated;
+  }
+
+  if (status !== 'accepted' && status !== 'declined') {
+    throw new AuthenticationUnavailable();
+  }
+  const completionValue = readOwnValue(value, 'completion');
+  if (
+    typeof completionValue !== 'object' ||
+    completionValue === null ||
+    Array.isArray(completionValue)
+  ) {
+    throw new AuthenticationUnavailable();
+  }
+
+  const requestId = readOwnValue(completionValue, 'requestId');
+  const decision = readOwnValue(completionValue, 'decision');
+  if (status === 'declined') {
+    const validated = validateAdoptionStatus({
+      status,
+      capability,
+      completion: { decision, requestId },
+    });
+    if (validated === null) throw new AuthenticationUnavailable();
+    return validated;
+  }
+
+  const acknowledgedRevision = readOwnValue(completionValue, 'acknowledgedRevision');
+  const timestampValue = readOwnValue(completionValue, 'timestamp');
+  if (!(timestampValue instanceof Date)) throw new AuthenticationUnavailable();
+  let timestamp: string;
+  try {
+    timestamp = Date.prototype.toISOString.call(timestampValue);
+  } catch {
+    throw new AuthenticationUnavailable();
+  }
+  const validated = validateAdoptionStatus({
+    status,
+    capability,
+    completion: { decision, requestId, acknowledgedRevision, timestamp },
+  });
+  if (validated === null) throw new AuthenticationUnavailable();
+  return validated;
 }
 
 function readOptionalPredecessorToken(
@@ -436,7 +512,7 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
         // the user starts a new attempt instead.
         const returnPath = validateStoredReturnPath(consumed.transaction.returnPath);
         if (providerError !== undefined) {
-          throw new AuthenticationFailed();
+          throw callbackProviderError(providerError);
         }
         if (code === undefined) {
           throw new AuthenticationFailed();
@@ -461,67 +537,31 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
         }
 
         const sessionNow = readClock(clock);
-        let user: UserRecord;
-        if (identity.verifiedGoogleEmail === null) {
-          user = await persistence.users.resolveByGoogleSubject({
-            googleSub: identity.googleSub,
-          });
-        } else {
-          user = await persistence.users.resolveByGoogleSubject({
-            googleSub: identity.googleSub,
-            verifiedGoogleEmail: identity.verifiedGoogleEmail,
-          });
-        }
-
         const sessionToken = generateOpaqueValue(random);
         const csrfToken = generateOpaqueValue(random);
         const { idleExpiresAt, absoluteExpiresAt } = sessionDeadlines(sessionNow);
-        // Fresh credentials prevent fixation. An active same-account session is
-        // replaced atomically; an active different-account credential in this
-        // browser requires an explicit logout before switching accounts.
-        if (predecessorToken === undefined) {
-          await persistence.sessions.create({
-            userId: user.id,
-            sessionTokenHash: sha256(sessionToken),
-            csrfTokenHash: sha256(csrfToken),
-            createdAt: sessionNow,
-            lastActivityAt: sessionNow,
-            idleExpiresAt,
-            absoluteExpiresAt,
-          });
-        } else {
-          const predecessor = await persistence.sessions.findActiveByTokenHash({
-            sessionTokenHash: sha256(predecessorToken),
-            at: sessionNow,
-          });
-          if (predecessor === null) {
-            await persistence.sessions.create({
-              userId: user.id,
-              sessionTokenHash: sha256(sessionToken),
-              csrfTokenHash: sha256(csrfToken),
-              createdAt: sessionNow,
-              lastActivityAt: sessionNow,
-              idleExpiresAt,
-              absoluteExpiresAt,
-            });
-          } else if (predecessor.userId !== user.id) {
-            throw new AccountSwitchRequiresLogout();
-          } else {
-            await persistence.sessions.replace({
-              predecessorSessionId: predecessor.id,
-              userId: user.id,
-              replacement: {
-                userId: user.id,
-                sessionTokenHash: sha256(sessionToken),
-                csrfTokenHash: sha256(csrfToken),
-                createdAt: sessionNow,
-                lastActivityAt: sessionNow,
-                idleExpiresAt,
-                absoluteExpiresAt,
-              },
-              at: sessionNow,
-            });
-          }
+        // Fresh credentials prevent fixation. Account creation, adoption
+        // capability issuance, and predecessor rotation all happen inside the
+        // persistence transaction so two callbacks cannot grant capability or
+        // revoke the same predecessor independently.
+        const completed = await persistence.accounts.completeGoogleLogin({
+          googleSub: identity.googleSub,
+          ...(identity.verifiedGoogleEmail === null
+            ? {}
+            : { verifiedGoogleEmail: identity.verifiedGoogleEmail }),
+          sessionTokenHash: sha256(sessionToken),
+          csrfTokenHash: sha256(csrfToken),
+          createdAt: sessionNow,
+          lastActivityAt: sessionNow,
+          idleExpiresAt,
+          absoluteExpiresAt,
+          at: sessionNow,
+          ...(predecessorToken === undefined
+            ? {}
+            : { predecessorSessionTokenHash: sha256(predecessorToken) }),
+        });
+        if (completed.status === 'account-switch') {
+          throw new AccountSwitchRequiresLogout();
         }
 
         return callbackSuccessResponse(
@@ -563,12 +603,20 @@ export function createAuthentication(dependencies: AuthenticationDependencies): 
         if (user === null || user.id !== authorization.proof.userId) {
           throw new InvalidAuthenticationInput();
         }
+        const adoption = publicAdoptionStatus(
+          await persistence.adoptions.getStatus({
+            userId: authorization.proof.userId,
+            sessionId: authorization.proof.sessionId,
+            sessionTokenHash: authorization.proof.sessionTokenHash,
+          }),
+        );
         const headers = makeResponseHeaders();
         headers.set('content-type', 'application/json');
         return new Response(
           JSON.stringify({
             userId: user.id,
             verifiedGoogleEmail: user.verifiedGoogleEmail,
+            adoption,
           }),
           { status: 200, headers },
         );

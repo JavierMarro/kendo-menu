@@ -10,6 +10,8 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 
 import {
+  type CompleteGoogleLoginInput,
+  type CompleteGoogleLoginResult,
   PersistenceError,
   type ConsumeLoginTransactionInput,
   type ConsumeLoginTransactionResult,
@@ -42,7 +44,17 @@ import {
   validateVerifiedGoogleEmail,
   validateClock,
 } from '../validation.js';
-import { applicationSessions, loginTransactions, persistenceSchema, users } from '../schema.js';
+import {
+  accountAdoptions,
+  applicationSessions,
+  loginTransactions,
+  persistenceSchema,
+  users,
+} from '../schema.js';
+import {
+  createPostgresAdoptionPersistence,
+  type PostgresAdoptionPersistenceDependencies,
+} from './adoption-adapter.js';
 import { createPostgresDashboardPersistence } from './dashboard-adapter.js';
 import type { PersistenceDatabase, PersistenceTransactionOptions } from './session-sql.js';
 import { touchSessionInDatabase } from './session-sql.js';
@@ -298,6 +310,80 @@ function assertActiveSession(row: SessionRow, at: Date): void {
   }
 }
 
+function activeSession(row: SessionRow, at: Date): boolean {
+  return (
+    row.createdAt.getTime() <= at.getTime() &&
+    row.revokedAt === null &&
+    row.idleExpiresAt.getTime() > at.getTime() &&
+    row.absoluteExpiresAt.getTime() > at.getTime()
+  );
+}
+
+class AccountSwitchConflict extends Error {
+  constructor() {
+    super('Account switch requires logout');
+    this.name = 'AccountSwitchConflict';
+  }
+}
+
+interface CompleteGoogleLoginValues {
+  readonly googleSub: string;
+  readonly verifiedGoogleEmail?: string;
+  readonly at: Date;
+  readonly session: {
+    readonly userId: string;
+    readonly sessionTokenHash: string;
+    readonly csrfTokenHash: string;
+    readonly createdAt: Date;
+    readonly lastActivityAt: Date;
+    readonly idleExpiresAt: Date;
+    readonly absoluteExpiresAt: Date;
+  };
+  readonly predecessorSessionTokenHash?: string;
+}
+
+function validateCompleteGoogleLoginInput(
+  input: CompleteGoogleLoginInput,
+  clock: PersistenceClock,
+): CompleteGoogleLoginValues {
+  const at = validateNow(clock, input.at);
+  const googleSub = validateGoogleSub(input.googleSub);
+  const verifiedGoogleEmail =
+    input.verifiedGoogleEmail === undefined || input.verifiedGoogleEmail === null
+      ? undefined
+      : validateVerifiedGoogleEmail(input.verifiedGoogleEmail);
+  const session = validateSessionCreationInput(
+    {
+      userId: '00000000-0000-4000-8000-000000000000',
+      sessionTokenHash: input.sessionTokenHash,
+      csrfTokenHash: input.csrfTokenHash,
+      idleExpiresAt: input.idleExpiresAt,
+      absoluteExpiresAt: input.absoluteExpiresAt,
+      ...(input.createdAt === undefined ? {} : { createdAt: input.createdAt }),
+      ...(input.lastActivityAt === undefined ? {} : { lastActivityAt: input.lastActivityAt }),
+    },
+    clock,
+    at,
+  );
+  if (
+    session.createdAt.getTime() > at.getTime() ||
+    session.lastActivityAt.getTime() > at.getTime()
+  ) {
+    throw new PersistenceError('INVALID_INPUT');
+  }
+  const predecessorSessionTokenHash =
+    input.predecessorSessionTokenHash === undefined
+      ? undefined
+      : validateSha256Hash(input.predecessorSessionTokenHash);
+  return {
+    googleSub,
+    ...(verifiedGoogleEmail === undefined ? {} : { verifiedGoogleEmail }),
+    at,
+    session,
+    ...(predecessorSessionTokenHash === undefined ? {} : { predecessorSessionTokenHash }),
+  };
+}
+
 export function createPostgresPersistence(
   options: PostgresPersistenceOptions,
 ): PostgresPersistence {
@@ -374,8 +460,152 @@ export function createPostgresPersistence(
     clock,
     runTransaction,
   });
+  const adoptionDependencies: PostgresAdoptionPersistenceDependencies = {
+    database,
+    clock,
+    runTransaction,
+  };
+  const adoptions = createPostgresAdoptionPersistence(adoptionDependencies);
 
   const implementation: KendoPersistence = {
+    accounts: {
+      completeGoogleLogin: (input: CompleteGoogleLoginInput) =>
+        safeOperation(async (): Promise<CompleteGoogleLoginResult> => {
+          const values = validateCompleteGoogleLoginInput(input, clock);
+          try {
+            return await runTransaction(async (transaction) => {
+              // Account-keyed operations all take the user lock first. This is
+              // the first lock in dashboard writes and adoption mutations too,
+              // preventing a user/session cycle during callback races.
+              const insertedUsers = await transaction
+                .insert(users)
+                .values({
+                  googleSub: values.googleSub,
+                  verifiedGoogleEmail: values.verifiedGoogleEmail ?? null,
+                  createdAt: values.at,
+                  updatedAt: values.at,
+                })
+                .onConflictDoNothing({ target: users.googleSub })
+                .returning();
+              let user: UserRow;
+              let newAccount = false;
+              const insertedUser = insertedUsers[0];
+              if (insertedUser !== undefined) {
+                user = insertedUser;
+                newAccount = true;
+              } else {
+                const existingUsers = await transaction
+                  .select()
+                  .from(users)
+                  .where(eq(users.googleSub, values.googleSub))
+                  .limit(1)
+                  .for('update');
+                const existingUser = existingUsers[0];
+                if (existingUser === undefined) throw new PersistenceError('CONFLICT');
+                const updatedUsers = await transaction
+                  .update(users)
+                  .set({
+                    ...(values.verifiedGoogleEmail === undefined
+                      ? {}
+                      : { verifiedGoogleEmail: values.verifiedGoogleEmail }),
+                    updatedAt: values.at,
+                  })
+                  .where(eq(users.id, existingUser.id))
+                  .returning();
+                const updatedUser = updatedUsers[0];
+                if (updatedUser === undefined) throw new PersistenceError('FAILED');
+                user = updatedUser;
+              }
+
+              const sessionValues = {
+                ...values.session,
+                userId: user.id,
+              };
+              let predecessor: SessionRow | undefined;
+              if (values.predecessorSessionTokenHash !== undefined) {
+                const predecessorRows = await transaction
+                  .select()
+                  .from(applicationSessions)
+                  .where(
+                    eq(applicationSessions.sessionTokenHash, values.predecessorSessionTokenHash),
+                  )
+                  .limit(1)
+                  .for('update');
+                predecessor = predecessorRows[0];
+                if (predecessor !== undefined && predecessor.revokedAt !== null) {
+                  // A consumed predecessor cannot be silently treated as an
+                  // absent cookie: concurrent replacement must fail closed so
+                  // exactly one callback receives the fresh session.
+                  throw new PersistenceError('CONFLICT');
+                }
+                if (
+                  predecessor !== undefined &&
+                  activeSession(predecessor, values.at) &&
+                  predecessor.userId !== user.id
+                ) {
+                  throw new AccountSwitchConflict();
+                }
+              }
+
+              if (predecessor !== undefined && activeSession(predecessor, values.at)) {
+                const revoked = await transaction
+                  .update(applicationSessions)
+                  .set({ revokedAt: values.at })
+                  .where(
+                    and(
+                      eq(applicationSessions.id, predecessor.id),
+                      eq(applicationSessions.userId, user.id),
+                      isNull(applicationSessions.revokedAt),
+                    ),
+                  )
+                  .returning({ id: applicationSessions.id });
+                if (revoked.length !== 1) throw new PersistenceError('CONFLICT');
+              }
+              const createdSessions = await transaction
+                .insert(applicationSessions)
+                .values(sessionValues)
+                .returning();
+              const createdSession = createdSessions[0];
+              if (createdSession === undefined) throw new PersistenceError('FAILED');
+              const sessionRow: SessionRow = createdSession;
+
+              if (predecessor !== undefined && activeSession(predecessor, values.at)) {
+                // Callback-driven same-account replacement consumes a pending
+                // capability just like the public sessions.replace operation.
+                // Terminal adoption receipts remain account-level recovery data.
+                await transaction
+                  .update(accountAdoptions)
+                  .set({ state: 'unavailable', creatingSessionId: null, updatedAt: values.at })
+                  .where(
+                    and(
+                      eq(accountAdoptions.userId, user.id),
+                      eq(accountAdoptions.state, 'pending'),
+                      eq(accountAdoptions.creatingSessionId, predecessor.id),
+                    ),
+                  );
+              }
+
+              if (newAccount) {
+                const adoptionRows = await transaction
+                  .insert(accountAdoptions)
+                  .values({
+                    userId: user.id,
+                    state: 'pending',
+                    creatingSessionId: sessionRow.id,
+                    createdAt: values.at,
+                    updatedAt: values.at,
+                  })
+                  .returning({ userId: accountAdoptions.userId });
+                if (adoptionRows.length !== 1) throw new PersistenceError('FAILED');
+              }
+              return { status: 'completed', user: mapUser(user), session: mapSession(sessionRow) };
+            });
+          } catch (error) {
+            if (error instanceof AccountSwitchConflict) return { status: 'account-switch' };
+            throw error;
+          }
+        }),
+    },
     users: {
       findPublicById: (userId: string) =>
         safeOperation(async () => {
@@ -617,6 +847,15 @@ export function createPostgresPersistence(
           }
 
           return runTransaction(async (transaction) => {
+            // Account-keyed mutation order is user, predecessor session,
+            // adoption. Dashboard and adoption writes take the same order.
+            const lockedUsers = await transaction
+              .select({ id: users.id })
+              .from(users)
+              .where(eq(users.id, userId))
+              .limit(1)
+              .for('no key update');
+            if (lockedUsers.length !== 1) throw new PersistenceError('CONFLICT');
             // Locking the predecessor makes revoke-plus-insert one indivisible
             // fixation-prevention operation. Any failure rolls both changes back.
             const predecessorRows = await transaction
@@ -662,6 +901,19 @@ export function createPostgresPersistence(
             if (replacementRow === undefined) {
               throw new PersistenceError('FAILED');
             }
+
+            // Replacing the creating session consumes the one-time capability.
+            // Keep terminal receipts untouched; only pending state is normalized.
+            await transaction
+              .update(accountAdoptions)
+              .set({ state: 'unavailable', creatingSessionId: null, updatedAt: at })
+              .where(
+                and(
+                  eq(accountAdoptions.userId, userId),
+                  eq(accountAdoptions.state, 'pending'),
+                  eq(accountAdoptions.creatingSessionId, predecessorSessionId),
+                ),
+              );
 
             return mapSession(replacementRow);
           });
@@ -719,20 +971,41 @@ export function createPostgresPersistence(
           const sessionId = validateUuid(input.sessionId);
           const userId = validateUuid(input.userId);
           const at = validateNow(clock, input.at);
-          const rows = await database
-            .update(applicationSessions)
-            .set({ revokedAt: at })
-            .where(
-              and(
-                eq(applicationSessions.id, sessionId),
-                eq(applicationSessions.userId, userId),
-                isNull(applicationSessions.revokedAt),
-              ),
-            )
-            .returning({ id: applicationSessions.id });
-          return rows.length === 1;
+          return runTransaction(async (transaction) => {
+            const lockedUsers = await transaction
+              .select({ id: users.id })
+              .from(users)
+              .where(eq(users.id, userId))
+              .limit(1)
+              .for('no key update');
+            if (lockedUsers.length !== 1) return false;
+            const rows = await transaction
+              .update(applicationSessions)
+              .set({ revokedAt: at })
+              .where(
+                and(
+                  eq(applicationSessions.id, sessionId),
+                  eq(applicationSessions.userId, userId),
+                  isNull(applicationSessions.revokedAt),
+                ),
+              )
+              .returning({ id: applicationSessions.id });
+            if (rows.length !== 1) return false;
+            await transaction
+              .update(accountAdoptions)
+              .set({ state: 'unavailable', creatingSessionId: null, updatedAt: at })
+              .where(
+                and(
+                  eq(accountAdoptions.userId, userId),
+                  eq(accountAdoptions.state, 'pending'),
+                  eq(accountAdoptions.creatingSessionId, sessionId),
+                ),
+              );
+            return true;
+          });
         }),
     },
+    adoptions,
   };
 
   return {

@@ -354,9 +354,8 @@ describe('real PostgreSQL HTTP authentication integration', () => {
       }),
     );
     expect(sessionResponse.status).toBe(200);
-    const sessionBody = await sessionResponse.text();
-    expect(sessionBody).toMatch(
-      /^\{"userId":"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}","verifiedGoogleEmail":"fresh@example\.test"\}$/u,
+    await expect(sessionResponse.text()).resolves.toMatch(
+      /^\{"userId":"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}","verifiedGoogleEmail":"fresh@example\.test","adoption":\{"status":"pending","capability":true\}\}$/u,
     );
 
     const rows = await storedSessionRows();
@@ -400,6 +399,7 @@ describe('real PostgreSQL HTTP authentication integration', () => {
     const starts = await Promise.all([startLogin(current.app), startLogin(current.app)]);
     const responses = await Promise.all(starts.map((login) => finishLogin(current.app, login)));
     expect(responses.every((response) => response.status === 303)).toBe(true);
+    expect(responses.every((response) => hasSetCookie(response, SESSION_COOKIE_NAME))).toBe(true);
     const users = await current.database.client.query<{ readonly count: string }>(
       `SELECT count(*)::text AS count FROM users WHERE google_sub = $1`,
       ['concurrent-first-login-subject'],
@@ -409,7 +409,8 @@ describe('real PostgreSQL HTTP authentication integration', () => {
     const first = starts[0];
     if (first === undefined) throw new Error('MISSING_FIRST_LOGIN');
     const replay = await finishLogin(current.app, first);
-    expect(replay.status).toBe(401);
+    expect(replay.status).toBe(303);
+    expect(replay.headers.get('location')).toBe('/app?authError=failed');
     expect(hasSetCookie(replay, LOGIN_COOKIE_NAME)).toBe(true);
   });
 
@@ -469,10 +470,8 @@ describe('real PostgreSQL HTTP authentication integration', () => {
       verifiedGoogleEmail: 'different@example.test',
     };
     const switchCallback = await finishLogin(current.app, switchLogin, replacement);
-    expect(switchCallback.status).toBe(409);
-    await expect(switchCallback.json()).resolves.toEqual({
-      error: 'ACCOUNT_SWITCH_REQUIRES_LOGOUT',
-    });
+    expect(switchCallback.status).toBe(303);
+    expect(switchCallback.headers.get('location')).toBe('/app?authError=failed');
     expect(hasSetCookie(switchCallback, SESSION_COOKIE_NAME)).toBe(false);
     expect(hasSetCookie(switchCallback, CSRF_COOKIE_NAME)).toBe(false);
 
@@ -789,8 +788,8 @@ describe('real PostgreSQL HTTP authentication integration', () => {
     };
     const login = await startLogin(current.app);
     const failed = await finishLogin(current.app, login, signedIn.cookies);
-    expect(failed.status).toBe(503);
-    await expect(failed.json()).resolves.toEqual({ error: 'AUTH_UNAVAILABLE' });
+    expect(failed.status).toBe(303);
+    expect(failed.headers.get('location')).toBe('/app?authError=unavailable');
     expect(hasSetCookie(failed, LOGIN_COOKIE_NAME)).toBe(true);
     expect(hasSetCookie(failed, SESSION_COOKIE_NAME)).toBe(false);
     expect(hasSetCookie(failed, CSRF_COOKIE_NAME)).toBe(false);
@@ -828,14 +827,18 @@ describe('real PostgreSQL HTTP authentication integration', () => {
     };
     const login = await startLogin(current.app);
     const response = await finishLogin(current.app, login);
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toEqual({ error: 'AUTH_UNAVAILABLE' });
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toBe('/app?authError=unavailable');
     expect(hasSetCookie(response, LOGIN_COOKIE_NAME)).toBe(true);
     expect(hasSetCookie(response, SESSION_COOKIE_NAME)).toBe(false);
     expect(hasSetCookie(response, CSRF_COOKIE_NAME)).toBe(false);
     expect(current.logs.at(-1)?.code).toBe('AUTH_PERSISTENCE_FAILED');
     expect(JSON.stringify(current.logs)).not.toContain('private detail');
     expect(await storedSessionRows()).toEqual([]);
+    expect((await current.database.client.query('SELECT * FROM users')).rows).toEqual([]);
+    expect((await current.database.client.query('SELECT * FROM account_adoptions')).rows).toEqual(
+      [],
+    );
   });
 
   it('allows only one concurrent replacement of a predecessor session', async () => {
@@ -849,12 +852,14 @@ describe('real PostgreSQL HTTP authentication integration', () => {
     const responses = await Promise.all(
       starts.map((login) => finishLogin(current.app, login, signedIn.cookies)),
     );
-    expect(responses.filter((response) => response.status === 303)).toHaveLength(1);
-    const winner = responses.find((response) => response.status === 303);
-    const loser = responses.find((response) => response.status !== 303);
+    expect(
+      responses.filter((response) => hasSetCookie(response, SESSION_COOKIE_NAME)),
+    ).toHaveLength(1);
+    const winner = responses.find((response) => hasSetCookie(response, SESSION_COOKIE_NAME));
+    const loser = responses.find((response) => !hasSetCookie(response, SESSION_COOKIE_NAME));
     if (winner === undefined || loser === undefined) throw new Error('MISSING_REPLACEMENT_RESULT');
-    expect(loser.status).toBe(503);
-    await expect(loser.json()).resolves.toEqual({ error: 'AUTH_UNAVAILABLE' });
+    expect(loser.status).toBe(303);
+    expect(loser.headers.get('location')).toBe('/app?authError=unavailable');
     expect(hasSetCookie(loser, LOGIN_COOKIE_NAME)).toBe(true);
     expect(hasSetCookie(loser, SESSION_COOKIE_NAME)).toBe(false);
     expect(hasSetCookie(loser, CSRF_COOKIE_NAME)).toBe(false);

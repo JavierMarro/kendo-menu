@@ -7,12 +7,19 @@ import { createAuthentication } from './auth/authentication.js';
 import { readAppOrigin, readGoogleConfiguration } from './auth/configuration.js';
 import { createGoogleAuthenticationAdapter } from './auth/google.js';
 import { createSessionAuthorization } from './auth/session-authorization.js';
+import { createAdoption } from './adoption/adoption.js';
 import { createDashboard } from './dashboard/dashboard.js';
+import { createDashboardCatalogue } from './dashboard/validation.js';
 import { createRuntimePersistence, type RuntimePersistenceOptions } from './persistence/runtime.js';
 
 /** Compose server-only dependencies without reading configuration or opening sockets. */
 export function createRuntimeServices(options: RuntimePersistenceOptions = {}) {
   const persistence = createRuntimePersistence(options);
+  const catalogue = createDashboardCatalogue();
+  const authorization = createSessionAuthorization({
+    persistence: persistence.get,
+    getAppOrigin: readAppOrigin,
+  });
   const authentication = createAuthentication({
     persistence: persistence.get,
     getGoogleConfiguration: readGoogleConfiguration,
@@ -20,13 +27,16 @@ export function createRuntimeServices(options: RuntimePersistenceOptions = {}) {
     google: createGoogleAuthenticationAdapter(),
   });
   const dashboard = createDashboard({
-    authorization: createSessionAuthorization({
-      persistence: persistence.get,
-      getAppOrigin: readAppOrigin,
-    }),
+    authorization,
     persistence: async () => (await persistence.get()).dashboards,
+    catalogue,
   });
-  return { authentication, dashboard };
+  const adoption = createAdoption({
+    authorization,
+    persistence: persistence.get,
+    catalogue,
+  });
+  return { authentication, dashboard, adoption };
 }
 
 export function createRuntimeAuthentication(options: RuntimePersistenceOptions = {}) {

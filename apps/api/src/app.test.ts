@@ -67,15 +67,23 @@ for (const [name, handle] of Object.entries(handlers)) {
           },
         }),
       );
-      expect(response.status).toBe(503);
       expect(response.headers.get('cache-control')).toBe('private, no-store');
-      await expect(response.json()).resolves.toEqual({ error: 'AUTH_UNAVAILABLE' });
       if (path.endsWith('/callback')) {
+        expect(response.status).toBe(303);
+        expect(response.headers.get('location')).toBe('/app?authError=unavailable');
         expect(response.headers.get('referrer-policy')).toBe('no-referrer');
-        expect(response.headers.getSetCookie()).toEqual([
-          expect.stringContaining('__Host-kendomenu-login='),
-        ]);
+        const callbackCookies = response.headers.getSetCookie();
+        expect(callbackCookies).toEqual([expect.stringContaining('__Host-kendomenu-login=')]);
+        expect(
+          callbackCookies.some((cookie) => cookie.startsWith('__Host-kendomenu-session=')),
+        ).toBe(false);
+        expect(callbackCookies.some((cookie) => cookie.startsWith('__Host-kendomenu-csrf='))).toBe(
+          false,
+        );
+        await expect(response.text()).resolves.toBe('');
       } else {
+        expect(response.status).toBe(503);
+        await expect(response.json()).resolves.toEqual({ error: 'AUTH_UNAVAILABLE' });
         expect(response.headers.getSetCookie()).toEqual([]);
       }
       expect((await handle(new Request('https://app.example.test/api/health'))).status).toBe(200);

@@ -1,0 +1,8 @@
+- Session: Authoritative adoption and account recovery (Job 6A)
+- Date/duration: 2026-09-19; not recorded across interrupted work
+- Scope/start: Resumed approved Job 6A from partial authentication/adoption contracts and schema edits.
+- Changes: Added adoption POST/status contracts, atomic account/session capability creation, terminal receipts, callback redirects, migration and regression tests.
+- Decisions: Only new-account creating sessions can adopt at revision zero; later sessions recover terminal results; Jobs 6B–6D remain separate.
+- Roadblocks: Restored checksum-verified temporary Node 24.12.0; local PostgreSQL/IPC sockets require sandbox escalation; no Neon or production access.
+- Verification: Node 24 check passed 744 tests/build/types/lint/format; PostgreSQL integration passed 152; preflight, db:check, repeated generation and independent re-review passed.
+- Follow-up: Ready for owner commit; Jobs 6B–6D and external integration gates remain; no commit, push, deployment or production migration; see ADOPTION.md.

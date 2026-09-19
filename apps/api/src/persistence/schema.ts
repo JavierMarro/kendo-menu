@@ -1,5 +1,6 @@
 /**
- * Drizzle schema for identity, opaque sessions, dashboard snapshots, and write receipts.
+ * Drizzle schema for identity, opaque sessions, dashboard snapshots, write receipts, and
+ * account-adoption state.
  * Application validation remains the first boundary; database constraints repeat critical
  * invariants so malformed direct SQL or a future adapter cannot persist unsafe state.
  */
@@ -162,6 +163,72 @@ export const applicationSessions = pgTable(
   ],
 );
 
+// A new account receives exactly one adoption capability, bound to the session
+// that created it. The terminal receipt lives on this same account-keyed row:
+// there is intentionally no second adoption-history table or dashboard copy.
+// Existing users created before this table was introduced have no row and
+// therefore receive no capability during migration.
+export const accountAdoptions = pgTable(
+  'account_adoptions',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    state: varchar('state', { length: 16 }).notNull(),
+    creatingSessionId: uuid('creating_session_id').references(() => applicationSessions.id, {
+      onDelete: 'restrict',
+    }),
+    decision: varchar('decision', { length: 3 }),
+    requestId: uuid('request_id'),
+    requestDigest: varchar('request_digest', { length: 64 }),
+    acknowledgedRevision: bigint('acknowledged_revision', { mode: 'bigint' }),
+    acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      'account_adoptions_state_values',
+      sql`(${table.state} IN ('pending', 'unavailable', 'accepted', 'declined'))`,
+    ),
+    check(
+      'account_adoptions_decision_values',
+      sql`(${table.decision} IS NULL OR ${table.decision} IN ('yes', 'no'))`,
+    ),
+    check(
+      'account_adoptions_state_shape',
+      sql`(
+        (${table.state} = 'pending' AND ${table.creatingSessionId} IS NOT NULL AND ${table.decision} IS NULL AND ${table.requestId} IS NULL AND ${table.requestDigest} IS NULL AND ${table.acknowledgedRevision} IS NULL AND ${table.acknowledgedAt} IS NULL)
+        OR (${table.state} = 'unavailable' AND ${table.creatingSessionId} IS NULL AND ${table.decision} IS NULL AND ${table.requestId} IS NULL AND ${table.requestDigest} IS NULL AND ${table.acknowledgedRevision} IS NULL AND ${table.acknowledgedAt} IS NULL)
+        OR (${table.state} = 'accepted' AND ${table.creatingSessionId} IS NULL AND ${table.decision} = 'yes' AND ${table.requestId} IS NOT NULL AND ${table.requestDigest} IS NOT NULL AND ${table.acknowledgedRevision} IS NOT NULL AND ${table.acknowledgedAt} IS NOT NULL)
+        OR (${table.state} = 'declined' AND ${table.creatingSessionId} IS NULL AND ${table.decision} = 'no' AND ${table.requestId} IS NOT NULL AND ${table.requestDigest} IS NOT NULL AND ${table.acknowledgedRevision} IS NULL AND ${table.acknowledgedAt} IS NULL)
+      ) IS TRUE`,
+    ),
+    check(
+      'account_adoptions_request_digest_format',
+      sql`(${table.requestDigest} IS NULL OR ${table.requestDigest} ~ '^[0-9a-f]{64}$')`,
+    ),
+    check(
+      'account_adoptions_request_id_format',
+      sql`(${table.requestId} IS NULL OR ${table.requestId}::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')`,
+    ),
+    check(
+      'account_adoptions_acknowledged_revision_positive',
+      sql`(${table.acknowledgedRevision} IS NULL OR ${table.acknowledgedRevision} > 0)`,
+    ),
+    check(
+      'account_adoptions_finite_timestamps',
+      sql`(isfinite(${table.createdAt}) AND isfinite(${table.updatedAt}) AND (${table.acknowledgedAt} IS NULL OR isfinite(${table.acknowledgedAt})))`,
+    ),
+    check('account_adoptions_timestamp_order', sql`(${table.updatedAt} >= ${table.createdAt})`),
+    check(
+      'account_adoptions_acknowledged_at_order',
+      sql`(${table.acknowledgedAt} IS NULL OR ${table.acknowledgedAt} >= ${table.createdAt})`,
+    ),
+  ],
+);
+
 // A dashboard is one complete canonical v10 snapshot per account. The payload is
 // deliberately text rather than json/jsonb: jsonb conversion rejects escaped NULs
 // and unpaired UTF-16 surrogates, and this boundary performs no SQL JSON conversion.
@@ -245,6 +312,7 @@ export const dashboardWriteReceipts = pgTable(
 
 /** One schema object is shared by every Drizzle database bound to a checked-out client. */
 export const persistenceSchema = {
+  accountAdoptions,
   applicationSessions,
   cloudDashboards,
   dashboardWriteReceipts,

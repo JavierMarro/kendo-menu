@@ -31,9 +31,24 @@ function sessionRequest(path = '/api/session'): Request {
   });
 }
 
+function adoptionRequest(): Request {
+  const csrf = Buffer.alloc(32, 2).toString('base64url');
+  return new Request('https://app.example.test/api/dashboard/adoption', {
+    method: 'POST',
+    headers: {
+      cookie: `${sessionCookie}; __Host-kendomenu-csrf=${csrf}`,
+      origin: 'https://app.example.test',
+      'x-csrf-token': csrf,
+      'content-type': 'application/json',
+    },
+    body: '{}',
+  });
+}
+
 describe('root Vercel pool composition', () => {
   it('does not attach or connect during import, health, or configuration failures', async () => {
     vi.stubEnv('DATABASE_URL', undefined);
+    vi.stubEnv('APP_ORIGIN', 'https://app.example.test');
     const connect = vi.spyOn(Pool.prototype, 'connect');
     const adapter = await loadAdapter();
     expect((await adapter.fetch(new Request('https://app.example.test/api/health'))).status).toBe(
@@ -42,6 +57,12 @@ describe('root Vercel pool composition', () => {
     const response = await adapter.fetch(sessionRequest());
     expect(response.status).toBe(503);
     expect(response.headers.getSetCookie()).toEqual([]);
+    expect(attach).not.toHaveBeenCalled();
+    expect(connect).not.toHaveBeenCalled();
+    const adoption = await adapter.fetch(adoptionRequest());
+    expect(adoption.status).toBe(503);
+    expect(await adoption.json()).toEqual({ error: 'AUTH_UNAVAILABLE' });
+    expect(adoption.headers.get('cache-control')).toBe('private, no-store');
     expect(attach).not.toHaveBeenCalled();
     expect(connect).not.toHaveBeenCalled();
     const dashboard = await adapter.fetch(sessionRequest('/api/dashboard'));
@@ -53,6 +74,7 @@ describe('root Vercel pool composition', () => {
 
   it('attaches the actual pg pool once and preserves credentials on unavailable queries', async () => {
     vi.stubEnv('DATABASE_URL', 'postgresql://127.0.0.1:1/kendomenu_dev');
+    vi.stubEnv('APP_ORIGIN', 'https://app.example.test');
     // Reject at the socket boundary: the runtime still creates and attaches its actual pg pool.
     vi.spyOn(Pool.prototype, 'connect').mockImplementation(() => {
       throw new Error('PRIVATE_DATABASE_FAILURE');
@@ -62,6 +84,7 @@ describe('root Vercel pool composition', () => {
       const responses = await Promise.all([
         adapter.fetch(sessionRequest()),
         adapter.fetch(sessionRequest('/api/dashboard')),
+        adapter.fetch(adoptionRequest()),
       ]);
       expect(attach).toHaveBeenCalledTimes(1);
       expect(attach).toHaveBeenCalledWith(expect.any(Pool));

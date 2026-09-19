@@ -9,7 +9,14 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { PersistenceError } from '../persistence/contracts.js';
 import type {
+  AdoptionDecisionInput,
+  AdoptionDecisionOutcome,
+  AdoptionStatus,
+  AdoptionStatusInput,
+  CompleteGoogleLoginInput,
+  CompleteGoogleLoginResult,
   ConsumeLoginTransactionInput,
   ConsumeLoginTransactionResult,
   KendoPersistence,
@@ -36,6 +43,7 @@ import {
   type GoogleIdentity,
   type GoogleOperationConfiguration,
 } from './contracts.js';
+import { isNonZeroRevision } from '../dashboard/validation.js';
 import { sha256 } from './security.js';
 
 const APP_ORIGIN = 'https://app.example.test';
@@ -54,6 +62,10 @@ interface LoginState {
   consumed: boolean;
 }
 
+interface FakeAdoptionState {
+  readonly creatingSessionId: string;
+}
+
 class FakePersistence implements KendoPersistence {
   readonly usersBySubject = new Map<string, UserRecord>();
   readonly usersById = new Map<string, UserRecord>();
@@ -67,6 +79,9 @@ class FakePersistence implements KendoPersistence {
   touchCalls = 0;
   cleanupCalls = 0;
   unavailable = false;
+  readonly adoptionByUser = new Map<string, FakeAdoptionState>();
+  adoptionStatusOverride: AdoptionStatus | undefined;
+  malformedAdoptionStatus = false;
 
   readonly users = {
     findPublicById: async (userId: string): Promise<PublicUserRecord | null> => {
@@ -85,7 +100,10 @@ class FakePersistence implements KendoPersistence {
       const user: UserRecord =
         existing === undefined
           ? {
-              id: USER_ID,
+              id:
+                this.usersById.size === 0
+                  ? USER_ID
+                  : `00000000-0000-4000-8000-${String(this.usersById.size + 1).padStart(12, '0')}`,
               googleSub: input.googleSub,
               verifiedGoogleEmail: input.verifiedGoogleEmail ?? null,
               createdAt: now,
@@ -102,6 +120,95 @@ class FakePersistence implements KendoPersistence {
       this.usersBySubject.set(input.googleSub, user);
       this.usersById.set(user.id, user);
       return user;
+    },
+  };
+
+  readonly accounts = {
+    completeGoogleLogin: async (
+      input: CompleteGoogleLoginInput,
+    ): Promise<CompleteGoogleLoginResult> => {
+      await Promise.resolve();
+      this.assertAvailable();
+      const user = await this.users.resolveByGoogleSubject({
+        googleSub: input.googleSub,
+        ...(input.verifiedGoogleEmail === undefined
+          ? {}
+          : { verifiedGoogleEmail: input.verifiedGoogleEmail }),
+      });
+      const sessionInput: SessionCreationInput = {
+        userId: user.id,
+        sessionTokenHash: input.sessionTokenHash,
+        csrfTokenHash: input.csrfTokenHash,
+        idleExpiresAt: input.idleExpiresAt,
+        absoluteExpiresAt: input.absoluteExpiresAt,
+        ...(input.createdAt === undefined ? {} : { createdAt: input.createdAt }),
+        ...(input.lastActivityAt === undefined ? {} : { lastActivityAt: input.lastActivityAt }),
+      };
+      let session: SessionRecord;
+      if (input.predecessorSessionTokenHash === undefined) {
+        session = await this.sessions.create(sessionInput);
+      } else {
+        const predecessor = await this.sessions.findActiveByTokenHash({
+          sessionTokenHash: input.predecessorSessionTokenHash,
+          ...(input.at === undefined ? {} : { at: input.at }),
+        });
+        if (predecessor !== null && predecessor.userId !== user.id) {
+          return { status: 'account-switch' };
+        }
+        session =
+          predecessor === null
+            ? await this.sessions.create(sessionInput)
+            : await this.sessions.replace({
+                predecessorSessionId: predecessor.id,
+                userId: user.id,
+                replacement: sessionInput,
+                ...(input.at === undefined ? {} : { at: input.at }),
+              });
+      }
+      if (!this.adoptionByUser.has(user.id)) {
+        this.adoptionByUser.set(user.id, { creatingSessionId: session.id });
+      }
+      return { status: 'completed', user, session };
+    },
+  };
+
+  readonly adoptions = {
+    getStatus: async (input: AdoptionStatusInput): Promise<AdoptionStatus> => {
+      await Promise.resolve();
+      this.assertAvailable();
+      if (this.adoptionStatusOverride !== undefined) {
+        return this.adoptionStatusOverride;
+      }
+      const state = this.adoptionByUser.get(input.userId);
+      if (state === undefined) {
+        return { status: 'unavailable', capability: false };
+      }
+      const session = this.sessionsById.get(input.sessionId);
+      const hashes = this.sessionHashes.get(input.sessionId);
+      const capability =
+        session !== undefined &&
+        hashes !== undefined &&
+        session.userId === input.userId &&
+        session.id === state.creatingSessionId &&
+        session.revokedAt === null &&
+        session.idleExpiresAt.getTime() > NOW.getTime() &&
+        session.absoluteExpiresAt.getTime() > NOW.getTime() &&
+        hashes.sessionTokenHash === input.sessionTokenHash;
+      const status: { status: 'pending'; capability: boolean } = {
+        status: 'pending',
+        capability,
+      };
+      if (this.malformedAdoptionStatus) {
+        Object.defineProperty(status, 'capability', { value: 'malformed' });
+      }
+      return status;
+    },
+    decide: async (
+      _input: AdoptionDecisionInput & AdoptionStatusInput,
+    ): Promise<AdoptionDecisionOutcome> => {
+      await Promise.resolve();
+      this.assertAvailable();
+      return { status: 'unavailable' };
     },
   };
 
@@ -217,7 +324,7 @@ class FakePersistence implements KendoPersistence {
   };
 
   private assertAvailable(): void {
-    if (this.unavailable) throw new Error('DATABASE_FAILURE');
+    if (this.unavailable) throw new PersistenceError('UNAVAILABLE');
   }
 }
 
@@ -229,6 +336,7 @@ class FakeGoogle implements GoogleAuthenticationAdapter {
   authorizationInputs: GoogleAuthorizationInput[] = [];
   exchangeInputs: GoogleExchangeInput[] = [];
   failAuthorization = false;
+  failExchange = false;
 
   createAuthorizationUrl(input: GoogleAuthorizationInput): string {
     this.authorizationInputs.push(input);
@@ -246,6 +354,9 @@ class FakeGoogle implements GoogleAuthenticationAdapter {
   async exchangeCode(input: GoogleExchangeInput): Promise<GoogleIdentity> {
     await Promise.resolve();
     this.exchangeInputs.push(input);
+    if (this.failExchange) {
+      throw new Error('PRIVATE_EXCHANGE_FAILURE');
+    }
     return this.identity;
   }
 }
@@ -291,6 +402,19 @@ function cookieHeader(...values: Array<readonly [string, string]>): string {
   return values.map(([name, value]) => `${name}=${value}`).join('; ');
 }
 
+async function expectCallbackFailure(response: Response, code: string): Promise<void> {
+  expect(response.status).toBe(303);
+  expect(response.headers.get('location')).toBe(`/app?authError=${code}`);
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+  await expect(response.text()).resolves.toBe('');
+  const cookies = response.headers.getSetCookie();
+  expect(cookies).toHaveLength(1);
+  expect(cookies[0]).toContain(`${LOGIN_COOKIE_NAME}=;`);
+  expect(cookies.some((cookie) => cookie.startsWith(`${SESSION_COOKIE_NAME}=`))).toBe(false);
+  expect(cookies.some((cookie) => cookie.startsWith(`${CSRF_COOKIE_NAME}=`))).toBe(false);
+}
+
 async function startLogin(authentication: ReturnType<typeof createAuthentication>): Promise<{
   readonly state: string;
   readonly login: string;
@@ -302,6 +426,23 @@ async function startLogin(authentication: ReturnType<typeof createAuthentication
   const state = new URL(location).searchParams.get('state');
   if (state === null) throw new Error('MISSING_STATE');
   return { state, login: readCookie(response, LOGIN_COOKIE_NAME) };
+}
+
+function makeAcceptedAdoptionStatus(): Extract<AdoptionStatus, { status: 'accepted' }> {
+  const acknowledgedRevision = '1';
+  if (!isNonZeroRevision(acknowledgedRevision)) {
+    throw new Error('INVALID_TEST_REVISION');
+  }
+  return {
+    status: 'accepted',
+    capability: false,
+    completion: {
+      decision: 'yes',
+      requestId: '00000000-0000-4000-8000-000000000099',
+      acknowledgedRevision,
+      timestamp: NOW,
+    },
+  };
 }
 
 describe('authentication application module', () => {
@@ -361,11 +502,7 @@ describe('authentication application module', () => {
         { headers: { cookie: cookieHeader([LOGIN_COOKIE_NAME, login.login]) } },
       ),
     );
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toEqual({ error: 'AUTH_UNAVAILABLE' });
-    expect(response.headers.getSetCookie()).toEqual([
-      expect.stringContaining(`${LOGIN_COOKIE_NAME}=;`),
-    ]);
+    await expectCallbackFailure(response, 'unavailable');
     expect([...persistence.loginStates.values()][0]?.consumed).toBe(false);
     expect(google.exchangeInputs).toEqual([]);
   });
@@ -450,6 +587,7 @@ describe('authentication application module', () => {
     expect(await current.json()).toEqual({
       userId: USER_ID,
       verifiedGoogleEmail: 'person@example.test',
+      adoption: { status: 'pending', capability: true },
     });
     expect([...persistence.sessionsById.values()][0]?.lastActivityAt.getTime()).toBe(before);
     expect(persistence.touchCalls).toBe(0);
@@ -459,8 +597,104 @@ describe('authentication application module', () => {
         headers: { cookie: cookieHeader([LOGIN_COOKIE_NAME, login.login]) },
       }),
     );
-    expect(replay.status).toBe(401);
-    expect(replay.headers.get('set-cookie')).toContain(`${LOGIN_COOKIE_NAME}=;`);
+    await expectCallbackFailure(replay, 'failed');
+  });
+
+  it('projects accepted and declined adoption status without exposing storage fields', async () => {
+    const persistence = new FakePersistence();
+    const { authentication } = makeAuthentication(persistence);
+    const login = await startLogin(authentication);
+    const callback = new URL(`${APP_ORIGIN}/api/auth/google/callback`);
+    callback.searchParams.set('state', login.state);
+    callback.searchParams.set('code', 'authorization-code');
+    const signedIn = await authentication.callback(
+      new Request(callback, {
+        headers: { cookie: cookieHeader([LOGIN_COOKIE_NAME, login.login]) },
+      }),
+    );
+    const session = readCookie(signedIn, SESSION_COOKIE_NAME);
+
+    const acceptedStatus = makeAcceptedAdoptionStatus();
+    Object.defineProperty(acceptedStatus, 'requestDigest', { value: 'SECRET_DIGEST' });
+    Object.defineProperty(acceptedStatus.completion, 'requestDigest', {
+      value: 'SECRET_COMPLETION_DIGEST',
+    });
+    Object.defineProperty(acceptedStatus.completion, 'sessionId', { value: 'SECRET_SESSION_ID' });
+    persistence.adoptionStatusOverride = acceptedStatus;
+    const accepted = await authentication.getSession(
+      new Request(`${APP_ORIGIN}/api/session`, {
+        headers: { cookie: cookieHeader([SESSION_COOKIE_NAME, session]) },
+      }),
+    );
+    expect(accepted.status).toBe(200);
+    expect(await accepted.json()).toEqual({
+      userId: USER_ID,
+      verifiedGoogleEmail: 'person@example.test',
+      adoption: {
+        status: 'accepted',
+        capability: false,
+        completion: {
+          decision: 'yes',
+          requestId: '00000000-0000-4000-8000-000000000099',
+          acknowledgedRevision: '1',
+          timestamp: '2026-09-11T10:00:00.000Z',
+        },
+      },
+    });
+
+    persistence.adoptionStatusOverride = {
+      status: 'declined',
+      capability: false,
+      completion: {
+        decision: 'no',
+        requestId: '00000000-0000-4000-8000-000000000098',
+      },
+    };
+    const declined = await authentication.getSession(
+      new Request(`${APP_ORIGIN}/api/session`, {
+        headers: { cookie: cookieHeader([SESSION_COOKIE_NAME, session]) },
+      }),
+    );
+    expect(declined.status).toBe(200);
+    expect(await declined.json()).toEqual({
+      userId: USER_ID,
+      verifiedGoogleEmail: 'person@example.test',
+      adoption: {
+        status: 'declined',
+        capability: false,
+        completion: {
+          decision: 'no',
+          requestId: '00000000-0000-4000-8000-000000000098',
+        },
+      },
+    });
+  });
+
+  it('fails with a fixed 503 when the adoption adapter returns malformed status', async () => {
+    const persistence = new FakePersistence();
+    const { authentication } = makeAuthentication(persistence);
+    const login = await startLogin(authentication);
+    const callback = new URL(`${APP_ORIGIN}/api/auth/google/callback`);
+    callback.searchParams.set('state', login.state);
+    callback.searchParams.set('code', 'authorization-code');
+    const signedIn = await authentication.callback(
+      new Request(callback, {
+        headers: { cookie: cookieHeader([LOGIN_COOKIE_NAME, login.login]) },
+      }),
+    );
+    const session = readCookie(signedIn, SESSION_COOKIE_NAME);
+    persistence.malformedAdoptionStatus = true;
+
+    const response = await authentication.getSession(
+      new Request(`${APP_ORIGIN}/api/session`, {
+        headers: { cookie: cookieHeader([SESSION_COOKIE_NAME, session]) },
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    await expect(response.json()).resolves.toEqual({ error: 'AUTH_UNAVAILABLE' });
+    expect(response.headers.getSetCookie()).toEqual([]);
   });
 
   it('rejects missing or duplicate callback security parameters and consumes provider denial safely', async () => {
@@ -472,8 +706,7 @@ describe('authentication application module', () => {
         headers: { cookie: cookieHeader([LOGIN_COOKIE_NAME, missing.login]) },
       }),
     );
-    expect(missingState.status).toBe(400);
-    expect(missingState.headers.get('set-cookie')).toContain(`${LOGIN_COOKIE_NAME}=;`);
+    await expectCallbackFailure(missingState, 'failed');
 
     const duplicate = await startLogin(authentication);
     const duplicateStateUrl = new URL(`${APP_ORIGIN}/api/auth/google/callback`);
@@ -485,7 +718,7 @@ describe('authentication application module', () => {
         headers: { cookie: cookieHeader([LOGIN_COOKIE_NAME, duplicate.login]) },
       }),
     );
-    expect(duplicateState.status).toBe(400);
+    await expectCallbackFailure(duplicateState, 'failed');
 
     const denied = await startLogin(authentication);
     const deniedUrl = new URL(`${APP_ORIGIN}/api/auth/google/callback`);
@@ -496,7 +729,7 @@ describe('authentication application module', () => {
         headers: { cookie: cookieHeader([LOGIN_COOKIE_NAME, denied.login]) },
       }),
     );
-    expect(denialResponse.status).toBe(401);
+    await expectCallbackFailure(denialResponse, 'cancelled');
     expect(google.exchangeInputs).toHaveLength(0);
     const consumedDenial = [...persistence.loginStates.values()].find(
       (state) => state.receipt.id === 'transaction-3',
@@ -518,7 +751,7 @@ describe('authentication application module', () => {
         },
       }),
     );
-    expect(mismatch.status).toBe(401);
+    await expectCallbackFailure(mismatch, 'failed');
 
     const fresh = await startLogin(authentication);
     const freshCallback = new URL(`${APP_ORIGIN}/api/auth/google/callback`);
@@ -607,5 +840,86 @@ describe('authentication application module', () => {
     );
     expect(unavailable.status).toBe(503);
     expect(unavailable.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('consumes a browser-bound transaction before exchange failure and clears only login state', async () => {
+    const persistence = new FakePersistence();
+    const google = new FakeGoogle();
+    google.failExchange = true;
+    const { authentication } = makeAuthentication(persistence, google);
+    const login = await startLogin(authentication);
+    const callback = new URL(`${APP_ORIGIN}/api/auth/google/callback`);
+    callback.searchParams.set('state', login.state);
+    callback.searchParams.set('code', 'authorization-code');
+
+    const response = await authentication.callback(
+      new Request(callback, {
+        headers: { cookie: cookieHeader([LOGIN_COOKIE_NAME, login.login]) },
+      }),
+    );
+
+    await expectCallbackFailure(response, 'failed');
+    expect([...persistence.loginStates.values()][0]?.consumed).toBe(true);
+    expect(persistence.sessionsById.size).toBe(0);
+  });
+
+  it('maps temporary provider denial to an unavailable redirect after consumption', async () => {
+    const persistence = new FakePersistence();
+    const { authentication, google } = makeAuthentication(persistence);
+    const login = await startLogin(authentication);
+    const callback = new URL(`${APP_ORIGIN}/api/auth/google/callback`);
+    callback.searchParams.set('state', login.state);
+    callback.searchParams.set('error', 'temporarily_unavailable');
+
+    const response = await authentication.callback(
+      new Request(callback, {
+        headers: { cookie: cookieHeader([LOGIN_COOKIE_NAME, login.login]) },
+      }),
+    );
+
+    await expectCallbackFailure(response, 'unavailable');
+    expect([...persistence.loginStates.values()][0]?.consumed).toBe(true);
+    expect(google.exchangeInputs).toHaveLength(0);
+  });
+
+  it('never consumes another browser transaction when the binding is missing or mismatched', async () => {
+    const persistence = new FakePersistence();
+    const { authentication } = makeAuthentication(persistence);
+    const first = await startLogin(authentication);
+    const second = await startLogin(authentication);
+    const callback = new URL(`${APP_ORIGIN}/api/auth/google/callback`);
+    callback.searchParams.set('state', second.state);
+    callback.searchParams.set('code', 'authorization-code');
+
+    const mismatched = await authentication.callback(
+      new Request(callback, {
+        headers: { cookie: cookieHeader([LOGIN_COOKIE_NAME, first.login]) },
+      }),
+    );
+    await expectCallbackFailure(mismatched, 'failed');
+    expect([...persistence.loginStates.values()].every((state) => !state.consumed)).toBe(true);
+
+    const missingBinding = await authentication.callback(new Request(callback));
+    await expectCallbackFailure(missingBinding, 'failed');
+    expect([...persistence.loginStates.values()].every((state) => !state.consumed)).toBe(true);
+  });
+
+  it('maps unavailable callback persistence to a fixed redirect without claiming consumption', async () => {
+    const persistence = new FakePersistence();
+    const { authentication } = makeAuthentication(persistence);
+    const login = await startLogin(authentication);
+    persistence.unavailable = true;
+    const callback = new URL(`${APP_ORIGIN}/api/auth/google/callback`);
+    callback.searchParams.set('state', login.state);
+    callback.searchParams.set('code', 'authorization-code');
+
+    const response = await authentication.callback(
+      new Request(callback, {
+        headers: { cookie: cookieHeader([LOGIN_COOKIE_NAME, login.login]) },
+      }),
+    );
+
+    await expectCallbackFailure(response, 'unavailable');
+    expect([...persistence.loginStates.values()][0]?.consumed).toBe(false);
   });
 });
