@@ -14,6 +14,22 @@ import {
   type WorkspaceCoordinationAvailability,
   type WorkspaceCoordinator,
 } from './workspace-coordination';
+import {
+  type AccountCacheVersion,
+  type AccountDatabase,
+  createIndexedDbAccountDatabase,
+} from './account-database';
+
+export type {
+  AccountCacheRecord,
+  AccountCacheVersion,
+  AccountCompareAndSwapResult,
+  AccountDatabase,
+  AccountMetadataKind,
+  AccountPayloadKind,
+  AccountPayloadRecord,
+  AccountRecoveryRecord,
+} from './account-database';
 
 export const TRAINING_STORAGE_KEY = 'kendo-menu';
 export const ACCOUNT_STORAGE_KEY_PREFIX = 'kendo-menu:account:';
@@ -69,6 +85,7 @@ export type AccountSyncMetadata = AccountSyncMetadataV1;
 export interface AccountStorageOptions {
   readonly accountId: unknown;
   readonly storage: StateStorage;
+  readonly database?: AccountDatabase;
   readonly coordination?: WorkspaceCoordinator;
   readonly onWriteFailure?: (error: AccountStorageError) => void;
 }
@@ -83,10 +100,13 @@ export interface AccountStorageController extends StateStorage {
   readonly disable: () => void;
   readonly isEnabled: () => boolean;
   readonly lastFailure: AccountStorageError | null;
+  readonly lastRecoveryFailure: AccountStorageError | null;
   readonly flush: () => Promise<void>;
   readonly readSyncMetadata: () => AccountSyncMetadata | null | Promise<AccountSyncMetadata | null>;
   readonly initializeSyncMetadata: () => AccountSyncMetadata | Promise<AccountSyncMetadata>;
   readonly confirmCurrentValue: (rawValue: string) => void | Promise<void>;
+  readonly migrateLegacy: () => Promise<void>;
+  readonly preserveLegacyDivergence: (observedValue?: string | null) => Promise<void>;
 }
 
 type MaybePromise<T> = T | Promise<T>;
@@ -198,11 +218,7 @@ function classifyAccountCacheValue(raw: string | null): TrainingStorageInspectio
     );
   }
   const inspection = classifyTrainingStorageValue(raw);
-  if (
-    inspection.status !== 'empty' &&
-    inspection.status !== 'ready' &&
-    inspection.status !== 'migrated'
-  ) {
+  if (inspection.status !== 'empty' && inspection.status !== 'ready') {
     throw new AccountStorageError(
       'invalid-persisted-value',
       'read',
@@ -326,19 +342,6 @@ function parseStoredMetadata(raw: string | null, accountId: string): AccountSync
   return parsed;
 }
 
-function serializeMetadata(metadata: AccountSyncMetadataV1): string {
-  assertSyncMetadataShape(metadata);
-  const raw = JSON.stringify(metadata);
-  if (raw.length > ACCOUNT_SYNC_METADATA_MAX_CHARACTERS) {
-    throw new AccountStorageError(
-      'malformed-metadata',
-      'metadata',
-      'Account synchronization metadata exceeds its bounded size.',
-    );
-  }
-  return raw;
-}
-
 function exactReadback(
   storage: StateStorage,
   key: string,
@@ -354,11 +357,6 @@ function exactReadback(
       );
     }
   });
-}
-
-function writeAndConfirm(storage: StateStorage, key: string, value: string): MaybePromise<void> {
-  const write = storage.setItem(key, value);
-  return mapAsync(write, () => exactReadback(storage, key, value));
 }
 
 function removeAndConfirm(storage: StateStorage, key: string): MaybePromise<void> {
@@ -401,27 +399,6 @@ export function readAccountSyncMetadata(
   });
 }
 
-export function writeAccountSyncMetadata(
-  storage: StateStorage,
-  accountId: unknown,
-  metadata: AccountSyncMetadataV1,
-  coordination?: WorkspaceCoordinator,
-): void | Promise<void> {
-  const checkedAccountId = assertCanonicalAccountId(accountId);
-  const key = deriveAccountSyncStorageKey(checkedAccountId);
-  if (metadata.accountId !== checkedAccountId) {
-    throw new AccountStorageError(
-      'malformed-metadata',
-      'metadata',
-      'Account synchronization metadata belongs to a different account.',
-    );
-  }
-  const raw = serializeMetadata(metadata);
-  return runStorageOperation('metadata', () =>
-    runWithCoordination(coordination, checkedAccountId, () => writeAndConfirm(storage, key, raw)),
-  );
-}
-
 export function createAccountSyncMetadata(accountId: unknown): AccountSyncMetadataV1 {
   const checkedAccountId = assertCanonicalAccountId(accountId);
   return { version: ACCOUNT_SYNC_METADATA_VERSION, accountId: checkedAccountId };
@@ -432,10 +409,13 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
   const cacheKey = deriveAccountStorageKey(accountId);
   const metadataKey = deriveAccountSyncStorageKey(accountId);
   const coordination = options.coordination;
+  const database = options.database ?? createIndexedDbAccountDatabase();
   let enabled = true;
   let lastFailure: AccountStorageError | null = null;
+  let lastRecoveryFailure: AccountStorageError | null = null;
   let writerFailed = false;
   let expectedCache: string | null | undefined;
+  let expectedVersion: AccountCacheVersion | null | undefined;
   let writeTail: Promise<void> | undefined;
   const pendingWrites = new Set<Promise<void>>();
   let writeFailureReported = false;
@@ -502,12 +482,19 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
 
   const scopedRead = (): MaybePromise<string | null> => {
     assertEnabled('read');
-    return runStorageOperation('read', () => {
-      const raw = options.storage.getItem(cacheKey);
-      return mapAsync(raw, (value) => {
+    return runStorageOperation('read', () =>
+      database.readCache(accountId).then((record) => {
         assertEnabled('read');
+        const value = record?.cacheValue ?? null;
         classifyAccountCacheValue(value);
-        if (expectedCache !== undefined && expectedCache !== value) {
+        if (
+          expectedVersion !== undefined &&
+          ((record === null && expectedVersion !== null) ||
+            (record !== null &&
+              (expectedVersion === null ||
+                record.identity !== expectedVersion.identity ||
+                record.generation !== expectedVersion.generation)))
+        ) {
           throw new AccountStorageError(
             'interrupted',
             'read',
@@ -515,9 +502,11 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
           );
         }
         expectedCache = value;
+        expectedVersion =
+          record === null ? null : { identity: record.identity, generation: record.generation };
         return value;
-      });
-    });
+      }),
+    );
   };
 
   const scopedWrite = (value: string): MaybePromise<void> => {
@@ -533,23 +522,30 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
     return runStorageOperation('write', () =>
       runWithCoordination(coordination, accountId, () => {
         assertEnabled('write');
-        return mapAsync(options.storage.getItem(cacheKey), (current) => {
-          assertEnabled('write');
-          classifyAccountCacheValue(current);
-          if (expectedCache !== undefined && current !== expectedCache) {
-            throw new AccountStorageError(
-              'interrupted',
-              'write',
-              'Another workspace changed the account cache.',
-            );
-          }
-          // A lock serializes commits; comparison also prevents a stale hydrated store
-          // from overwriting another tab's edit once that lock becomes available.
-          return mapAsync(writeAndConfirm(options.storage, cacheKey, value), () => {
+        return database
+          .compareAndSwapCache(accountId, expectedVersion ?? null, value)
+          .then((result) => {
             assertEnabled('write');
-            expectedCache = value;
+            if (result.status !== 'committed' || result.record === null) {
+              throw new AccountStorageError(
+                'interrupted',
+                'write',
+                'Another workspace changed the account cache.',
+              );
+            }
+            if (result.record.cacheValue !== value) {
+              throw new AccountStorageError(
+                'malformed-readback',
+                'write',
+                'The IndexedDB cache readback did not match the requested value.',
+              );
+            }
+            expectedCache = result.record.cacheValue;
+            expectedVersion = {
+              identity: result.record.identity,
+              generation: result.record.generation,
+            };
           });
-        });
       }),
     );
   };
@@ -559,20 +555,122 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
     return runStorageOperation('remove', () =>
       runWithCoordination(coordination, accountId, () => {
         assertEnabled('remove');
-        return mapAsync(options.storage.getItem(cacheKey), (current) => {
-          assertEnabled('remove');
-          if (expectedCache !== undefined && current !== expectedCache) {
-            throw new AccountStorageError(
-              'interrupted',
-              'remove',
-              'Another workspace changed the account cache.',
-            );
-          }
-          return mapAsync(removeAndConfirm(options.storage, cacheKey), () => {
+        return database
+          .compareAndSwapCache(accountId, expectedVersion ?? null, null)
+          .then((result) => {
             assertEnabled('remove');
+            if (result.status !== 'committed') {
+              throw new AccountStorageError(
+                'interrupted',
+                'remove',
+                'Another workspace changed the account cache.',
+              );
+            }
             expectedCache = null;
+            expectedVersion = null;
           });
-        });
+      }),
+    );
+  };
+
+  const ensureUnknownAcknowledgement = async (): Promise<void> => {
+    const existing = await database.readMetadata(accountId, 'ack');
+    if (existing === null)
+      await database.writeMetadata(accountId, 'ack', { version: 1, status: 'unknown' });
+  };
+
+  const retainLegacyIfDivergent = async (legacy: string | null): Promise<void> => {
+    if (legacy === null) {
+      lastRecoveryFailure = null;
+      return;
+    }
+    if (classifyTrainingStorageValue(legacy).status !== 'ready') {
+      lastRecoveryFailure = new AccountStorageError(
+        'invalid-persisted-value',
+        'write',
+        'The legacy account value could not be validated for recovery.',
+      );
+      return;
+    }
+    const current = await database.readCache(accountId);
+    if (current !== null && current.cacheValue !== legacy) {
+      try {
+        await database.writeRecovery(accountId, legacy);
+        lastRecoveryFailure = null;
+      } catch (error) {
+        lastRecoveryFailure = mapStorageError(error, 'write');
+        throw lastRecoveryFailure;
+      }
+    } else lastRecoveryFailure = null;
+  };
+
+  const migrateLegacy = async (): Promise<void> => {
+    assertEnabled('read');
+    await runStorageOperation('read', async () =>
+      runWithCoordination(coordination, accountId, async () => {
+        assertEnabled('read');
+        const current = await database.readCache(accountId);
+        const legacy = await options.storage.getItem(cacheKey);
+        // LocalStorage has no atomic compare/remove. Keep the legacy source when
+        // coordination fell back without the shared 6B account Web Lock.
+        const canCleanLegacy = coordination?.isAvailable === true;
+        if (legacy !== null) {
+          const inspection = classifyTrainingStorageValue(legacy);
+          if (inspection.status !== 'ready') {
+            await retainLegacyIfDivergent(legacy);
+            if (current === null) classifyAccountCacheValue(legacy);
+          } else if (current === null) {
+            const migrated = await database.migrateCacheIfAbsent(accountId, legacy);
+            if (migrated.cacheValue === legacy) {
+              const confirmed = await database.readCache(accountId);
+              if (
+                confirmed === null ||
+                confirmed.cacheValue !== legacy ||
+                confirmed.identity !== migrated.identity ||
+                confirmed.generation !== migrated.generation
+              ) {
+                throw new AccountStorageError(
+                  'malformed-readback',
+                  'write',
+                  'The migrated account cache did not read back exactly.',
+                );
+              }
+              const latestLegacy = await options.storage.getItem(cacheKey);
+              if (latestLegacy === legacy && canCleanLegacy)
+                await removeAndConfirm(options.storage, cacheKey);
+              else await retainLegacyIfDivergent(latestLegacy);
+            } else {
+              await retainLegacyIfDivergent(legacy);
+            }
+          } else if (current.cacheValue !== legacy) {
+            await retainLegacyIfDivergent(legacy);
+            const latestLegacy = await options.storage.getItem(cacheKey);
+            if (latestLegacy !== legacy) await retainLegacyIfDivergent(latestLegacy);
+          } else {
+            const latestLegacy = await options.storage.getItem(cacheKey);
+            if (latestLegacy === legacy && canCleanLegacy)
+              await removeAndConfirm(options.storage, cacheKey);
+            else await retainLegacyIfDivergent(latestLegacy);
+          }
+        }
+        await ensureUnknownAcknowledgement();
+        const record = await database.readCache(accountId);
+        expectedCache = record?.cacheValue ?? null;
+        expectedVersion =
+          record === null ? null : { identity: record.identity, generation: record.generation };
+      }),
+    );
+  };
+
+  const preserveLegacyDivergence = async (observedValue?: string | null): Promise<void> => {
+    assertEnabled('read');
+    await runStorageOperation('read', async () =>
+      runWithCoordination(coordination, accountId, async () => {
+        // The event's value can have been removed by migration before this callback runs.
+        // Preserve that validated observation even when the key is now absent.
+        const legacy =
+          observedValue === undefined ? await options.storage.getItem(cacheKey) : observedValue;
+        await retainLegacyIfDivergent(legacy);
       }),
     );
   };
@@ -641,6 +739,9 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
     get lastFailure() {
       return lastFailure;
     },
+    get lastRecoveryFailure() {
+      return lastRecoveryFailure;
+    },
     flush: async () => {
       while (pendingWrites.size > 0) {
         await Promise.all([...pendingWrites]);
@@ -658,21 +759,13 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
       const metadata = createAccountSyncMetadata(accountId);
       // Never replace existing metadata for a different account or future version. A fresh
       // workspace receives its marker only after the stored value has been inspected.
-      return runStorageOperation('metadata', () =>
-        runWithCoordination(coordination, accountId, () => {
-          const existing = options.storage.getItem(metadataKey);
-          return mapAsync(existing, (raw) => {
-            assertEnabled('metadata');
-            const value = parseStoredMetadata(raw, accountId);
-            if (value !== null) {
-              return value;
-            }
-            const serialized = serializeMetadata(metadata);
-            const result = writeAndConfirm(options.storage, metadataKey, serialized);
-            return mapAsync(result, () => metadata);
-          });
-        }),
-      );
+      return runStorageOperation('metadata', () => {
+        const existing = options.storage.getItem(metadataKey);
+        return mapAsync(existing, (raw) => {
+          assertEnabled('metadata');
+          return parseStoredMetadata(raw, accountId) ?? metadata;
+        });
+      });
     },
     confirmCurrentValue: (rawValue) => {
       assertEnabled('write');
@@ -680,24 +773,23 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
         throw lastFailure;
       }
       classifyAccountCacheValue(rawValue);
-      try {
-        const result = runStorageOperation('write', () =>
-          runWithCoordination(coordination, accountId, () => {
-            assertEnabled('write');
-            return exactReadback(options.storage, cacheKey, rawValue);
-          }),
-        );
-        if (isPromiseLike(result)) {
-          const tracked = Promise.resolve(result).catch((error: unknown) =>
-            reportWriteFailure(error),
-          );
-          return trackWrite(tracked);
-        }
-        return result;
-      } catch (error) {
-        return reportWriteFailure(error);
-      }
+      const result = database
+        .readCache(accountId)
+        .then((record) => {
+          if (record?.cacheValue !== rawValue)
+            throw new AccountStorageError(
+              'malformed-readback',
+              'write',
+              'The account cache did not match the confirmed value.',
+            );
+          expectedCache = rawValue;
+          expectedVersion = { identity: record.identity, generation: record.generation };
+        })
+        .catch((error: unknown) => reportWriteFailure(error));
+      return trackWrite(result);
     },
+    migrateLegacy,
+    preserveLegacyDivergence,
   };
 
   return controller;

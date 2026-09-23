@@ -26,6 +26,7 @@ export interface WorkspaceStorageChange {
   readonly scope: WorkspaceScope;
   readonly key: string;
   readonly kind: WorkspaceChangeKind;
+  readonly newValue: string | null;
 }
 
 export interface WorkspaceStorageEvent {
@@ -230,6 +231,7 @@ export function createWorkspaceCoordinator(
         scope: cloneScope(subscription.scope),
         key: event.key,
         kind,
+        newValue: event.newValue,
       });
     }
   };

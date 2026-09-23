@@ -245,14 +245,19 @@ store; warm network failure preserves the already activated account. Monotonic e
 identities guard asynchronous results. Switching/hiding aborts requests, unsubscribes observers,
 disables the old writer and clears/releases its store. Job 6B schedules no timers or background work.
 
-[Account storage](../apps/web/src/lib/account-storage.ts) retains one v10 dashboard under
-`kendo-menu:account:<internal-user-uuid>` and bounded version-1 identity-only metadata at `:sync`.
-The guest key remains `kendo-menu`. Every cache passes the existing store validation/migration path;
-metadata is separately strict. Durable writes require exact read-back, and failures latch until
-recovery. Account commits compare the previously confirmed cache while holding the account lock;
-a changed cache stops the stale writer. Writes within one adapter also serialize without Web Locks.
-No baseline, pending request, conflict or adoption dashboard is duplicated in LocalStorage.
-The [storage budget](ACCOUNT_SYNC.md#job-6b-implementation-boundary) accounts for retained caches.
+[Account storage](../apps/web/src/lib/account-storage.ts) uses a versioned IndexedDB database for
+account-keyed validated v10 caches and local generations. Its separately bounded metadata starts
+with cloud acknowledgement unknown; reserved pending-request, active-conflict, and recovery records
+remain local and do not perform synchronization. The guest key remains `kendo-menu` in LocalStorage.
+After session verification, migration validates Job 6B's `kendo-menu:account:<internal-user-uuid>`
+legacy value, commits and reads back the IndexedDB copy, then conditionally removes the unchanged
+legacy key while holding the shared account lock. Without that lock, it keeps the legacy source.
+A later divergent legacy write is retained separately for recovery. Metadata at the
+legacy `:sync` key is identity-only and never proves cloud acknowledgement. Durable writes require
+exact read-back; cache identity and generation comparisons stop stale writers, and failures latch
+until recovery. Short account locks and IndexedDB transactions never span network requests. The
+[storage budget](ACCOUNT_SYNC.md#job-6c-a--account-cache-cutover) covers migration overlap and
+retained copies.
 
 Failed/indeterminate logout keeps the account locally accessible and returns a retryable result.
 Local hiding reports that server revocation was not confirmed. If a quota failure coincides with

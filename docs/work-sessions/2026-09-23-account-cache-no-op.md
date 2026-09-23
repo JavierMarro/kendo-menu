@@ -1,0 +1,8 @@
+- Session: account cache no op
+- Date/duration: 2026-09-23; ~15 minutes
+- Scope/start: Correct Job 6C-A identical-write behavior in the uncommitted IndexedDB cutover; no 6C-B work or commit.
+- Changes: Matching identical cache writes now return the confirmed record without a write; deterministic tests cover same-byte stale expectations, and browser tests separate open-only from genuine second-tab edits.
+- Decisions: Compare expected identity and generation before byte equality; unchanged hydration and reload preserve generation and acknowledgement, including at maximum generation.
+- Roadblocks: The previous maximum-generation browser assertion assumed unchanged hydration would fail; it now checks successful hydration and rejected editing.
+- Verification: Node 24 pnpm check PASS (web 255, API 437, store 69, domain 73 tests); account browser spec development 16/16 PASS and preview 16/16 PASS; independent persistence review PASS.
+- Follow-up: Job 6C-B remains separate; use the binding synchronization rules and budget in docs/ACCOUNT_SYNC.md after this cutover passes its persistence gate.

@@ -14,6 +14,7 @@ import type { DashboardEntry } from '@kendo-menu/domain';
 
 import {
   createAccountStorage,
+  type AccountDatabase,
   type AccountStorageController,
   type AccountStorageFailureCode,
 } from './account-storage';
@@ -46,6 +47,7 @@ export type WorkspaceSnapshot =
       readonly synchronization: 'not-implemented' | 'unavailable';
       readonly storageChanged: boolean;
       readonly persistenceFailure: AccountStorageFailureCode | null;
+      readonly recoveryFailure: AccountStorageFailureCode | null;
       readonly serverRevocationConfirmed: boolean;
     }
   | { readonly mode: 'disposed'; readonly epoch: number };
@@ -55,6 +57,7 @@ export interface AccountWorkspaceOptions {
   readonly api: Pick<AccountApiClient, 'getSession' | 'logout'>;
   readonly storage: StateStorage;
   readonly coordination: WorkspaceCoordinator;
+  readonly database?: AccountDatabase;
 }
 
 interface ActiveWorkspace {
@@ -203,6 +206,7 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
         synchronization: options.coordination.isAvailable ? 'not-implemented' : 'unavailable',
         storageChanged: active.storageChanged,
         persistenceFailure: active.storage.lastFailure?.code ?? null,
+        recoveryFailure: active.storage.lastRecoveryFailure?.code ?? null,
         serverRevocationConfirmed: active.serverRevocationConfirmed,
       };
     },
@@ -290,6 +294,7 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
         accountId: userId,
         storage: options.storage,
         coordination: options.coordination,
+        ...(options.database === undefined ? {} : { database: options.database }),
       });
       preparing = storage;
       const activationCurrent = () =>
@@ -299,10 +304,31 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
         active === undefined &&
         preparing === storage &&
         storage.accountId === userId;
+      const observedLegacyValues: string[] = [];
+      let sawLegacyChange = false;
+      // Subscribe during verified preparation so a stale tab's event value survives
+      // even if migration removes the key before the event callback can read it.
+      const unsubscribe = options.coordination.subscribe(
+        accountWorkspaceScope(userId),
+        (change) => {
+          if (change.kind === 'cache') {
+            if (active?.storage === storage) {
+              active.storageChanged = true;
+              void storage.preserveLegacyDivergence(change.newValue).catch(() => undefined);
+            } else if (activationCurrent()) {
+              if (change.newValue !== null) observedLegacyValues.push(change.newValue);
+              sawLegacyChange = true;
+            }
+          } else if (active?.storage === storage) {
+            active.storageChanged = true;
+          }
+        },
+      );
       let store: TrainingStoreApi | undefined;
       try {
-        // Metadata is separately validated; its presence never establishes identity.
-        await storage.readSyncMetadata();
+        // Only a verified session reaches migration. Its account lock covers the short
+        // LocalStorage-to-IndexedDB cutover, never an HTTP request.
+        await storage.migrateLegacy();
         if (!activationCurrent()) return { status: 'superseded' };
         let hydrationFailed = false;
         store = await createTrainingStoreAsync({
@@ -323,8 +349,6 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
           }
           store.setState({ dashboardEntries: retained.entries });
         }
-        await storage.initializeSyncMetadata();
-        if (!activationCurrent()) return { status: 'superseded' };
         // Persist one canonical v10 cache, including a new empty workspace, and confirm it.
         await storage.setItem(
           storage.cacheKey,
@@ -340,11 +364,14 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
           }),
         );
         if (!activationCurrent()) return { status: 'superseded' };
-        const unsubscribe = options.coordination.subscribe(accountWorkspaceScope(userId), () => {
-          if (active?.epoch === activationEpoch && active.userId === userId) {
-            active.storageChanged = true;
-          }
-        });
+        let observedIndex = 0;
+        while (observedIndex < observedLegacyValues.length) {
+          const value = observedLegacyValues[observedIndex];
+          observedIndex += 1;
+          if (value === undefined) continue;
+          await storage.preserveLegacyDivergence(value);
+          if (!activationCurrent()) return { status: 'superseded' };
+        }
         active = {
           userId,
           session: result.session,
@@ -352,7 +379,7 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
           store,
           storage,
           unsubscribe,
-          storageChanged: false,
+          storageChanged: sawLegacyChange,
           serverRevocationConfirmed: false,
         };
         preparing = undefined;
@@ -364,6 +391,7 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
           : { status: 'superseded' };
       } finally {
         if (active?.storage !== storage) {
+          unsubscribe();
           storage.disable();
           store?.setState({ dashboardEntries: [] });
           if (preparing === storage) preparing = undefined;

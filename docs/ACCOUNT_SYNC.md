@@ -566,6 +566,52 @@ Local deterministic tests do not establish real Google login, HTTPS cookie behav
 Vercel API routing, or Fluid Compute operation. Those remain separately authorized production
 verification gates.
 
+## Job 6C-A — account cache cutover
+
+The internal account workspace moves its validated v10 cache to one versioned IndexedDB database
+after `/api/session` verifies the account. Records are keyed by the internal account UUID. The
+database reserves bounded acknowledgement, pending-request, active-conflict, and retained-recovery
+records for Job 6C-B. A migrated cache and Job 6B's identity-only `:sync` marker both leave cloud
+acknowledgement **unknown**. Guest persistence stays at the `kendo-menu` LocalStorage key.
+The pending/conflict slots currently enforce a bounded JSON-object envelope; Job 6C-B must define
+and validate their request and conflict contracts before consuming them.
+
+Migration holds the existing account storage lock only across local operations. The validated
+IndexedDB record wins over an older legacy account key. The legacy key is removed only after the
+IndexedDB value is committed and read back, the legacy value still matches the one migrated, and
+the shared account Web Lock was acquired. Without that lock, the legacy source stays in place.
+A later valid legacy write from a stale Job 6B tab is preserved as a separate recovery
+copy when it diverges; it never replaces the active cache or triggers an upload. Failed preservation
+leaves that legacy value in place. Quota and storage failures are recovery states, not confirmed saves.
+An identical cache write is a no-op only after its expected identity and generation match inside
+the transaction; it returns the confirmed record without advancing generation or changing acknowledgement.
+An identical value from a stale writer still conflicts.
+LocalStorage has no atomic compare-and-remove operation: a writer that bypasses the shared lock can
+still race cleanup. Validated storage-event values are queued during activation and retained for
+recovery even if the key disappears before the event is handled.
+
+For one near-limit guest dashboard, account dashboard, and legacy copy during migration, the guest
+LocalStorage key and value use at most 4,194,324 logical bytes under two-byte-per-code-unit
+accounting; the IndexedDB account cache uses at most 6,291,456 bytes plus 4,096 metadata bytes; the
+legacy account key, value, and bounded `:sync` marker use at most 4,195,558 bytes. The logical total
+is **14,685,434 bytes**. One retained divergent legacy recovery copy adds at most 6,295,552 bytes.
+Browser bookkeeping and transaction copies can require more storage, so these figures do not
+guarantee quota availability.
+
+Job 6C-B's budget is **20,983,828 bytes** for guest and account caches, one pending request, and
+active local/cloud conflict copies, before legacy or retained recovery copies. Each retained
+losing-local copy adds at most 6,295,552 bytes; lifetime retention has no finite maximum.
+
+Job 6C-B must suspend ordinary PUTs only when an eligible, non-empty, validated,
+cloud-size-compliant guest dashboard awaits Yes/No, or an adoption request remains unresolved.
+Absent, invalid, or oversized guest data creates no invented No decision and does not block
+ordinary account editing or uploads. A successful ordinary write may consume Job 6A's pending
+capability. If the separate synchronization Web Lock is unavailable or cannot be acquired, local
+saves remain usable while uploads pause. That lock may cover an HTTP request; the account storage
+lock and IndexedDB transactions stay short and never span fetch, in line with the
+[Web Locks API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API) and
+[IndexedDB transaction lifetime](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API/Basic_Terminology).
+
 ## 3. Remaining gates for later jobs
 
 ### Owner decisions
