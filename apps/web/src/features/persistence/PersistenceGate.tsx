@@ -1,3 +1,8 @@
+/**
+ * Selects a validated guest store and presents recovery when browser persistence is unsafe.
+ * The store remains usable in memory while the gate reports write failures or pending saves.
+ * Explicit recovery choices replace the storage adapter rather than replacing live UI state.
+ */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { createTrainingStore } from '@kendo-menu/store';
@@ -71,6 +76,8 @@ export function PersistenceGate({
   }, []);
 
   const updatePendingWriter = useCallback((writerId: object, pending: boolean) => {
+    // A replaced writer may settle after the new one starts. Track identities, not just a
+    // boolean, so the old completion cannot clear the new writer's pending warning.
     queueMicrotask(() => {
       setPendingWriterIds((current) => {
         if (pending && current.has(writerId)) {
@@ -165,6 +172,8 @@ export function PersistenceGate({
       return undefined;
     }
 
+    // A queued browser write is not yet confirmed; warn before closing the tab even though
+    // Zustand has already rendered the edited state.
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';

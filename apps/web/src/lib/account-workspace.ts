@@ -1,3 +1,9 @@
+/**
+ * Binds a verified server session to one account-scoped local training store.
+ * The controller owns activation, account switching, and exit; a cached ID alone never
+ * activates a workspace. Epochs and request sequences keep late responses from reopening
+ * or mutating an account after another lifecycle operation has taken over.
+ */
 import {
   createTrainingStoreAsync,
   serializePersistedTrainingStateV10,
@@ -15,12 +21,11 @@ import type { AccountApiClient, AccountSession, SessionResult } from './account-
 import { accountWorkspaceScope, type WorkspaceCoordinator } from './workspace-coordination';
 
 // Internal composition only. Public routes deliberately do not instantiate this controller.
-// Session validation, storage validation, and coordination remain separate injected boundaries.
 
 export type WorkspaceOperationResult =
   | { readonly status: 'ready' }
   | { readonly status: 'signed-out' }
-  | { readonly status: 'hidden'; readonly serverRevocationConfirmed: false }
+  | { readonly status: 'hidden'; readonly serverRevocationConfirmed: boolean }
   | { readonly status: 'superseded' }
   | { readonly status: 'disposed' }
   | {
@@ -127,6 +132,8 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
     !operation.abort.signal.aborted;
 
   const preserve = async (workspace: ActiveWorkspace): Promise<boolean> => {
+    // A save acknowledgement is meaningful only if the cache still equals the current store.
+    // Edits can arrive while the asynchronous flush or readback is in progress.
     try {
       await workspace.storage.flush();
       const raw = serializePersistedTrainingStateV10({
@@ -164,9 +171,11 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
     intent: NonNullable<typeof exitIntent>,
   ): Promise<WorkspaceOperationResult> => {
     if (active !== workspace || exitIntent !== intent) return { status: 'superseded' };
+    // Record confirmed revocation before a fallible local flush. A newer exit intent must
+    // still know the server session is gone even if it supersedes this operation.
+    if (confirmed) workspace.serverRevocationConfirmed = true;
     const saved = await preserve(workspace);
     if (active !== workspace || exitIntent !== intent) return { status: 'superseded' };
-    if (confirmed) workspace.serverRevocationConfirmed = true;
     cancelRequests();
     deactivate(!saved);
     return saved
@@ -174,7 +183,9 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
       : {
           status: 'retryable',
           reason: 'storage',
-          ...(confirmed ? { serverRevocationConfirmed: true as const } : {}),
+          ...(workspace.serverRevocationConfirmed
+            ? { serverRevocationConfirmed: true as const }
+            : {}),
         };
   };
 
@@ -368,10 +379,16 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
       exitIntent = intent;
       const operation = startRequest();
       if (!(await preserve(workspace))) {
+        if (!isCurrent(operation)) return { status: 'superseded' };
+        if (workspace.serverRevocationConfirmed) {
+          // The server session is already gone: retain the unsaved state privately, but do not
+          // leave the revoked account visible while waiting for storage recovery.
+          cancelRequests();
+          deactivate(true);
+          return { status: 'retryable', reason: 'storage', serverRevocationConfirmed: true };
+        }
         if (exitIntent === intent) exitIntent = undefined;
-        return isCurrent(operation)
-          ? { status: 'retryable', reason: 'storage' }
-          : { status: 'superseded' };
+        return { status: 'retryable', reason: 'storage' };
       }
       if (!isCurrent(operation)) return { status: 'superseded' };
       try {
@@ -430,11 +447,18 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
       )
         return { status: 'superseded' };
       if (!saved) {
+        if (workspace?.serverRevocationConfirmed) {
+          deactivate(true);
+          return { status: 'retryable', reason: 'storage', serverRevocationConfirmed: true };
+        }
         if (intent !== undefined && exitIntent === intent) exitIntent = undefined;
         return { status: 'retryable', reason: 'storage' };
       }
+      // Local hide can supersede a logout whose 204 already arrived. Preserve that fact in
+      // the result even though this operation does not call the server itself.
+      const serverRevocationConfirmed = workspace?.serverRevocationConfirmed ?? false;
       deactivate();
-      return { status: 'hidden', serverRevocationConfirmed: false };
+      return { status: 'hidden', serverRevocationConfirmed };
     },
 
     dispose: () => {

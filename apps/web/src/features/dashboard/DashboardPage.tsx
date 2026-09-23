@@ -1,3 +1,9 @@
+/**
+ * Renders and edits the current workspace's dashboard entries and per-activity details.
+ * Store actions update the active local workspace immediately; save labels reflect the
+ * separate browser-persistence result. This page does not decide account identity or cloud
+ * synchronization state.
+ */
 import {
   useEffect,
   useMemo,
@@ -479,6 +485,8 @@ export function DashboardTrainingSet({
       return;
     }
 
+    // Blur commits any focused notes or quantity draft before flushing, so the confirmation
+    // corresponds to the value the person was editing rather than the prior store snapshot.
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLElement && event.currentTarget.contains(activeElement)) {
       activeElement.blur();

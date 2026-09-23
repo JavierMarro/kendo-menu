@@ -582,6 +582,181 @@ describe('internal account bootstrap and isolation', () => {
     expect(restored.store.getState().dashboardEntries).toHaveLength(1);
   });
 
+  it('reports confirmed revocation when a local hide supersedes a successful logout save', async () => {
+    const f = fixture();
+    add(f.guestStore);
+    const guestValue = f.values.get('kendo-menu');
+    await f.controller.bootstrap();
+    const account = f.controller.getSnapshot();
+    if (account.mode !== 'account') throw new Error('account missing');
+
+    const logoutResponse = deferred<Response>();
+    f.fetch.mockReturnValueOnce(logoutResponse.promise);
+    const logout = f.controller.logout();
+    await vi.waitFor(() => expect(f.fetch).toHaveBeenCalledTimes(2));
+
+    const writeGate = deferred<void>();
+    const write = f.storage.setItem;
+    let writeStarted = false;
+    f.storage.setItem = async (key, raw) => {
+      if (key === deriveAccountStorageKey(A)) {
+        writeStarted = true;
+        await writeGate.promise;
+      }
+      await write(key, raw);
+    };
+    add(account.store);
+    await vi.waitFor(() => expect(writeStarted).toBe(true));
+    logoutResponse.resolve(new Response(null, { status: 204 }));
+    await vi.waitFor(() =>
+      expect(f.controller.getSnapshot()).toMatchObject({
+        mode: 'account',
+        serverRevocationConfirmed: true,
+      }),
+    );
+
+    const hide = f.controller.hideLocally();
+    writeGate.resolve();
+    expect(await hide).toEqual({ status: 'hidden', serverRevocationConfirmed: true });
+    expect(await logout).toEqual({ status: 'superseded' });
+    expect(f.controller.getSnapshot().mode).toBe('guest');
+    expect(account.store.getState().dashboardEntries).toEqual([]);
+    expect(f.values.get(deriveAccountStorageKey(A))).not.toBe(empty);
+    expect(f.values.get('kendo-menu')).toBe(guestValue);
+    expect(f.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('hides a revoked account when concurrent local hide and final preservation both fail', async () => {
+    const f = fixture();
+    add(f.guestStore);
+    const guestValue = f.values.get('kendo-menu');
+    await f.controller.bootstrap();
+    const account = f.controller.getSnapshot();
+    if (account.mode !== 'account') throw new Error('account missing');
+    const accountKey = deriveAccountStorageKey(A);
+    const logoutResponse = deferred<Response>();
+    f.fetch.mockReturnValueOnce(logoutResponse.promise);
+    const logout = f.controller.logout();
+    await vi.waitFor(() => expect(f.fetch).toHaveBeenCalledTimes(2));
+
+    const finalWrite = deferred<void>();
+    const write = f.storage.setItem;
+    let finalWriteStarted = false;
+    f.storage.setItem = async (key, raw) => {
+      if (key === accountKey) {
+        finalWriteStarted = true;
+        await finalWrite.promise;
+        throw new DOMException('quota fixture', 'QuotaExceededError');
+      }
+      await write(key, raw);
+    };
+    add(account.store);
+    await vi.waitFor(() => expect(finalWriteStarted).toBe(true));
+    logoutResponse.resolve(new Response(null, { status: 204 }));
+    await vi.waitFor(() =>
+      expect(f.controller.getSnapshot()).toMatchObject({
+        mode: 'account',
+        serverRevocationConfirmed: true,
+      }),
+    );
+
+    const hide = f.controller.hideLocally();
+    finalWrite.resolve();
+    expect(await hide).toEqual({
+      status: 'retryable',
+      reason: 'storage',
+      serverRevocationConfirmed: true,
+    });
+    expect(await logout).toEqual({ status: 'superseded' });
+    expect(f.controller.getSnapshot().mode).toBe('guest');
+    expect(account.store.getState().dashboardEntries).toEqual([]);
+    expect(f.values.get(accountKey)).toBe(empty);
+    expect(f.values.get('kendo-menu')).toBe(guestValue);
+    expect(f.guestStore.getState().dashboardEntries).toHaveLength(1);
+
+    f.storage.setItem = write;
+    f.fetch.mockResolvedValueOnce(session(B));
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    const newer = f.controller.getSnapshot();
+    if (newer.mode !== 'account') throw new Error('newer account missing');
+    expect(newer.userId).toBe(B);
+    expect(newer.store.getState().dashboardEntries).toEqual([]);
+    f.fetch.mockResolvedValueOnce(session(A));
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    const restored = f.controller.getSnapshot();
+    if (restored.mode !== 'account') throw new Error('restored account missing');
+    expect(restored.userId).toBe(A);
+    expect(restored.store.getState().dashboardEntries).toHaveLength(1);
+    expect(f.values.get('kendo-menu')).toBe(guestValue);
+  });
+
+  it('hides a revoked account when a second logout supersedes hide before final preservation fails', async () => {
+    const f = fixture();
+    add(f.guestStore);
+    const guestValue = f.values.get('kendo-menu');
+    await f.controller.bootstrap();
+    const account = f.controller.getSnapshot();
+    if (account.mode !== 'account') throw new Error('account missing');
+    const accountKey = deriveAccountStorageKey(A);
+    const logoutResponse = deferred<Response>();
+    f.fetch.mockReturnValueOnce(logoutResponse.promise);
+    const firstLogout = f.controller.logout();
+    await vi.waitFor(() => expect(f.fetch).toHaveBeenCalledTimes(2));
+
+    const finalWrite = deferred<void>();
+    const write = f.storage.setItem;
+    let finalWriteStarted = false;
+    f.storage.setItem = async (key, raw) => {
+      if (key === accountKey) {
+        finalWriteStarted = true;
+        await finalWrite.promise;
+        throw new DOMException('quota fixture', 'QuotaExceededError');
+      }
+      await write(key, raw);
+    };
+    add(account.store);
+    await vi.waitFor(() => expect(finalWriteStarted).toBe(true));
+    logoutResponse.resolve(new Response(null, { status: 204 }));
+    await vi.waitFor(() =>
+      expect(f.controller.getSnapshot()).toMatchObject({
+        mode: 'account',
+        serverRevocationConfirmed: true,
+      }),
+    );
+
+    const hide = f.controller.hideLocally();
+    const secondLogout = f.controller.logout();
+    finalWrite.resolve();
+    expect(await hide).toEqual({ status: 'superseded' });
+    expect(await firstLogout).toEqual({ status: 'superseded' });
+    expect(await secondLogout).toEqual({
+      status: 'retryable',
+      reason: 'storage',
+      serverRevocationConfirmed: true,
+    });
+    expect(f.fetch).toHaveBeenCalledTimes(2);
+    expect(f.controller.getSnapshot().mode).toBe('guest');
+    expect(account.store.getState().dashboardEntries).toEqual([]);
+    expect(f.values.get(accountKey)).toBe(empty);
+    expect(f.values.get('kendo-menu')).toBe(guestValue);
+    expect(f.guestStore.getState().dashboardEntries).toHaveLength(1);
+
+    f.storage.setItem = write;
+    f.fetch.mockResolvedValueOnce(session(B));
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    const newer = f.controller.getSnapshot();
+    if (newer.mode !== 'account') throw new Error('newer account missing');
+    expect(newer.userId).toBe(B);
+    expect(newer.store.getState().dashboardEntries).toEqual([]);
+    f.fetch.mockResolvedValueOnce(session(A));
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    const restored = f.controller.getSnapshot();
+    if (restored.mode !== 'account') throw new Error('restored account missing');
+    expect(restored.userId).toBe(A);
+    expect(restored.store.getState().dashboardEntries).toHaveLength(1);
+    expect(f.values.get('kendo-menu')).toBe(guestValue);
+  });
+
   it('does not send DELETE when the initial logout preservation fails', async () => {
     const f = fixture();
     add(f.guestStore);
@@ -599,6 +774,43 @@ describe('internal account bootstrap and isolation', () => {
     expect(f.controller.getSnapshot().mode).toBe('account');
     expect(f.values.get('kendo-menu')).toBe(guestValue);
     expect(f.guestStore.getState().dashboardEntries).toHaveLength(1);
+    f.storage.setItem = write;
+  });
+
+  it('keeps unconfirmed overlapping hide and logout retryable after storage failure', async () => {
+    const f = fixture();
+    add(f.guestStore);
+    const guestValue = f.values.get('kendo-menu');
+    await f.controller.bootstrap();
+    const account = f.controller.getSnapshot();
+    if (account.mode !== 'account') throw new Error('account missing');
+    const finalWrite = deferred<void>();
+    const write = f.storage.setItem;
+    let finalWriteStarted = false;
+    f.storage.setItem = async (key, raw) => {
+      if (key === deriveAccountStorageKey(A)) {
+        finalWriteStarted = true;
+        await finalWrite.promise;
+        throw new DOMException('quota fixture', 'QuotaExceededError');
+      }
+      await write(key, raw);
+    };
+    add(account.store);
+    await vi.waitFor(() => expect(finalWriteStarted).toBe(true));
+
+    const hide = f.controller.hideLocally();
+    const logout = f.controller.logout();
+    finalWrite.resolve();
+    expect(await hide).toEqual({ status: 'superseded' });
+    expect(await logout).toEqual({ status: 'retryable', reason: 'storage' });
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      userId: A,
+      serverRevocationConfirmed: false,
+    });
+    expect(account.store.getState().dashboardEntries).toHaveLength(1);
+    expect(f.fetch).toHaveBeenCalledTimes(1);
+    expect(f.values.get('kendo-menu')).toBe(guestValue);
     f.storage.setItem = write;
   });
 

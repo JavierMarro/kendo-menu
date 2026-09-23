@@ -1,3 +1,9 @@
+/**
+ * Account-scoped LocalStorage adapter for the Zustand workspace cache.
+ * Keys use the server-issued internal user ID, while separately validated sync metadata
+ * records cache ownership without proving authentication. Writes are confirmed by readback
+ * so callers can distinguish a durable local save from an in-memory store update.
+ */
 import {
   classifyTrainingStorageValue,
   type StateStorage,
@@ -477,6 +483,8 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
   };
 
   const sequenceWrite = (action: () => MaybePromise<void>): MaybePromise<void> => {
+    // Zustand may issue writes without awaiting earlier ones. Preserve their order so an older
+    // async completion cannot become the final cache value after a newer edit.
     const result = writeTail === undefined ? action() : writeTail.then(action);
     if (!isPromiseLike(result)) return result;
     const pending = Promise.resolve(result);
@@ -648,6 +656,8 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
     initializeSyncMetadata: () => {
       assertEnabled('metadata');
       const metadata = createAccountSyncMetadata(accountId);
+      // Never replace existing metadata for a different account or future version. A fresh
+      // workspace receives its marker only after the stored value has been inspected.
       return runStorageOperation('metadata', () =>
         runWithCoordination(coordination, accountId, () => {
           const existing = options.storage.getItem(metadataKey);

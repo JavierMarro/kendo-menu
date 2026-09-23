@@ -1,3 +1,9 @@
+/**
+ * Displays one library training session and offers a local dashboard action.
+ * Adding changes Zustand immediately, while the visible success message waits for the
+ * persistence provider to confirm a device write. A failed confirmation is reported without
+ * claiming the in-memory addition was lost.
+ */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -75,6 +81,8 @@ export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentP
     try {
       addToDashboard(trainingSet.id);
       added = true;
+      // Keep the UI's success claim aligned with durable browser storage, not merely the
+      // synchronous Zustand mutation.
       await flushPersistence();
       setStatusMessage(`${trainingSet.name} added to your dashboard.`);
     } catch {

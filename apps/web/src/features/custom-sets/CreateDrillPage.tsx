@@ -1,3 +1,9 @@
+/**
+ * Builds a custom training session and adds it to the current local dashboard.
+ * Draft edits are guarded against accidental navigation; a successful submit is reported
+ * only after the persistence boundary confirms the device write. On write failure the live
+ * entry remains available for recovery instead of being silently discarded.
+ */
 import {
   useEffect,
   useMemo,
@@ -175,6 +181,8 @@ export function CreateDrillPage() {
       const input = parseResult.value;
       createCustomTrainingSet(input);
       created = true;
+      // The store mutation is immediate, but the dashboard success route should follow a
+      // confirmed local write. A failed confirmation takes the user to recovery-aware UI.
       try {
         await flushPersistence();
         isDirtyRef.current = false;

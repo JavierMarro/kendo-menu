@@ -1,3 +1,9 @@
+/**
+ * Provides the guest workspace's browser-storage and recovery boundary.
+ * Zustand updates memory immediately, but explicit flush and readback checks decide whether
+ * those edits were confirmed on this device. Recovery can swap the backing adapter without
+ * changing the store reference used by the UI.
+ */
 import {
   classifyTrainingStorageValue,
   serializePersistedTrainingStateV10,
@@ -156,6 +162,8 @@ function confirmReadback(
 }
 
 function assertGuestBaseline(name: string, value: string | null): void {
+  // The initial value was inspected before store creation. Revalidate it here so a recovery
+  // writer never treats arbitrary or future-version bytes as its known baseline.
   if (value === null) {
     return;
   }
@@ -318,6 +326,8 @@ export function createBrowserTrainingStorage(
     if (!enabled || writeFailed) {
       return;
     }
+    // Compare the current value with the last value this writer observed. Even with a lock,
+    // another tab may have committed since hydration; silently overwriting it would lose data.
     const storage = resolveBrowserStorage(options.storage);
     const expectedValue = expectedValues.get(name);
     const hasExpectedValue = expectedValues.has(name);

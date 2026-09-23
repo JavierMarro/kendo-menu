@@ -1,3 +1,9 @@
+/**
+ * Coordinates same-origin guest and account cache operations across browser tabs.
+ * Web Locks serialize writes when available; storage events only tell an already selected
+ * workspace that its cache changed. Neither mechanism authenticates a user or chooses which
+ * account may be opened.
+ */
 import { classifyTrainingStorageValue } from '@kendo-menu/store';
 
 import {

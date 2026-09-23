@@ -1,3 +1,8 @@
+/**
+ * Shares local persistence status and the explicit save-confirmation operation with UI pages.
+ * Labels distinguish an in-memory edit from a pending or failed device write; they do not
+ * claim that guest data has been uploaded to an account or synchronized elsewhere.
+ */
 import { createContext, useContext } from 'react';
 
 export interface PersistenceContextValue {
@@ -16,6 +21,7 @@ export function getPersistenceStatusLabel({
   writeFailed,
   pending,
 }: PersistenceStatusSnapshot): string {
+  // Failure wins over pending so a stuck or rejected write cannot look like an ordinary save.
   if (writeFailed) {
     return 'Changes are not being saved';
   }

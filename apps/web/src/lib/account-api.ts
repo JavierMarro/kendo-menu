@@ -335,6 +335,8 @@ function parseAdoptionStatus(value: unknown): AdoptionStatus | null {
 }
 
 function parseSession(value: unknown): AccountSession | null {
+  // Only the internal user ID selects a local account workspace. The verified email is
+  // display data; accepting it as a storage key would mix identity and presentation.
   if (
     !isStrictJsonObject(value) ||
     !hasExactKeys(value, ['userId', 'verifiedGoogleEmail', 'adoption']) ||
@@ -857,6 +859,8 @@ export function createAccountApiClient(
     headers: HeadersInit,
     body?: string,
   ): Promise<{ readonly response: Response; readonly status: number }> {
+    // Redirects are rejected so a login page cannot masquerade as API JSON. Bypass caches
+    // so session and dashboard reads reflect the server's current state.
     if (signal?.aborted) {
       throw new AccountApiError('aborted', 'The account request was aborted.');
     }
