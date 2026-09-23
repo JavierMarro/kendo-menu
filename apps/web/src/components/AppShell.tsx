@@ -10,11 +10,11 @@ import { PrimaryNavigationLinks } from './PrimaryNavigation';
 import { SiteFooter } from './SiteFooter';
 
 export function AppShell() {
-  const { mode, writeFailed } = usePersistenceStatus();
+  const { mode, writeFailed, pending } = usePersistenceStatus();
   const location = useLocation();
   const [openLocationKey, setOpenLocationKey] = useState<string | null>(null);
   const menuToggleRef = useRef<HTMLButtonElement>(null);
-  const persistenceStatusLabel = getPersistenceStatusLabel({ mode, writeFailed });
+  const persistenceStatusLabel = getPersistenceStatusLabel({ mode, writeFailed, pending });
   const isMenuOpen = openLocationKey === location.key;
   const isLandingPage = location.pathname === '/app';
 

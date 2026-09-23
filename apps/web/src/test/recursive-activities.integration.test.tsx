@@ -26,7 +26,9 @@ function getRequiredSummary(container: ParentNode): HTMLElement {
 function renderLibraryFixture() {
   const store = createTestStore();
   const view = render(
-    <PersistenceContext.Provider value={{ mode: 'local', writeFailed: false }}>
+    <PersistenceContext.Provider
+      value={{ mode: 'local', writeFailed: false, pending: false, flush: () => Promise.resolve() }}
+    >
       <TrainingStoreProvider store={store}>
         <MemoryRouter>
           <DrillDetailContent titleId="synthetic-title" trainingSet={RECURSIVE_TRAINING_SET} />
@@ -69,7 +71,9 @@ function renderDashboardFixture(storage?: TestMemoryStorage) {
   const store = createTestStore(storage);
   store.getState().addToDashboard(RECURSIVE_TRAINING_SET.id);
   const view = render(
-    <PersistenceContext.Provider value={{ mode: 'local', writeFailed: false }}>
+    <PersistenceContext.Provider
+      value={{ mode: 'local', writeFailed: false, pending: false, flush: () => Promise.resolve() }}
+    >
       <TrainingStoreProvider store={store}>
         <RecursiveDashboardFixture />
       </TrainingStoreProvider>
@@ -242,7 +246,14 @@ describe('recursive activity web consumers', () => {
     const entryId = store.getState().addToDashboard(RECURSIVE_TRAINING_SET.id);
     store.getState().setQuantityOverride(entryId, 'synthetic-station-a', 'repetitions', 9);
     render(
-      <PersistenceContext.Provider value={{ mode: 'local', writeFailed: false }}>
+      <PersistenceContext.Provider
+        value={{
+          mode: 'local',
+          writeFailed: false,
+          pending: false,
+          flush: () => Promise.resolve(),
+        }}
+      >
         <TrainingStoreProvider store={store}>
           <RecursiveDashboardFixture />
         </TrainingStoreProvider>
@@ -264,7 +275,14 @@ describe('recursive activity web consumers', () => {
     const store = createTestStore();
 
     render(
-      <PersistenceContext.Provider value={{ mode: 'local', writeFailed: false }}>
+      <PersistenceContext.Provider
+        value={{
+          mode: 'local',
+          writeFailed: false,
+          pending: false,
+          flush: () => Promise.resolve(),
+        }}
+      >
         <TrainingStoreProvider store={store}>
           <MemoryRouter>
             <DialogShell

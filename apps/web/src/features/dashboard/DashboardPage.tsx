@@ -129,7 +129,9 @@ export function DashboardPage() {
         ? `${createdName} was added, but changes are not being saved to this device.`
         : persistenceStatus.mode === 'session'
           ? `${createdName} was added for this session only.`
-          : `${createdName} saved to your dashboard.`;
+          : persistenceStatus.pending
+            ? `${createdName} is being saved to your dashboard.`
+            : `${createdName} saved to your dashboard.`;
 
   useEffect(() => {
     if (savedMenuNavigationState === null) {
@@ -447,7 +449,9 @@ export function DashboardTrainingSet({
   const [notesDraft, setNotesDraft] = useState(entry.notes);
   const [notesStatus, setNotesStatus] = useState<'idle' | 'updated'>('idle');
   const [saveConfirmationVersion, setSaveConfirmationVersion] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
   const persistenceStatus = usePersistenceStatus();
+  const { flush: flushPersistence } = persistenceStatus;
   const activities = trainingSet.activities;
   const activityCount = getTrainingSetActivityCount(trainingSet);
   const description = getTrainingSetDescription(trainingSet);
@@ -460,22 +464,35 @@ export function DashboardTrainingSet({
     setNotesStatus('idle');
   };
 
-  const handleNotesBlur = () => {
-    if (notesDraft !== entry.notes) {
-      onUpdate({ notes: notesDraft });
+  const handleNotesBlur = (event: FocusEvent<HTMLTextAreaElement>) => {
+    const nextNotes = event.currentTarget.value;
+    if (nextNotes !== entry.notes) {
+      setNotesDraft(nextNotes);
+      onUpdate({ notes: nextNotes });
       setNotesStatus('updated');
     }
   };
 
-  const handleExplicitSave = (event: FormEvent<HTMLFormElement>) => {
+  const handleExplicitSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isSaving) {
+      return;
+    }
 
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLElement && event.currentTarget.contains(activeElement)) {
       activeElement.blur();
     }
 
-    setSaveConfirmationVersion((version) => version + 1);
+    setIsSaving(true);
+    try {
+      await flushPersistence();
+    } catch {
+      // The persistence context exposes the typed failure state and the feedback label reflects it.
+    } finally {
+      setSaveConfirmationVersion((version) => version + 1);
+      setIsSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -489,7 +506,7 @@ export function DashboardTrainingSet({
 
   return (
     <article className="dashboard-card dashboard-card--expanded" data-entry-index={index + 1}>
-      <form className="dashboard-card-form" onSubmit={handleExplicitSave}>
+      <form className="dashboard-card-form" onSubmit={(event) => void handleExplicitSave(event)}>
         <div className="dashboard-card-heading">
           <div className="card-index" aria-hidden="true">
             {String(index + 1).padStart(2, '0')}
@@ -545,6 +562,8 @@ export function DashboardTrainingSet({
           <button
             className="primary-button"
             type="submit"
+            disabled={isSaving}
+            aria-busy={isSaving}
             aria-describedby={
               saveConfirmationVersion === 0 ? saveHintId : `${saveHintId} ${saveStatusId}`
             }

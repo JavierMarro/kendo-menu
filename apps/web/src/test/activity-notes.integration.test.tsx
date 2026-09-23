@@ -355,7 +355,14 @@ describe('dashboard activity notes', () => {
     const setActivityNote = vi.fn();
 
     render(
-      <PersistenceContext.Provider value={{ mode: 'local', writeFailed: false }}>
+      <PersistenceContext.Provider
+        value={{
+          mode: 'local',
+          writeFailed: false,
+          pending: false,
+          flush: () => Promise.resolve(),
+        }}
+      >
         <DashboardTrainingSet
           entry={NESTED_NOTE_ENTRY}
           index={0}

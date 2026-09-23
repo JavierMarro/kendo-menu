@@ -532,6 +532,40 @@ and account entry points remain work for Jobs 6B–6D.
 The [Job 6A handoff](ADOPTION.md) records the request/status contracts, lifecycle, local verification,
 and remaining gates. All database tests target only isolated schemas in local `kendomenu_test`.
 
+## Job 6B implementation boundary
+
+Job 6B starts from reviewed commit `5492d5dd6340a22e737bd0db738e8d285ae93bd2` on
+`codex/account-sync-integration`, verified with a clean working tree. Its owner-approved scope is
+internal session bootstrap, isolated account caches, local hiding/logout, and browser coordination.
+Account entry points remain inaccessible through Job 6C. Bootstrap does not fetch or upload a cloud
+dashboard, call adoption, or infer authentication from browser storage.
+
+The canonical guest key stays `kendo-menu`. Account cache keys use only the verified internal user
+UUID: `kendo-menu:account:<user-id>`, with separately versioned metadata at the `:sync` suffix.
+Dashboard persistence remains v10. Metadata must not imply an acknowledged revision or contain a
+dashboard copy before the synchronization job establishes those facts.
+
+**Storage budget before adding payload metadata:** the existing ceiling is 2,097,152 UTF-16 code
+units per serialized dashboard. One guest plus one account cache can therefore occupy 4,194,304
+code units (approximately 8 MiB if counted as two bytes per code unit), plus keys and bounded
+metadata. Each retained account adds one cache of that size; browser quotas are not guaranteed.
+Decoded Zustand state is in memory, not another LocalStorage record. Job 6B adds no baseline,
+canonical request, conflict, or adoption payload copy. A five-copy design would require up to
+10,485,760 code units for one dashboard alone and is deliberately excluded. Quota failures must
+preserve the live state and existing guest data without claiming durable success. Jobs 6C/6D must
+reassess this budget before introducing any payload-bearing journal.
+
+Cold offline/invalid bootstrap exposes guest mode with a retryable result. An account activated
+after authentication in the current application lifetime can remain locally editable after a
+later connectivity failure. Successful logout preserves its cache and releases its live store;
+failed logout preserves the active workspace. Local hiding explicitly leaves server revocation
+unconfirmed, and reopening always requires fresh session verification. These policies are approved
+by the Job 6B request; they do not approve later synchronization triggers or conflict UI.
+
+Local deterministic tests do not establish real Google login, HTTPS cookie behavior, Neon,
+Vercel API routing, or Fluid Compute operation. Those remain separately authorized production
+verification gates.
+
 ## 3. Remaining gates for later jobs
 
 ### Owner decisions
@@ -545,8 +579,9 @@ Confirm or revise the remaining recommendations before their implementation:
 - [x] Job 6A server eligibility: only the new account's active creating session at revision zero;
       returning accounts receive no capability. Browser guest validation and the blocking Yes/No
       interaction remain later-job work.
-- [ ] Conflict interaction, synchronization triggers, offline account access, cache retention,
-      unsynchronized logout, and account-switch behavior.
+- [x] Job 6B offline access for an already activated account, isolated cache retention, logout
+      versus local hiding, and account-switch isolation; account UI remains inaccessible.
+- [ ] Conflict interaction and synchronization triggers.
 - [x] Application-session lifetime and verified-email metadata policy accepted in Job 4A.
 - [ ] Account deletion, retention, remaining device copies, and encryption expectations.
 - [ ] Provider/API regions, operational responsibility, budget, recovery requirements, and processor

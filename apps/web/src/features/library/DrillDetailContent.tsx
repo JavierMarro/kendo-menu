@@ -16,6 +16,7 @@ import {
   type TrainingActivityRenderContext,
 } from '../../components/TrainingActivityList';
 import { TrainingSetTags } from '../../components/TrainingSetTags';
+import { usePersistenceStatus } from '../persistence/persistence-context';
 
 interface DrillDetailContentProps {
   readonly titleId: string;
@@ -59,8 +60,33 @@ function renderLibraryActivityAside(context: TrainingActivityRenderContext) {
 
 export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentProps) {
   const addToDashboard = useTrainingStore((state) => state.addToDashboard);
+  const { flush: flushPersistence } = usePersistenceStatus();
   const [statusMessage, setStatusMessage] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
   const description = getTrainingSetDescription(trainingSet);
+
+  const handleAddToDashboard = async () => {
+    if (isAdding) {
+      return;
+    }
+
+    setIsAdding(true);
+    let added = false;
+    try {
+      addToDashboard(trainingSet.id);
+      added = true;
+      await flushPersistence();
+      setStatusMessage(`${trainingSet.name} added to your dashboard.`);
+    } catch {
+      setStatusMessage(
+        added
+          ? `${trainingSet.name} was added, but KendoMenu could not confirm it was saved on this device.`
+          : `${trainingSet.name} could not be added to your dashboard.`,
+      );
+    } finally {
+      setIsAdding(false);
+    }
+  };
 
   return (
     <div className="drill-detail-content">
@@ -73,10 +99,9 @@ export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentP
         <button
           className="primary-button"
           type="button"
-          onClick={() => {
-            addToDashboard(trainingSet.id);
-            setStatusMessage(`${trainingSet.name} added to your dashboard.`);
-          }}
+          onClick={() => void handleAddToDashboard()}
+          disabled={isAdding}
+          aria-busy={isAdding}
         >
           Add to dashboard
         </button>

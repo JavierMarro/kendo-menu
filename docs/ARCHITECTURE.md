@@ -230,10 +230,51 @@ Google callback failures use fixed application redirects and consume authenticat
 login attempts before handling provider cancellation or exchange failure. See
 [the Job 6A handoff](ADOPTION.md) for scope, verification, and remaining gates.
 
-In the later target, the web workspace module selects isolated guest/account
-stores; the synchronization module exchanges validated whole dashboards with the backend over a
-same-origin interface. Domain validation remains platform-neutral. Injected storage is still a
-local persistence seam, not a replacement for revision checks, acknowledgements, or retries.
+### Job 6B internal browser workspace boundary
+
+The browser [API client](../apps/web/src/lib/account-api.ts) validates the committed session and
+dashboard contracts without importing Node/server modules. Requests use same-origin credentials,
+no-store caching and redirect rejection. Bounded UTF-8 response parsing rejects HTML, malformed
+JSON, unknown fields, invalid revisions and account mismatches. The CSRF cookie is read only when
+preparing a mutation; cookies and provider credentials never enter frontend persistence.
+
+The internal [workspace controller](../apps/web/src/lib/account-workspace.ts) receives the existing
+guest store and injected API, storage and coordination boundaries. It verifies `/api/session`
+before constructing an account store or reading account caches. Cold failure exposes only the guest
+store; warm network failure preserves the already activated account. Monotonic epochs and request
+identities guard asynchronous results. Switching/hiding aborts requests, unsubscribes observers,
+disables the old writer and clears/releases its store. Job 6B schedules no timers or background work.
+
+[Account storage](../apps/web/src/lib/account-storage.ts) retains one v10 dashboard under
+`kendo-menu:account:<internal-user-uuid>` and bounded version-1 identity-only metadata at `:sync`.
+The guest key remains `kendo-menu`. Every cache passes the existing store validation/migration path;
+metadata is separately strict. Durable writes require exact read-back, and failures latch until
+recovery. Account commits compare the previously confirmed cache while holding the account lock;
+a changed cache stops the stale writer. Writes within one adapter also serialize without Web Locks.
+No baseline, pending request, conflict or adoption dashboard is duplicated in LocalStorage.
+The [storage budget](ACCOUNT_SYNC.md#job-6b-implementation-boundary) accounts for retained caches.
+
+Failed/indeterminate logout keeps the account locally accessible and returns a retryable result.
+Local hiding reports that server revocation was not confirmed. If a quota failure coincides with
+authentication changing, the old store is deactivated and its existing immutable unsaved state is
+held privately for this application lifetime, accessible again only after verifying the same user
+and confirming that its durable baseline has not changed. A changed baseline preserves both
+versions and stops; this job does not choose a conflict winner.
+This cannot survive closing the application; it is not durable storage or a cloud acknowledgement.
+
+[Web Locks coordination](../apps/web/src/lib/workspace-coordination.ts) uses guest/internal UUID
+scopes. Current-app guest persistence commits and explicit reset use the same guest lock; guest
+editing still works without it. Guest save confirmations await exact read-back, and pending commits
+show a saving state and guard page unload. Account lock-acquisition failure falls back to local
+persistence only if no commit was attempted. Validated storage events are notifications only, never identity or
+account-selection inputs.
+Absent or unusable coordination is reported as unavailable for account synchronization. The internal
+controller is not composed into public routes, and production account entry points remain absent.
+The browser fixture is an explicit test/preview entry, not a production build entry.
+
+Job 6C still owns the synchronization engine, revisions, acknowledgements and retries. Job 6D owns
+adoption and account UI. The bootstrap controller invokes neither dashboard writes nor adoption.
+Domain validation remains platform-neutral, and injected storage remains a local persistence seam.
 
 The [account and synchronization design](ACCOUNT_SYNC.md) distinguishes owner-approved decisions,
 accepted technology, unapproved behavior/operational recommendations, mandatory correctness/security
