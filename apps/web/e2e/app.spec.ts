@@ -738,6 +738,10 @@ test.describe('routed training flows', () => {
     const notes = dashboardDialog.getByLabel('Practice notes');
     await notes.fill('Keep the shoulders relaxed.');
     await notes.blur();
+    await expect(page.locator('.session-status')).toHaveAttribute(
+      'aria-label',
+      'Saved on this device',
+    );
 
     await page.reload();
     const reloadedDashboardDialog = await openDashboardMenu(page, 'Junior-high school dojo menu');

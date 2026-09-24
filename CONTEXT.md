@@ -32,3 +32,32 @@ A practitioner-entered note keyed by activity ID within one dashboard entry.
 
 **Quantity override**:
 A dashboard-specific quantity keyed first by activity ID and then by unit; absence is not zero.
+
+## Account and continuity language
+
+**KendoMenu account**:
+A practitioner's identity within KendoMenu, associated with their account workspace.
+
+**Application session**:
+A period during which KendoMenu recognizes a practitioner as signed in. It is used for authentication
+and is distinct from a kendo training session, which describes practice activities.
+
+**Guest workspace**:
+The dashboard belonging to anonymous use in one browser, separate from any account workspace.
+
+**Account workspace**:
+The dashboard belonging to one KendoMenu account across its signed-in devices.
+
+**Guest adoption**:
+The practitioner's choice to move an eligible guest dashboard into their new account's empty cloud
+dashboard.
+
+**Cloud dashboard**:
+The account's acknowledged dashboard held for continuity between devices.
+
+**Dashboard revision**:
+An identifier for an acknowledged edition of a cloud dashboard.
+
+**Synchronization conflict**:
+A disagreement between a device's dashboard changes and a cloud dashboard changed since that
+device's last acknowledged revision.

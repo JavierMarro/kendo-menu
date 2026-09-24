@@ -1,0 +1,8 @@
+- Session: PostgreSQL dashboard persistence and route integration (Job 5B)
+- Date/duration: 2026-09-13; not recorded across interrupted work
+- Scope/start: Clean codex/account-sync-integration at reviewed owner Job 5A commit 07dbace; Job 5B only.
+- Changes: Added dashboard SQL/migration metadata, focused adapter, shared session activity SQL, lazy auth/dashboard composition, registered routes and PostgreSQL/Node tests.
+- Decisions: Preserve Job 5A contracts and 0000 migration; canonical text storage, account serialization, bounded receipts and atomic final activity touch; no server write retry.
+- Roadblocks: Node 24 checks need the existing temporary runtime and disabled pnpm auto-repair; local PostgreSQL/listener/IPC sockets require sandbox escalation.
+- Verification: Node 24 check:api passed 389 tests; PostgreSQL integration passed 102; check passed 696/build/types/lint/format; missing-config failure, db:check, repeat generation and independent correction review passed.
+- Follow-up: No commit, deployment or production migration; Google/HTTPS/Neon/Vercel/Fluid Compute and external start-rate-limit gates remain; see DASHBOARD_PERSISTENCE.md for exact evidence and review limits.

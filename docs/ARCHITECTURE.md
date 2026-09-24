@@ -127,9 +127,11 @@ dashboard, library, library details, custom-session creation, sources, and an ap
 `/cookies`, and a top-level not-found route. `/` redirects to `/app`; direct refreshes rely on the
 hosting fallback.
 
-The root [`vercel.json`](../vercel.json) runs `pnpm build`, serves `apps/web/dist`, and rewrites
-`/(.*)` to `/index.html`. Static files take precedence, so generated PWA assets remain addressable
-while client-side routes receive the SPA entry point.
+The root [`vercel.json`](../vercel.json) runs `pnpm build` and serves `apps/web/dist`. The Job 3
+checkout adds API dispatch before the existing SPA fallback to `/index.html`, retaining static
+file precedence. Combined Vercel function discovery and routing remain unverified; this configuration
+change has not been deployed. The existing production observations are recorded in the deployment
+runbook.
 
 [`vite.config.ts`](../apps/web/vite.config.ts) uses `vite-plugin-pwa` to generate the manifest and
 service worker. The manifest starts at `/app`, has `/` scope, and requests standalone display. The
@@ -143,10 +145,162 @@ no SPA route or custom-event analytics pipeline, and training plans, notes, and 
 intentionally sent to GoatCounter. Analytics availability is therefore separate from the local
 planning workflow.
 
-## Current non-goals
+## Current production exclusions
 
-There is no server, account system, remote sync, database, paid tier, API, or initialized mobile
-app. `apps/mobile` remains a reserved boundary and `packages/ui` remains reserved for genuinely
+There is no production server API, account system, remote sync, database, paid tier, or initialized
+mobile app. `apps/mobile` remains a reserved boundary and `packages/ui` remains reserved for genuinely
 shared platform-neutral UI.
 
 For the original recursive-model decision, see [ADR 0001](./adr/0001-recursive-training-activities.md).
+
+## Local API scaffold and accepted later architecture
+
+Optional accounts and synchronization are an approved product direction. There is no deployed
+account or synchronization behavior. The local backend authentication and persistence implementation
+below is separate from production behavior. The accepted decisions
+are [identity and application sessions](adr/0002-identity-application-sessions.md),
+[workspace separation and guest adoption](adr/0003-workspaces-guest-adoption.md), and
+[whole-dashboard synchronization](adr/0004-whole-dashboard-sync.md).
+
+The Job 3 local scaffold puts Elysia application behavior in `apps/api`, with separate standalone
+Node and minimal root Vercel function adapters. The `createApp({ authentication })` interface handles standard Requests
+without starting a listener. Job 4B adds Google start/callback and session GET/DELETE routes behind
+one injected authentication module; there is no frontend integration. Job 4A adds isolated PostgreSQL authentication persistence under `apps/api/src/persistence`,
+using Drizzle and pg for users, login transactions, and application sessions. Its intent-oriented
+interface hides schema, transactions, and driver errors. Job 4B runtime composition injects
+persistence lazily; only root Vercel composition imports its pool attachment helper. The concrete
+PostgreSQL adapter exposes its pool to runtime composition, never to authentication contracts. Explicit migration commands live under `apps/api/src/database`, with
+reviewed SQL and metadata under `apps/api/drizzle`. Database-independent unit tests and isolated
+real-PostgreSQL integration tests are separate commands. Node 24 is the declared target. See [ADR 0005](adr/0005-node-elysia-api-foundation.md).
+
+### Job 5A protected dashboard foundation
+
+The API now depends on the platform-neutral domain workspace for strict v10 dashboard wire
+validation. The [domain codec](../packages/domain/src/dashboard-persistence.ts) owns current wire
+DTOs; store aliases preserve its existing imports, migrations and local serialization behavior.
+Node-compatible relative imports and a JSON import attribute let the same domain source work in
+the API's NodeNext and the web's bundler configurations. Neither React nor Zustand enters the API.
+
+[Shared session authorization](../apps/api/src/auth/session-authorization.ts) now serves session
+GET, logout and injected protected application operations. It never touches session activity.
+Logout requires equal CSRF cookie/header credentials bound to the active session. Invalid sessions
+clear application cookies; Origin/CSRF rejection and indeterminate failures preserve them.
+
+The [dashboard application](../apps/api/src/dashboard/dashboard.ts) implements the Request/Response
+trust pipeline against an injected [protected persistence interface](../apps/api/src/persistence/dashboard-contracts.ts).
+Strict byte/JSON boundaries, canonical hashing and lossless v10 validation precede persistence.
+Current-catalogue compatibility remains separate so retained receipts can be checked first.
+Job 5A left dashboard routes unregistered and dashboard schema absent. Job 5B consumes those
+committed contracts directly; its local implementation is described below. See the
+[stable foundation handoff](DASHBOARD_FOUNDATION.md) for contracts, policy and boundaries.
+
+### Job 5B local PostgreSQL dashboard integration
+
+`GET /api/dashboard` and `PUT /api/dashboard` now delegate to the existing application handler.
+Explicit HEAD and unsupported-method handlers reject without authorization or body consumption;
+PUT disables Elysia automatic parsing. `createRuntimeServices()` composes authentication and
+dashboard authorization/persistence around one lazy provider. The root function attaches that
+provider's pool once, and the Node adapter retains repeated Set-Cookie headers. Imports and health
+remain independent of database configuration/connectivity.
+
+The focused [dashboard adapter](../apps/api/src/persistence/postgres/dashboard-adapter.ts) stores
+canonical snapshot text in `cloud_dashboards` and bounded acknowledgement history in
+`dashboard_write_receipts`. Migration `0001_dashboard_persistence` extends the preserved Job 4A
+migration. With Job 6A, a write locks its internal user, then locks/revalidates the session before inspecting
+receipts or revisions. New dashboard content, its receipt, receipt cleanup and final session
+activity commit together. Retained identical requests return the original acknowledgement without
+activity or cleanup; uncertain commit outcomes return a fixed unavailable response and require
+the unchanged request ID for recovery. There is no server-side write retry or reset operation.
+
+These are local backend changes, with no frontend account/sync integration or production migration.
+See [Job 5B evidence and migration guidance](DASHBOARD_PERSISTENCE.md) for verification and the
+remaining Google/HTTPS/Neon/Vercel/Fluid Compute gates.
+
+### Job 6A authoritative adoption
+
+The approved Job 6A boundary adds account-level adoption state and one terminal receipt, with the
+pending capability tied to the session that creates the account. Account creation, session creation,
+and capability issuance are atomic. Returning accounts receive no new capability. Session inspection
+computes availability without writing and lets later authenticated sessions recover accepted or
+declined completion without retaining another dashboard representation.
+
+The adoption POST shares the dashboard transport and authenticated request boundary, with explicit
+Yes/No decisions, account mismatch protection, complete-envelope byte limits, and terminal replay.
+Google callback failures use fixed application redirects and consume authenticated browser-bound
+login attempts before handling provider cancellation or exchange failure. See
+[the Job 6A handoff](ADOPTION.md) for scope, verification, and remaining gates.
+
+### Job 6B internal browser workspace boundary
+
+The browser [API client](../apps/web/src/lib/account-api.ts) validates the committed session and
+dashboard contracts without importing Node/server modules. Requests use same-origin credentials,
+no-store caching and redirect rejection. Bounded UTF-8 response parsing rejects HTML, malformed
+JSON, unknown fields, invalid revisions and account mismatches. The CSRF cookie is read only when
+preparing a mutation; cookies and provider credentials never enter frontend persistence.
+
+The internal [workspace controller](../apps/web/src/lib/account-workspace.ts) receives the existing
+guest store and injected API, storage and coordination boundaries. It verifies `/api/session`
+before constructing an account store or reading account caches. Cold failure exposes only the guest
+store; warm network failure preserves the already activated account. Monotonic epochs and request
+identities guard asynchronous results. Switching/hiding aborts requests, unsubscribes observers,
+disables the old writer and clears/releases its store. Job 6B schedules no timers or background work.
+
+[Account storage](../apps/web/src/lib/account-storage.ts) uses a versioned IndexedDB database for
+account-keyed validated v10 caches and local generations. Its separately bounded metadata starts
+with cloud acknowledgement unknown. The 6C-B synchronization controller uses exact pending-request
+and active-conflict records; retained recovery copies remain local. The guest key remains
+`kendo-menu` in LocalStorage.
+After session verification, migration validates Job 6B's `kendo-menu:account:<internal-user-uuid>`
+legacy value, commits and reads back the IndexedDB copy, then conditionally removes the unchanged
+legacy key while holding the shared account lock. Without that lock, it keeps the legacy source.
+A later divergent legacy write is retained separately for recovery. Metadata at the
+legacy `:sync` key is identity-only and never proves cloud acknowledgement. Durable writes require
+exact read-back; cache identity and generation comparisons stop stale writers, and failures latch
+until recovery. Short account locks and IndexedDB transactions never span network requests. The
+[storage budget](ACCOUNT_SYNC.md#job-6c-a--account-cache-cutover) covers migration overlap and
+retained copies.
+
+Failed/indeterminate logout keeps the account locally accessible and returns a retryable result.
+Local hiding reports that server revocation was not confirmed. If a quota failure coincides with
+authentication changing, the old store is deactivated and its existing immutable unsaved state is
+held privately for this application lifetime, accessible again only after verifying the same user
+and confirming that its durable baseline has not changed. A changed baseline preserves both
+versions and stops; this job does not choose a conflict winner.
+This cannot survive closing the application; it is not durable storage or a cloud acknowledgement.
+An account dashboard 401 hides the workspace immediately; explicit retry verifies `/api/session`
+before another dashboard request. Cloud replacement synchronously closes the confirmed editor
+before changing IndexedDB, then reloads the cache under the session that verified this already-open
+workspace. This preserves local editing if connectivity drops during replacement. Hide and logout
+supersede reopening; a fresh verification already in flight can switch to another account, while
+an offline failure resumes the previously open account. A failed logout retains revocation context
+for retry.
+
+[Web Locks coordination](../apps/web/src/lib/workspace-coordination.ts) uses guest/internal UUID
+scopes. Current-app guest persistence commits and explicit reset use the same guest lock; guest
+editing still works without it. Guest save confirmations await exact read-back, and pending commits
+show a saving state and guard page unload. Account lock-acquisition failure falls back to local
+persistence only if no commit was attempted. Validated storage events are notifications only, never identity or
+account-selection inputs.
+Absent or unusable coordination is reported as unavailable for account synchronization. The internal
+controller is not composed into public routes, and production account entry points remain absent.
+The browser fixture is an explicit test/preview entry, not a production build entry.
+
+Job 6C-B adds an opt-in internal synchronization controller with a distinct Web Lock, validated
+revision and request records, atomic acknowledgement, conditional PUT retries, and explicit
+whole-dashboard conflict resolution. Verified workspace composition can enable it; public routes
+remain guest-only. Local saves continue when upload coordination is unavailable. Job 6D owns
+adoption and account UI; the synchronizer never submits an adoption decision on its own.
+Domain validation remains platform-neutral, and injected storage remains a local persistence seam.
+
+The [account and synchronization design](ACCOUNT_SYNC.md) distinguishes owner-approved decisions,
+accepted technology, unapproved behavior/operational recommendations, mandatory correctness/security
+requirements, and later implementation gates.
+The existing local JSON limit counts 2,097,152 JavaScript UTF-16 code units, not network bytes;
+cloud transport limits must be evaluated separately. No production routing or runtime compatibility
+is claimed from this proposed diagram:
+
+```text
+Browser workspace → local store/storage
+        └→ synchronization → same-origin /api/* → Vercel adapter → backend application → PostgreSQL
+                                                        local Node adapter ─┘
+```

@@ -26,6 +26,36 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-09-24 — account sync review and onboarding comments](./2026-09-24-account-sync-review-comments.md)
+
+- [2026-09-24 — account sync review fixes](./2026-09-24-account-sync-review-fixes.md)
+
+- [2026-09-24 — account sync hardening](./2026-09-24-account-sync-hardening.md)
+
+- [2026-09-23 — internal account sync](./2026-09-23-internal-account-sync.md)
+
+- [2026-09-23 — account cache no-op](./2026-09-23-account-cache-no-op.md)
+
+- [2026-09-23 — IndexedDB account cutover](./2026-09-23-indexeddb-account-cutover.md)
+
+- [2026-09-23 — revocation result contract](./2026-09-23-revocation-result-contract.md)
+
+- [2026-09-20 — account bootstrap and workspace isolation](./2026-09-20-account-workspace-bootstrap.md)
+
+- [2026-09-19 — authoritative adoption and account recovery](./2026-09-19-authoritative-adoption.md)
+
+- [2026-09-13 — PostgreSQL dashboard persistence and routes](./2026-09-13-dashboard-postgres-persistence.md)
+
+- [2026-09-12 — protected dashboard application foundation](./2026-09-12-dashboard-foundation.md)
+
+- [2026-09-11 — Google OIDC and opaque application sessions](./2026-09-11-google-oidc-opaque-sessions.md)
+
+- [2026-09-10 — authentication persistence foundation](./2026-09-10-auth-persistence-foundation.md)
+
+- [2026-09-09 — Node and Elysia API foundation](./2026-09-09-node-elysia-api.md)
+
+- [2026-09-09 — account and synchronization architecture](./2026-09-09-account-sync-architecture.md)
+
 - [2026-09-08 — user-facing kendo glossary](./2026-09-08-kendo-glossary.md)
 
 - [2026-09-08 — Astra repository instruction migration](./2026-09-08-astra-instruction-migration.md)

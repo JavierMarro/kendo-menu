@@ -5,17 +5,22 @@ import {
 } from '@kendo-menu/domain';
 import {
   parsePersistedTrainingStateV10,
+  serializePersistedTrainingStateV10,
   TRAINING_STORE_PERSISTENCE_VERSION,
 } from '@kendo-menu/store';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
   createBrowserTrainingStorage,
+  createMemoryTrainingStorage,
+  createTrainingStorageController,
   downloadCurrentTrainingBackup,
   inspectBrowserTrainingStorage,
   resetBrowserTrainingStorage,
+  resetBrowserTrainingStorageCoordinated,
   TRAINING_STORAGE_KEY,
 } from './training-persistence';
+import { createWorkspaceCoordinator, type WorkspaceLockProvider } from './workspace-coordination';
 
 function currentTrainingEntry(): DashboardEntry {
   const trainingSet = DEFAULT_TRAINING_SETS[0];
@@ -61,6 +66,16 @@ function readBlobText(blob: Blob): Promise<string> {
 }
 
 describe('browser training persistence adapter', () => {
+  function coordinatorWith(lockNames: string[]): ReturnType<typeof createWorkspaceCoordinator> {
+    const locks: WorkspaceLockProvider = {
+      request: (name, callback) => {
+        lockNames.push(name);
+        return Promise.resolve().then(() => callback({ name, mode: 'exclusive' }));
+      },
+    };
+    return createWorkspaceCoordinator({ locks, events: null });
+  }
+
   it.each([
     ['synchronous write error', new Error('write blocked')],
     ['quota write error', new DOMException('quota exceeded', 'QuotaExceededError')],
@@ -108,6 +123,209 @@ describe('browser training persistence adapter', () => {
     } finally {
       Object.defineProperty(window, 'localStorage', descriptor);
     }
+  });
+
+  it('serializes current guest writes and cleanup through the canonical guest lock', async () => {
+    const lockNames: string[] = [];
+    const coordination = coordinatorWith(lockNames);
+    const storage = createBrowserTrainingStorage({ coordination });
+
+    storage.setItem(TRAINING_STORAGE_KEY, 'guest-value');
+    await storage.flush();
+    await resetBrowserTrainingStorageCoordinated(TRAINING_STORAGE_KEY, { coordination });
+
+    expect(lockNames).toEqual(['kendo-menu:guest', 'kendo-menu:guest']);
+    expect(window.localStorage.getItem(TRAINING_STORAGE_KEY)).toBeNull();
+    coordination.dispose();
+  });
+
+  it('keeps a guest write local when lock acquisition fails before the callback', async () => {
+    let value: string | null = null;
+    const coordination = createWorkspaceCoordinator({
+      locks: {
+        request: () => Promise.reject(new Error('lock provider unavailable')),
+      },
+      events: null,
+    });
+    const storage = createBrowserTrainingStorage({
+      coordination,
+      storage: {
+        getItem: () => value,
+        setItem: (_name, next) => {
+          value = next;
+        },
+        removeItem: () => {
+          value = null;
+        },
+      },
+    });
+
+    storage.setItem(TRAINING_STORAGE_KEY, 'guest-value');
+    await storage.flush();
+
+    expect(value).toBe('guest-value');
+    expect(coordination.isAvailable).toBe(false);
+  });
+
+  it('reports an unconfirmed coordinated guest cleanup', () => {
+    let removeCalls = 0;
+    const storage = {
+      getItem: () => 'still-present',
+      setItem: () => undefined,
+      removeItem: () => {
+        removeCalls += 1;
+      },
+    };
+
+    let failure: unknown;
+    try {
+      void resetBrowserTrainingStorageCoordinated(TRAINING_STORAGE_KEY, { storage });
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({
+      name: 'BrowserStorageError',
+      code: 'malformed-readback',
+      operation: 'remove',
+    });
+    expect(removeCalls).toBe(1);
+  });
+
+  it('reports altered guest read-back without replacing the live adapter silently', async () => {
+    let value: string | null = null;
+    const storage = createBrowserTrainingStorage({
+      storage: {
+        getItem: () => value,
+        setItem: (_name, next) => {
+          value = `${next}-altered`;
+        },
+        removeItem: () => {
+          value = null;
+        },
+      },
+    });
+
+    storage.setItem(TRAINING_STORAGE_KEY, 'guest-value');
+    await expect(storage.flush()).rejects.toMatchObject({
+      name: 'BrowserStorageError',
+      code: 'malformed-readback',
+    });
+    expect(storage.lastFailure?.code).toBe('malformed-readback');
+    expect(storage.isEnabled()).toBe(true);
+  });
+
+  it('does not start a queued guest write after an earlier write has failed', async () => {
+    let active = false;
+    const queued: Array<() => void> = [];
+    const locks: WorkspaceLockProvider = {
+      request: (name, callback) => {
+        expect(name).toBe('kendo-menu:guest');
+        return new Promise((resolve, reject) => {
+          const run = () => {
+            active = true;
+            Promise.resolve()
+              .then(() => callback({ name, mode: 'exclusive' }))
+              .then(resolve, reject)
+              .finally(() => {
+                active = false;
+                queued.shift();
+                queued[0]?.();
+              });
+          };
+          queued.push(run);
+          if (!active && queued.length === 1) {
+            run();
+          }
+        });
+      },
+    };
+    let writes = 0;
+    const storage = createBrowserTrainingStorage({
+      coordination: createWorkspaceCoordinator({ locks, events: null }),
+      storage: {
+        getItem: () => null,
+        setItem: () => {
+          writes += 1;
+          return Promise.reject(new Error('write blocked'));
+        },
+        removeItem: () => undefined,
+      },
+    });
+
+    storage.setItem(TRAINING_STORAGE_KEY, 'first');
+    storage.setItem(TRAINING_STORAGE_KEY, 'second');
+
+    await expect(storage.flush()).rejects.toMatchObject({ code: 'unavailable' });
+    expect(writes).toBe(1);
+  });
+
+  it('rejects a stale guest writer after another tab changes the hydrated value', async () => {
+    let value: string | null = 'hydrated-value';
+    const storage = createBrowserTrainingStorage({
+      storage: {
+        getItem: () => value,
+        setItem: (_name, next) => {
+          value = next;
+        },
+        removeItem: () => {
+          value = null;
+        },
+      },
+    });
+
+    expect(storage.getItem(TRAINING_STORAGE_KEY)).toBe('hydrated-value');
+    value = 'another-tab-value';
+    storage.setItem(TRAINING_STORAGE_KEY, 'stale-tab-value');
+
+    await expect(storage.flush()).rejects.toMatchObject({ code: 'interrupted' });
+    expect(value).toBe('another-tab-value');
+  });
+
+  it.each(['empty', 'populated'] as const)(
+    'keeps the inspected %s guest baseline when storage changes before replacement writes',
+    async (scenario) => {
+      const emptyValue = serializePersistedTrainingStateV10({ dashboardEntries: [] });
+      const populatedValue = serializePersistedTrainingStateV10({
+        dashboardEntries: [currentTrainingEntry()],
+      });
+      const inspectedValue = scenario === 'empty' ? null : populatedValue;
+      const concurrentValue = scenario === 'empty' ? populatedValue : emptyValue;
+      let value: string | null = inspectedValue;
+      const storage = createBrowserTrainingStorage({
+        initialValues: { [TRAINING_STORAGE_KEY]: inspectedValue },
+        storage: {
+          getItem: () => value,
+          setItem: (_name, next) => {
+            value = next;
+          },
+          removeItem: () => {
+            value = null;
+          },
+        },
+      });
+
+      value = concurrentValue;
+      storage.setItem(TRAINING_STORAGE_KEY, emptyValue);
+
+      await expect(storage.flush()).rejects.toMatchObject({ code: 'interrupted' });
+      expect(value).toBe(concurrentValue);
+    },
+  );
+
+  it('disables queued guest writers before recovery replaces their backing storage', async () => {
+    const lockNames: string[] = [];
+    const coordination = coordinatorWith(lockNames);
+    const browserStorage = createBrowserTrainingStorage({ coordination });
+    const controller = createTrainingStorageController(browserStorage);
+
+    controller.setItem(TRAINING_STORAGE_KEY, 'stale-guest-value');
+    controller.replace(createMemoryTrainingStorage());
+    await browserStorage.flush();
+    await controller.flush();
+
+    expect(window.localStorage.getItem(TRAINING_STORAGE_KEY)).toBeNull();
+    expect(controller.isEnabled()).toBe(true);
+    coordination.dispose();
   });
 
   it('exports the current v10 state, including the latest dashboard and activity notes', async () => {

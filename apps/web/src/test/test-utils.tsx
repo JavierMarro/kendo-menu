@@ -55,6 +55,8 @@ export function renderApp(store: TrainingStoreApi, options: AppRenderOptions = {
   const persistenceValue: PersistenceContextValue = {
     mode: persistence.mode ?? 'local',
     writeFailed: persistence.writeFailed ?? false,
+    pending: persistence.pending ?? false,
+    flush: persistence.flush ?? (() => Promise.resolve()),
   };
 
   function Wrapper({ children }: { readonly children: ReactNode }) {

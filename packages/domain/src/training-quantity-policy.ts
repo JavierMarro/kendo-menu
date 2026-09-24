@@ -1,5 +1,5 @@
-import { getDefaultTrainingQuantityUnits, getEditableTrainingQuantityUnits } from './types';
-import type { TrainingActivity, TrainingQuantityOverrides, TrainingQuantityUnit } from './types';
+import { getDefaultTrainingQuantityUnits, getEditableTrainingQuantityUnits } from './types.js';
+import type { TrainingActivity, TrainingQuantityOverrides, TrainingQuantityUnit } from './types.js';
 
 export interface TrainingQuantityPolicy {
   readonly primaryUnit: TrainingQuantityUnit;

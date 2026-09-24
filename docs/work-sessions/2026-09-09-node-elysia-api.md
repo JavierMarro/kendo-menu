@@ -1,0 +1,8 @@
+- Session: Node and Elysia API foundation (Job 3)
+- Date/duration: 2026-09-09; duration not recorded
+- Scope/start: Clean codex/account-sync-integration checkout with Job 2 present; local scaffold only.
+- Changes: Added API package and thin runtime adapters; recorded accepted stack in ADR 0005 and aligned related guidance.
+- Decisions: Node 24 target; health-only API; later database, identity, synchronization, and product/operational choices remain outside implementation scope.
+- Roadblocks: Local Node is v25.2.1; Vercel CLI/settings unavailable without prohibited linking or provider access, so combined routing remains unverified.
+- Verification: check:api (31), check (327 unit tests/build/lint/types/format), both browser suites (151 each, 3 skips), PWA (4), standalone health/JSON404 smoke, diff/link/debug/secret scans passed; independent review PASS.
+- Follow-up: Retain combined Vercel artifact/routing as an authorized Preview gate; confirm later owner decisions before their jobs; no deployment, branch operation, or commit.

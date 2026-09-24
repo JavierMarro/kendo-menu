@@ -2,23 +2,26 @@
   "name": "kendo-menu",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@11.22.0",
   "engines": {
-    "node": ">=20.19.0"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "pnpm --filter @kendo-menu/web dev",
     "build": "pnpm --filter @kendo-menu/web build",
-    "typecheck": "pnpm -r --if-present typecheck",
+    "typecheck": "pnpm -r --if-present typecheck && tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "pnpm -r --if-present test",
     "test:domain": "pnpm --filter @kendo-menu/domain test",
     "test:store": "pnpm --filter @kendo-menu/store test",
+    "test:api": "pnpm --filter @kendo-menu/api test",
     "test:web": "pnpm --filter @kendo-menu/web test",
     "check:domain": "pnpm --filter @kendo-menu/domain typecheck && pnpm --filter @kendo-menu/domain lint && pnpm --filter @kendo-menu/domain test",
     "check:store": "pnpm --filter @kendo-menu/store typecheck && pnpm --filter @kendo-menu/store lint && pnpm --filter @kendo-menu/store test",
+    "check:api": "pnpm --filter @kendo-menu/api typecheck && pnpm --filter @kendo-menu/api lint && pnpm --filter @kendo-menu/api test && pnpm exec tsc --noEmit -p tsconfig.json && pnpm exec eslint api",
     "check:web": "pnpm --filter @kendo-menu/web typecheck && pnpm --filter @kendo-menu/web lint && pnpm --filter @kendo-menu/web test && pnpm --filter @kendo-menu/web build",
     "test:e2e": "pnpm --filter @kendo-menu/web test:e2e",
     "test:e2e:preview": "pnpm --filter @kendo-menu/web test:e2e:preview",
@@ -29,7 +32,13 @@
     "session:new": "./scripts/new-work-session.sh",
     "session:check": "./scripts/check-work-sessions.sh",
     "check": "pnpm session:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
-    "verify:full": "pnpm check && pnpm test:e2e:preview && pnpm test:e2e:pwa"
+    "verify:full": "pnpm check && pnpm test:e2e:preview && pnpm test:e2e:pwa",
+    "dev:api": "pnpm --filter @kendo-menu/api dev",
+    "test:api:persistence": "pnpm --filter @kendo-menu/api test:persistence",
+    "test:api:integration": "pnpm --filter @kendo-menu/api test:integration",
+    "db:generate": "pnpm --filter @kendo-menu/api db:generate",
+    "db:check": "pnpm --filter @kendo-menu/api db:check",
+    "db:migrate": "pnpm --filter @kendo-menu/api db:migrate"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -42,5 +51,9 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.67.0",
     "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "@kendo-menu/api": "workspace:*",
+    "@vercel/functions": "3.9.7"
   }
 }

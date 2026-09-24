@@ -1,3 +1,8 @@
+/**
+ * Provides the shared app navigation and visible device-persistence status.
+ * The label comes from the persistence provider, not from an inferred account state.
+ * Navigation focus and menu dismissal remain independent of save activity.
+ */
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 
@@ -10,11 +15,11 @@ import { PrimaryNavigationLinks } from './PrimaryNavigation';
 import { SiteFooter } from './SiteFooter';
 
 export function AppShell() {
-  const { mode, writeFailed } = usePersistenceStatus();
+  const { mode, writeFailed, pending } = usePersistenceStatus();
   const location = useLocation();
   const [openLocationKey, setOpenLocationKey] = useState<string | null>(null);
   const menuToggleRef = useRef<HTMLButtonElement>(null);
-  const persistenceStatusLabel = getPersistenceStatusLabel({ mode, writeFailed });
+  const persistenceStatusLabel = getPersistenceStatusLabel({ mode, writeFailed, pending });
   const isMenuOpen = openLocationKey === location.key;
   const isLandingPage = location.pathname === '/app';
 
@@ -23,6 +28,7 @@ export function AppShell() {
       return undefined;
     }
 
+    // Escape closes mobile navigation and restores focus to its controlling button.
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') {
         return;

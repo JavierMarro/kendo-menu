@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig-root.tsbuildinfo"
+  },
+  "include": ["api"]
+}

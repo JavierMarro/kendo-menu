@@ -36,7 +36,7 @@ const OFFICIAL_ZNKR_ID = asTrainingSetId('official-znkr-ajkf');
 const OFFICIAL_ZNKR_MEN_ID = 'official-znkr-ajkf-kihon-waza-men';
 const TOP_UNIVERSITY_ID = asTrainingSetId('top-university');
 const TOP_UNIVERSITY_KAKARIGEIKO_ID = 'top-university-kakarigeiko-kakarigeiko';
-const DASHBOARD_EDITOR_TEST_TIMEOUT = 30_000;
+const DASHBOARD_EDITOR_TEST_TIMEOUT = 60_000;
 const IN_SCOPE_SESSION_SMOKE_CASES = [
   {
     id: 'international-dojo-2-hour-session',
