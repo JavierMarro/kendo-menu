@@ -247,8 +247,9 @@ disables the old writer and clears/releases its store. Job 6B schedules no timer
 
 [Account storage](../apps/web/src/lib/account-storage.ts) uses a versioned IndexedDB database for
 account-keyed validated v10 caches and local generations. Its separately bounded metadata starts
-with cloud acknowledgement unknown; reserved pending-request, active-conflict, and recovery records
-remain local and do not perform synchronization. The guest key remains `kendo-menu` in LocalStorage.
+with cloud acknowledgement unknown. The 6C-B synchronization controller uses exact pending-request
+and active-conflict records; retained recovery copies remain local. The guest key remains
+`kendo-menu` in LocalStorage.
 After session verification, migration validates Job 6B's `kendo-menu:account:<internal-user-uuid>`
 legacy value, commits and reads back the IndexedDB copy, then conditionally removes the unchanged
 legacy key while holding the shared account lock. Without that lock, it keeps the legacy source.
@@ -266,6 +267,13 @@ held privately for this application lifetime, accessible again only after verify
 and confirming that its durable baseline has not changed. A changed baseline preserves both
 versions and stops; this job does not choose a conflict winner.
 This cannot survive closing the application; it is not durable storage or a cloud acknowledgement.
+An account dashboard 401 hides the workspace immediately; explicit retry verifies `/api/session`
+before another dashboard request. Cloud replacement synchronously closes the confirmed editor
+before changing IndexedDB, then reloads the cache under the session that verified this already-open
+workspace. This preserves local editing if connectivity drops during replacement. Hide and logout
+supersede reopening; a fresh verification already in flight can switch to another account, while
+an offline failure resumes the previously open account. A failed logout retains revocation context
+for retry.
 
 [Web Locks coordination](../apps/web/src/lib/workspace-coordination.ts) uses guest/internal UUID
 scopes. Current-app guest persistence commits and explicit reset use the same guest lock; guest
@@ -277,8 +285,11 @@ Absent or unusable coordination is reported as unavailable for account synchroni
 controller is not composed into public routes, and production account entry points remain absent.
 The browser fixture is an explicit test/preview entry, not a production build entry.
 
-Job 6C still owns the synchronization engine, revisions, acknowledgements and retries. Job 6D owns
-adoption and account UI. The bootstrap controller invokes neither dashboard writes nor adoption.
+Job 6C-B adds an opt-in internal synchronization controller with a distinct Web Lock, validated
+revision and request records, atomic acknowledgement, conditional PUT retries, and explicit
+whole-dashboard conflict resolution. Verified workspace composition can enable it; public routes
+remain guest-only. Local saves continue when upload coordination is unavailable. Job 6D owns
+adoption and account UI; the synchronizer never submits an adoption decision on its own.
 Domain validation remains platform-neutral, and injected storage remains a local persistence seam.
 
 The [account and synchronization design](ACCOUNT_SYNC.md) distinguishes owner-approved decisions,

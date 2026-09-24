@@ -941,6 +941,9 @@ export function createAccountApiClient(
       const { response, status } = await request(DASHBOARD_ENDPOINT, 'GET', signal, {
         accept: 'application/json',
       });
+      // The observed rejection invalidates this verified workspace even if an error
+      // proxy sends a malformed body or Content-Type.
+      if (status === 401) throw errorForStatus(status, 'UNAUTHENTICATED');
       if (status !== 200) throw await readErrorResponse(response, status);
       validateJsonContentType(response);
       const dashboard = parseDashboardRead(
@@ -982,6 +985,7 @@ export function createAccountApiClient(
         },
         body,
       );
+      if (status === 401) throw errorForStatus(status, 'UNAUTHENTICATED');
       if (status !== 200) throw await readErrorResponse(response, status);
       validateJsonContentType(response);
       const acknowledgement = parseDashboardAcknowledgement(

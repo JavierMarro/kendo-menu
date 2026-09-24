@@ -26,6 +26,14 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-09-24 — account sync review and onboarding comments](./2026-09-24-account-sync-review-comments.md)
+
+- [2026-09-24 — account sync review fixes](./2026-09-24-account-sync-review-fixes.md)
+
+- [2026-09-24 — account sync hardening](./2026-09-24-account-sync-hardening.md)
+
+- [2026-09-23 — internal account sync](./2026-09-23-internal-account-sync.md)
+
 - [2026-09-23 — account cache no-op](./2026-09-23-account-cache-no-op.md)
 
 - [2026-09-23 — IndexedDB account cutover](./2026-09-23-indexeddb-account-cutover.md)

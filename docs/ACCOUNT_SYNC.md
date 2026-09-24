@@ -612,6 +612,53 @@ lock and IndexedDB transactions stay short and never span fetch, in line with th
 [Web Locks API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API) and
 [IndexedDB transaction lifetime](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API/Basic_Terminology).
 
+## Job 6C-B — internal synchronization
+
+The optional internal synchronizer runs only for a freshly verified account workspace. It uses a
+separate account synchronization Web Lock, distinct from the short account storage lock. That lock
+may cover dashboard GET/PUT requests; every IndexedDB transaction finishes before fetch begins or
+after fetch returns. When the sync lock is unavailable or occupied, local editing and confirmed
+IndexedDB saves continue while uploads pause. Public routes still instantiate only guest storage.
+
+The versioned account database validates exact acknowledgement, pending dashboard/adoption request,
+and active conflict records on read. A pending request binds one stable request ID and validated
+dashboard snapshot to the cache identity and generation before PUT. A validated server response
+records its acknowledgement before clearing that request in one transaction; a lost response can
+retry the same request ID. Later local generations remain dirty. Conflict records keep the current
+local cache and a bounded cloud snapshot; explicit use-cloud resolution re-reads the latest cloud
+revision and retains the losing local cache in recovery in the same transaction as replacement.
+Use-local resolution also re-reads the cloud revision before preparing a new conditional PUT.
+Neither path silently merges dashboards.
+Only a newly synthesized empty cache carries the bounded `new-empty` provenance marker that permits
+an initial cloud refresh. An empty migrated legacy cache has unknown provenance and conflicts with
+a divergent cloud; generation zero alone never proves a clean local copy. Baseline writes check
+the current acknowledgement in the transaction so a stale tab cannot regress an acknowledged
+revision.
+Before replacing the cache, the controller checks the exact confirmed visible value and
+synchronously hides and disables the old workspace. An intervening edit prevents replacement;
+an edit after the gate cannot be accepted by the hidden workspace. Use-cloud retains the losing
+local cache in its replacement transaction, so a later quota failure cannot strand a visible
+unconfirmed edit. After either transaction outcome, the gate reloads the cache under the session
+that verified this already-open workspace, so editing remains available if connectivity drops.
+A local hide or logout supersedes reopening, and a failed logout retains a private revocation
+retry context. An already-started fresh session verification can switch to a different account;
+if that check fails offline, local rehydration resumes the previously open workspace. A dashboard
+401 still hides the account and requires a fresh `/api/session` check.
+
+Only a non-empty, valid, cloud-size-compliant guest snapshot with a pending adoption capability
+and empty cloud dashboard suspends ordinary PUTs for a Yes/No choice. An unresolved persisted
+adoption request also suspends them. Missing, invalid, empty, or oversized guest data does not
+create a No decision or prevent ordinary account uploads; a successful ordinary PUT can consume
+the server's pending adoption capability. The internal controller checks saved edits after a
+one-second debounce and on focus/reconnect, with at most three timed retry attempts and a stop on
+nonretryable request failures. A dashboard 401 immediately hides the account workspace and
+retains its latest entries privately where possible. Explicit retry first re-verifies
+`/api/session`; dashboard requests resume only after success. Job 6D remains
+responsible for account entry points,
+the adoption choice, and conflict UI; this job does not expose them publicly.
+Job 6D will also add the adoption POST client and execute Yes/No decisions. Job 6C-B only
+preflights eligibility and reserves a validated, account-scoped pending adoption shape.
+
 ## 3. Remaining gates for later jobs
 
 ### Owner decisions
@@ -627,7 +674,8 @@ Confirm or revise the remaining recommendations before their implementation:
       interaction remain later-job work.
 - [x] Job 6B offline access for an already activated account, isolated cache retention, logout
       versus local hiding, and account-switch isolation; account UI remains inaccessible.
-- [ ] Conflict interaction and synchronization triggers.
+- [x] Internal synchronization triggers and explicit conflict resolution accepted in Job 6C-B;
+      the reachable conflict interaction remains Job 6D work.
 - [x] Application-session lifetime and verified-email metadata policy accepted in Job 4A.
 - [ ] Account deletion, retention, remaining device copies, and encryption expectations.
 - [ ] Provider/API regions, operational responsibility, budget, recovery requirements, and processor

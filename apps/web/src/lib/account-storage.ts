@@ -1,8 +1,8 @@
 /**
- * Account-scoped LocalStorage adapter for the Zustand workspace cache.
- * Keys use the server-issued internal user ID, while separately validated sync metadata
- * records cache ownership without proving authentication. Writes are confirmed by readback
- * so callers can distinguish a durable local save from an in-memory store update.
+ * Account-scoped IndexedDB adapter for the Zustand workspace cache.
+ * A server-issued internal user ID selects the cache only after session verification; the old
+ * LocalStorage value is a migration source, never proof of authentication or cloud acknowledgement.
+ * Ordered writes and readback distinguish a durable device save from an in-memory store update.
  */
 import {
   classifyTrainingStorageValue,
@@ -509,6 +509,8 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
     );
   };
 
+  // Keep Zustand's immediate update while refusing to overwrite a cache changed by another tab.
+  // The database checks the expected identity/generation in the transaction, not in this caller.
   const scopedWrite = (value: string): MaybePromise<void> => {
     assertEnabled('write');
     const inspection = classifyAccountCacheValue(value);
@@ -604,6 +606,8 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
     } else lastRecoveryFailure = null;
   };
 
+  // Cut over only after the account is verified. Retain the legacy source whenever coordination,
+  // validation, or IndexedDB readback cannot establish that its content is safely preserved.
   const migrateLegacy = async (): Promise<void> => {
     assertEnabled('read');
     await runStorageOperation('read', async () =>
