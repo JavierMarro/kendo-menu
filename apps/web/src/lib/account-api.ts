@@ -891,23 +891,61 @@ export function createAccountApiClient(
 
   return {
     async getSession(signal): Promise<SessionResult> {
-      const { response, status } = await request(SESSION_ENDPOINT, 'GET', signal, {
-        accept: 'application/json',
+      // A stalled identity check must eventually release the guest UI to show Retry.
+      // The timeout also fences a transport that ignores AbortSignal.
+      const timedRequest = new AbortController();
+      const cancelForCaller = () => timedRequest.abort();
+      signal?.addEventListener('abort', cancelForCaller, { once: true });
+      if (signal?.aborted) timedRequest.abort();
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      let timedOut = false;
+      const timeout = new Promise<never>((_resolve, reject) => {
+        timeoutId = setTimeout(() => {
+          timedOut = true;
+          timedRequest.abort();
+          reject(
+            new AccountApiError('network', 'The account session check timed out.', {
+              retryable: true,
+            }),
+          );
+        }, 10_000);
       });
-      if (status === 401) {
-        const error = await readErrorResponse(response, status);
-        if (error.code !== 'UNAUTHENTICATED') throw error;
-        return { status: 'signed-out' };
-      }
-      if (status !== 200) throw await readErrorResponse(response, status);
-      validateJsonContentType(response);
-      const session = parseSession(await readJsonBody(response, MAX_ERROR_RESPONSE_BYTES));
-      if (session === null) {
-        throw new AccountApiError('invalid-response', 'The account session response was invalid.', {
-          status,
+      const verifyResponse = async (): Promise<SessionResult> => {
+        const { response, status } = await request(SESSION_ENDPOINT, 'GET', timedRequest.signal, {
+          accept: 'application/json',
         });
+        if (status === 401) {
+          const error = await readErrorResponse(response, status);
+          if (error.code !== 'UNAUTHENTICATED') throw error;
+          return { status: 'signed-out' };
+        }
+        if (status !== 200) throw await readErrorResponse(response, status);
+        validateJsonContentType(response);
+        const session = parseSession(await readJsonBody(response, MAX_ERROR_RESPONSE_BYTES));
+        if (session === null) {
+          throw new AccountApiError(
+            'invalid-response',
+            'The account session response was invalid.',
+            {
+              status,
+            },
+          );
+        }
+        return { status: 'authenticated', session };
+      };
+      try {
+        return await Promise.race([verifyResponse(), timeout]);
+      } catch (error) {
+        if (timedOut) {
+          throw new AccountApiError('network', 'The account session check timed out.', {
+            retryable: true,
+          });
+        }
+        throw error;
+      } finally {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+        signal?.removeEventListener('abort', cancelForCaller);
       }
-      return { status: 'authenticated', session };
     },
 
     async logout(signal): Promise<void> {

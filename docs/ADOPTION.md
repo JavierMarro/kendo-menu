@@ -90,9 +90,11 @@ also passed. No dependency, deployment, or production configuration files change
 
 The creating-session rule deliberately fails closed if an initial login commits but its response
 never reaches the browser: a later login does not receive a replacement capability. Guest data is
-not deleted by this backend. Browser preservation and adoption UI remain later-job work. The
-creating-session foreign key verifies session existence; the adapter separately verifies that the
-session belongs to the account before granting capability.
+not deleted by this backend. Browser adoption UI remains later-job work. Under the subsequently
+approved [ADR 0006](adr/0006-independent-dashboards-one-time-guest-copy.md), the frontend must also
+retain the guest LocalStorage copy after either decision, including an acknowledged Yes; guest
+deletion is not pending frontend work. The creating-session foreign key verifies session existence;
+the adapter separately verifies that the session belongs to the account before granting capability.
 
 Real Google, HTTPS cookies, Neon, Vercel routing, and Fluid Compute remain separate verification
 gates. No commit, push, deployment, production migration, or external configuration change belongs

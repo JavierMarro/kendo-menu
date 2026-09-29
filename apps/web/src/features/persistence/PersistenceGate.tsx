@@ -5,9 +5,17 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { createTrainingStore } from '@kendo-menu/store';
+import {
+  classifyTrainingStorageValue,
+  createTrainingStore,
+  type StateStorage,
+} from '@kendo-menu/store';
 
 import { PersistenceContext } from './persistence-context';
+import {
+  AccountWorkspaceProvider,
+  useOptionalAccountWorkspace,
+} from '../account/AccountWorkspaceProvider';
 import {
   createBrowserTrainingStorage,
   createMemoryTrainingStorage,
@@ -20,7 +28,6 @@ import {
   type TrainingStorageController,
   type PersistenceInspection,
 } from '../../lib/training-persistence';
-import { TrainingStoreProvider } from '../../lib/training-store-provider';
 import { createWorkspaceCoordinator } from '../../lib/workspace-coordination';
 
 // Compatibility exports keep existing provider test utilities stable while the context lives separately.
@@ -63,6 +70,11 @@ export function PersistenceGate({
   // here because this provider does not consume invalidation notifications, and constructing an
   // event-owning coordinator during render is unsafe under React StrictMode's discarded renders.
   const coordination = useMemo(() => createWorkspaceCoordinator({ events: null }), []);
+  const recoveryWorkspace = useMemo(() => {
+    const storage = createMemoryTrainingStorage();
+    const store = createTrainingStore({ storage, storageKey: TRAINING_STORAGE_KEY });
+    return { store, storage };
+  }, []);
 
   const onWriteError = useCallback(() => {
     setWriteFailed(true);
@@ -141,6 +153,94 @@ export function PersistenceGate({
     }
     return null;
   });
+  const storeBundleRef = useRef(storeBundle);
+  const createStoreBundleRef = useRef(createStoreBundle);
+  const fallbackAccountStorage = useMemo(() => createMemoryTrainingStorage(), []);
+  const useFallbackAccountStorage =
+    sessionOnly || runtimeUnavailable || inspection.status === 'unavailable';
+  const useFallbackAccountStorageRef = useRef(useFallbackAccountStorage);
+  useEffect(() => {
+    useFallbackAccountStorageRef.current = useFallbackAccountStorage;
+  }, [useFallbackAccountStorage]);
+  useEffect(() => {
+    storeBundleRef.current = storeBundle;
+    createStoreBundleRef.current = createStoreBundle;
+  }, [createStoreBundle, storeBundle]);
+  // Account legacy keys must remain readable while adoption temporarily disables the guest
+  // writer for exact-source cleanup. Only the guest key follows the replaceable writer.
+  const guestStorageProxy = useMemo<StateStorage>(
+    () => ({
+      getItem: (name) =>
+        name === TRAINING_STORAGE_KEY
+          ? (storeBundleRef.current?.storage.getItem(name) ?? null)
+          : useFallbackAccountStorageRef.current
+            ? fallbackAccountStorage.getItem(name)
+            : window.localStorage.getItem(name),
+      setItem: (name, value) => {
+        if (name === TRAINING_STORAGE_KEY)
+          return storeBundleRef.current?.storage.setItem(name, value);
+        return useFallbackAccountStorageRef.current
+          ? fallbackAccountStorage.setItem(name, value)
+          : window.localStorage.setItem(name, value);
+      },
+      removeItem: (name) => {
+        if (name === TRAINING_STORAGE_KEY) return storeBundleRef.current?.storage.removeItem(name);
+        return useFallbackAccountStorageRef.current
+          ? fallbackAccountStorage.removeItem(name)
+          : window.localStorage.removeItem(name);
+      },
+    }),
+    [fallbackAccountStorage],
+  );
+  const guestCleanup = useMemo(
+    () => ({
+      readRaw: () => window.localStorage.getItem(TRAINING_STORAGE_KEY),
+      removeRaw: () => window.localStorage.removeItem(TRAINING_STORAGE_KEY),
+      prepare: async () => {
+        await storeBundleRef.current?.storage.flush();
+        storeBundleRef.current?.storage.disable();
+      },
+      refreshFromRaw: (rawValue: string | null, { durableWrites }: { durableWrites: boolean }) => {
+        const inspection = classifyTrainingStorageValue(rawValue);
+        if (
+          inspection.status !== 'empty' &&
+          inspection.status !== 'ready' &&
+          inspection.status !== 'migrated'
+        ) {
+          throw new Error('The current guest workspace cannot be opened.');
+        }
+        const previousStorage = storeBundleRef.current?.storage;
+        if (
+          !durableWrites &&
+          previousStorage !== undefined &&
+          (previousStorage.isPending() || previousStorage.lastFailure !== null)
+        ) {
+          throw new Error('Unconfirmed guest edits require coordinated recovery.');
+        }
+        const next = durableWrites
+          ? createStoreBundleRef.current(rawValue)
+          : (() => {
+              const memory = createMemoryTrainingStorage();
+              if (rawValue !== null) memory.setItem(TRAINING_STORAGE_KEY, rawValue);
+              const storage = createTrainingStorageController(memory);
+              const store = createTrainingStore({ storage, storageKey: TRAINING_STORAGE_KEY });
+              return { store, storage };
+            })();
+        storeBundleRef.current?.storage.disable();
+        storeBundleRef.current = next;
+        setStoreBundle(next);
+        if (!durableWrites) {
+          // Without a shared lock, the freshly read guest source remains usable in this
+          // document but must not become a new LocalStorage writer.
+          setSessionOnly(true);
+          setWriteFailed(false);
+        }
+        setInspection(inspectBrowserTrainingStorage(TRAINING_STORAGE_KEY));
+        return next.store;
+      },
+    }),
+    [],
+  );
 
   useEffect(() => {
     if (
@@ -315,36 +415,7 @@ export function PersistenceGate({
     }
   }, [store]);
 
-  if (
-    store !== null &&
-    !runtimeUnavailable &&
-    (sessionOnly || inspection.status === 'empty' || inspection.status === 'ready') &&
-    !recoveryIsRequested
-  ) {
-    return (
-      <PersistenceContext.Provider
-        value={{
-          mode: sessionOnly ? 'session' : 'local',
-          writeFailed,
-          pending: writePending,
-          flush: flushPersistence,
-        }}
-      >
-        <TrainingStoreProvider store={store}>
-          {writeFailed ? (
-            <PersistenceWriteFailureNotice
-              backupError={backupError}
-              onDownload={downloadCurrentBackup}
-              onOpenRecovery={() => setLocalRecoveryRequested(true)}
-            />
-          ) : null}
-          {children}
-        </TrainingStoreProvider>
-      </PersistenceContext.Provider>
-    );
-  }
-
-  return (
+  const recoveryView = (
     <PersistenceRecovery
       inspection={
         runtimeUnavailable
@@ -358,14 +429,10 @@ export function PersistenceGate({
       writeFailed={writeFailed}
       currentBackupAvailable={store !== null}
       onConfirmReset={() => {
-        if (!resetPendingRef.current) {
-          setConfirmReset(true);
-        }
+        if (!resetPendingRef.current) setConfirmReset(true);
       }}
       onCancelReset={() => {
-        if (!resetPendingRef.current) {
-          setConfirmReset(false);
-        }
+        if (!resetPendingRef.current) setConfirmReset(false);
       }}
       onDownload={downloadBackup}
       onDownloadCurrentBackup={downloadCurrentBackup}
@@ -373,6 +440,60 @@ export function PersistenceGate({
       onRetry={retry}
       onContinueWithoutSaving={continueWithoutSaving}
     />
+  );
+
+  if (
+    store !== null &&
+    storeBundle !== null &&
+    !runtimeUnavailable &&
+    (sessionOnly || inspection.status === 'empty' || inspection.status === 'ready')
+  ) {
+    return (
+      <PersistenceContext.Provider
+        value={{
+          mode: sessionOnly ? 'session' : 'local',
+          writeFailed,
+          pending: writePending,
+          flush: flushPersistence,
+        }}
+      >
+        <AccountWorkspaceProvider
+          guestStore={store}
+          guestStorage={guestStorageProxy}
+          guestCleanup={guestCleanup}
+          guestFallback={recoveryIsRequested ? recoveryView : undefined}
+        >
+          {writeFailed ? (
+            <GuestPersistenceWriteFailureNotice
+              backupError={backupError}
+              onDownload={downloadCurrentBackup}
+              onOpenRecovery={() => setLocalRecoveryRequested(true)}
+            />
+          ) : null}
+          {children}
+        </AccountWorkspaceProvider>
+      </PersistenceContext.Provider>
+    );
+  }
+
+  return (
+    <PersistenceContext.Provider
+      value={{
+        mode: 'session',
+        writeFailed: false,
+        pending: false,
+        flush: () => Promise.resolve(),
+      }}
+    >
+      <AccountWorkspaceProvider
+        guestStore={recoveryWorkspace.store}
+        guestStorage={guestStorageProxy}
+        guestCleanup={guestCleanup}
+        guestFallback={recoveryView}
+      >
+        {children}
+      </AccountWorkspaceProvider>
+    </PersistenceContext.Provider>
   );
 }
 
@@ -397,6 +518,12 @@ interface PersistenceWriteFailureNoticeProps {
   readonly backupError: string | null;
   readonly onDownload: () => void;
   readonly onOpenRecovery: () => void;
+}
+
+function GuestPersistenceWriteFailureNotice(props: PersistenceWriteFailureNoticeProps) {
+  const workspace = useOptionalAccountWorkspace();
+  if (workspace?.snapshot.mode !== 'guest') return null;
+  return <PersistenceWriteFailureNotice {...props} />;
 }
 
 function PersistenceWriteFailureNotice({

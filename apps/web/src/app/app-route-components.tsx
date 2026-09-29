@@ -1,6 +1,7 @@
-import { Component, useCallback, useEffect, useState, type ReactElement } from 'react';
+import { Component, useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import {
   NavigationType,
+  useNavigate,
   Outlet,
   useLocation,
   useNavigationType,
@@ -16,6 +17,8 @@ import {
   readCookieNoticeAcknowledgement,
 } from '../lib/cookie-notice';
 import { updateRouteMetadata } from '../lib/route-metadata';
+import { scheduleGuestPageview, subscribeToAccountTransitions } from '../lib/guest-pageview';
+import { useOptionalAccountWorkspace } from '../features/account/AccountWorkspaceProvider';
 
 const routeTitles: Readonly<Record<string, string>> = {
   '/app': 'Plan your keiko',
@@ -26,6 +29,23 @@ const routeTitles: Readonly<Record<string, string>> = {
   '/app/glossary': 'Glossary',
   '/cookies': 'Cookie Policy',
 };
+
+const authErrorMessages = new Map([
+  ['cancelled', 'Google sign-in was cancelled. You can continue using KendoMenu as a guest.'],
+  ['failed', 'Google sign-in could not be completed. Please try again.'],
+  ['unavailable', 'Account sign-in is temporarily unavailable. Guest use remains available.'],
+]);
+
+function authNoticeFromSearch(search: string): string | null {
+  const authError = new URLSearchParams(search).get('authError');
+  return authError === null ? null : (authErrorMessages.get(authError) ?? null);
+}
+
+function authErrorFromNavigationState(state: unknown): string | null {
+  if (typeof state !== 'object' || state === null || !('authError' in state)) return null;
+  const code = state.authError;
+  return typeof code === 'string' && authErrorMessages.has(code) ? code : null;
+}
 
 interface ScrollPosition {
   readonly top: number;
@@ -209,15 +229,96 @@ function RouteFocusAndTitle(): ReactElement {
 
 export function RouteRoot() {
   const [isCookieNoticeVisible, setIsCookieNoticeVisible] = useState(shouldShowBrowserCookieNotice);
+  const location = useLocation();
+  const authNotice =
+    authNoticeFromSearch(location.search) ??
+    authErrorMessages.get(authErrorFromNavigationState(location.state) ?? '') ??
+    null;
+  const navigate = useNavigate();
+  const accountWorkspace = useOptionalAccountWorkspace();
+  const pageviewScheduled = useRef(false);
+  const cancelScheduledPageview = useRef<(() => boolean) | null>(null);
+  const initialPathname = useRef(location.pathname);
   const dismissCookieNotice = useCallback((): void => {
     persistBrowserCookieNoticeAcknowledgement();
     setIsCookieNoticeVisible(false);
+  }, []);
+
+  useEffect(() => {
+    // The landing redirect carries the query to /app. Let that navigation finish before
+    // removing the callback code, or the two replacements can discard its notice state.
+    if (location.pathname === '/') return;
+    const parameters = new URLSearchParams(location.search);
+    const queryError = parameters.get('authError');
+    if (queryError !== null) {
+      // Keep only a recognized callback code in route state. A history replacement can
+      // remount this layout, so component state alone cannot carry the fixed notice.
+      // The provider's document-load check already verifies the session after the redirect.
+      parameters.delete('authError');
+      const search = parameters.toString();
+      void navigate(
+        { pathname: location.pathname, search: search.length === 0 ? '' : `?${search}` },
+        {
+          replace: true,
+          state: authErrorMessages.has(queryError) ? { authError: queryError } : null,
+        },
+      );
+    }
+  }, [location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    const accountVerification = accountWorkspace?.verification;
+    const workspaceMode = accountWorkspace?.snapshot.mode;
+    if (accountVerification === 'authenticated' || accountVerification === 'retryable') {
+      // The document's initial check did not prove signed out. Later logout or recovery
+      // must not turn an authenticated or unresolved visit into an analytics pageview.
+      pageviewScheduled.current = true;
+      cancelScheduledPageview.current?.();
+      cancelScheduledPageview.current = null;
+      return;
+    }
+    if (
+      accountVerification !== 'signed-out' ||
+      workspaceMode !== 'guest' ||
+      pageviewScheduled.current
+    )
+      return;
+    pageviewScheduled.current = true;
+    cancelScheduledPageview.current = scheduleGuestPageview(initialPathname.current);
+  }, [accountWorkspace?.snapshot.mode, accountWorkspace?.verification]);
+
+  useEffect(() => {
+    if (accountWorkspace?.snapshot.mode !== 'guest') {
+      cancelScheduledPageview.current?.();
+      cancelScheduledPageview.current = null;
+    }
+  }, [accountWorkspace?.snapshot.mode]);
+
+  useEffect(() => {
+    const cancelPageview = () => {
+      pageviewScheduled.current = true;
+      cancelScheduledPageview.current?.();
+      cancelScheduledPageview.current = null;
+    };
+    window.addEventListener('kendomenu:sign-in-started', cancelPageview);
+    const unsubscribeFromTransitions = subscribeToAccountTransitions(cancelPageview);
+    return () => {
+      window.removeEventListener('kendomenu:sign-in-started', cancelPageview);
+      unsubscribeFromTransitions();
+      if (cancelScheduledPageview.current?.()) pageviewScheduled.current = false;
+      cancelScheduledPageview.current = null;
+    };
   }, []);
 
   return (
     <InstallExperienceProvider isAutomaticPromptBlocked={isCookieNoticeVisible}>
       <RouteFocusAndTitle />
       <Outlet />
+      {authNotice === null ? null : (
+        <p className="auth-error-notice" role="alert">
+          {authNotice}
+        </p>
+      )}
       {isCookieNoticeVisible ? <CookieNotice onDismiss={dismissCookieNotice} /> : null}
     </InstallExperienceProvider>
   );

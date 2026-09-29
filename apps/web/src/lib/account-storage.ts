@@ -88,6 +88,8 @@ export interface AccountStorageOptions {
   readonly database?: AccountDatabase;
   readonly coordination?: WorkspaceCoordinator;
   readonly onWriteFailure?: (error: AccountStorageError) => void;
+  /** Notifies the owning workspace when a write starts, settles, or fails. */
+  readonly onWriteStateChange?: () => void;
 }
 
 export interface AccountStorageController extends StateStorage {
@@ -95,12 +97,14 @@ export interface AccountStorageController extends StateStorage {
   readonly cacheKey: string;
   readonly metadataKey: string;
   readonly confirmedCacheValue: string | null | undefined;
+  readonly confirmedCacheVersion: AccountCacheVersion | null | undefined;
   readonly coordinationAvailability: WorkspaceCoordinationAvailability;
   readonly coordinationAvailable: boolean;
   readonly disable: () => void;
   readonly isEnabled: () => boolean;
   readonly lastFailure: AccountStorageError | null;
   readonly lastRecoveryFailure: AccountStorageError | null;
+  readonly hasPendingWrites: boolean;
   readonly flush: () => Promise<void>;
   readonly readSyncMetadata: () => AccountSyncMetadata | null | Promise<AccountSyncMetadata | null>;
   readonly initializeSyncMetadata: () => AccountSyncMetadata | Promise<AccountSyncMetadata>;
@@ -435,6 +439,7 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
     const mapped = mapStorageError(error, 'write');
     lastFailure = mapped;
     writerFailed = true;
+    options.onWriteStateChange?.();
     if (!writeFailureReported) {
       writeFailureReported = true;
       try {
@@ -448,12 +453,15 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
 
   const trackWrite = (result: Promise<void>): Promise<void> => {
     pendingWrites.add(result);
+    options.onWriteStateChange?.();
     void result.then(
       () => {
         pendingWrites.delete(result);
+        options.onWriteStateChange?.();
       },
       () => {
         pendingWrites.delete(result);
+        options.onWriteStateChange?.();
       },
     );
     // The storage API remains rejectable for callers that await it, while this attached handler
@@ -686,6 +694,11 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
     get confirmedCacheValue() {
       return expectedCache;
     },
+    get confirmedCacheVersion() {
+      return expectedVersion === undefined || expectedVersion === null
+        ? expectedVersion
+        : { identity: expectedVersion.identity, generation: expectedVersion.generation };
+    },
     get coordinationAvailability() {
       return coordination?.availability ?? 'unavailable';
     },
@@ -745,6 +758,9 @@ export function createAccountStorage(options: AccountStorageOptions): AccountSto
     },
     get lastRecoveryFailure() {
       return lastRecoveryFailure;
+    },
+    get hasPendingWrites() {
+      return pendingWrites.size > 0;
     },
     flush: async () => {
       while (pendingWrites.size > 0) {

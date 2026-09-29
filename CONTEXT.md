@@ -49,8 +49,8 @@ The dashboard belonging to anonymous use in one browser, separate from any accou
 The dashboard belonging to one KendoMenu account across its signed-in devices.
 
 **Guest adoption**:
-The practitioner's choice to move an eligible guest dashboard into their new account's empty cloud
-dashboard.
+The practitioner's one-time choice to copy a guest dashboard into a newly created account while
+retaining the guest dashboard.
 
 **Cloud dashboard**:
 The account's acknowledged dashboard held for continuity between devices.

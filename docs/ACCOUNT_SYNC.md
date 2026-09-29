@@ -1,6 +1,7 @@
 # Accounts and synchronization
 
-Documentation baseline: 2026-09-11. **No production authentication or synchronization exists.**
+Documentation baseline: 2026-09-11; local integration status updated for 6D-A on 2026-09-29.
+**No production authentication or synchronization exists.**
 Job 4B connects local Google OIDC and opaque-session HTTP behavior to Job 4A PostgreSQL persistence;
 real Google, Neon, HTTPS-browser, and Vercel integration remain unverified.
 Job 5A adds an unregistered protected dashboard application foundation and shared authorization;
@@ -17,10 +18,12 @@ an attachment; no private attachment path or new product-demand claim is publish
 Current facts come from [production architecture](ARCHITECTURE.md),
 [store persistence](../packages/store/src/persistence.ts),
 [store construction](../packages/store/src/index.ts), and
-[browser storage](../apps/web/src/lib/training-persistence.ts). Today the browser uses the `kendo-menu`
-key, bounded v10 validation/migration, and whole-dashboard writes, without cloud revisions or
-acknowledgements. Custom snapshots have a two-level stored shape; built-ins are canonicalized from
-the current catalogue. Recovery downloads exist, but an ordinary backup import workflow does not.
+[guest browser storage](../apps/web/src/lib/training-persistence.ts). The guest dashboard uses
+Zustand and the `kendo-menu` LocalStorage key; the integration checkout also has verified account
+workspaces using Zustand, account-scoped IndexedDB caches, and the cloud API. Bounded v10
+validation/migration applies to local data. Custom snapshots have a two-level stored shape;
+built-ins are canonicalized from the current catalogue. Recovery downloads exist, but an ordinary
+backup import workflow does not. The local account foundation is not a deployed account journey.
 The [deployment runbook](runbooks/DEPLOYMENT.md) remains authoritative about repository-declared,
 independently observed, owner-reported, and unverified deployment facts.
 
@@ -37,13 +40,17 @@ operational recommendations remain unapproved until the jobs that implement them
 - Google subject is the unique identity. A supplied verified Google email may replace nullable
   display metadata; missing or unverified email leaves existing metadata unchanged. First login
   without verified email stores null. Email is never unique identity; no name/photo is stored.
-- Guest and authenticated workspaces remain separate.
-- A blocking Yes/No adoption choice appears only when **a new KendoMenu account has an empty cloud
-  dashboard and the browser contains an eligible, non-empty guest workspace**. No dismiss action
-  is included. Exact eligibility for returning empty accounts remains unresolved.
-- **Yes:** upload the complete validated guest dashboard, create the account cache, and delete the
-  guest workspace only after server acknowledgement. **No:** preserve the hidden guest workspace;
-  it reappears after logout.
+- Guest and signed-in dashboards are independent: Zustand plus LocalStorage for the guest;
+  Zustand plus an account-scoped IndexedDB cache and cloud API for the signed-in account.
+- Only a newly created account's creating session may receive the one-time blocking Yes/No offer,
+  when this browser has an eligible guest dashboard. There is no dismiss action. An empty cloud
+  dashboard alone does not establish a new account or justify a default menu. Returning accounts
+  receive no new offer, even if their cloud dashboard is empty.
+- **Yes:** copy the complete validated guest dashboard into the account while leaving the guest
+  LocalStorage copy unchanged, including after server acknowledgement. **No:** permanently decline
+  the offer while also leaving guest data unchanged. Later changes in either workspace trigger no
+  new offer or automatic transfer; this does not preclude a separately designed manual import.
+- After successful sign-in, guest use requires sign-out; sign-out returns to the homepage.
 - Signed-in dashboards use local-first, whole-dashboard synchronization. Cloud writes use optimistic
   revisions and never silently apply last-write-wins.
 - Job 5A accepts a complete cloud-write limit of 2,097,152 UTF-8 bytes, including metadata,
@@ -53,8 +60,10 @@ operational recommendations remain unapproved until the jobs that implement them
 - No realtime connections, CRDTs, automatic field merging, collaboration, paid tiers, or public sharing.
 
 See accepted ADRs [0002](adr/0002-identity-application-sessions.md),
-[0003](adr/0003-workspaces-guest-adoption.md), and [0004](adr/0004-whole-dashboard-sync.md).
-These are target decisions, not descriptions of current production functionality.
+[0004](adr/0004-whole-dashboard-sync.md), and
+[0006](adr/0006-independent-dashboards-one-time-guest-copy.md). ADR
+[0003](adr/0003-workspaces-guest-adoption.md) records the superseded move/delete decision. These
+are target decisions, not descriptions of current production functionality.
 
 ### Owner-accepted technical stack — Job 3
 
@@ -108,8 +117,9 @@ behavior and supplies its pool attachment hook. Runtime configuration and databa
 
 The checked-in configuration retains `apps/web/dist` and the SPA fallback, adding API dispatch
 before that fallback. `GET /api/health` returns `{"status":"ok"}`; unknown API paths return JSON
-404s. The frontend does not call the API. This is implemented local backend behavior, **not deployed
-production functionality**.
+404s. At the Job 3 scaffold stage, the frontend did not call the API; the current 6D-A integration
+does call local session and dashboard endpoints. Neither state proves deployed production account
+functionality.
 
 **Deployment verification gate:** direct application/adapter tests and Vite browser tests do not
 prove Vercel function discovery, workspace bundling, or combined API-before-SPA routing. No Vercel
@@ -128,7 +138,7 @@ not prove browser HTTPS or provider behavior; never infer those from health test
 
 The accepted driver direction is PostgreSQL via **`pg` everywhere**, with Drizzle's node-postgres
 integration. Job 4A implements the local pool, transaction, and migration foundation. Neon
-endpoints, adoption, and Vercel execution remain later-job work:
+endpoints, browser adoption UI, and Vercel execution remain later-job work:
 
 - The local adapter caches a bounded `pg.Pool` per warm module instance (maximum 5, idle timeout
   5 seconds). A Neon pooled endpoint remains the later runtime target; no request uses Neon yet.
@@ -152,8 +162,9 @@ versions without claiming Neon or Vercel compatibility.
 ### Product and operational defaults
 
 **Owner confirmation required before the jobs implementing these behaviors**, not before the
-isolated Job 3 health scaffold. These were Job 2 recommendations; the returning-account rule is
-now approved for Job 6A as recorded below. Other rows retain their stated decision status.
+isolated Job 3 health scaffold. These were Job 2 recommendations; the returning-account and
+guest-preservation rules are now approved as recorded above. Other rows retain their stated
+decision status.
 
 | Decision                     | Recommended default                                                                                                                                             | Main trade-off                                                                                                                                                                 |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -162,7 +173,7 @@ now approved for Job 6A as recorded below. Other rows retain their stated decisi
 | Synchronization triggers     | Debounce saved edits for one second; also check on reconnect/focus and explicit retry                                                                           | Simple foreground continuity without persistent connections or background-worker synchronization.                                                                              |
 | Conflict interaction         | Pause uploads; explicit choice of local or cloud whole dashboard, with export/preservation before discarding the losing local copy                              | More visible friction, but no silent loss or field merging.                                                                                                                    |
 | Account cache/offline access | Retain account-scoped data hidden on logout; reopen only after reauthentication; an already-open account workspace remains editable offline with uploads paused | Supports continuity but retains readable data on a shared browser; a fresh uncached device cannot load cloud data offline.                                                     |
-| Logout/account switching     | Preserve pending account-scoped edits, stop uploads, hide account data, and reveal the guest workspace; disclose unsynchronized work                            | Prioritizes local work retention over clearing all account data on logout. Offline logout remains locally immediate, with revocation completed before later authenticated use. |
+| Logout/account switching     | Preserve pending account-scoped edits, stop uploads, hide account data, and return to the homepage after sign-out; disclose unsynchronized work                 | Prioritizes local work retention over clearing all account data on logout. Offline logout remains locally immediate, with revocation completed before later authenticated use. |
 | Region                       | Colocate API and database in an EU region offered by both providers                                                                                             | Reduces regional latency and unnecessary transfers, but does not establish legal jurisdiction or compliance.                                                                   |
 | Operating owner and cost     | Repository owner operates it; start a non-production evaluation on available free allocations with no automatic paid upgrade                                    | Keeps a personal project proportionate; free quotas and durability may not meet production recovery needs. Approve a numeric spending ceiling before provisioning.             |
 | Recovery and retention       | Keep the current cloud dashboard; daily recoverable database backup, seven-day backup retention, 24-hour recovery-point and 48-hour recovery-time targets       | No user-facing historical versions; provider plan capabilities and cost must be checked rather than promised.                                                                  |
@@ -240,13 +251,14 @@ References: [Google OIDC](https://developers.google.com/identity/openid-connect/
   different content fails. One in-flight write and a coalesced newer pending snapshot prevent an old
   acknowledgement from marking newer edits clean. Bound retries with backoff; stop on conflicts,
   validation failures, or expired authentication instead of looping.
-- Adoption requires the server to atomically check that the cloud dashboard is still empty and
-  accept the complete validated snapshot. A concurrent cloud write must not be overwritten. Persist
-  the acknowledged account cache and recoverable adoption progress before guest deletion. Delete
-  only the guest snapshot actually adopted; concurrent guest edits remain protected. LocalStorage
-  does not provide a multi-key transaction, so interrupted transitions must resume idempotently.
+- Adoption requires the server to verify the creating session's pending capability, atomically
+  check that the cloud dashboard is still empty, and accept the complete validated snapshot. A
+  concurrent cloud write must not be overwritten. Persist the acknowledged account cache and
+  recoverable adoption progress before reporting completion. Keep the guest LocalStorage copy
+  unchanged regardless of the decision or server acknowledgement. Interrupted transitions must
+  resume idempotently without a second offer.
 - Lost responses, server rejection, storage quota errors, and cache-write failure keep the guest
-  data recoverable. Do not report adoption complete or delete guest data before acknowledgement and
+  data unchanged and recoverable. Do not report adoption complete before acknowledgement and
   successful account-cache persistence. The blocking choice remains Yes/No, with no invented dismiss.
 - Deletion-versus-edit and stale tabs must yield revision conflicts rather than silently resurrecting
   entries. Revalidate the latest revision before a user-confirmed whole-dashboard replacement.

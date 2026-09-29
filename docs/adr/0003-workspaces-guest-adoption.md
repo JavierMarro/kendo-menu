@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0006
 ---
 
 # Separate workspaces with explicit guest adoption
@@ -11,5 +11,6 @@ guest dashboard, creates the account cache, and deletes the guest workspace only
 acknowledgement; No preserves the hidden guest workspace, which reappears after logout.
 
 There is no dismiss action. Exact eligibility for returning empty accounts is not accepted by this
-ADR and requires owner confirmation. This target is not implemented; eligibility recommendations
-and failure handling are in the [account and synchronization design](../ACCOUNT_SYNC.md).
+ADR and requires owner confirmation. This was the original target, not implemented behavior. The
+current decision is [ADR 0006](0006-independent-dashboards-one-time-guest-copy.md); the original
+move/delete rule above is retained as historical evidence.

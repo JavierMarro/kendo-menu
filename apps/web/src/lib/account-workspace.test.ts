@@ -22,6 +22,9 @@ import {
 
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
+const C = '33333333-3333-4333-8333-333333333333';
+const D = '44444444-4444-4444-8444-444444444444';
+const E = '55555555-5555-4555-8555-555555555555';
 const empty = JSON.stringify({ state: { dashboardEntries: [] }, version: 10 });
 const session = (userId = A) =>
   new Response(
@@ -150,10 +153,14 @@ function deferred<T>() {
   let resolve: (value: T) => void = () => {
     throw new Error('uninitialized');
   };
-  const promise = new Promise<T>((complete) => {
+  let reject: (reason?: unknown) => void = () => {
+    throw new Error('uninitialized');
+  };
+  const promise = new Promise<T>((complete, fail) => {
     resolve = complete;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function fixture(withCoordination = true, guestRaw?: string) {
@@ -232,6 +239,58 @@ function add(store: TrainingStoreApi) {
 }
 
 describe('internal account bootstrap and isolation', () => {
+  it('exposes account write pending state and waits for durable readback on flush', async () => {
+    const f = fixture();
+    await expect(f.controller.bootstrap()).resolves.toMatchObject({ status: 'ready' });
+    const gate = deferred<void>();
+    f.database.onWrite = () => gate.promise;
+
+    const accountStore = f.controller.getSnapshot();
+    if (accountStore.mode !== 'account') throw new Error('Expected verified account workspace');
+    add(accountStore.store);
+
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      persistencePending: true,
+      persistenceFailure: null,
+    });
+    let flushFinished = false;
+    const flush = f.controller.flushPersistence().finally(() => {
+      flushFinished = true;
+    });
+    await Promise.resolve();
+    expect(flushFinished).toBe(false);
+
+    gate.resolve();
+    await flush;
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      persistencePending: false,
+      persistenceFailure: null,
+    });
+    const persisted = f.database.caches.get(A)?.cacheValue;
+    expect(persisted).toContain('"id"');
+  });
+
+  it('exposes failed account writes and rejects an explicit durability flush', async () => {
+    const f = fixture();
+    await expect(f.controller.bootstrap()).resolves.toMatchObject({ status: 'ready' });
+    f.database.onWrite = () => Promise.reject(new Error('quota exceeded'));
+
+    const accountStore = f.controller.getSnapshot();
+    if (accountStore.mode !== 'account') throw new Error('Expected verified account workspace');
+    add(accountStore.store);
+
+    await expect(f.controller.flushPersistence()).rejects.toMatchObject({
+      code: 'unavailable',
+    });
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      persistencePending: false,
+      persistenceFailure: 'unavailable',
+    });
+  });
+
   it('keeps warm local persistence when Web Lock acquisition becomes unavailable', async () => {
     const f = fixture();
     let rejectLocks = false;
@@ -267,7 +326,7 @@ describe('internal account bootstrap and isolation', () => {
     expect(reopened.store.getState().dashboardEntries).toHaveLength(1);
     expect(reopened.synchronization).toBe('unavailable');
     expect(reopened.persistenceFailure).toBeNull();
-    controller.dispose();
+    await controller.dispose();
   });
   it('retains the existing guest migration at kendo-menu without adopting it', async () => {
     const f = fixture(
@@ -394,7 +453,10 @@ describe('internal account bootstrap and isolation', () => {
       status: 'retryable',
       reason: 'storage',
     });
-    expect(corrupt.controller.getSnapshot().mode).toBe('guest');
+    expect(corrupt.controller.getSnapshot()).toMatchObject({
+      mode: 'account-error',
+      storageFailure: 'invalid-persisted-value',
+    });
     expect(corrupt.values.get(key)).toBe('{broken');
 
     for (const raw of ['{"version":1}', `{"version":999,"accountId":"${A}"}`]) {
@@ -405,6 +467,75 @@ describe('internal account bootstrap and isolation', () => {
       expect(f.values.get(marker)).toBe(raw);
       expect(f.database.metadata.get(`${A}:ack`)).toEqual({ version: 1, status: 'unknown' });
     }
+  });
+
+  it('keeps Use this device ahead of a held account-error Retry', async () => {
+    const f = fixture();
+    f.values.set(deriveAccountStorageKey(A), '{broken');
+    expect(await f.controller.bootstrap()).toEqual({ status: 'retryable', reason: 'storage' });
+    expect(f.controller.getSnapshot()).toMatchObject({ mode: 'account-error', userId: A });
+
+    const heldRetry = deferred<Response>();
+    f.fetch.mockReturnValueOnce(heldRetry.promise);
+    const retry = f.controller.bootstrap();
+    await vi.waitFor(() => expect(f.fetch).toHaveBeenCalledTimes(2));
+    const retrySignal = f.fetch.mock.calls[1]?.[1]?.signal;
+
+    expect(await f.controller.hideLocally()).toEqual({
+      status: 'hidden',
+      serverRevocationConfirmed: false,
+    });
+    expect(retrySignal?.aborted).toBe(true);
+
+    heldRetry.resolve(session(A));
+    expect(await retry).toEqual({ status: 'superseded' });
+    expect(f.controller.getSnapshot().mode).toBe('guest');
+  });
+
+  it('refreshes the current guest source into a non-persisting store without Web Locks', async () => {
+    const f = fixture(false);
+    add(f.guestStore);
+    const currentGuest = f.values.get('kendo-menu');
+    if (currentGuest === undefined) throw new Error('Expected a saved guest source');
+    const lockless = createWorkspaceCoordinator({ locks: null, events: null });
+    let prepared = false;
+    let refreshedWithDurableWrites: boolean | undefined;
+    const controller = createAccountWorkspaceController({
+      guestStore: f.guestStore,
+      storage: f.storage,
+      api: f.api,
+      coordination: lockless,
+      database: f.database,
+      guestCleanup: {
+        readRaw: () => f.values.get('kendo-menu') ?? null,
+        removeRaw: () => {
+          f.values.delete('kendo-menu');
+        },
+        prepare: () => {
+          prepared = true;
+        },
+        refreshFromRaw: (rawValue, { durableWrites }) => {
+          refreshedWithDurableWrites = durableWrites;
+          const refreshedStorage: StateStorage = {
+            getItem: () => rawValue,
+            setItem: () => undefined,
+            removeItem: () => undefined,
+          };
+          controller.replaceGuestStore(
+            createTrainingStore({ storage: refreshedStorage, storageKey: 'kendo-menu' }),
+          );
+        },
+      },
+    });
+
+    expect(await controller.refreshGuestWorkspace()).toBe(true);
+    expect(prepared).toBe(false);
+    expect(refreshedWithDurableWrites).toBe(false);
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.mode).toBe('guest');
+    if (snapshot.mode !== 'guest') throw new Error('Expected guest workspace');
+    expect(snapshot.store.getState().dashboardEntries).toHaveLength(1);
+    expect(f.values.get('kendo-menu')).toBe(currentGuest);
   });
 
   it('ignores old bootstrap responses and aborts on disposal', async () => {
@@ -421,7 +552,7 @@ describe('internal account bootstrap and isolation', () => {
     const last = deferred<Response>();
     f.fetch.mockReturnValueOnce(last.promise);
     const pending = f.controller.bootstrap();
-    f.controller.dispose();
+    await f.controller.dispose();
     last.resolve(session(A));
     expect(await pending).toEqual({ status: 'superseded' });
     expect(f.controller.getSnapshot().mode).toBe('disposed');
@@ -937,6 +1068,9 @@ describe('internal account bootstrap and isolation', () => {
       serverRevocationConfirmed: true,
     });
     expect(f.controller.getSnapshot().mode).toBe('guest');
+    expect(f.controller.hasHiddenUnsavedAccountChanges()).toBe(true);
+    expect(f.controller.listDisposalEditRecovery().items).toEqual([]);
+    expect(f.controller.readDisposalEditRecovery('not-yet-verified')).toBeNull();
     expect(f.guestStore.getState().dashboardEntries).toHaveLength(1);
     expect(f.values.get('kendo-menu')).toBe(guestValue);
     expect(active.store.getState().dashboardEntries).toEqual([]);
@@ -945,6 +1079,7 @@ describe('internal account bootstrap and isolation', () => {
     const restored = f.controller.getSnapshot();
     if (restored.mode !== 'account') throw new Error('account missing');
     expect(restored.store.getState().dashboardEntries).toHaveLength(1);
+    expect(f.controller.hasHiddenUnsavedAccountChanges()).toBe(false);
   });
 
   it('retains failed writes privately when authentication changes, restoring only after same-user verification', async () => {
@@ -956,9 +1091,15 @@ describe('internal account bootstrap and isolation', () => {
       throw new DOMException('quota fixture', 'QuotaExceededError');
     };
     add(a.store);
+    const observedHiddenState: boolean[] = [];
+    const unsubscribe = f.controller.subscribe(() => {
+      observedHiddenState.push(f.controller.hasHiddenUnsavedAccountChanges());
+    });
     f.fetch.mockResolvedValueOnce(session(B));
     expect(await f.controller.bootstrap()).toEqual({ status: 'retryable', reason: 'storage' });
     expect(f.controller.getSnapshot().mode).toBe('guest');
+    expect(f.controller.hasHiddenUnsavedAccountChanges()).toBe(true);
+    expect(observedHiddenState.at(-1)).toBe(true);
     expect(a.store.getState().dashboardEntries).toEqual([]);
     expect(f.reads.some((key) => key.startsWith(deriveAccountStorageKey(B)))).toBe(false);
     f.database.onWrite = undefined;
@@ -972,6 +1113,114 @@ describe('internal account bootstrap and isolation', () => {
     const restored = f.controller.getSnapshot();
     if (restored.mode !== 'account') throw new Error('account missing');
     expect(restored.store.getState().dashboardEntries).toHaveLength(1);
+    expect(f.controller.hasHiddenUnsavedAccountChanges()).toBe(false);
+    unsubscribe();
+  });
+
+  it('keeps a content-free hidden-edit signal after signed-out verification until same-account recovery is durable', async () => {
+    const f = fixture();
+    await f.controller.bootstrap();
+    const account = f.controller.getSnapshot();
+    if (account.mode !== 'account') throw new Error('account missing');
+
+    f.database.onWrite = () => {
+      throw new DOMException('quota fixture', 'QuotaExceededError');
+    };
+    add(account.store);
+    await expect(f.controller.flushPersistence()).rejects.toMatchObject({ code: 'quota' });
+    expect(f.controller.hasHiddenUnsavedAccountChanges()).toBe(false);
+
+    f.fetch.mockResolvedValueOnce(signedOut());
+    expect(await f.controller.bootstrap()).toEqual({ status: 'retryable', reason: 'storage' });
+    expect(f.controller.getSnapshot().mode).toBe('guest');
+    expect(f.controller.hasHiddenUnsavedAccountChanges()).toBe(true);
+    expect(f.controller.listDisposalEditRecovery().items).toEqual([]);
+    expect(f.controller.readDisposalEditRecovery('unverified-copy')).toBeNull();
+
+    f.database.onWrite = undefined;
+    f.fetch.mockResolvedValueOnce(session(A));
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    const restored = f.controller.getSnapshot();
+    if (restored.mode !== 'account') throw new Error('account missing');
+    expect(restored.store.getState().dashboardEntries).toHaveLength(1);
+    expect(f.controller.hasHiddenUnsavedAccountChanges()).toBe(false);
+    expect(f.controller.listDisposalEditRecovery().items).toEqual([]);
+  });
+
+  it('retains a failed edit when a peer advances and restores identical cache bytes', async () => {
+    const f = fixture();
+    f.fetch.mockResolvedValueOnce(session(D));
+    await expect(f.controller.bootstrap()).resolves.toMatchObject({ status: 'ready' });
+    const account = f.controller.getSnapshot();
+    if (account.mode !== 'account') throw new Error('account missing');
+
+    f.database.onWrite = () => Promise.reject(new Error('quota exceeded'));
+    add(account.store);
+    await expect(f.controller.flushPersistence()).rejects.toMatchObject({ code: 'unavailable' });
+    f.fetch.mockResolvedValueOnce(signedOut());
+    await expect(f.controller.bootstrap()).resolves.toMatchObject({
+      status: 'retryable',
+      reason: 'storage',
+    });
+    expect(f.controller.listDisposalEditRecovery().items).toEqual([]);
+
+    const oldCache = f.database.caches.get(D);
+    if (oldCache === undefined) throw new Error('Expected the original account cache');
+    const newerCache = {
+      ...oldCache,
+      generation: oldCache.generation + 2,
+      cacheValue: oldCache.cacheValue,
+    };
+    f.database.caches.set(D, newerCache);
+    f.database.onWrite = undefined;
+    f.fetch.mockResolvedValueOnce(session(D));
+    await expect(f.controller.bootstrap()).resolves.toMatchObject({
+      status: 'retryable',
+      reason: 'storage',
+    });
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account-error',
+      userId: D,
+      storageFailure: 'malformed-readback',
+    });
+
+    const recovery = f.controller.listDisposalEditRecovery();
+    expect(recovery.items).toHaveLength(1);
+    const copy = recovery.items[0];
+    if (copy === undefined) throw new Error('Expected the retained controller edit');
+    const rawCopy = f.controller.readDisposalEditRecovery(copy.recoveryId);
+    expect(rawCopy).toContain('international-dojo-2-hour-session');
+    expect(f.database.caches.get(D)).toEqual(newerCache);
+
+    const readStarted = deferred<void>();
+    const releaseRead = deferred<void>();
+    f.database.onRead = () => {
+      readStarted.resolve();
+      return releaseRead.promise;
+    };
+    f.fetch.mockResolvedValueOnce(session(B));
+    const switching = f.controller.bootstrap();
+    await readStarted.promise;
+    expect(f.controller.getSnapshot().mode).not.toBe('account-error');
+    expect(f.controller.listDisposalEditRecovery().items).toEqual([]);
+    expect(f.controller.readDisposalEditRecovery(copy.recoveryId)).toBeNull();
+    releaseRead.resolve();
+    expect(await switching).toEqual({ status: 'ready' });
+  });
+
+  it('does not flag a hidden account after signed-out verification when its latest value is durable', async () => {
+    const f = fixture();
+    await f.controller.bootstrap();
+    const account = f.controller.getSnapshot();
+    if (account.mode !== 'account') throw new Error('account missing');
+    add(account.store);
+    await f.controller.flushPersistence();
+
+    f.fetch.mockResolvedValueOnce(signedOut());
+    expect(await f.controller.bootstrap()).toEqual({ status: 'signed-out' });
+    expect(f.controller.getSnapshot().mode).toBe('guest');
+    expect(f.controller.hasHiddenUnsavedAccountChanges()).toBe(false);
+    await f.controller.dispose();
   });
 
   it('waits for an outstanding account write before switching', async () => {
@@ -1003,10 +1252,120 @@ describe('internal account bootstrap and isolation', () => {
     };
     const bootstrap = f.controller.bootstrap();
     await vi.waitFor(() => expect(readingCache).toBe(true));
-    f.controller.dispose();
+    await f.controller.dispose();
     gate.resolve(empty);
     expect(await bootstrap).toEqual({ status: 'superseded' });
     expect(f.values.has(deriveAccountStorageKey(A))).toBe(false);
+  });
+
+  it('keeps the account writer enabled until an in-flight save is durable during disposal', async () => {
+    const f = fixture();
+    await f.controller.bootstrap();
+    const account = f.controller.getSnapshot();
+    if (account.mode !== 'account') throw new Error('Expected account workspace');
+
+    const gate = deferred<void>();
+    f.database.onWrite = () => gate.promise;
+    add(account.store);
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      persistencePending: true,
+    });
+
+    const disposing = f.controller.dispose();
+    expect(f.controller.getSnapshot().mode).toBe('disposed');
+    gate.resolve();
+    await disposing;
+
+    await vi.waitFor(() => {
+      const cache = f.database.caches.get(A)?.cacheValue;
+      expect(cache).toBeDefined();
+      expect(cache).not.toBe(empty);
+      expect(cache).toContain('"id"');
+    });
+    expect(account.store.getState().dashboardEntries).toEqual([]);
+  });
+
+  it('restores a failed save across provider disposal only for the same verified cache', async () => {
+    const f = fixture();
+    await f.controller.bootstrap();
+    const account = f.controller.getSnapshot();
+    if (account.mode !== 'account') throw new Error('Expected account workspace');
+
+    f.database.onWrite = () => Promise.reject(new Error('quota exceeded'));
+    add(account.store);
+    await expect(f.controller.flushPersistence()).rejects.toMatchObject({ code: 'unavailable' });
+    await f.controller.dispose();
+
+    f.database.onWrite = undefined;
+    f.fetch.mockResolvedValueOnce(session(B));
+    const remountedController = createAccountWorkspaceController({
+      guestStore: f.guestStore,
+      storage: f.storage,
+      api: f.api,
+      coordination: f.coordination,
+      database: f.database,
+    });
+    expect(await remountedController.bootstrap()).toEqual({ status: 'ready' });
+    const otherAccount = remountedController.getSnapshot();
+    if (otherAccount.mode !== 'account') throw new Error('Expected verified account workspace');
+    expect(otherAccount.userId).toBe(B);
+    expect(otherAccount.store.getState().dashboardEntries).toHaveLength(0);
+
+    f.fetch.mockResolvedValueOnce(session(A));
+    expect(await remountedController.bootstrap()).toEqual({ status: 'ready' });
+    const restored = remountedController.getSnapshot();
+    if (restored.mode !== 'account') throw new Error('Expected restored account workspace');
+    expect(restored.userId).toBe(A);
+    expect(restored.store.getState().dashboardEntries).toHaveLength(1);
+    await remountedController.flushPersistence();
+    await remountedController.dispose();
+  });
+
+  it('keeps disposal-retained edits gated when the confirmed account cache changed', async () => {
+    const f = fixture();
+    await f.controller.bootstrap();
+    const account = f.controller.getSnapshot();
+    if (account.mode !== 'account') throw new Error('Expected account workspace');
+
+    f.database.onWrite = () => Promise.reject(new Error('quota exceeded'));
+    add(account.store);
+    await expect(f.controller.flushPersistence()).rejects.toMatchObject({ code: 'unavailable' });
+    await f.controller.dispose();
+
+    const baseline = f.database.caches.get(A);
+    if (baseline === undefined) throw new Error('Expected baseline account cache');
+    f.database.caches.set(A, {
+      ...baseline,
+      identity: 'changed-by-peer',
+      generation: baseline.generation + 1,
+      cacheValue: `${baseline.cacheValue} `,
+    });
+    f.database.onWrite = undefined;
+
+    const remountedController = createAccountWorkspaceController({
+      guestStore: f.guestStore,
+      storage: f.storage,
+      api: f.api,
+      coordination: f.coordination,
+      database: f.database,
+    });
+    expect(await remountedController.bootstrap()).toEqual({
+      status: 'retryable',
+      reason: 'storage',
+    });
+    expect(remountedController.getSnapshot()).toMatchObject({
+      mode: 'account-error',
+      userId: A,
+      storageFailure: 'malformed-readback',
+    });
+
+    f.database.caches.set(A, baseline);
+    expect(await remountedController.bootstrap()).toEqual({ status: 'ready' });
+    const restored = remountedController.getSnapshot();
+    if (restored.mode !== 'account') throw new Error('Expected restored account workspace');
+    expect(restored.store.getState().dashboardEntries).toHaveLength(1);
+    await remountedController.dispose();
   });
 
   it('does not perform any automatic dashboard read, cloud write or adoption', async () => {
@@ -1180,5 +1539,188 @@ describe('internal account bootstrap and isolation', () => {
     expect(f.reads.every((key) => key === 'kendo-menu')).toBe(true);
     expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
     expect(f.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('retains and exposes both divergent copies when same-account disposals settle out of order', async () => {
+    const f = fixture();
+    f.fetch.mockImplementation(() => Promise.resolve(session(C)));
+    await f.controller.bootstrap();
+    const first = f.controller.getSnapshot();
+    if (first.mode !== 'account') throw new Error('first controller did not open account');
+
+    const secondController = createAccountWorkspaceController({
+      guestStore: f.guestStore,
+      storage: f.storage,
+      api: f.api,
+      coordination: f.coordination,
+      database: f.database,
+    });
+    await secondController.bootstrap();
+    const second = secondController.getSnapshot();
+    if (second.mode !== 'account') throw new Error('second controller did not open account');
+
+    const firstTraining = DEFAULT_TRAINING_SETS[0];
+    const secondTraining = DEFAULT_TRAINING_SETS[1];
+    if (firstTraining === undefined || secondTraining === undefined)
+      throw new Error('fixture requires two training sets');
+
+    const firstWrite = deferred<void>();
+    const secondWrite = deferred<void>();
+    let writeIndex = 0;
+    f.database.onWrite = () => {
+      const write = [firstWrite, secondWrite][writeIndex];
+      writeIndex += 1;
+      if (write === undefined) throw new Error('unexpected extra write');
+      return write.promise;
+    };
+    first.store.getState().addToDashboard(firstTraining.id);
+    second.store.getState().addToDashboard(secondTraining.id);
+    await vi.waitFor(() => expect(writeIndex).toBe(2));
+
+    const firstFlush = f.controller.flushPersistence();
+    const secondFlush = secondController.flushPersistence();
+    const firstDispose = f.controller.dispose();
+    const secondDispose = secondController.dispose();
+
+    secondWrite.reject(new Error('second controller quota failure'));
+    await expect(secondFlush).rejects.toMatchObject({ code: 'unavailable' });
+    await secondDispose;
+    firstWrite.reject(new Error('first controller quota failure'));
+    await expect(firstFlush).rejects.toMatchObject({ code: 'unavailable' });
+    await firstDispose;
+
+    f.database.onWrite = undefined;
+    const remountedController = createAccountWorkspaceController({
+      guestStore: f.guestStore,
+      storage: f.storage,
+      api: f.api,
+      coordination: f.coordination,
+      database: f.database,
+    });
+    expect(await remountedController.bootstrap()).toEqual({
+      status: 'retryable',
+      reason: 'storage',
+    });
+    expect(remountedController.getSnapshot()).toMatchObject({
+      mode: 'account-error',
+      userId: C,
+      storageFailure: 'malformed-readback',
+    });
+
+    const recovery = remountedController.listDisposalEditRecovery();
+    expect(recovery.items).toHaveLength(2);
+    expect(recovery.nextCursor).toBeNull();
+    const firstCopy = recovery.items[0];
+    const secondCopy = recovery.items[1];
+    if (firstCopy === undefined || secondCopy === undefined)
+      throw new Error('both retained copies should be listed');
+    expect(firstCopy.recoveryId).not.toBe(secondCopy.recoveryId);
+    expect(firstCopy.characterLength).toBeGreaterThan(0);
+    expect(firstCopy.menuCount).toBe(1);
+    const firstEnvelope = remountedController.readDisposalEditRecovery(firstCopy.recoveryId);
+    const secondEnvelope = remountedController.readDisposalEditRecovery(secondCopy.recoveryId);
+    expect(firstEnvelope).not.toBe(secondEnvelope);
+    const envelopes = [firstEnvelope, secondEnvelope];
+    expect(envelopes.some((value) => value?.includes(firstTraining.id))).toBe(true);
+    expect(envelopes.some((value) => value?.includes(secondTraining.id))).toBe(true);
+
+    expect(await remountedController.hideLocally()).toMatchObject({ status: 'hidden' });
+    expect(remountedController.listDisposalEditRecovery().items).toHaveLength(0);
+    expect(remountedController.readDisposalEditRecovery(firstCopy.recoveryId)).toBeNull();
+    await remountedController.dispose();
+  });
+
+  it('keeps a recovery ID and cursor valid when a later disposal adds another copy', async () => {
+    const f = fixture();
+    f.fetch.mockImplementation(() => Promise.resolve(session(D)));
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    const first = f.controller.getSnapshot();
+    if (first.mode !== 'account') throw new Error('Expected first account workspace');
+
+    f.database.onWrite = () => Promise.reject(new Error('first cache write failed'));
+    add(first.store);
+    await expect(f.controller.flushPersistence()).rejects.toMatchObject({ code: 'unavailable' });
+    f.fetch.mockResolvedValueOnce(signedOut());
+    expect(await f.controller.bootstrap()).toEqual({ status: 'retryable', reason: 'storage' });
+    const baseline = f.database.caches.get(D);
+    if (baseline === undefined) throw new Error('Expected the confirmed cache');
+    f.database.caches.set(D, {
+      ...baseline,
+      generation: baseline.generation + 1,
+      cacheValue: `${baseline.cacheValue} `,
+    });
+    f.database.onWrite = undefined;
+    expect(await f.controller.bootstrap()).toEqual({ status: 'retryable', reason: 'storage' });
+    const original = f.controller.listDisposalEditRecovery().items[0];
+    if (original === undefined) throw new Error('Expected the controller-held recovery copy');
+
+    const later = createAccountWorkspaceController({
+      guestStore: f.guestStore,
+      storage: f.storage,
+      api: f.api,
+      coordination: f.coordination,
+      database: f.database,
+    });
+    expect(await later.bootstrap()).toEqual({ status: 'ready' });
+    const second = later.getSnapshot();
+    if (second.mode !== 'account') throw new Error('Expected second account workspace');
+    const anotherTraining = DEFAULT_TRAINING_SETS[1];
+    if (anotherTraining === undefined) throw new Error('Expected another training set');
+    f.database.onWrite = () => Promise.reject(new Error('second cache write failed'));
+    second.store.getState().addToDashboard(anotherTraining.id);
+    await expect(later.flushPersistence()).rejects.toMatchObject({ code: 'unavailable' });
+    await later.dispose();
+
+    const recovery = f.controller.listDisposalEditRecovery();
+    expect(recovery.items.map((copy) => copy.recoveryId)).toContain(original.recoveryId);
+    const appended = f.controller.listDisposalEditRecovery(original.recoveryId).items;
+    expect(appended).toHaveLength(1);
+    expect(appended[0]?.recoveryId).not.toBe(original.recoveryId);
+    expect(f.controller.readDisposalEditRecovery(original.recoveryId)).toContain(
+      'international-dojo-2-hour-session',
+    );
+    expect(f.controller.readDisposalEditRecovery(appended[0]?.recoveryId ?? '')).toContain(
+      anotherTraining.id,
+    );
+  });
+
+  it('keeps an exposed recovery ID when a later disposal holds the same edit', async () => {
+    const f = fixture();
+    f.fetch.mockImplementation(() => Promise.resolve(session(E)));
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    const first = f.controller.getSnapshot();
+    if (first.mode !== 'account') throw new Error('Expected first account workspace');
+    f.database.onWrite = () => Promise.reject(new Error('first cache write failed'));
+    add(first.store);
+    const originalEntries = first.store.getState().dashboardEntries;
+    await expect(f.controller.flushPersistence()).rejects.toMatchObject({ code: 'unavailable' });
+    f.fetch.mockResolvedValueOnce(signedOut());
+    expect(await f.controller.bootstrap()).toEqual({ status: 'retryable', reason: 'storage' });
+    expect(await f.controller.bootstrap()).toEqual({ status: 'retryable', reason: 'storage' });
+    const original = f.controller.listDisposalEditRecovery().items[0];
+    if (original === undefined) throw new Error('Expected a verified recovery copy');
+
+    f.database.onWrite = undefined;
+    const later = createAccountWorkspaceController({
+      guestStore: f.guestStore,
+      storage: f.storage,
+      api: f.api,
+      coordination: f.coordination,
+      database: f.database,
+    });
+    expect(await later.bootstrap()).toEqual({ status: 'ready' });
+    const second = later.getSnapshot();
+    if (second.mode !== 'account') throw new Error('Expected second account workspace');
+    f.database.onWrite = () => Promise.reject(new Error('duplicate cache write failed'));
+    second.store.setState({ dashboardEntries: originalEntries });
+    await expect(later.flushPersistence()).rejects.toMatchObject({ code: 'unavailable' });
+    await later.dispose();
+
+    expect(f.controller.listDisposalEditRecovery().items.map((copy) => copy.recoveryId)).toEqual([
+      original.recoveryId,
+    ]);
+    expect(f.controller.readDisposalEditRecovery(original.recoveryId)).toContain(
+      'international-dojo-2-hour-session',
+    );
   });
 });

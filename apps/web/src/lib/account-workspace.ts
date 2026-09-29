@@ -6,6 +6,7 @@
  * briefly closes its editor; authentication rejection requires fresh session verification.
  */
 import {
+  classifyTrainingStorageValue,
   createTrainingStoreAsync,
   serializePersistedTrainingStateV10,
   type TrainingStoreApi,
@@ -14,7 +15,9 @@ import {
 import type { DashboardEntry } from '@kendo-menu/domain';
 
 import {
+  AccountStorageError,
   createAccountStorage,
+  type AccountCacheVersion,
   type AccountDatabase,
   type AccountStorageController,
   type AccountStorageFailureCode,
@@ -33,6 +36,79 @@ import { accountWorkspaceScope, type WorkspaceCoordinator } from './workspace-co
 
 // Internal composition only. Public routes deliberately do not instantiate this controller.
 
+interface UnconfirmedWorkspaceEdits {
+  readonly recoveryId: string;
+  readonly entries: readonly DashboardEntry[];
+  readonly baseline: string | null | undefined;
+  readonly baselineVersion: AccountCacheVersion | null | undefined;
+}
+
+// A provider can be remounted after an IndexedDB write fails. Keep every distinct in-memory edit
+// and its last confirmed cache value until a fresh session check opens that exact account/cache.
+const editsRetainedAcrossDisposal = new Map<string, readonly UnconfirmedWorkspaceEdits[]>();
+let disposalRecoverySequence = 0;
+const DISPOSAL_RECOVERY_PAGE_SIZE = 20;
+
+const createUnconfirmedWorkspaceEdits = (
+  entries: readonly DashboardEntry[],
+  baseline: string | null | undefined,
+  baselineVersion: AccountCacheVersion | null | undefined,
+): UnconfirmedWorkspaceEdits => ({
+  recoveryId: `retained-${(++disposalRecoverySequence).toString(36)}`,
+  entries,
+  baseline,
+  baselineVersion,
+});
+
+const sameCacheVersion = (
+  left: AccountCacheVersion | null | undefined,
+  right: AccountCacheVersion | null | undefined,
+): boolean =>
+  left === right ||
+  (left !== null &&
+    left !== undefined &&
+    right !== null &&
+    right !== undefined &&
+    left.identity === right.identity &&
+    left.generation === right.generation);
+
+const hasUnconfirmedWorkspaceContent = (
+  entries: readonly DashboardEntry[],
+  baseline: string | null | undefined,
+): boolean => {
+  try {
+    return serializePersistedTrainingStateV10({ dashboardEntries: entries }) !== baseline;
+  } catch {
+    // Keep data when it cannot be compared safely with the last durable value.
+    return true;
+  }
+};
+
+const sameUnconfirmedEdit = (
+  left: UnconfirmedWorkspaceEdits,
+  right: UnconfirmedWorkspaceEdits,
+): boolean => {
+  if (
+    left.baseline !== right.baseline ||
+    !sameCacheVersion(left.baselineVersion, right.baselineVersion)
+  )
+    return false;
+  try {
+    return (
+      serializePersistedTrainingStateV10({ dashboardEntries: left.entries }) ===
+      serializePersistedTrainingStateV10({ dashboardEntries: right.entries })
+    );
+  } catch {
+    return false;
+  }
+};
+
+const retainDisposalEdits = (userId: string, edits: UnconfirmedWorkspaceEdits): void => {
+  const current = editsRetainedAcrossDisposal.get(userId) ?? [];
+  if (current.some((candidate) => sameUnconfirmedEdit(candidate, edits))) return;
+  editsRetainedAcrossDisposal.set(userId, [...current, edits]);
+};
+
 export type WorkspaceOperationResult =
   | { readonly status: 'ready' }
   | { readonly status: 'signed-out' }
@@ -47,6 +123,7 @@ export type WorkspaceOperationResult =
 
 export type WorkspaceSnapshot =
   | { readonly mode: 'guest'; readonly epoch: number; readonly store: TrainingStoreApi }
+  | { readonly mode: 'guest-refreshing'; readonly epoch: number; readonly failed: boolean }
   | {
       readonly mode: 'account';
       readonly epoch: number;
@@ -58,8 +135,16 @@ export type WorkspaceSnapshot =
         'not-implemented' | 'unavailable' | AccountSynchronizationResult['status'];
       readonly storageChanged: boolean;
       readonly persistenceFailure: AccountStorageFailureCode | null;
+      readonly persistencePending: boolean;
       readonly recoveryFailure: AccountStorageFailureCode | null;
       readonly serverRevocationConfirmed: boolean;
+    }
+  | {
+      readonly mode: 'account-error';
+      readonly epoch: number;
+      readonly userId: string;
+      readonly session: AccountSession;
+      readonly storageFailure: AccountStorageFailureCode;
     }
   | { readonly mode: 'disposed'; readonly epoch: number };
 
@@ -68,6 +153,16 @@ export interface AccountWorkspaceOptions {
   readonly api: Pick<AccountApiClient, 'getSession' | 'logout'>;
   readonly storage: StateStorage;
   readonly coordination: WorkspaceCoordinator;
+  /** Provider-owned direct mutation and non-persisting guest-store replacement for adoption cleanup. */
+  readonly guestCleanup?: {
+    readonly readRaw: () => string | null | Promise<string | null>;
+    readonly removeRaw: () => void | Promise<void>;
+    readonly prepare: () => void | Promise<void>;
+    readonly refreshFromRaw: (
+      rawValue: string | null,
+      options: { readonly durableWrites: boolean },
+    ) => void | Promise<void>;
+  };
   readonly database?: AccountDatabase;
   readonly synchronization?: {
     readonly api: Pick<AccountApiClient, 'getDashboard' | 'putDashboard'>;
@@ -101,12 +196,21 @@ interface RemoteReplacementGate {
 
 /** Owns an application-lifetime activation, never a remembered authentication flag. */
 export function createAccountWorkspaceController(options: AccountWorkspaceOptions) {
+  const listeners = new Set<() => void>();
+  const notify = () => {
+    for (const listener of listeners) listener();
+  };
   let epoch = 0;
   let requestSequence = 0;
   let disposed = false;
   let active: ActiveWorkspace | undefined;
+  let guestStore = options.guestStore;
+  let guestRefreshPending = false;
+  let guestRefreshFailed = false;
   let authenticationReverificationRequired = false;
   let authenticationRecoverySession: AccountSession | undefined;
+  let verifiedStorageFailure:
+    { readonly session: AccountSession; readonly code: AccountStorageFailureCode } | undefined;
   let authenticationLogoutInFlight = false;
   let preparing: AccountStorageController | undefined;
   let replacementGate: RemoteReplacementGate | undefined;
@@ -145,23 +249,67 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
   };
   const currentSynchronizer = () => active?.synchronizer;
   let request: AbortController | undefined;
+  let disposalTask: Promise<void> = Promise.resolve();
   let exitIntent:
     { readonly workspace: ActiveWorkspace; readonly kind: 'logout' | 'hide' } | undefined;
   // A failed durable write must not discard edits when authentication changes. This holds
   // only the existing immutable state references (no extra LocalStorage payload), with no
   // store/actions/writer, and is considered only after fresh verification of that same ID.
-  const unconfirmedEdits = new Map<
+  const unconfirmedEdits = new Map<string, UnconfirmedWorkspaceEdits>();
+  // Once recovery has exposed a copy ID, later disposals may only append to its view. This
+  // preserves download links and cursors even when another controller retains a duplicate.
+  const recoveryViews = new Map<
     string,
-    {
-      readonly entries: readonly DashboardEntry[];
-      readonly baseline: string | null | undefined;
-    }
+    { readonly copies: UnconfirmedWorkspaceEdits[]; readonly observedIds: Set<string> }
   >();
 
   const cancelRequests = () => {
     requestSequence += 1;
     request?.abort();
     request = undefined;
+  };
+
+  const getDisposalRecoveryScope = () => {
+    if (disposed) return undefined;
+    const workspace = active;
+    if (workspace !== undefined) {
+      if (authenticationReverificationRequired) return undefined;
+      return {
+        userId: workspace.userId,
+        isCurrent: () => !disposed && !authenticationReverificationRequired && active === workspace,
+      };
+    }
+    const failure = verifiedStorageFailure;
+    // A dashboard rejection keeps edits hidden until a fresh session response. Once that
+    // response has verified an account but opening its cache fails, that verified account's
+    // recovery copies remain available even though authentication recovery is still pending.
+    if (failure !== undefined) {
+      return {
+        userId: failure.session.userId,
+        isCurrent: () => !disposed && active === undefined && verifiedStorageFailure === failure,
+      };
+    }
+    return undefined;
+  };
+
+  const getRecoveryCopies = (userId: string): readonly UnconfirmedWorkspaceEdits[] => {
+    let view = recoveryViews.get(userId);
+    if (view === undefined) {
+      view = { copies: [], observedIds: new Set<string>() };
+      recoveryViews.set(userId, view);
+    }
+    const candidates = [
+      ...(editsRetainedAcrossDisposal.get(userId) ?? []),
+      ...(unconfirmedEdits.has(userId) ? [unconfirmedEdits.get(userId)] : []),
+    ].filter((candidate): candidate is UnconfirmedWorkspaceEdits => candidate !== undefined);
+    for (const candidate of candidates) {
+      if (view.observedIds.has(candidate.recoveryId)) continue;
+      view.observedIds.add(candidate.recoveryId);
+      if (!view.copies.some((prior) => sameUnconfirmedEdit(prior, candidate))) {
+        view.copies.push(candidate);
+      }
+    }
+    return view.copies;
   };
 
   const deactivate = (retainUnconfirmed = false) => {
@@ -173,10 +321,18 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
     if (previous !== undefined) {
       if (exitIntent?.workspace === previous) exitIntent = undefined;
       if (retainUnconfirmed) {
-        unconfirmedEdits.set(previous.userId, {
-          entries: previous.store.getState().dashboardEntries,
-          baseline: previous.storage.confirmedCacheValue,
-        });
+        const entries = previous.store.getState().dashboardEntries;
+        const baseline = previous.storage.confirmedCacheValue;
+        if (hasUnconfirmedWorkspaceContent(entries, baseline)) {
+          unconfirmedEdits.set(
+            previous.userId,
+            createUnconfirmedWorkspaceEdits(
+              entries,
+              baseline,
+              previous.storage.confirmedCacheVersion,
+            ),
+          );
+        }
       }
       previous.unsubscribe();
       previous.unsubscribeStore?.();
@@ -186,6 +342,9 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
       // persistence adapter must not overwrite the retained cache with this empty state.
       previous.store.setState({ dashboardEntries: [] });
     }
+    // Subscribers derive the content-free retained-edit warning from this controller. Notify
+    // only after the hidden copy has been installed and the active account has been removed.
+    notify();
   };
 
   const settleReplacementGate = (gate: RemoteReplacementGate) => {
@@ -276,9 +435,82 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
   };
 
   const controller = {
+    hasHiddenUnsavedAccountChanges: (): boolean =>
+      unconfirmedEdits.size > 0 ||
+      [...editsRetainedAcrossDisposal.values()].some((copies) => copies.length > 0),
+
+    listDisposalEditRecovery: (cursor?: string) => {
+      const scope = getDisposalRecoveryScope();
+      if (scope === undefined) return { items: [], nextCursor: null };
+      const copies = getRecoveryCopies(scope.userId);
+      let start = 0;
+      if (cursor !== undefined) {
+        const cursorIndex = copies.findIndex((copy) => copy.recoveryId === cursor);
+        if (cursorIndex < 0) return { items: [], nextCursor: null };
+        start = cursorIndex + 1;
+      }
+      const page = copies.slice(start, start + DISPOSAL_RECOVERY_PAGE_SIZE);
+      const last = page.at(-1);
+      const items = page.map((copy) => {
+        let characterLength: number | null = null;
+        let menuCount = 0;
+        try {
+          if (Array.isArray(copy.entries)) menuCount = copy.entries.length;
+          const rawValue = serializePersistedTrainingStateV10({
+            dashboardEntries: copy.entries,
+          });
+          const inspection = classifyTrainingStorageValue(rawValue);
+          if (inspection.status === 'ready' || inspection.status === 'empty') {
+            characterLength = rawValue.length;
+          }
+        } catch {
+          // Keep the copy listed even when its contents cannot currently be serialized.
+        }
+        return { recoveryId: copy.recoveryId, menuCount, characterLength };
+      });
+      if (!scope.isCurrent()) return { items: [], nextCursor: null };
+      return {
+        items,
+        nextCursor: start + page.length < copies.length ? (last?.recoveryId ?? null) : null,
+      };
+    },
+
+    readDisposalEditRecovery: (recoveryId: string): string | null => {
+      const scope = getDisposalRecoveryScope();
+      if (scope === undefined) return null;
+      const copy = getRecoveryCopies(scope.userId).find(
+        (candidate) => candidate.recoveryId === recoveryId,
+      );
+      if (copy === undefined) return null;
+      try {
+        const rawValue = serializePersistedTrainingStateV10({
+          dashboardEntries: copy.entries,
+        });
+        const inspection = classifyTrainingStorageValue(rawValue);
+        return scope.isCurrent() && (inspection.status === 'ready' || inspection.status === 'empty')
+          ? rawValue
+          : null;
+      } catch {
+        return null;
+      }
+    },
+
     getSnapshot: (): WorkspaceSnapshot => {
       if (disposed) return { mode: 'disposed', epoch };
-      if (active === undefined) return { mode: 'guest', epoch, store: options.guestStore };
+      if (verifiedStorageFailure !== undefined)
+        return {
+          mode: 'account-error',
+          epoch,
+          userId: verifiedStorageFailure.session.userId,
+          session: verifiedStorageFailure.session,
+          storageFailure: verifiedStorageFailure.code,
+        };
+      if (active === undefined) {
+        if (guestRefreshPending || guestRefreshFailed) {
+          return { mode: 'guest-refreshing', epoch, failed: guestRefreshFailed };
+        }
+        return { mode: 'guest', epoch, store: guestStore };
+      }
       return {
         mode: 'account',
         epoch,
@@ -291,9 +523,97 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
           (options.coordination.isAvailable ? 'not-implemented' : 'unavailable'),
         storageChanged: active.storageChanged,
         persistenceFailure: active.storage.lastFailure?.code ?? null,
+        persistencePending: active.storage.hasPendingWrites,
         recoveryFailure: active.storage.lastRecoveryFailure?.code ?? null,
         serverRevocationConfirmed: active.serverRevocationConfirmed,
       };
+    },
+
+    subscribe: (listener: () => void): (() => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+
+    /** Waits for the active account cache write and confirms the current store readback. */
+    flushPersistence: async (): Promise<void> => {
+      const workspace = active;
+      if (workspace === undefined) {
+        throw new AccountStorageError(
+          'interrupted',
+          'write',
+          'There is no active account workspace to confirm.',
+        );
+      }
+      await workspace.storage.flush();
+      const value = serializePersistedTrainingStateV10({
+        dashboardEntries: workspace.store.getState().dashboardEntries,
+      });
+      await workspace.storage.confirmCurrentValue(value);
+      if (
+        active !== workspace ||
+        workspace.epoch !== epoch ||
+        value !==
+          serializePersistedTrainingStateV10({
+            dashboardEntries: workspace.store.getState().dashboardEntries,
+          })
+      ) {
+        throw new AccountStorageError(
+          'interrupted',
+          'write',
+          'The account workspace changed before its save could be confirmed.',
+        );
+      }
+    },
+
+    beginSignIn: (): void => {
+      notify();
+    },
+
+    replaceGuestStore: (replacement: TrainingStoreApi): void => {
+      guestStore = replacement;
+      notify();
+    },
+
+    refreshGuestWorkspace: async (): Promise<boolean> => {
+      if (active !== undefined || options.guestCleanup === undefined) return false;
+      guestRefreshPending = true;
+      guestRefreshFailed = false;
+      notify();
+      try {
+        if (!options.coordination.isAvailable) {
+          // Keep guest menus accessible when this browser cannot coordinate writers. The
+          // provider installs the validated current source in memory, where edits cannot
+          // overwrite another tab's LocalStorage value without a lock.
+          const rawValue = await options.guestCleanup.readRaw();
+          await options.guestCleanup.refreshFromRaw(rawValue ?? null, { durableWrites: false });
+          guestRefreshPending = false;
+          guestRefreshFailed = false;
+          notify();
+          return true;
+        }
+        try {
+          await options.guestCleanup.prepare();
+          await options.coordination.withLock({ kind: 'guest' }, async () => {
+            const rawValue = await options.guestCleanup?.readRaw();
+            await options.guestCleanup?.refreshFromRaw(rawValue ?? null, { durableWrites: true });
+          });
+        } catch (error) {
+          if (options.coordination.isAvailable) throw error;
+          // Lock acquisition can fail after `prepare` disabled the previous writer. Re-read
+          // the source and expose it through the provider's non-persisting fallback.
+          const rawValue = await options.guestCleanup.readRaw();
+          await options.guestCleanup.refreshFromRaw(rawValue ?? null, { durableWrites: false });
+        }
+        guestRefreshPending = false;
+        guestRefreshFailed = false;
+        notify();
+        return true;
+      } catch {
+        guestRefreshPending = false;
+        guestRefreshFailed = true;
+        notify();
+        return false;
+      }
     },
 
     bootstrap: async (): Promise<WorkspaceOperationResult> => {
@@ -401,6 +721,7 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
           pendingReplacement.reopenAllowed = false;
         }
         if (result.status === 'signed-out') {
+          verifiedStorageFailure = undefined;
           const saved = active === undefined || (await preserve(active));
           if (!isCurrent(operation)) return { status: 'superseded' };
           authenticationReverificationRequired = false;
@@ -414,6 +735,15 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
           return { status: 'signed-out' };
         }
         const userId = result.session.userId;
+        if (
+          verifiedStorageFailure !== undefined &&
+          verifiedStorageFailure.session.userId !== userId
+        ) {
+          // The previous account's recovery UI loses authorization as soon as this
+          // different verified identity is known, before its cache preparation can wait.
+          verifiedStorageFailure = undefined;
+          notify();
+        }
         if (active?.userId === userId) {
           active.session = result.session;
           active.synchronizer?.updateSession(result.session);
@@ -448,6 +778,7 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
               accountId: userId,
               storage: options.storage,
               coordination: options.coordination,
+              onWriteStateChange: notify,
               ...((synchronizationDatabase ?? options.database) === undefined
                 ? {}
                 : { database: synchronizationDatabase ?? options.database }),
@@ -457,7 +788,11 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
             return null;
           }
         })();
-        if (preparation === null) return { status: 'retryable', reason: 'storage' };
+        if (preparation === null) {
+          verifiedStorageFailure = { session: result.session, code: 'unavailable' };
+          notify();
+          return { status: 'retryable', reason: 'storage' };
+        }
         const { synchronizationDatabase, storage } = preparation;
         preparing = storage;
         const activationCurrent = () =>
@@ -502,14 +837,39 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
             },
           });
           if (!activationCurrent()) return { status: 'superseded' };
-          if (hydrationFailed) return { status: 'retryable', reason: 'storage' };
-          const retained = unconfirmedEdits.get(userId);
+          if (hydrationFailed) {
+            verifiedStorageFailure = { session: result.session, code: 'invalid-persisted-value' };
+            notify();
+            return { status: 'retryable', reason: 'storage' };
+          }
+          const retainedCandidates = [
+            ...(unconfirmedEdits.has(userId) ? [unconfirmedEdits.get(userId)] : []),
+            ...(editsRetainedAcrossDisposal.get(userId) ?? []),
+          ].filter((candidate): candidate is UnconfirmedWorkspaceEdits => candidate !== undefined);
+          const uniqueRetainedCandidates = retainedCandidates.filter(
+            (candidate, index) =>
+              !retainedCandidates
+                .slice(0, index)
+                .some((prior) => sameUnconfirmedEdit(candidate, prior)),
+          );
+          const retained = uniqueRetainedCandidates[0];
+          if (
+            uniqueRetainedCandidates.length > 1 ||
+            uniqueRetainedCandidates.some(
+              (candidate) =>
+                candidate.baseline !== storage.confirmedCacheValue ||
+                !sameCacheVersion(candidate.baselineVersion, storage.confirmedCacheVersion),
+            )
+          ) {
+            // Multiple disposed controllers can hold different unsaved versions. Keep every
+            // copy and require recovery instead of choosing one by disposal completion order.
+            verifiedStorageFailure = { session: result.session, code: 'malformed-readback' };
+            notify();
+            return { status: 'retryable', reason: 'storage' };
+          }
           if (retained !== undefined) {
             // A newer tab's cache and this unsaved state are two different versions. Job 6B
             // preserves both and stops; it must not implement automatic conflict resolution.
-            if (retained.baseline !== storage.confirmedCacheValue) {
-              return { status: 'retryable', reason: 'storage' };
-            }
             store.setState({ dashboardEntries: retained.entries });
           }
           // Persist one canonical v10 cache, including a new empty workspace, and confirm it.
@@ -546,6 +906,8 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
             storageChanged: sawLegacyChange,
             serverRevocationConfirmed: false,
           };
+          verifiedStorageFailure = undefined;
+          notify();
           if (options.synchronization !== undefined && synchronizationDatabase !== undefined) {
             const synchronizer = createAccountSynchronizer({
               accountId: userId,
@@ -619,11 +981,22 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
                 : { locks: options.synchronization.locks }),
             });
             active.synchronizer = synchronizer;
-            active.unsubscribeStore = activatedStore.subscribe(() => synchronizer.schedule());
+            active.unsubscribeStore = activatedStore.subscribe(() => {
+              synchronizer.schedule();
+              notify();
+            });
             synchronizer.start();
           }
           preparing = undefined;
           unconfirmedEdits.delete(userId);
+          recoveryViews.delete(userId);
+          if (retained !== undefined) {
+            const remaining = (editsRetainedAcrossDisposal.get(userId) ?? []).filter(
+              (candidate) => !sameUnconfirmedEdit(candidate, retained),
+            );
+            if (remaining.length > 0) editsRetainedAcrossDisposal.set(userId, remaining);
+            else editsRetainedAcrossDisposal.delete(userId);
+          }
           authenticationReverificationRequired = false;
           authenticationRecoverySession = undefined;
           if (pendingReplacement !== undefined) {
@@ -631,7 +1004,14 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
             settleReplacementGate(pendingReplacement);
           }
           return { status: 'ready' };
-        } catch {
+        } catch (error) {
+          if (activationCurrent()) {
+            verifiedStorageFailure = {
+              session: result.session,
+              code: error instanceof AccountStorageError ? error.code : 'unavailable',
+            };
+            notify();
+          }
           return activationCurrent()
             ? { status: 'retryable', reason: 'storage' }
             : { status: 'superseded' };
@@ -644,6 +1024,7 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
           }
         }
       } finally {
+        notify();
         if (ordinaryBootstrap) {
           ordinaryBootstrapsInFlight -= 1;
           const gate = replacementGate;
@@ -670,6 +1051,27 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
       const gate = replacementGate;
       const workspace = active ?? gate?.workspace;
       if (authenticationLogoutInFlight || gate?.logoutInFlight) return { status: 'superseded' };
+      if (verifiedStorageFailure !== undefined && active === undefined && gate === undefined) {
+        const operation = startRequest();
+        authenticationLogoutInFlight = true;
+        try {
+          await options.api.logout(operation.abort.signal);
+          if (!isCurrent(operation)) return { status: 'superseded' };
+          verifiedStorageFailure = undefined;
+          notify();
+          return { status: 'signed-out' };
+        } catch (error) {
+          if (!isCurrent(operation)) return { status: 'superseded' };
+          if (isUnauthenticated(error)) {
+            verifiedStorageFailure = undefined;
+            notify();
+            return { status: 'signed-out' };
+          }
+          return { status: 'retryable', reason: 'logout' };
+        } finally {
+          authenticationLogoutInFlight = false;
+        }
+      }
       if (
         active === undefined &&
         gate === undefined &&
@@ -816,6 +1218,18 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
     hideLocally: async (): Promise<WorkspaceOperationResult> => {
       if (disposed) return { status: 'disposed' };
       const workspace = active;
+      if (
+        workspace === undefined &&
+        verifiedStorageFailure !== undefined &&
+        replacementGate === undefined
+      ) {
+        // A Retry may still be waiting on /api/session or IndexedDB preparation. Invalidate
+        // that generation before clearing the verified error so Use this device stays local.
+        cancelRequests();
+        verifiedStorageFailure = undefined;
+        notify();
+        return { status: 'hidden', serverRevocationConfirmed: false };
+      }
       if (workspace === undefined && replacementGate !== undefined) {
         const gate = replacementGate;
         gate.reopenAllowed = false;
@@ -895,11 +1309,56 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
     useLocalVersion: async (conflictId: string): Promise<AccountSynchronizationResult> =>
       active?.synchronizer?.useLocal(conflictId) ?? { status: 'paused' },
 
-    dispose: () => {
-      if (disposed) return;
+    dispose: (): Promise<void> => {
+      if (disposed) return disposalTask;
       disposed = true;
       cancelRequests();
-      deactivate();
+      const workspace = active;
+      listeners.clear();
+      for (const [userId, edits] of unconfirmedEdits) {
+        retainDisposalEdits(userId, edits);
+      }
+      if (workspace === undefined || !workspace.storage.hasPendingWrites) {
+        if (workspace !== undefined && workspace.storage.lastFailure !== null) {
+          const entries = workspace.store.getState().dashboardEntries;
+          const baseline = workspace.storage.confirmedCacheValue;
+          if (hasUnconfirmedWorkspaceContent(entries, baseline)) {
+            retainDisposalEdits(
+              workspace.userId,
+              createUnconfirmedWorkspaceEdits(
+                entries,
+                baseline,
+                workspace.storage.confirmedCacheVersion,
+              ),
+            );
+          }
+        }
+        deactivate();
+        return disposalTask;
+      }
+
+      // React cleanup cannot await controller disposal. Keep the account adapter enabled until
+      // writes already accepted by Zustand have settled and the last store value has been read
+      // back. Disabling it here aborts an IndexedDB-backed write that may still be in flight.
+      disposalTask = preserve(workspace).then((saved) => {
+        if (active !== workspace) return;
+        if (!saved) {
+          const entries = workspace.store.getState().dashboardEntries;
+          const baseline = workspace.storage.confirmedCacheValue;
+          if (hasUnconfirmedWorkspaceContent(entries, baseline)) {
+            retainDisposalEdits(
+              workspace.userId,
+              createUnconfirmedWorkspaceEdits(
+                entries,
+                baseline,
+                workspace.storage.confirmedCacheVersion,
+              ),
+            );
+          }
+        }
+        deactivate();
+      });
+      return disposalTask;
     },
   };
   return controller;

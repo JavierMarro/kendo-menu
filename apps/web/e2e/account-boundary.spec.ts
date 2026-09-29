@@ -275,12 +275,13 @@ test('exhausted cache generation permits an identical write but rejects an edit'
   });
 });
 
-test('ordinary routes neither bootstrap accounts nor expose account entry points', async ({
+test('ordinary routes verify sessions without trusting remembered account sentinels', async ({
   page,
 }) => {
   const apiRequests: string[] = [];
   page.on('request', (request) => {
-    if (new URL(request.url()).pathname.startsWith('/api/')) apiRequests.push(request.method());
+    const pathname = new URL(request.url()).pathname;
+    if (pathname.startsWith('/api/')) apiRequests.push(`${request.method()} ${pathname}`);
   });
   const accountKey = 'kendo-menu:account:11111111-1111-4111-8111-111111111111';
   await page.addInitScript((key) => {
@@ -289,13 +290,15 @@ test('ordinary routes neither bootstrap accounts nor expose account entry points
   }, accountKey);
   await page.goto('/app/dashboard');
   await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: /google|sign in|log in|account/i })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: /google|sign in|log in|account/i })).toHaveCount(0);
+  await expect(page.locator('.account-session-controls')).toContainText(
+    'Account unavailable; guest use works.',
+  );
   await page.goto('/app/account');
   await expect(
     page.getByRole('heading', { name: 'That route is not part of KendoMenu.' }),
   ).toBeVisible();
-  expect(apiRequests).toEqual([]);
+  expect(apiRequests.length).toBeGreaterThan(0);
+  expect(apiRequests.every((request) => request === 'GET /api/session')).toBe(true);
   expect(await page.evaluate((key) => localStorage.getItem(key), accountKey)).toBe(
     'untrusted remembered account sentinel',
   );

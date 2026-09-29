@@ -47,30 +47,35 @@ activity quantities and notes can be adapted without mutating the built-in libra
 - The production MVP is a React + Vite + TypeScript web app with React Router. Domain contracts live
   in `packages/domain`; the platform-neutral Zustand store lives in `packages/store` and receives an
   injected storage adapter.
-- Browser LocalStorage is sufficient for the current bounded dataset. Persisted JSON is untrusted
-  and must be validated, versioned, and migrated when its shape changes.
-- Production accounts, synchronization, and databases are not available. A local backend with
-  Google OIDC and opaque sessions exists separately from the production frontend; it has not been
-  deployed or connected to real Google accounts. Their
-  approved future product scope is described below; this document does not authorize scaffolding
-  or provisioning. Paid tiers and initialization of `apps/mobile` remain out of scope.
+- The guest dashboard uses Zustand with browser LocalStorage; a verified signed-in dashboard uses
+  Zustand with an account-scoped IndexedDB cache and cloud API. Persisted JSON is untrusted and must
+  be validated, versioned, and migrated when its shape changes.
+- The verified account workspace foundation and local backend contracts are implemented on the
+  integration branch. Public Google entry and guest adoption remain unmounted in 6D-A; the account
+  service has not been deployed or connected to real Google accounts. This document does not
+  authorize deployment or provisioning. Paid tiers and initialization of `apps/mobile` remain out
+  of scope.
 
-## Approved product direction — not implemented
+## Account journey — local integration only
 
-Anonymous use remains fully supported and free. Optional Google-only KendoMenu accounts will add
+Anonymous use remains fully supported and free. Planned optional Google-only KendoMenu accounts add
 cross-device continuity through local-first, whole-dashboard synchronization with explicit conflict
-handling. Guest and account workspaces remain separate; signing in does not silently combine them.
+handling. Guest and account workspaces remain separate; signing in must not silently combine them.
 
-A blocking Yes/No guest-adoption choice applies only when a **new KendoMenu account has an empty
-cloud dashboard and this browser contains an eligible, non-empty guest workspace**. Yes uploads the
-complete validated guest dashboard, creates the account cache, and deletes the guest workspace only
-after server acknowledgement. No preserves the hidden guest workspace, which reappears after logout.
-There is no dismiss action. Eligibility for returning empty accounts still requires owner confirmation.
+A planned blocking Yes/No guest-adoption choice applies only to a **newly created KendoMenu account**
+when this browser has an eligible guest dashboard. Yes copies the complete guest dashboard into the
+account; the guest LocalStorage copy stays unchanged, even after server acknowledgement. No
+permanently declines the offer and also leaves the guest dashboard unchanged. There is no dismiss
+action. Returning accounts never receive another offer, even with an empty cloud dashboard. Later
+changes in either workspace cause no new offer or automatic transfer; a future manual import feature
+is a separate decision. After successful sign-in, guest use requires signing out, which returns to
+the homepage. An empty cloud dashboard alone does not prove a new account or create a default menu.
 
 Realtime connections, CRDTs, automatic field merging, collaboration, paid tiers, and public sharing
-are excluded. Optional accounts and cross-device continuity are approved direction, not current
-production functionality.
-See the [account and synchronization design](docs/ACCOUNT_SYNC.md) for accepted decisions,
+are excluded. The verified account workspace foundation is implemented locally; public account
+entry, guest adoption, and cross-device continuity are not current production functionality.
+See [ADR 0006](docs/adr/0006-independent-dashboards-one-time-guest-copy.md) and the
+[account and synchronization design](docs/ACCOUNT_SYNC.md) for accepted decisions,
 recommendations awaiting confirmation, and the gates for later implementation jobs.
 
 ## Brand Commitments

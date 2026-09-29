@@ -1,4 +1,4 @@
-import { Navigate, type RouteObject } from 'react-router-dom';
+import { Navigate, useLocation, type RouteObject } from 'react-router-dom';
 
 import { RouteErrorRethrow } from '../features/errors/RouteErrorRethrow';
 import { CreateDrillPage } from '../features/custom-sets/CreateDrillPage';
@@ -12,12 +12,17 @@ import { GlossaryPage } from '../features/glossary/GlossaryPage';
 import { SourcesPage } from '../features/sources/SourcesPage';
 import { AppLayout, RouteRoot, StandaloneNotFoundPage } from './app-route-components';
 
+function LandingRedirect() {
+  const location = useLocation();
+  return <Navigate replace to={{ pathname: '/app', search: location.search }} />;
+}
+
 export const appRoutes: RouteObject[] = [
   {
     element: <RouteRoot />,
     errorElement: <RouteErrorRethrow />,
     children: [
-      { path: '/', element: <Navigate replace to="/app" /> },
+      { path: '/', element: <LandingRedirect /> },
       {
         path: '/app',
         element: <AppLayout />,

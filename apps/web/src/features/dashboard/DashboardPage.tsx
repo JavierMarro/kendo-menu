@@ -311,7 +311,8 @@ export function DashboardPage() {
           <h2 id="empty-dashboard-title">Your dashboard is ready.</h2>
           <p>
             Add a session from the Keiko library and shape it for today&apos;s practice. Quantities
-            and notes stay on this device as you refine the session.
+            and notes save as you refine the session. Signed-in account menus can also synchronise
+            between devices.
           </p>
           <div className="empty-actions">
             <Link className="primary-button" to="/app/library">

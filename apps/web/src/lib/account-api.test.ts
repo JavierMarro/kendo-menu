@@ -119,6 +119,31 @@ describe('account API boundary', () => {
     await expect(client.getSession()).resolves.toEqual({ status: 'signed-out' });
   });
 
+  it('times out a session response whose body never finishes', async () => {
+    vi.useFakeTimers();
+    try {
+      const stalledBody = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{'));
+        },
+      });
+      const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(stalledBody, {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+      const result = expectAccountError(
+        createAccountApiClient({ fetch: requestFetch }).getSession(),
+        'network',
+      );
+      await vi.advanceTimersByTimeAsync(10_000);
+      await result;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('rejects HTML, malformed JSON, duplicate keys, and redirect responses', async () => {
     const htmlFetch = vi
       .fn<typeof fetch>()

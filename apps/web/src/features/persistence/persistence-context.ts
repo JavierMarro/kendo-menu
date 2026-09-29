@@ -6,7 +6,7 @@
 import { createContext, useContext } from 'react';
 
 export interface PersistenceContextValue {
-  readonly mode: 'local' | 'session';
+  readonly mode: 'local' | 'session' | 'account';
   readonly writeFailed: boolean;
   readonly pending: boolean;
   readonly flush: () => Promise<void>;
@@ -29,17 +29,21 @@ export function getPersistenceStatusLabel({
     return 'Saving changes';
   }
 
+  if (mode === 'account') return 'Saved to this account on this device';
   return mode === 'session' ? 'Session only' : 'Saved on this device';
 }
 
 export function getPersistenceUpdateLabel({
+  mode,
   writeFailed,
   pending,
-}: Pick<PersistenceContextValue, 'writeFailed' | 'pending'>): string {
+}: Pick<PersistenceContextValue, 'mode' | 'writeFailed' | 'pending'>): string {
   if (writeFailed) {
-    return 'Not saved to this device.';
+    return mode === 'account'
+      ? 'Not saved to this account on this device.'
+      : 'Not saved to this device.';
   }
-  return pending ? 'Saving…' : 'Updated.';
+  return pending ? 'Saving…' : mode === 'account' ? 'Saved to this account.' : 'Updated.';
 }
 
 export function getExplicitPersistenceUpdateLabel({
@@ -54,6 +58,7 @@ export function getExplicitPersistenceUpdateLabel({
     return 'Saving changes…';
   }
 
+  if (mode === 'account') return 'Changes saved to this account on this device.';
   return mode === 'session' ? 'Changes saved for this session.' : 'Changes saved on this device.';
 }
 

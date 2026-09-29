@@ -1,0 +1,8 @@
+- Session: account workspace foundation (6D-A)
+- Date/duration: 2026-09-27 to 2026-09-29; duration not recorded
+- Scope/start: Job 6D-A verified account workspace and signed-out analytics on committed 6A–6C contracts; local work only.
+- Changes: Added verified account routes, durable saves, cross-tab gates, guest recovery isolation, lockless session-only guest refresh, account-edit leave warnings, and private failed-copy export; retained failed edits through session rejection and peer cache advance without overwriting the cache; fixed duplicate callback session check and signed-out analytics pixel.
+- Decisions: ADR 0006 supersedes move/delete with independent guest/account dashboards and one-time guest copy; account saves await IndexedDB readback; public Google entry and adoption controls remain unmounted.
+- Roadblocks: Retained edits need cache value and generation guards plus same-account verification; recovery IDs and cursors remain stable as copies arrive; StrictMode bootstrap replay needed one scheduled session check; guest refresh without a lock must avoid a competing LocalStorage writer.
+- Verification: Node 24 check:web passed (274 unit tests); focused development and preview browser suites each passed 10 on desktop/mobile; session:check, targeted formatting, and git diff --check HEAD passed; independent persistence/security re-review PASS. Earlier full preview and PWA gates predate this correction.
+- Follow-up: Public account journey and adoption remain Job 6D-B, not started here; no stage, commit, push, or deployment in this session.

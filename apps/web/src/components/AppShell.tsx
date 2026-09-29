@@ -10,12 +10,14 @@ import {
   getPersistenceStatusLabel,
   usePersistenceStatus,
 } from '../features/persistence/persistence-context';
+import { useOptionalAccountWorkspace } from '../features/account/AccountWorkspaceProvider';
 import { BrandLockup } from './BrandLockup';
 import { PrimaryNavigationLinks } from './PrimaryNavigation';
 import { SiteFooter } from './SiteFooter';
 
 export function AppShell() {
   const { mode, writeFailed, pending } = usePersistenceStatus();
+  const accountWorkspace = useOptionalAccountWorkspace();
   const location = useLocation();
   const [openLocationKey, setOpenLocationKey] = useState<string | null>(null);
   const menuToggleRef = useRef<HTMLButtonElement>(null);
@@ -52,14 +54,17 @@ export function AppShell() {
       </a>
       <header className="top-bar">
         <BrandLockup onClick={closeMenu} />
-        <div
-          className={writeFailed ? 'session-status is-error' : 'session-status'}
-          aria-label={persistenceStatusLabel}
-          role="status"
-        >
-          <span className="status-pulse" aria-hidden="true" />
-          <span className="session-status-label">{persistenceStatusLabel}</span>
-        </div>
+        {accountWorkspace?.snapshot.mode === 'account' ? null : (
+          <div
+            className={writeFailed ? 'session-status is-error' : 'session-status'}
+            aria-label={persistenceStatusLabel}
+            role="status"
+          >
+            <span className="status-pulse" aria-hidden="true" />
+            <span className="session-status-label">{persistenceStatusLabel}</span>
+          </div>
+        )}
+        {accountWorkspace === null ? null : <AccountSessionControls workspace={accountWorkspace} />}
         <button
           ref={menuToggleRef}
           className="menu-toggle"
@@ -94,4 +99,87 @@ export function AppShell() {
       <SiteFooter onNavigate={closeMenu} />
     </div>
   );
+}
+
+function AccountSessionControls({
+  workspace,
+}: {
+  readonly workspace: NonNullable<ReturnType<typeof useOptionalAccountWorkspace>>;
+}) {
+  const [exitMessage, setExitMessage] = useState<string | null>(null);
+  const snapshot = workspace.snapshot;
+
+  if (snapshot.mode === 'account-error') return null;
+  if (snapshot.mode === 'account') {
+    const identity = snapshot.session.verifiedGoogleEmail
+      ? `Signed in as ${snapshot.session.verifiedGoogleEmail}`
+      : 'Signed in';
+    return (
+      <div className="account-session-controls" aria-label="Account session">
+        <span>{identity}</span>
+        <button
+          className="text-button"
+          type="button"
+          onClick={() => {
+            setExitMessage(null);
+            void workspace.signOut().then((result) => {
+              if (result.status === 'retryable') {
+                setExitMessage(
+                  result.reason === 'storage'
+                    ? 'Sign-out is waiting for local account storage. Your account remains available; retry after storage recovers.'
+                    : 'KendoMenu could not sign you out. Check your connection and retry.',
+                );
+              }
+            });
+          }}
+        >
+          Sign out
+        </button>
+        <button
+          className="text-button"
+          type="button"
+          onClick={() => {
+            setExitMessage(null);
+            void workspace.openThisDevice().then((result) => {
+              if (result.status === 'retryable') {
+                setExitMessage(
+                  result.reason === 'storage'
+                    ? 'Could not switch to this device because account changes could not be saved. Your account remains open. Retry when local storage is available.'
+                    : 'Could not switch to this device. Your account remains open; please retry.',
+                );
+              }
+            });
+          }}
+        >
+          Use this device
+        </button>
+        {exitMessage ? <span role="status">{exitMessage}</span> : null}
+      </div>
+    );
+  }
+  if (workspace.verification === 'checking') {
+    return (
+      <span className="account-session-status" role="status">
+        Checking account status
+      </span>
+    );
+  }
+  if (workspace.verification === 'retryable') {
+    return (
+      <div className="account-session-controls" role="status">
+        <span>Account unavailable; guest use works.</span>
+        <button
+          type="button"
+          className="text-button"
+          onClick={() => void workspace.verifySession()}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+  if (workspace.verification === 'signed-out') {
+    return null;
+  }
+  return null;
 }
