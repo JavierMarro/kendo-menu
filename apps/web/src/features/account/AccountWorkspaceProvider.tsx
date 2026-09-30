@@ -512,6 +512,9 @@ export function AccountWorkspaceProvider({
   if (value === null) {
     return (
       <AccountWorkspaceContext.Provider value={null}>
+        {hiddenUnsavedAccountChanges ? (
+          <HiddenUnsavedAccountNotice onRetry={verifySession} />
+        ) : null}
         <TrainingStoreProvider store={guestStore}>
           {guestFallback ?? children}
         </TrainingStoreProvider>
