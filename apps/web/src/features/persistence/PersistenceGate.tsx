@@ -1,8 +1,21 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+/**
+ * Selects a validated guest store and presents recovery when browser persistence is unsafe.
+ * The store remains usable in memory while the gate reports write failures or pending saves.
+ * Explicit recovery choices replace the storage adapter rather than replacing live UI state.
+ */
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { createTrainingStore } from '@kendo-menu/store';
+import {
+  classifyTrainingStorageValue,
+  createTrainingStore,
+  type StateStorage,
+} from '@kendo-menu/store';
 
 import { PersistenceContext } from './persistence-context';
+import {
+  AccountWorkspaceProvider,
+  useOptionalAccountWorkspace,
+} from '../account/AccountWorkspaceProvider';
 import {
   createBrowserTrainingStorage,
   createMemoryTrainingStorage,
@@ -10,12 +23,12 @@ import {
   downloadCurrentTrainingBackup,
   downloadRawTrainingBackup,
   inspectBrowserTrainingStorage,
-  resetBrowserTrainingStorage,
+  resetBrowserTrainingStorageAsync,
   TRAINING_STORAGE_KEY,
   type TrainingStorageController,
   type PersistenceInspection,
 } from '../../lib/training-persistence';
-import { TrainingStoreProvider } from '../../lib/training-store-provider';
+import { createWorkspaceCoordinator } from '../../lib/workspace-coordination';
 
 // Compatibility exports keep existing provider test utilities stable while the context lives separately.
 /* eslint-disable-next-line react-refresh/only-export-components */
@@ -45,11 +58,24 @@ export function PersistenceGate({
   );
   const [sessionOnly, setSessionOnly] = useState(false);
   const [writeFailed, setWriteFailed] = useState(false);
+  const [pendingWriterIds, setPendingWriterIds] = useState<ReadonlySet<object>>(() => new Set());
   const [runtimeUnavailable, setRuntimeUnavailable] = useState(false);
   const [backupError, setBackupError] = useState<string | null>(null);
   const [resetError, setResetError] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [resetPending, setResetPending] = useState(false);
+  const resetPendingRef = useRef(false);
   const [localRecoveryRequested, setLocalRecoveryRequested] = useState(false);
+  // Guest persistence only needs the lock boundary. Storage events are intentionally disabled
+  // here because this provider does not consume invalidation notifications, and constructing an
+  // event-owning coordinator during render is unsafe under React StrictMode's discarded renders.
+  const coordination = useMemo(() => createWorkspaceCoordinator({ events: null }), []);
+  const recoveryWorkspace = useMemo(() => {
+    const storage = createMemoryTrainingStorage();
+    const store = createTrainingStore({ storage, storageKey: TRAINING_STORAGE_KEY });
+    return { store, storage };
+  }, []);
+
   const onWriteError = useCallback(() => {
     setWriteFailed(true);
   }, []);
@@ -61,30 +87,160 @@ export function PersistenceGate({
     }, 0);
   }, []);
 
-  const createStoreBundle = useCallback((): TrainingStoreBundle => {
-    const storage = createTrainingStorageController(
-      sessionOnly
-        ? createMemoryTrainingStorage()
-        : createBrowserTrainingStorage({ onReadError, onWriteError }),
-    );
-    const store = createTrainingStore({
-      storage,
-      storageKey: TRAINING_STORAGE_KEY,
-      onHydrationError: onReadError,
+  const updatePendingWriter = useCallback((writerId: object, pending: boolean) => {
+    // A replaced writer may settle after the new one starts. Track identities, not just a
+    // boolean, so the old completion cannot clear the new writer's pending warning.
+    queueMicrotask(() => {
+      setPendingWriterIds((current) => {
+        if (pending && current.has(writerId)) {
+          return current;
+        }
+        if (!pending && !current.has(writerId)) {
+          return current;
+        }
+        const next = new Set(current);
+        if (pending) {
+          next.add(writerId);
+        } else {
+          next.delete(writerId);
+        }
+        return next;
+      });
     });
-    return { store, storage };
-  }, [onReadError, onWriteError, sessionOnly]);
+  }, []);
+
+  const createBrowserStorage = useCallback(
+    (initialValue?: string | null) => {
+      const writerId = {};
+      return createBrowserTrainingStorage({
+        coordination,
+        ...(initialValue === undefined
+          ? {}
+          : { initialValues: { [TRAINING_STORAGE_KEY]: initialValue } }),
+        onPendingChange: (pending) => updatePendingWriter(writerId, pending),
+        onReadError,
+        onWriteError,
+      });
+    },
+    [coordination, onReadError, onWriteError, updatePendingWriter],
+  );
+
+  const createStoreBundle = useCallback(
+    (initialValue?: string | null): TrainingStoreBundle => {
+      const storage = createTrainingStorageController(
+        sessionOnly ? createMemoryTrainingStorage() : createBrowserStorage(initialValue),
+      );
+      const store = createTrainingStore({
+        storage,
+        storageKey: TRAINING_STORAGE_KEY,
+        onHydrationError: onReadError,
+      });
+      return { store, storage };
+    },
+    [createBrowserStorage, onReadError, sessionOnly],
+  );
+
+  const inspectedGuestValue = (value: PersistenceInspection): string | null =>
+    value.status === 'ready' ? value.raw : null;
 
   const [storeBundle, setStoreBundle] = useState<TrainingStoreBundle | null>(() => {
     if (sessionOnly || inspection.status === 'empty' || inspection.status === 'ready') {
       try {
-        return createStoreBundle();
+        return createStoreBundle(inspectedGuestValue(inspection));
       } catch {
         onReadError();
       }
     }
     return null;
   });
+  const storeBundleRef = useRef(storeBundle);
+  const createStoreBundleRef = useRef(createStoreBundle);
+  const fallbackAccountStorage = useMemo(() => createMemoryTrainingStorage(), []);
+  const useFallbackAccountStorage =
+    sessionOnly || runtimeUnavailable || inspection.status === 'unavailable';
+  const useFallbackAccountStorageRef = useRef(useFallbackAccountStorage);
+  useEffect(() => {
+    useFallbackAccountStorageRef.current = useFallbackAccountStorage;
+  }, [useFallbackAccountStorage]);
+  useEffect(() => {
+    storeBundleRef.current = storeBundle;
+    createStoreBundleRef.current = createStoreBundle;
+  }, [createStoreBundle, storeBundle]);
+  // Account legacy keys must remain readable while adoption temporarily disables the guest
+  // writer for exact-source cleanup. Only the guest key follows the replaceable writer.
+  const guestStorageProxy = useMemo<StateStorage>(
+    () => ({
+      getItem: (name) =>
+        name === TRAINING_STORAGE_KEY
+          ? (storeBundleRef.current?.storage.getItem(name) ?? null)
+          : useFallbackAccountStorageRef.current
+            ? fallbackAccountStorage.getItem(name)
+            : window.localStorage.getItem(name),
+      setItem: (name, value) => {
+        if (name === TRAINING_STORAGE_KEY)
+          return storeBundleRef.current?.storage.setItem(name, value);
+        return useFallbackAccountStorageRef.current
+          ? fallbackAccountStorage.setItem(name, value)
+          : window.localStorage.setItem(name, value);
+      },
+      removeItem: (name) => {
+        if (name === TRAINING_STORAGE_KEY) return storeBundleRef.current?.storage.removeItem(name);
+        return useFallbackAccountStorageRef.current
+          ? fallbackAccountStorage.removeItem(name)
+          : window.localStorage.removeItem(name);
+      },
+    }),
+    [fallbackAccountStorage],
+  );
+  const guestCleanup = useMemo(
+    () => ({
+      readRaw: () => window.localStorage.getItem(TRAINING_STORAGE_KEY),
+      removeRaw: () => window.localStorage.removeItem(TRAINING_STORAGE_KEY),
+      prepare: async () => {
+        await storeBundleRef.current?.storage.flush();
+        storeBundleRef.current?.storage.disable();
+      },
+      refreshFromRaw: (rawValue: string | null, { durableWrites }: { durableWrites: boolean }) => {
+        const inspection = classifyTrainingStorageValue(rawValue);
+        if (
+          inspection.status !== 'empty' &&
+          inspection.status !== 'ready' &&
+          inspection.status !== 'migrated'
+        ) {
+          throw new Error('The current guest workspace cannot be opened.');
+        }
+        const previousStorage = storeBundleRef.current?.storage;
+        if (
+          !durableWrites &&
+          previousStorage !== undefined &&
+          (previousStorage.isPending() || previousStorage.lastFailure !== null)
+        ) {
+          throw new Error('Unconfirmed guest edits require coordinated recovery.');
+        }
+        const next = durableWrites
+          ? createStoreBundleRef.current(rawValue)
+          : (() => {
+              const memory = createMemoryTrainingStorage();
+              if (rawValue !== null) memory.setItem(TRAINING_STORAGE_KEY, rawValue);
+              const storage = createTrainingStorageController(memory);
+              const store = createTrainingStore({ storage, storageKey: TRAINING_STORAGE_KEY });
+              return { store, storage };
+            })();
+        storeBundleRef.current?.storage.disable();
+        storeBundleRef.current = next;
+        setStoreBundle(next);
+        if (!durableWrites) {
+          // Without a shared lock, the freshly read guest source remains usable in this
+          // document but must not become a new LocalStorage writer.
+          setSessionOnly(true);
+          setWriteFailed(false);
+        }
+        setInspection(inspectBrowserTrainingStorage(TRAINING_STORAGE_KEY));
+        return next.store;
+      },
+    }),
+    [],
+  );
 
   useEffect(() => {
     if (
@@ -96,15 +252,36 @@ export function PersistenceGate({
 
     const timeoutId = window.setTimeout(() => {
       try {
-        setStoreBundle(createStoreBundle());
+        setStoreBundle(createStoreBundle(inspectedGuestValue(inspection)));
       } catch {
         onReadError();
       }
     }, 0);
     return () => window.clearTimeout(timeoutId);
-  }, [createStoreBundle, inspection.status, onReadError, sessionOnly, storeBundle]);
+  }, [createStoreBundle, inspection, onReadError, sessionOnly, storeBundle]);
 
   const store = storeBundle?.store ?? null;
+  const writePending = pendingWriterIds.size > 0;
+
+  const flushPersistence = useCallback(async () => {
+    await storeBundle?.storage.flush();
+  }, [storeBundle]);
+
+  useEffect(() => {
+    if (!writePending) {
+      return undefined;
+    }
+
+    // A queued browser write is not yet confirmed; warn before closing the tab even though
+    // Zustand has already rendered the edited state.
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [writePending]);
 
   const recoveryIsRequested = recoveryRequested || localRecoveryRequested;
 
@@ -141,7 +318,7 @@ export function PersistenceGate({
     ) {
       setWriteFailed(false);
       try {
-        persistCurrentStateWith(createBrowserTrainingStorage({ onReadError, onWriteError }));
+        persistCurrentStateWith(createBrowserStorage(inspectedGuestValue(nextInspection)));
       } catch {
         setWriteFailed(true);
       }
@@ -150,7 +327,7 @@ export function PersistenceGate({
     }
 
     completeRecovery();
-  }, [completeRecovery, onReadError, onWriteError, persistCurrentStateWith, store]);
+  }, [completeRecovery, createBrowserStorage, persistCurrentStateWith, store]);
 
   const continueWithoutSaving = useCallback(() => {
     setBackupError(null);
@@ -168,15 +345,21 @@ export function PersistenceGate({
     completeRecovery();
   }, [completeRecovery, persistCurrentStateWith]);
 
-  const resetLocalData = useCallback(() => {
+  const resetLocalData = useCallback(async () => {
+    if (resetPendingRef.current) {
+      return;
+    }
+    resetPendingRef.current = true;
+    setResetPending(true);
     try {
-      resetBrowserTrainingStorage(TRAINING_STORAGE_KEY);
       const storageController = storeBundle?.storage;
+      storageController?.disable();
+      await resetBrowserTrainingStorageAsync(TRAINING_STORAGE_KEY, { coordination });
       if (store !== null && storageController !== undefined) {
         const memoryStorage = createMemoryTrainingStorage();
         storageController.replace(memoryStorage);
         store.setState({ dashboardEntries: [] });
-        storageController.replace(createBrowserTrainingStorage({ onReadError, onWriteError }));
+        storageController.replace(createBrowserStorage(null));
       }
       setConfirmReset(false);
       setBackupError(null);
@@ -188,9 +371,19 @@ export function PersistenceGate({
       completeRecovery();
     } catch {
       setConfirmReset(false);
-      setResetError('KendoMenu could not remove the local data. Nothing was changed.');
+      const nextInspection = inspectBrowserTrainingStorage(TRAINING_STORAGE_KEY);
+      setInspection(nextInspection);
+      setRuntimeUnavailable(nextInspection.status === 'unavailable');
+      setResetError(
+        store === null
+          ? 'KendoMenu could not confirm local data removal. Try again before leaving this page.'
+          : 'KendoMenu could not confirm local data removal. Your current session remains available; try again before leaving this page.',
+      );
+    } finally {
+      resetPendingRef.current = false;
+      setResetPending(false);
     }
-  }, [completeRecovery, onReadError, onWriteError, store, storeBundle]);
+  }, [completeRecovery, coordination, createBrowserStorage, store, storeBundle]);
 
   const downloadBackup = useCallback(() => {
     setBackupError(null);
@@ -222,29 +415,7 @@ export function PersistenceGate({
     }
   }, [store]);
 
-  if (
-    store !== null &&
-    !runtimeUnavailable &&
-    (sessionOnly || inspection.status === 'empty' || inspection.status === 'ready') &&
-    !recoveryIsRequested
-  ) {
-    return (
-      <PersistenceContext.Provider value={{ mode: sessionOnly ? 'session' : 'local', writeFailed }}>
-        <TrainingStoreProvider store={store}>
-          {writeFailed ? (
-            <PersistenceWriteFailureNotice
-              backupError={backupError}
-              onDownload={downloadCurrentBackup}
-              onOpenRecovery={() => setLocalRecoveryRequested(true)}
-            />
-          ) : null}
-          {children}
-        </TrainingStoreProvider>
-      </PersistenceContext.Provider>
-    );
-  }
-
-  return (
+  const recoveryView = (
     <PersistenceRecovery
       inspection={
         runtimeUnavailable
@@ -254,16 +425,75 @@ export function PersistenceGate({
       confirmReset={confirmReset}
       backupError={backupError}
       resetError={resetError}
+      resetPending={resetPending}
       writeFailed={writeFailed}
       currentBackupAvailable={store !== null}
-      onConfirmReset={() => setConfirmReset(true)}
-      onCancelReset={() => setConfirmReset(false)}
+      onConfirmReset={() => {
+        if (!resetPendingRef.current) setConfirmReset(true);
+      }}
+      onCancelReset={() => {
+        if (!resetPendingRef.current) setConfirmReset(false);
+      }}
       onDownload={downloadBackup}
       onDownloadCurrentBackup={downloadCurrentBackup}
       onReset={resetLocalData}
       onRetry={retry}
       onContinueWithoutSaving={continueWithoutSaving}
     />
+  );
+
+  if (
+    store !== null &&
+    storeBundle !== null &&
+    !runtimeUnavailable &&
+    (sessionOnly || inspection.status === 'empty' || inspection.status === 'ready')
+  ) {
+    return (
+      <PersistenceContext.Provider
+        value={{
+          mode: sessionOnly ? 'session' : 'local',
+          writeFailed,
+          pending: writePending,
+          flush: flushPersistence,
+        }}
+      >
+        <AccountWorkspaceProvider
+          guestStore={store}
+          guestStorage={guestStorageProxy}
+          guestCleanup={guestCleanup}
+          guestFallback={recoveryIsRequested ? recoveryView : undefined}
+        >
+          {writeFailed ? (
+            <GuestPersistenceWriteFailureNotice
+              backupError={backupError}
+              onDownload={downloadCurrentBackup}
+              onOpenRecovery={() => setLocalRecoveryRequested(true)}
+            />
+          ) : null}
+          {children}
+        </AccountWorkspaceProvider>
+      </PersistenceContext.Provider>
+    );
+  }
+
+  return (
+    <PersistenceContext.Provider
+      value={{
+        mode: 'session',
+        writeFailed: false,
+        pending: false,
+        flush: () => Promise.resolve(),
+      }}
+    >
+      <AccountWorkspaceProvider
+        guestStore={recoveryWorkspace.store}
+        guestStorage={guestStorageProxy}
+        guestCleanup={guestCleanup}
+        guestFallback={recoveryView}
+      >
+        {children}
+      </AccountWorkspaceProvider>
+    </PersistenceContext.Provider>
   );
 }
 
@@ -272,6 +502,7 @@ interface PersistenceRecoveryProps {
   readonly confirmReset: boolean;
   readonly backupError: string | null;
   readonly resetError: string | null;
+  readonly resetPending: boolean;
   readonly writeFailed: boolean;
   readonly currentBackupAvailable: boolean;
   readonly onConfirmReset: () => void;
@@ -287,6 +518,12 @@ interface PersistenceWriteFailureNoticeProps {
   readonly backupError: string | null;
   readonly onDownload: () => void;
   readonly onOpenRecovery: () => void;
+}
+
+function GuestPersistenceWriteFailureNotice(props: PersistenceWriteFailureNoticeProps) {
+  const workspace = useOptionalAccountWorkspace();
+  if (workspace?.snapshot.mode !== 'guest') return null;
+  return <PersistenceWriteFailureNotice {...props} />;
 }
 
 function PersistenceWriteFailureNotice({
@@ -327,6 +564,7 @@ function PersistenceRecovery({
   confirmReset,
   backupError,
   resetError,
+  resetPending,
   writeFailed,
   currentBackupAvailable,
   onConfirmReset,
@@ -454,20 +692,40 @@ function PersistenceRecovery({
 
         <div className="recovery-actions">
           {currentBackupAvailable ? (
-            <button className="secondary-button" type="button" onClick={onDownloadCurrentBackup}>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={onDownloadCurrentBackup}
+              disabled={resetPending}
+            >
               Download current backup
             </button>
           ) : null}
           {hasRawBackup ? (
-            <button className="secondary-button" type="button" onClick={onDownload}>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={onDownload}
+              disabled={resetPending}
+            >
               Download raw backup
             </button>
           ) : null}
-          <button className="primary-button" type="button" onClick={onRetry}>
+          <button
+            className="primary-button"
+            type="button"
+            onClick={onRetry}
+            disabled={resetPending}
+          >
             Try again
           </button>
           {isUnavailable || currentBackupAvailable ? (
-            <button className="secondary-button" type="button" onClick={onContinueWithoutSaving}>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={onContinueWithoutSaving}
+              disabled={resetPending}
+            >
               Continue without saving
             </button>
           ) : null}
@@ -477,6 +735,7 @@ function PersistenceRecovery({
               className="text-button destructive-button"
               type="button"
               onClick={onConfirmReset}
+              disabled={resetPending}
             >
               Reset local data
             </button>
@@ -491,6 +750,7 @@ function PersistenceRecovery({
             aria-labelledby="reset-title"
             aria-describedby="reset-description"
             aria-modal="true"
+            aria-busy={resetPending}
             onCancel={(event) => {
               event.preventDefault();
               onCancelReset();
@@ -507,10 +767,16 @@ function PersistenceRecovery({
                 className="secondary-button"
                 type="button"
                 onClick={onCancelReset}
+                disabled={resetPending}
               >
                 Keep my data
               </button>
-              <button className="primary-button destructive-button" type="button" onClick={onReset}>
+              <button
+                className="primary-button destructive-button"
+                type="button"
+                onClick={onReset}
+                disabled={resetPending}
+              >
                 Reset local data
               </button>
             </div>

@@ -15,6 +15,7 @@ apps/web/playwright-report/
 !.agents/skills/README.md
 !.agents/skills/code-reviewer-pre-commit/
 !.agents/skills/kendomenu-web-feature/
+!.agents/skills/onboarding-code-comments/
 !.agents/skills/pre-commit-verification/
 !.agents/skills/testing-fuzz-stress/
 !.agents/skills/work-session-history/

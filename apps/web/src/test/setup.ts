@@ -32,6 +32,20 @@ class DeterministicStorage implements Storage {
 }
 
 const localStorage = new DeterministicStorage();
+const guestOnlyFetch: typeof fetch = (input) => {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.pathname : input.url;
+  return Promise.resolve(
+    url === '/api/session'
+      ? new Response(JSON.stringify({ error: 'UNAUTHENTICATED' }), {
+          status: 401,
+          headers: { 'content-type': 'application/json' },
+        })
+      : new Response(JSON.stringify({ error: 'NOT_FOUND' }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        }),
+  );
+};
 
 Object.defineProperty(window, 'localStorage', {
   configurable: true,
@@ -41,6 +55,7 @@ Object.defineProperty(globalThis, 'localStorage', {
   configurable: true,
   value: localStorage,
 });
+Object.defineProperty(globalThis, 'fetch', { configurable: true, value: guestOnlyFetch });
 
 const scrollTo: Window['scrollTo'] = () => undefined;
 

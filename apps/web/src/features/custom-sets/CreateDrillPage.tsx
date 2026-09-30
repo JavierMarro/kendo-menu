@@ -1,3 +1,9 @@
+/**
+ * Builds a custom training session and adds it to the current local dashboard.
+ * Draft edits are guarded against accidental navigation; a successful submit is reported
+ * only after the persistence boundary confirms the device write. On write failure the live
+ * entry remains available for recovery instead of being silently discarded.
+ */
 import {
   useEffect,
   useMemo,
@@ -22,6 +28,7 @@ import {
 import { useTrainingStore } from '../../lib/training-store-context';
 import { useDataRouterMode } from '../../lib/router-context';
 import { createSavedMenuNavigationState } from '../../lib/navigation-state';
+import { usePersistenceStatus } from '../persistence/persistence-context';
 
 const EMPTY_BUILDER_ERRORS: BuilderErrors = {};
 
@@ -88,6 +95,8 @@ export function CreateDrillPage() {
   const createCustomTrainingSet = useTrainingStore(
     (store) => store.createCustomTrainingSetAndAddToDashboard,
   );
+  const { flush: flushPersistence } = usePersistenceStatus();
+  const [isSaving, setIsSaving] = useState(false);
   const parseResult = useMemo(() => parseBuilderState(state), [state]);
   const errors: BuilderErrors = parseResult.success ? EMPTY_BUILDER_ERRORS : parseResult.errors;
   const draftActivityCount = state.sections.reduce(
@@ -153,8 +162,11 @@ export function CreateDrillPage() {
 
   const showError = (key: string): boolean => submitted || touched.has(key);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isSaving) {
+      return;
+    }
     setSubmitted(true);
     setSubmitRequest((request) => request + 1);
     setSubmitError('');
@@ -163,21 +175,47 @@ export function CreateDrillPage() {
       return;
     }
 
+    setIsSaving(true);
+    let created = false;
     try {
       const input = parseResult.value;
       createCustomTrainingSet(input);
-      isDirtyRef.current = false;
-      setIsDirty(false);
-      const navigation = navigate('/app/dashboard', {
-        state: createSavedMenuNavigationState(input.name),
-      });
-      void Promise.resolve(navigation).catch(() => {
-        isDirtyRef.current = true;
-        setIsDirty(true);
-        setSubmitError('The session was saved, but KendoMenu could not open the dashboard.');
-      });
+      created = true;
+      // The store mutation is immediate, but the dashboard success route should follow a
+      // confirmed local write. A failed confirmation takes the user to recovery-aware UI.
+      try {
+        await flushPersistence();
+        isDirtyRef.current = false;
+        setIsDirty(false);
+        const navigation = navigate('/app/dashboard', {
+          state: createSavedMenuNavigationState(input.name),
+        });
+        void Promise.resolve(navigation).catch(() => {
+          isDirtyRef.current = true;
+          setIsDirty(true);
+          setSubmitError('The session was saved, but KendoMenu could not open the dashboard.');
+        });
+      } catch {
+        // Keep the live entry available while the persistence warning offers recovery and backup.
+        isDirtyRef.current = false;
+        setIsDirty(false);
+        const navigation = navigate('/app/dashboard');
+        void Promise.resolve(navigation).catch(() => {
+          isDirtyRef.current = true;
+          setIsDirty(true);
+          setSubmitError(
+            'The session was added in memory, but KendoMenu could not confirm it was saved or open the dashboard.',
+          );
+        });
+      }
     } catch {
-      setSubmitError('The session could not be saved. Your draft is still here; try again.');
+      setSubmitError(
+        created
+          ? 'The session could not be confirmed as saved. Your draft is still here; try again.'
+          : 'The session could not be saved. Your draft is still here; try again.',
+      );
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -581,7 +619,7 @@ export function CreateDrillPage() {
         </section>
 
         <div className="builder-actions">
-          <button className="primary-button" type="submit">
+          <button className="primary-button" type="submit" disabled={isSaving} aria-busy={isSaving}>
             Save session to dashboard
           </button>
         </div>

@@ -21,7 +21,7 @@ const FAQ_ITEMS: readonly FaqItem[] = [
     id: 'is-kendomenu-free',
     question: 'Is KendoMenu free?',
     answer:
-      'Yes. KendoMenu is free to use, with no adverts or premium features. Your menus and dashboard data stay on the device you use; account-based cloud access will be available in the future.',
+      'Yes. KendoMenu is free to use, with no adverts or premium features. Menus you save stay on this device.',
   },
   {
     id: 'all-experience-levels',
@@ -65,8 +65,7 @@ const FAQ_ITEMS: readonly FaqItem[] = [
   {
     id: 'device-sync',
     question: 'Are my menus synchronised between devices?',
-    answer:
-      'Not currently. Your saved menus and dashboard are tied to the device where you create them, so your computer and phone keep separate local data. Cloud synchronisation will be available in the future.',
+    answer: 'Menus saved in the current public app stay on the device where you create them.',
   },
 ];
 

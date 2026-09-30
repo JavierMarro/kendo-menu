@@ -1,0 +1,8 @@
+- Session: Account bootstrap and workspace isolation (Job 6B)
+- Date/duration: 2026-09-20–2026-09-23; multi-turn session
+- Scope/start: Verified clean codex/account-sync-integration at reviewed Job 6A commit 5492d5d before editing.
+- Changes: Added strict browser API validation, UUID-scoped v10 caches, payload-free metadata, internal bootstrap/logout/hide lifecycle, and Web Locks boundaries; corrected exit precedence and ambiguous logout recovery.
+- Decisions: Account UI/cloud writes remain absent; preserve guest kendo-menu; aborted DELETE can still commit; only 204, exact DELETE 401, or authoritative session absence confirms sign-out; old A exit cannot clear newer B.
+- Roadblocks: Local Playwright listener requires sandbox escalation; no database, Neon, production credentials, deployment or dependency changes.
+- Verification: Node 24 `pnpm check` passed (73 domain, 69 store, 437 API, 239 web); account-boundary E2E passed 6/6 development and 6/6 preview; independent correction review PASS.
+- Follow-up: Uncommitted Job 6B handoff; Jobs 6C/6D and Google/HTTPS-cookie/Neon/Vercel/Fluid Compute gates remain unverified; no production changes.

@@ -1,0 +1,8 @@
+- Session: Account and synchronization architecture (Job 2)
+- Date/duration: 2026-09-09; duration not recorded
+- Scope/start: Clean worktree; documentation-only recording of approved account/sync direction after the discovery memo.
+- Changes: Added ADRs 0002–0004, account/authentication glossary terms, proposed product/architecture sections, and a sourced stack/design document with Job 3 gates.
+- Decisions: Only owner-listed architecture accepted; corrected non-empty guest eligibility and blocking Yes/No; Node/Neon/Drizzle/Google recommendations remain unapproved; Vercel pool helper is provisional.
+- Roadblocks: Exact stable Node 24/helper compatibility and combined Vercel API/SPA routing remain unverified before Job 3; no installation, scaffolding, configuration, infrastructure, deployment, or commit.
+- Verification: New/affected design links, ADR numbering/status, glossary coverage, targeted Prettier, pnpm session:check and diff checks passed; independent review PASS after clarifying OAuth callback GET semantics.
+- Follow-up: Resolve grouped owner choices and compatibility gates before Job 3; two pre-existing broken history links remain (2026-08-22-responsive-site-footer and 2026-08-21-landing-page-polish); implementation tests not run.

@@ -1,0 +1,8 @@
+- Session: Google OIDC and opaque application sessions (Job 4B)
+- Date/duration: 2026-09-11; duration not recorded
+- Scope/start: Clean codex/account-sync-integration with Job 3 API and Job 4A persistence; local backend implementation only.
+- Changes: Added injected Google OIDC/authentication routes, secure opaque session/CSRF cookies, public user lookup, bounded login cleanup, same-origin configuration, explicit safe HEAD handling, and Vercel pool attachment.
+- Decisions: openid email only; ten-minute bound login; seven-day idle/30-day absolute sessions; GET never touches activity; malformed predecessors are overwritten; same-user replacement and explicit logout before account switching; migration unchanged.
+- Roadblocks: Node adapter dropped repeated Set-Cookie fields, resolved through standard Response mapping; Node 24 checks need pnpm auto-repair disabled and local sockets need sandbox approval; external start-route rate limiting and existing esbuild development advisory remain production gates.
+- Verification: Node 24 check:api passed 224 tests; local PostgreSQL integration passed 44; db:check and full pnpm check passed 520 workspace tests; production audit clean; one documented moderate development esbuild advisory; static/secret scans passed; independent findings addressed.
+- Follow-up: Real Google/Neon/HTTPS and Fluid Compute remain integration gates; browser E2E/release suites not run for this backend slice; no credentials, external configuration, commit, push, merge, or deployment.

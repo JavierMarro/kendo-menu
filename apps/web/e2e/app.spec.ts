@@ -157,7 +157,7 @@ test.describe('routed training flows', () => {
   test('persists the cookie notice acknowledgement for 21 days', async ({ page }) => {
     const notice = page.getByRole('complementary', { name: 'Cookie notice' });
     await expect(notice).toContainText(
-      'This site does not use tracking cookies. We use GoatCounter Analytics (no cookies) to improve the service.',
+      'When signed out, KendoMenu sends one cookie-free page count when this page first opens.',
     );
     await expect(notice.getByRole('link', { name: 'More information' })).toHaveAttribute(
       'href',
@@ -168,9 +168,9 @@ test.describe('routed training flows', () => {
     await expect(page).toHaveURL(/\/cookies$/);
     await expect(page.getByRole('heading', { name: 'Cookie Policy', exact: true })).toBeVisible();
     await expect(
-      page.getByText(/This training data .* is not sent to a remote service/),
+      page.getByText(/Guest dashboard training sessions are stored locally/),
     ).toBeVisible();
-    const goatCounterLink = page.getByRole('link', { name: 'GoatCounter Analytics' });
+    const goatCounterLink = page.getByRole('link', { name: 'GoatCounter' });
     await expect(goatCounterLink).toHaveAttribute(
       'href',
       'https://www.goatcounter.com/help/privacy',
@@ -178,8 +178,7 @@ test.describe('routed training flows', () => {
     await expect(goatCounterLink).toHaveAttribute('target', '_blank');
     await expect(
       page.getByText(
-        'KendoMenu uses GoatCounter for cookie-free, aggregate usage statistics such as page paths, browser and operating-system categories, screen size, country, and short-lived session deduplication. Individual pageviews and referrer collection are disabled. Training plans, notes, and menu names are not intentionally sent to GoatCounter.',
-        { exact: true },
+        /KendoMenu sends one page count after the browser verifies that the visitor is signed out\./,
       ),
     ).toBeVisible();
     await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toBeVisible();
@@ -738,6 +737,10 @@ test.describe('routed training flows', () => {
     const notes = dashboardDialog.getByLabel('Practice notes');
     await notes.fill('Keep the shoulders relaxed.');
     await notes.blur();
+    await expect(page.locator('.session-status')).toHaveAttribute(
+      'aria-label',
+      'Saved on this device',
+    );
 
     await page.reload();
     const reloadedDashboardDialog = await openDashboardMenu(page, 'Junior-high school dojo menu');

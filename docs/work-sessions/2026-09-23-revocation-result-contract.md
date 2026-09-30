@@ -1,0 +1,8 @@
+- Session: revocation result contract
+- Date/duration: 2026-09-23; ~15 minutes
+- Scope/start: Correct Job 6B exit-result semantics before Job 6C; existing uncommitted race fix and onboarding comments were preserved.
+- Changes: Local hide now reports the recorded server-revocation state; session-check storage retries use that state; added a successful-204 overlap regression test.
+- Decisions: No account UI, synchronization, server, dependency, or deployment change; only authoritative server evidence confirms revocation.
+- Roadblocks: None; the rare session-check supersession branch has no direct interleaving test.
+- Verification: Node 24 targeted workspace suite 38 PASS; check:web 243 PASS with types/lint/build; Prettier and diff checks PASS; independent review PASS.
+- Follow-up: Owner may commit this correction; Job 6C planning can use the corrected result contract.

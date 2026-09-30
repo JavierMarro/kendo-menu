@@ -51,7 +51,9 @@ export function RecursiveFixtureApp({
   readonly view: 'library' | 'dashboard';
 }) {
   return (
-    <PersistenceContext.Provider value={{ mode: 'local', writeFailed: false }}>
+    <PersistenceContext.Provider
+      value={{ mode: 'local', writeFailed: false, pending: false, flush: () => Promise.resolve() }}
+    >
       <TrainingStoreProvider store={store}>
         {view === 'library' ? (
           <MemoryRouter>

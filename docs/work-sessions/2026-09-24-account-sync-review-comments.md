@@ -1,0 +1,8 @@
+- Session: account sync review and onboarding comments
+- Date/duration: 2026-09-24; duration not recorded
+- Scope/start: Reviewed uncommitted Job 6C-B fixes with committed 6C-A storage cutover; no production or provider access.
+- Changes: Added behavior-preserving onboarding comments to four account persistence, workspace, and synchronization source files.
+- Decisions: No new architecture decision; use-cloud refreshes cloud revision and local replacement retains already-verified offline access.
+- Roadblocks: No remaining local correctness blocker found; live Google, Neon, HTTPS-cookie, and Vercel gates remain unverified.
+- Verification: Node 24 check:web PASS (257 tests); focused sync Chromium 35/35; formatting and diff checks PASS; comment-stripped output hashes unchanged.
+- Follow-up: Commit reviewed 6C-B and comments after owner review; Job 6D owns reachable adoption and conflict UI.

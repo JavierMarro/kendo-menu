@@ -164,13 +164,13 @@ test.describe('production PWA shell', () => {
     page,
     context,
   }) => {
-    const blockedGoatCounterRequests: string[] = [];
+    const analyticsRequests: string[] = [];
     await page.route('**://gc.zgo.at/**', async (route) => {
-      blockedGoatCounterRequests.push(route.request().url());
+      analyticsRequests.push(route.request().url());
       await route.abort();
     });
     await page.route('**://javiermarro.goatcounter.com/**', async (route) => {
-      blockedGoatCounterRequests.push(route.request().url());
+      analyticsRequests.push(route.request().url());
       await route.abort();
     });
 
@@ -183,7 +183,7 @@ test.describe('production PWA shell', () => {
     await expect(
       page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY),
     ).resolves.toBe(OFFLINE_STORAGE_RAW);
-    await expect.poll(() => blockedGoatCounterRequests.length).toBeGreaterThan(0);
+    await expect(page.locator('script[src*="count.js"]')).toHaveCount(0);
 
     await context.setOffline(true);
     try {
@@ -213,6 +213,7 @@ test.describe('production PWA shell', () => {
           page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY),
         ).resolves.toBe(OFFLINE_STORAGE_RAW);
       }
+      expect(analyticsRequests).toEqual([]);
     } finally {
       await context.setOffline(false);
     }

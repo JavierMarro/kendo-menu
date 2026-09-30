@@ -1,0 +1,8 @@
+- Session: account sync hardening
+- Date/duration: 2026-09-24; ~4 hours
+- Scope/start: Closed two blocking defects in uncommitted Job 6C-B: dashboard 401 left account visible, and postcommit recovery could lose a late edit.
+- Changes: Dashboard 401 now hides and retains private state; retry verifies session; malformed/PUT/conflict 401 paths covered. Cloud replacement closes editing before IDB commit and guards reactivation, hide, logout, and revocation retry.
+- Decisions: A late edit is refused at the precommit gate; use-cloud still preserves the losing cache atomically. Explicit hide/logout supersedes automatic reopening; no Job 6D, commit, or deployment.
+- Roadblocks: Combined Node 24 checks exposed existing editor-test timeouts under parallel load; their test-only limits rose from 30 to 60 seconds. Live provider integration remains unverified.
+- Verification: Node 24 pnpm check PASS; full dev and built-preview E2E each 233 passed/3 skipped; account Chromium 30/30; independent persistence review PASS.
+- Follow-up: Job 6D owns adoption POST/choice, conflict UI/export, and guest cleanup; retain account-only internal access until reviewed UI work.

@@ -142,7 +142,7 @@ describe('application error recovery', () => {
     }
   });
 
-  it('routes unexpected router failures into the external boundary', () => {
+  it('routes unexpected router failures into the external boundary', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const rootRoute = appRoutes[0];
     if (rootRoute === undefined) throw new Error('Expected the root route.');
@@ -154,6 +154,7 @@ describe('application error recovery', () => {
         <RouterProvider router={router} />
       </ApplicationRecovery>,
     );
+    await screen.findByRole('heading', { name: 'KendoMenu couldn’t continue.' });
     expect(screen.getByRole('heading', { name: 'KendoMenu couldn’t continue.' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Open data recovery' })).toBeEnabled();
   });
@@ -172,7 +173,7 @@ describe('application error recovery', () => {
         <EditThenFail />
       </ApplicationRecovery>,
     );
-    await user.click(screen.getByRole('button', { name: 'Edit then fail' }));
+    await user.click(await screen.findByRole('button', { name: 'Edit then fail' }));
     await user.click(screen.getByRole('button', { name: 'Open data recovery' }));
     await user.click(screen.getByRole('button', { name: 'Download current backup' }));
     expect(download).toHaveBeenCalledWith([

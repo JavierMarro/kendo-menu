@@ -13,7 +13,7 @@ const WARM_UP_ID = 'international-dojo-2-hour-session-warm-up-warm-up';
 const SUBURI_ID = 'international-dojo-2-hour-session-suburi-suburi';
 const ASHI_SABAKI_ID = 'international-dojo-2-hour-session-ashi-sabaki-ashi-sabaki';
 const KIRIKAESHI_ID = 'international-dojo-2-hour-session-kirikaeshi-kirikaeshi';
-const DASHBOARD_EDITOR_TEST_TIMEOUT = 30_000;
+const DASHBOARD_EDITOR_TEST_TIMEOUT = 60_000;
 
 function getActivity(activityId: string): HTMLElement {
   const activity = document.querySelector<HTMLElement>(`[data-activity-id="${activityId}"]`);
@@ -355,7 +355,14 @@ describe('dashboard activity notes', () => {
     const setActivityNote = vi.fn();
 
     render(
-      <PersistenceContext.Provider value={{ mode: 'local', writeFailed: false }}>
+      <PersistenceContext.Provider
+        value={{
+          mode: 'local',
+          writeFailed: false,
+          pending: false,
+          flush: () => Promise.resolve(),
+        }}
+      >
         <DashboardTrainingSet
           entry={NESTED_NOTE_ENTRY}
           index={0}

@@ -1,6 +1,6 @@
 # KendoMenu project skills
 
-These five versioned, project-owned Codex skills are natively discoverable from `.agents/skills`.
+These six versioned, project-owned Codex skills are natively discoverable from `.agents/skills`.
 Load a skill only when its described workflow matches the current task; ordinary work does not need
 every skill.
 
@@ -17,6 +17,8 @@ every skill.
   data-flow tracing, security checks, and counter-hypotheses.
 - [`work-session-history`](./work-session-history/SKILL.md): create the required evidence-based,
   eight-line session handoff and validate the history policy.
+- [`onboarding-code-comments`](./onboarding-code-comments/SKILL.md): explicitly invoked, behavior-
+  preserving senior-engineer comments for a selected handwritten implementation scope.
 
 ## Workflow composition
 

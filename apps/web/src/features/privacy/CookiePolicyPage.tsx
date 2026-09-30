@@ -32,34 +32,39 @@ export function CookiePolicyPage() {
         <section className="policy-section" aria-labelledby="local-storage-title">
           <h2 id="local-storage-title">Local storage</h2>
           <p>
-            Your dashboard training sessions are stored locally in your browser so KendoMenu can
-            work without an account or a server. This training data is separate from cookies, is not
-            sent to a remote service and can be deleted by clearing site data in your browser. Small
-            device-only preferences, including notice acknowledgements and installation prompt
-            state, are stored locally in the same way.
+            Guest dashboard training sessions are stored locally in your browser and are not sent to
+            an account service unless you choose to add them to a new account. Signed-in account
+            dashboards are saved locally and synchronized with the KendoMenu account service. This
+            training data is separate from cookies. Clearing site data removes the browser copy, but
+            does not delete an account dashboard. Small device-only preferences, including notice
+            acknowledgements and installation prompt state, are stored locally.
           </p>
         </section>
 
         <section className="policy-section" aria-labelledby="analytics-title">
           <h2 id="analytics-title">Analytics</h2>
           <p>
-            KendoMenu uses{' '}
+            KendoMenu sends one page count after the browser verifies that the visitor is signed
+            out. The request uses GoatCounter’s image endpoint; its only query parameter is a
+            static, allow-listed page path. It omits query strings, referrer information, account
+            state, email, menu content, notes, and other page parameters. As with ordinary web
+            requests, the service receives network metadata such as the browser’s IP address and
+            user-agent. No analytics request is sent while session verification is unresolved,
+            offline, or authenticated. KendoMenu does not load GoatCounter JavaScript. The request
+            uses an explicit no-referrer policy and a cookie-free image GET.
+          </p>
+          <p>
+            Learn about the service from{' '}
             <strong>
               <a
                 href="https://www.goatcounter.com/help/privacy"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                GoatCounter Analytics
+                GoatCounter
               </a>
             </strong>
-            , a privacy-friendly web analytics service.
-          </p>
-          <p>
-            KendoMenu uses GoatCounter for cookie-free, aggregate usage statistics such as page
-            paths, browser and operating-system categories, screen size, country, and short-lived
-            session deduplication. Individual pageviews and referrer collection are disabled.
-            Training plans, notes, and menu names are not intentionally sent to GoatCounter.
+            .
           </p>
         </section>
 
