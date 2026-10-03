@@ -278,22 +278,27 @@ test('callback error is shown after root navigation and removed from the address
   expect(sessionChecks).toBe(1);
 });
 
-test('Use this device gates a failed account preservation and offers retry and backup', async ({
+test('a storage-retryable sign-out keeps the account workspace protected', async ({
   page,
   context,
 }) => {
+  await context.addInitScript(() => {
+    Object.defineProperty(document, 'cookie', {
+      configurable: true,
+      get: () => '__Host-kendomenu-csrf=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    });
+  });
   await routeAccount(context, () => ({ id: accountA, email: 'first@example.test' }));
   await page.goto('/app/dashboard');
   await expect(page.getByText('Signed in as first@example.test')).toBeVisible();
   await divergeAccountCache(page, accountA);
 
-  await page.getByRole('button', { name: 'Use this device' }).click();
+  await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(
-    page.getByRole('status').filter({ hasText: 'Recent account changes could not be saved' }),
-  ).toContainText('Keep this tab open and retry or download an account backup.');
-  await expect(page.getByRole('button', { name: 'Retry saving' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Download account backup' })).toBeVisible();
-  await expect(page.getByText('Signed in as first@example.test')).toHaveCount(0);
+    page.getByRole('status').filter({ hasText: 'Sign-out is waiting for local account storage' }),
+  ).toBeVisible();
+  await expect(page.getByText('Signed in as first@example.test')).toBeVisible();
+  await expect(page).toHaveURL(/\/app\/dashboard$/);
 });
 
 test('a completed sign-out in another tab hides the old account', async ({ page, context }) => {
@@ -316,6 +321,7 @@ test('a completed sign-out in another tab hides the old account', async ({ page,
   );
   const peer = await context.newPage();
   await page.goto('/app/dashboard');
+  await expect(page.getByText('Signed in as first@example.test')).toBeVisible();
   await peer.goto('/app/dashboard');
   await expect(page.getByText('Signed in as first@example.test')).toBeVisible();
   await expect(peer.getByText('Signed in as first@example.test')).toBeVisible();
@@ -661,82 +667,6 @@ test('a signed-out hint clears a held check after dashboard rejection already hi
   await hintTab.close();
 });
 
-test('Use this device stays on the guest workspace while the account session remains active', async ({
-  page,
-  context,
-}) => {
-  await routeAccount(context, () => ({ id: accountA, email: 'first@example.test' }));
-  await page.goto('/app/dashboard');
-  await expect(page.getByText('Signed in as first@example.test')).toBeVisible();
-  await page.route('**/api/session', (route) => route.abort());
-  const hintTab = await context.newPage();
-  await hintTab.goto('/app/dashboard');
-  await expect(page.getByRole('button', { name: 'Retry account check' })).toBeVisible();
-  await page.unroute('**/api/session');
-
-  let laterSessionChecks = 0;
-  await page.route('**/api/session', (route) => {
-    laterSessionChecks += 1;
-    return route.fallback();
-  });
-  await page.evaluate(() => {
-    void navigator.locks.request('kendo-menu:guest', async () => {
-      document.documentElement.dataset['guestLockHeld'] = 'true';
-      await new Promise<void>((resolve) => {
-        window.addEventListener('release-guest-lock', () => resolve(), { once: true });
-      });
-    });
-  });
-  await expect
-    .poll(() => page.evaluate(() => document.documentElement.dataset['guestLockHeld']))
-    .toBe('true');
-  await page.getByRole('button', { name: 'Use this device' }).click();
-  await expect(page.getByRole('heading', { name: 'Opening this device workspace' })).toBeVisible();
-  await page.evaluate(() => {
-    const channel = new BroadcastChannel('kendomenu-account-transition-v1');
-    channel.addEventListener('message', () => {
-      document.documentElement.dataset['duringGuestRefreshHint'] = 'received';
-      channel.close();
-    });
-  });
-  await hintTab.evaluate(() => {
-    const channel = new BroadcastChannel('kendomenu-account-transition-v1');
-    channel.postMessage({ signal: 'verified-account-active', sender: 'during-refresh-fixture' });
-    channel.close();
-  });
-  await expect
-    .poll(() => page.evaluate(() => document.documentElement.dataset['duringGuestRefreshHint']))
-    .toBe('received');
-  expect(laterSessionChecks).toBe(0);
-  await page.evaluate(() => window.dispatchEvent(new Event('release-guest-lock')));
-  await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
-  await expect(page.getByText('Signed in as first@example.test')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
-  expect(laterSessionChecks).toBe(0);
-
-  await page.evaluate(() => {
-    const channel = new BroadcastChannel('kendomenu-account-transition-v1');
-    channel.addEventListener('message', () => {
-      document.documentElement.dataset['laterAccountHint'] = 'received';
-      channel.close();
-    });
-  });
-  await hintTab.evaluate(() => {
-    const channel = new BroadcastChannel('kendomenu-account-transition-v1');
-    channel.postMessage({
-      signal: 'verified-account-active',
-      sender: 'later-account-hint-fixture',
-    });
-    channel.close();
-  });
-  await expect
-    .poll(() => page.evaluate(() => document.documentElement.dataset['laterAccountHint']))
-    .toBe('received');
-  expect(laterSessionChecks).toBe(0);
-  await expect(page.getByText('Signed in as first@example.test')).toHaveCount(0);
-  await hintTab.close();
-});
-
 test('Use this device refreshes guest data after account storage fails to open', async ({
   page,
   context,
@@ -770,6 +700,44 @@ test('Use this device refreshes guest data after account storage fails to open',
   await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
   await expect(page.locator('.dashboard-card--compact')).toHaveCount(0);
   await expect(page.getByText('Signed in as first@example.test')).toHaveCount(0);
+});
+
+test('confirmed sign-out from account-storage recovery returns to the homepage', async ({
+  page,
+  context,
+}) => {
+  let current: { id: string; email: string } | null = {
+    id: accountA,
+    email: 'first@example.test',
+  };
+  await context.addInitScript(() => {
+    Object.defineProperty(document, 'cookie', {
+      configurable: true,
+      get: () => '__Host-kendomenu-csrf=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    });
+    Object.defineProperty(indexedDB, 'open', {
+      configurable: true,
+      value: () => {
+        throw new Error('Account IndexedDB is unavailable in this test.');
+      },
+    });
+  });
+  await routeAccount(
+    context,
+    () => current,
+    () => {
+      current = null;
+    },
+  );
+  await page.goto('/app/dashboard');
+  await expect(
+    page.getByRole('heading', { name: 'Your account workspace could not be opened' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await page.goto('/app/dashboard');
+  await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
 });
 
 test('Use this device cancels a held Retry from account-storage recovery', async ({
@@ -862,32 +830,6 @@ test('a peer sign-in does not offer a no-op backup for account-storage failure',
   await peer.close();
 });
 
-test('Use this device opens a fresh guest snapshot in session-only mode without Web Locks', async ({
-  page,
-  context,
-}) => {
-  let current: { id: string; email: string } | null = null;
-  await routeAccount(context, () => current);
-  await page.goto('/app/library?drill=junior-high-kendo-club');
-  const menu = page.getByRole('dialog', { name: 'Junior-high school dojo menu' });
-  await menu.getByRole('button', { name: 'Add to dashboard' }).click();
-  await expect(menu.locator('.inline-confirmation')).toContainText('added to your dashboard');
-  await page.goto('/app/dashboard');
-  await expect(page.getByRole('heading', { name: 'Junior-high school dojo menu' })).toBeVisible();
-
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
-  });
-  current = { id: accountA, email: 'first@example.test' };
-  await page.reload();
-  await expect(page.getByText('Signed in as first@example.test')).toBeVisible();
-  await page.getByRole('button', { name: 'Use this device' }).click();
-  await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Junior-high school dojo menu' })).toBeVisible();
-  await expect(page.getByRole('status', { name: 'Session only' })).toBeVisible();
-  await expect(page.getByText('Signed in as first@example.test')).toHaveCount(0);
-});
-
 test('focus re-verifies after cross-tab sign-out when BroadcastChannel is unavailable', async ({
   page,
   context,
@@ -912,6 +854,7 @@ test('focus re-verifies after cross-tab sign-out when BroadcastChannel is unavai
   );
   const peer = await context.newPage();
   await page.goto('/app/dashboard');
+  await expect(page.getByText('Signed in as first@example.test')).toBeVisible();
   await peer.goto('/app/dashboard');
   await expect(peer.getByText('Signed in as first@example.test')).toBeVisible();
   await page.bringToFront();
@@ -923,6 +866,71 @@ test('focus re-verifies after cross-tab sign-out when BroadcastChannel is unavai
   await peer.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(peer.getByText('Signed in as first@example.test')).toHaveCount(0);
   await expect(peer.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+  await peer.close();
+});
+
+test('signed-out guest tab verifies peer sign-in on focus without BroadcastChannel or account analytics', async ({
+  page,
+  context,
+}) => {
+  let current: { id: string; email: string } | null = null;
+  let sessionChecks = 0;
+  const analyticsRequests: string[] = [];
+  await context.addInitScript(() => {
+    Object.defineProperty(window, 'BroadcastChannel', { configurable: true, value: undefined });
+  });
+  await routeAccount(context, () => current);
+  let failNextSession = false;
+  await page.route('**/api/session', (route) => {
+    if (failNextSession && route.request().method() === 'GET') {
+      failNextSession = false;
+      return route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'SERVICE_UNAVAILABLE' }),
+      });
+    }
+    return route.fallback();
+  });
+  await context.route('**/api/auth/google/start', (route) => {
+    current = { id: accountA, email: 'first@example.test' };
+    return route.fulfill({ status: 302, headers: { location: '/app/dashboard' } });
+  });
+  await page.route('https://javiermarro.goatcounter.com/**', async (route) => {
+    analyticsRequests.push(route.request().url());
+    await route.abort();
+  });
+  page.on('request', (request) => {
+    if (request.url().endsWith('/api/session') && request.method() === 'GET') sessionChecks += 1;
+  });
+  await page.goto('/app/library?drill=junior-high-kendo-club');
+  await expect(page.locator('.account-google-entry')).toHaveCount(1);
+  const menu = page.getByRole('dialog', { name: 'Junior-high school dojo menu' });
+  await menu.getByRole('button', { name: 'Add to dashboard' }).click();
+  await expect(menu.locator('.inline-confirmation')).toContainText('added to your dashboard');
+  const guestRaw = await page.evaluate(() => localStorage.getItem('kendo-menu'));
+  expect(guestRaw).not.toBeNull();
+  await expect.poll(() => analyticsRequests.length).toBeGreaterThan(0);
+  analyticsRequests.length = 0;
+  const peer = await context.newPage();
+  await peer.goto('/api/auth/google/start');
+  await expect(peer.getByText('Signed in as first@example.test')).toBeVisible();
+  const checksBeforeFocus = sessionChecks;
+  analyticsRequests.length = 0;
+  failNextSession = true;
+  await page.bringToFront();
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect.poll(() => sessionChecks).toBeGreaterThan(checksBeforeFocus);
+  await expect(page.locator('.account-session-controls')).toContainText(
+    'Account unavailable; guest use works.',
+  );
+  const checksBeforeRetry = sessionChecks;
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect.poll(() => sessionChecks).toBeGreaterThan(checksBeforeRetry);
+  await expect(page.getByText('Signed in as first@example.test')).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('kendo-menu'))).toBe(guestRaw);
+  await page.waitForTimeout(1_100);
+  expect(analyticsRequests).toEqual([]);
   await peer.close();
 });
 
@@ -980,6 +988,7 @@ test('a superseded first sign-out still broadcasts its confirmed server revocati
   await page.evaluate(() => window.dispatchEvent(new Event('release-first-logout')));
   await expect(peer.getByText('Signed in as first@example.test')).toHaveCount(0);
   await expect(page.getByText('Signed in as first@example.test')).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByRole('heading', { name: 'Plan the keiko you need today.' })).toBeVisible();
   await peer.close();
 });

@@ -838,33 +838,28 @@ test('an unavailable synchronization lock pauses uploads while account edits per
   expect(await page.evaluate(() => localStorage.getItem('e2e:account-put-count'))).toBeNull();
 });
 
-test('only an eligible guest awaiting Yes or No pauses ordinary account uploads', async ({
+test('an eligible guest offer pauses uploads until verified recheck sees the guest removed', async ({
   page,
 }) => {
   await page.goto('/e2e/account-sync-fixture.html?guest=eligible');
   await expect(page.locator('#result')).toHaveText('ready');
   await page.evaluate(() => window.dispatchEvent(new Event('e2e-sync-edit')));
-  await expect
-    .poll(async () => {
-      const status = await page.locator('#operation').textContent();
-      if (status === 'retryable') {
-        await page.evaluate(() => window.dispatchEvent(new Event('e2e-sync-retry')));
-      }
-      return status;
-    })
-    .toBe('awaiting-adoption');
+  await expect(page.locator('#operation')).toHaveText('paused');
   expect(await page.evaluate(() => localStorage.getItem('e2e:account-put-count'))).toBeNull();
   expect(await page.evaluate(() => localStorage.getItem('kendo-menu'))).not.toBeNull();
 
   await page.evaluate(() => localStorage.removeItem('kendo-menu'));
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.evaluate(() => window.dispatchEvent(new Event('e2e-sync-bootstrap')));
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('e2e:bootstrap-result')))
+    .toBe('ready');
   await expect
     .poll(async () => (await readSynchronizationRecords(page)).acknowledgement)
     .toMatchObject({ status: 'acknowledged', revision: '1' });
   expect(await page.evaluate(() => localStorage.getItem('e2e:account-put-count'))).toBe('1');
 });
 
-test('an eligible guest appearing after request preparation pauses its first send', async ({
+test('an eligible guest appearing after request preparation cannot displace its first send', async ({
   page,
 }) => {
   await page.goto('/e2e/account-sync-fixture.html?guest=appears');
@@ -873,18 +868,12 @@ test('an eligible guest appearing after request preparation pauses its first sen
     .poll(async () => (await readSynchronizationRecords(page)).acknowledgement)
     .toMatchObject({ status: 'acknowledged', revision: '0' });
   await page.evaluate(() => window.dispatchEvent(new Event('e2e-sync-edit')));
-  await expect(page.locator('#operation')).toHaveText('awaiting-adoption');
-  expect((await readSynchronizationRecords(page)).pending).toMatchObject({
-    kind: 'pending-request',
-  });
-  expect(await page.evaluate(() => localStorage.getItem('e2e:account-put-count'))).toBeNull();
-
-  await page.evaluate(() => localStorage.removeItem('kendo-menu'));
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.locator('#operation')).toHaveText('uploaded');
   await expect
     .poll(async () => readSynchronizationRecords(page))
     .toMatchObject({ acknowledgement: { status: 'acknowledged', revision: '1' }, pending: null });
   expect(await page.evaluate(() => localStorage.getItem('e2e:account-put-count'))).toBe('1');
+  expect(await page.evaluate(() => localStorage.getItem('kendo-menu'))).not.toBeNull();
 });
 
 test('invalid guest data does not invent a No decision or block ordinary uploads', async ({

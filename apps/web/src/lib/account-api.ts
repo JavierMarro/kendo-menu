@@ -162,6 +162,41 @@ export interface DashboardWriteAcknowledgement {
   readonly updatedAt: string;
 }
 
+export type AdoptionRequest =
+  | {
+      readonly decision: 'no';
+      readonly transportVersion: 1;
+      readonly expectedAccountWorkspaceId: string;
+      readonly requestId: string;
+    }
+  | {
+      readonly decision: 'yes';
+      readonly transportVersion: 1;
+      readonly expectedAccountWorkspaceId: string;
+      readonly expectedRevision: '0';
+      readonly requestId: string;
+      readonly catalogueVersion: string;
+      readonly dashboard: DashboardSnapshot;
+    };
+
+export type AdoptionResponse =
+  | {
+      readonly status: 'accepted';
+      readonly completion: Extract<AdoptionStatus, { status: 'accepted' }>['completion'];
+      readonly acknowledgement: DashboardWriteAcknowledgement;
+    }
+  | {
+      readonly status: 'declined';
+      readonly completion: Extract<AdoptionStatus, { status: 'declined' }>['completion'];
+    }
+  | {
+      readonly status: 'replayed';
+      readonly completion:
+        | Extract<AdoptionStatus, { status: 'accepted' }>['completion']
+        | Extract<AdoptionStatus, { status: 'declined' }>['completion'];
+      readonly acknowledgement?: DashboardWriteAcknowledgement;
+    };
+
 export interface AccountApiClient {
   getSession(signal?: AbortSignal): Promise<SessionResult>;
   logout(signal?: AbortSignal): Promise<void>;
@@ -171,12 +206,17 @@ export interface AccountApiClient {
     request: DashboardWriteRequest,
     signal?: AbortSignal,
   ): Promise<DashboardWriteAcknowledgement>;
+  postAdoption(
+    accountWorkspaceId: string,
+    request: AdoptionRequest,
+    signal?: AbortSignal,
+  ): Promise<AdoptionResponse>;
 }
 
 export interface AccountApiDependencies {
   /** `fetch` is injected so tests never need a network or a real browser session. */
   readonly fetch?: typeof fetch;
-  /** Reads `document.cookie`; this is called only for logout and dashboard PUT. */
+  /** Reads `document.cookie` for logout, dashboard PUT, and adoption POST. */
   readonly readCookie?: () => string;
   /** The current application origin used to reject cross-origin final responses. */
   readonly origin?: string;
@@ -454,6 +494,155 @@ function parseDashboardAcknowledgement(
     revision: value['revision'],
     updatedAt: value['updatedAt'],
   });
+}
+
+function validateAdoptionRequest(
+  value: unknown,
+  accountWorkspaceId: string,
+): AdoptionRequest | null {
+  if (!isStrictJsonObject(value) || value['expectedAccountWorkspaceId'] !== accountWorkspaceId) {
+    return null;
+  }
+  if (value['decision'] === 'no') {
+    return hasExactKeys(value, [
+      'decision',
+      'transportVersion',
+      'expectedAccountWorkspaceId',
+      'requestId',
+    ]) &&
+      value['transportVersion'] === 1 &&
+      isRequestId(value['requestId'])
+      ? Object.freeze({
+          decision: 'no',
+          transportVersion: 1,
+          expectedAccountWorkspaceId: accountWorkspaceId,
+          requestId: value['requestId'],
+        })
+      : null;
+  }
+  if (
+    value['decision'] !== 'yes' ||
+    !hasExactKeys(value, [
+      'decision',
+      'transportVersion',
+      'expectedAccountWorkspaceId',
+      'expectedRevision',
+      'requestId',
+      'catalogueVersion',
+      'dashboard',
+    ]) ||
+    value['transportVersion'] !== 1 ||
+    value['expectedRevision'] !== '0' ||
+    !isRequestId(value['requestId']) ||
+    !isCatalogueVersion(value['catalogueVersion'])
+  ) {
+    return null;
+  }
+  const dashboard = parseDashboardSnapshot(value['dashboard']);
+  return dashboard === null
+    ? null
+    : Object.freeze({
+        decision: 'yes',
+        transportVersion: 1,
+        expectedAccountWorkspaceId: accountWorkspaceId,
+        expectedRevision: '0',
+        requestId: value['requestId'],
+        catalogueVersion: value['catalogueVersion'],
+        dashboard,
+      });
+}
+
+function parseAdoptionResponse(
+  value: unknown,
+  accountWorkspaceId: string,
+  request: AdoptionRequest,
+): AdoptionResponse | null {
+  if (!isStrictJsonObject(value)) return null;
+  const status = value['status'];
+  const completion = value['completion'];
+  if (!isStrictJsonObject(completion)) return null;
+  const decision = completion['decision'];
+  const requestId = completion['requestId'];
+  if (requestId !== request.requestId || !isRequestId(requestId) || decision !== request.decision) {
+    return null;
+  }
+  if (decision === 'no') {
+    if (
+      !hasExactKeys(completion, ['decision', 'requestId']) ||
+      !(
+        (status === 'declined' && hasExactKeys(value, ['status', 'completion'])) ||
+        (status === 'replayed' && hasExactKeys(value, ['status', 'completion']))
+      )
+    ) {
+      return null;
+    }
+    const declinedCompletion = Object.freeze({ decision: 'no' as const, requestId });
+    return Object.freeze({ status, completion: declinedCompletion });
+  }
+
+  const acknowledgedRevision = completion['acknowledgedRevision'];
+  const timestamp = completion['timestamp'];
+  if (
+    !hasExactKeys(completion, ['decision', 'requestId', 'acknowledgedRevision', 'timestamp']) ||
+    !isNonZeroRevision(acknowledgedRevision) ||
+    !isTimestamp(timestamp)
+  ) {
+    return null;
+  }
+  const acceptedCompletion = Object.freeze({
+    decision: 'yes' as const,
+    requestId,
+    acknowledgedRevision,
+    timestamp,
+  });
+  if (status === 'accepted' && hasExactKeys(value, ['status', 'completion', 'acknowledgement'])) {
+    const acknowledgement = parseDashboardAcknowledgement(
+      value['acknowledgement'],
+      accountWorkspaceId,
+      {
+        transportVersion: 1,
+        expectedAccountWorkspaceId: accountWorkspaceId,
+        expectedRevision: '0',
+        requestId,
+        catalogueVersion: request.decision === 'yes' ? request.catalogueVersion : '',
+        dashboard: { version: 10, state: { dashboardEntries: [] } },
+      },
+    );
+    if (
+      acknowledgement === null ||
+      acknowledgement.revision !== acknowledgedRevision ||
+      acknowledgement.updatedAt !== timestamp
+    ) {
+      return null;
+    }
+    return Object.freeze({ status, completion: acceptedCompletion, acknowledgement });
+  }
+  if (status === 'replayed' && hasExactKeys(value, ['status', 'completion', 'acknowledgement'])) {
+    const acknowledgement = parseDashboardAcknowledgement(
+      value['acknowledgement'],
+      accountWorkspaceId,
+      {
+        transportVersion: 1,
+        expectedAccountWorkspaceId: accountWorkspaceId,
+        expectedRevision: '0',
+        requestId,
+        catalogueVersion: request.decision === 'yes' ? request.catalogueVersion : '',
+        dashboard: { version: 10, state: { dashboardEntries: [] } },
+      },
+    );
+    if (
+      acknowledgement === null ||
+      acknowledgement.revision !== acknowledgedRevision ||
+      acknowledgement.updatedAt !== timestamp
+    ) {
+      return null;
+    }
+    return Object.freeze({ status, completion: acceptedCompletion, acknowledgement });
+  }
+  if (status === 'replayed' && hasExactKeys(value, ['status', 'completion'])) {
+    return Object.freeze({ status, completion: acceptedCompletion });
+  }
+  return null;
 }
 
 function validateDashboardWriteRequest(
@@ -854,7 +1043,7 @@ export function createAccountApiClient(
 
   async function request(
     endpoint: string,
-    method: 'GET' | 'DELETE' | 'PUT',
+    method: 'GET' | 'DELETE' | 'PUT' | 'POST',
     signal: AbortSignal | undefined,
     headers: HeadersInit,
     body?: string,
@@ -1041,6 +1230,49 @@ export function createAccountApiClient(
         );
       }
       return acknowledgement;
+    },
+
+    async postAdoption(accountWorkspaceId, input, signal): Promise<AdoptionResponse> {
+      validateEndpointAccountId(accountWorkspaceId);
+      const requestValue = validateAdoptionRequest(input, accountWorkspaceId);
+      if (requestValue === null) {
+        throw new AccountApiError('request-invalid', 'The adoption request was invalid.');
+      }
+      let body: string;
+      try {
+        body = JSON.stringify(requestValue);
+      } catch {
+        throw new AccountApiError('request-invalid', 'The adoption request was invalid.');
+      }
+      if (new TextEncoder().encode(body).byteLength > MAX_DASHBOARD_REQUEST_BYTES) {
+        throw new AccountApiError('oversized', 'The adoption request exceeded its size limit.');
+      }
+      const csrf = csrfHeader(readCookie);
+      const { response, status } = await request(
+        '/api/dashboard/adoption',
+        'POST',
+        signal,
+        {
+          accept: 'application/json',
+          'content-type': 'application/json',
+          'x-csrf-token': csrf,
+        },
+        body,
+      );
+      if (status === 401) throw errorForStatus(status, 'UNAUTHENTICATED');
+      if (status !== 200) throw await readErrorResponse(response, status);
+      validateJsonContentType(response);
+      const result = parseAdoptionResponse(
+        await readJsonBody(response, MAX_ERROR_RESPONSE_BYTES),
+        accountWorkspaceId,
+        requestValue,
+      );
+      if (result === null) {
+        throw new AccountApiError('invalid-response', 'The adoption response was invalid.', {
+          status,
+        });
+      }
+      return result;
     },
   };
 }

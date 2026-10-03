@@ -1,0 +1,8 @@
+- Session: managed auth transition plan
+- Date/duration: 2026-10-04; not recorded
+- Scope/start: Planned the owner-approved managed-auth/online-account replacement from codex/account-sync-integration HEAD 25350c1 with uncommitted 6D-B work preserved.
+- Changes: Added MANAGED_AUTH_TRANSITION.md with owner setup, local checkpoint commands, four CLI prompts and a dependency-based retirement inventory; runtime files unchanged.
+- Decisions: Guest Zustand/LocalStorage remains offline-capable; account dashboards load/save online; Neon managed auth is the replacement direction; one-time guest copy remains.
+- Roadblocks: Existing custom-session SQL coupling needs adaptation; real managed identity reaching Node/Elysia must be proved before wider migration; old E2E failures remain historical unresolved evidence.
+- Verification: Repository/status/import/configuration and current primary Neon docs reviewed; independent handoff review PASS; pnpm session:check passed 73 entries, targeted formatting and git diff --check HEAD passed; runtime tests/live integration not run.
+- Follow-up: Owner preserves a local checkpoint and prepares a dedicated Neon Auth development branch; send Migration A to CLI plan; delete legacy runtime files only after callers are replaced.

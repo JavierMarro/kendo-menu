@@ -13,6 +13,7 @@ import { serializePersistedTrainingStateV10, type StateStorage } from '@kendo-me
 import { AccountApiError, createAccountApiClient } from '../../lib/account-api';
 import { createAccountWorkspaceController } from '../../lib/account-workspace';
 import { createWorkspaceCoordinator } from '../../lib/workspace-coordination';
+import { AdoptionDialog } from './AdoptionDialog';
 import {
   broadcastAccountTransition,
   subscribeToAccountTransitions,
@@ -20,6 +21,21 @@ import {
 import { TrainingStoreProvider } from '../../lib/training-store-provider';
 import { AccountPersistenceBridge } from '../persistence/AccountPersistenceBridge';
 import type { TrainingStoreApi } from '@kendo-menu/store';
+
+const GUEST_SIGN_IN_CONFIRMATION_TIMEOUT_MS = 5_000;
+
+function confirmGuestWorkspaceBeforeDeadline(confirmDurable: () => Promise<void>): Promise<void> {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = window.setTimeout(
+      () => reject(new Error('Guest storage confirmation timed out.')),
+      GUEST_SIGN_IN_CONFIRMATION_TIMEOUT_MS,
+    );
+  });
+  return Promise.race([confirmDurable(), timeout]).finally(() => {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  });
+}
 
 export type AccountWorkspaceController = ReturnType<typeof createAccountWorkspaceController>;
 export type AccountWorkspaceSnapshot = ReturnType<AccountWorkspaceController['getSnapshot']>;
@@ -37,6 +53,8 @@ export interface AccountWorkspaceContextValue {
     Awaited<ReturnType<AccountWorkspaceController['hideLocally']>>
   >;
   readonly startGoogleSignIn: () => void;
+  readonly chooseAdoption: (decision: 'yes' | 'no') => Promise<void>;
+  readonly retryAdoption: () => Promise<void>;
 }
 
 const AccountWorkspaceContext = createContext<AccountWorkspaceContextValue | null>(null);
@@ -48,7 +66,7 @@ interface AccountWorkspaceProviderProps {
   readonly guestStorage: StateStorage;
   readonly guestCleanup?: {
     readonly readRaw: () => string | null | Promise<string | null>;
-    readonly removeRaw: () => void | Promise<void>;
+    readonly confirmDurable: () => Promise<void>;
     readonly prepare: () => void | Promise<void>;
     readonly refreshFromRaw: (
       rawValue: string | null,
@@ -75,6 +93,18 @@ export function AccountWorkspaceProvider({
   const initialGuestStore = useRef(guestStore);
   const verificationGeneration = useRef(0);
   const verificationPending = useRef(false);
+  const verifiedSignedOut = useRef(false);
+  const signInInFlight = useRef(false);
+  const signInAttemptGeneration = useRef(0);
+  const restoredSessionGeneration = useRef(0);
+  const restoredSessionPending = useRef(false);
+  const [restoredSessionState, setRestoredSessionState] = useState<'idle' | 'checking' | 'failed'>(
+    'idle',
+  );
+  const [signInState, setSignInState] = useState<'idle' | 'saving' | 'failed'>('idle');
+  useEffect(() => {
+    if (signInState === 'saving') document.getElementById('guest-sign-in-status')?.focus();
+  }, [signInState]);
   const confirmedRevocationSequence = useRef(0);
   const externalExitGeneration = useRef(0);
   const externalExitInFlight = useRef(false);
@@ -105,6 +135,11 @@ export function AccountWorkspaceProvider({
       if (generation !== verificationGeneration.current) return null;
       verificationPending.current = false;
       const next = workspace.getSnapshot();
+      if (result.status === 'signed-out' && next.mode === 'guest') {
+        verifiedSignedOut.current = true;
+      } else if (result.status === 'ready' || next.mode !== 'guest') {
+        verifiedSignedOut.current = false;
+      }
       setOperationResult(result);
       setSnapshot(next);
       setVerification(
@@ -122,9 +157,32 @@ export function AccountWorkspaceProvider({
     [],
   );
 
+  const recheckRestoredSession = useCallback(
+    async (workspace: AccountWorkspaceController) => {
+      const generation = ++restoredSessionGeneration.current;
+      restoredSessionPending.current = true;
+      localGuestSelected.current = false;
+      verifiedSignedOut.current = false;
+      peerSignInPending.current = false;
+      externalSessionInFlight.current = false;
+      externalSessionWorkspace.current = null;
+      setExternalSessionState('none');
+      setRestoredSessionState('checking');
+      window.dispatchEvent(new Event('kendomenu:session-verification-started'));
+      const result = await runVerification(workspace, true);
+      if (generation !== restoredSessionGeneration.current) return;
+      restoredSessionPending.current = false;
+      setRestoredSessionState(
+        result?.status === 'ready' || result?.status === 'signed-out' ? 'idle' : 'failed',
+      );
+    },
+    [runVerification],
+  );
+
   const checkExternalSession = useCallback(
     async (workspace: AccountWorkspaceController) => {
       if (
+        restoredSessionPending.current ||
         localGuestSelected.current ||
         externalExitWorkspace.current !== null ||
         externalSessionInFlight.current
@@ -273,7 +331,6 @@ export function AccountWorkspaceProvider({
         : {
             guestCleanup: {
               readRaw: () => guestCleanup.readRaw(),
-              removeRaw: () => guestCleanup.removeRaw(),
               prepare: () => guestCleanup.prepare(),
               refreshFromRaw: async (
                 rawValue: string | null,
@@ -299,7 +356,7 @@ export function AccountWorkspaceProvider({
         setVerification((current) => (current === 'authenticated' ? 'retryable' : current));
       }
     });
-    const unsubscribeTransitions = subscribeToAccountTransitions((signal) => {
+    const transitions = subscribeToAccountTransitions((signal) => {
       if (signal === 'signed-out') {
         void secureExternalSignOut(workspace);
       } else if (signal === 'sign-in-started') {
@@ -332,15 +389,38 @@ export function AccountWorkspaceProvider({
       }
     });
     const reverifyVisibleAccount = () => {
+      if (restoredSessionPending.current) return;
       const mode = workspace.getSnapshot().mode;
+      if (
+        !transitions.available &&
+        verifiedSignedOut.current &&
+        !localGuestSelected.current &&
+        mode === 'guest' &&
+        !externalSessionInFlight.current
+      ) {
+        window.dispatchEvent(new Event('kendomenu:session-verification-started'));
+        void checkExternalSession(workspace);
+        return;
+      }
       if (!peerSignInPending.current && (mode === 'account' || mode === 'account-error'))
         void checkExternalSession(workspace);
     };
     const reverifyOnVisibility = () => {
       if (document.visibilityState !== 'hidden') reverifyVisibleAccount();
     };
+    const reverifyAfterBfCache = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      // A restored document carries presentation state only. Hide it until a fresh session
+      // request establishes which workspace, if any, belongs in this tab.
+      signInAttemptGeneration.current += 1;
+      signInInFlight.current = false;
+      setSignInState('idle');
+      setLocalGuestChoice(false);
+      void recheckRestoredSession(workspace);
+    };
     window.addEventListener('focus', reverifyVisibleAccount);
     document.addEventListener('visibilitychange', reverifyOnVisibility);
+    window.addEventListener('pageshow', reverifyAfterBfCache);
     // StrictMode replays effect setup and cleanup on the initial document. Schedule the
     // first check after that replay so one document sends one session request.
     const initialVerification = window.setTimeout(() => {
@@ -359,13 +439,21 @@ export function AccountWorkspaceProvider({
       externalSessionInFlight.current = false;
       externalSessionWorkspace.current = null;
       unsubscribe();
-      unsubscribeTransitions();
+      transitions.unsubscribe();
       window.removeEventListener('focus', reverifyVisibleAccount);
       document.removeEventListener('visibilitychange', reverifyOnVisibility);
+      window.removeEventListener('pageshow', reverifyAfterBfCache);
       void workspace.dispose();
       coordination.dispose();
     };
-  }, [checkExternalSession, guestCleanup, guestStorage, runVerification, secureExternalSignOut]);
+  }, [
+    checkExternalSession,
+    guestCleanup,
+    guestStorage,
+    recheckRestoredSession,
+    runVerification,
+    secureExternalSignOut,
+  ]);
 
   useEffect(() => {
     if (controller !== null && guestStore !== initialGuestStore.current) {
@@ -378,6 +466,22 @@ export function AccountWorkspaceProvider({
     snapshot.mode === 'account' &&
     (snapshot.persistencePending || snapshot.persistenceFailure !== null);
   const hiddenUnsavedAccountChanges = controller?.hasHiddenUnsavedAccountChanges() ?? false;
+  const restoreFocusAfterAdoption = useRef(false);
+  useEffect(() => {
+    if (
+      snapshot.mode === 'adoption-completing' ||
+      (snapshot.mode === 'account' && snapshot.adoption.status !== 'none')
+    ) {
+      restoreFocusAfterAdoption.current = true;
+    } else if (
+      snapshot.mode === 'account' &&
+      snapshot.adoption.status === 'none' &&
+      restoreFocusAfterAdoption.current
+    ) {
+      restoreFocusAfterAdoption.current = false;
+      document.getElementById('main-content')?.focus({ preventScroll: true });
+    }
+  }, [snapshot]);
   useEffect(() => {
     if (!accountWriteUnconfirmed && !hiddenUnsavedAccountChanges) return undefined;
     // Browsers may show a leave prompt for a pending account cache write. Unload prompts are
@@ -417,7 +521,10 @@ export function AccountWorkspaceProvider({
     if (generation !== verificationGeneration.current) {
       // A superseded logout can still have revoked the browser session. Its own
       // BroadcastChannel message is ignored, so preserve and hide this tab locally.
-      if (revocationConfirmed) void secureExternalSignOut(controller);
+      if (revocationConfirmed) {
+        const protectedExit = await secureExternalSignOut(controller);
+        if (protectedExit.status === 'hidden') window.location.replace('/app');
+      }
       return result;
     }
     verificationPending.current = false;
@@ -439,6 +546,7 @@ export function AccountWorkspaceProvider({
         setExternalSessionState('none');
       }
     }
+    if (result.status === 'signed-out') window.location.replace('/app');
     return result;
   }, [controller, secureExternalSignOut]);
 
@@ -448,14 +556,33 @@ export function AccountWorkspaceProvider({
   }, [controller, secureExternalSignOut]);
 
   const startGoogleSignIn = useCallback(() => {
-    localGuestSelected.current = false;
-    verificationGeneration.current += 1;
-    verificationPending.current = false;
-    controller?.beginSignIn();
-    broadcastAccountTransition('sign-in-started');
+    if (controller === null || signInInFlight.current) return;
+    const attempt = ++signInAttemptGeneration.current;
+    signInInFlight.current = true;
+    setSignInState('saving');
+    // The current document must cancel its own pending pixel at initiation.
     window.dispatchEvent(new Event('kendomenu:sign-in-started'));
-    window.location.assign('/api/auth/google/start');
-  }, [controller]);
+    void (async () => {
+      try {
+        if (guestCleanup === undefined) throw new Error('Guest storage is unavailable.');
+        await confirmGuestWorkspaceBeforeDeadline(guestCleanup.confirmDurable);
+      } catch {
+        if (attempt !== signInAttemptGeneration.current) return;
+        signInAttemptGeneration.current += 1;
+        signInInFlight.current = false;
+        setSignInState('failed');
+        return;
+      }
+      if (attempt !== signInAttemptGeneration.current) return;
+      localGuestSelected.current = false;
+      verifiedSignedOut.current = false;
+      verificationGeneration.current += 1;
+      verificationPending.current = false;
+      broadcastAccountTransition('sign-in-started');
+      controller.beginSignIn();
+      window.location.assign('/api/auth/google/start');
+    })();
+  }, [controller, guestCleanup]);
 
   const downloadExternalAccountBackup = useCallback(() => {
     const current = (
@@ -494,6 +621,8 @@ export function AccountWorkspaceProvider({
             signOut,
             openThisDevice,
             startGoogleSignIn,
+            chooseAdoption: controller.chooseAdoption,
+            retryAdoption: controller.retryAdoption,
           },
     [
       controller,
@@ -516,8 +645,21 @@ export function AccountWorkspaceProvider({
           <HiddenUnsavedAccountNotice onRetry={verifySession} />
         ) : null}
         <TrainingStoreProvider store={guestStore}>
-          {guestFallback ?? children}
+          <GuestWorkspaceSurface signInState={signInState} onRetry={startGoogleSignIn}>
+            {guestFallback ?? children}
+          </GuestWorkspaceSurface>
         </TrainingStoreProvider>
+      </AccountWorkspaceContext.Provider>
+    );
+  }
+
+  if (restoredSessionState !== 'idle') {
+    return (
+      <AccountWorkspaceContext.Provider value={value}>
+        <RestoredSessionGate
+          state={restoredSessionState}
+          onRetry={() => void recheckRestoredSession(value.controller)}
+        />
       </AccountWorkspaceContext.Provider>
     );
   }
@@ -620,15 +762,6 @@ export function AccountWorkspaceProvider({
                     Download account backup
                   </button>
                 ) : null}
-                <button
-                  className="text-button"
-                  type="button"
-                  onClick={() => {
-                    void openThisDevice();
-                  }}
-                >
-                  Use this device
-                </button>
               </div>
             ) : null}
             {externalBackupError ? (
@@ -652,24 +785,185 @@ export function AccountWorkspaceProvider({
         ) : null}
         {snapshot.mode === 'guest-refreshing' ? (
           <GuestWorkspaceRefresh />
+        ) : snapshot.mode === 'adoption-completing' ? (
+          <AdoptionCompletionGate />
         ) : (
           <AccountStorageRecovery />
         )}
       </AccountWorkspaceContext.Provider>
     );
   }
+  const activeAdoption =
+    snapshot.mode === 'account' ? snapshot.adoption : ({ status: 'none' } as const);
 
   return (
     <AccountWorkspaceContext.Provider value={value}>
       {hiddenUnsavedAccountChanges ? <HiddenUnsavedAccountNotice onRetry={verifySession} /> : null}
       <TrainingStoreProvider store={visibleStore}>
         {snapshot.mode === 'guest' ? (
-          (guestFallback ?? children)
+          <GuestWorkspaceSurface signInState={signInState} onRetry={startGoogleSignIn}>
+            {guestFallback ?? children}
+          </GuestWorkspaceSurface>
         ) : (
-          <AccountPersistenceBridge workspace={value}>{children}</AccountPersistenceBridge>
+          <AccountPersistenceBridge workspace={value}>
+            {activeAdoption.status === 'checking' ||
+            activeAdoption.status === 'completing' ||
+            (activeAdoption.status === 'retryable' && activeAdoption.decision === undefined) ||
+            activeAdoption.status === 'storage-recovery' ? (
+              <AdoptionProgress workspace={value} />
+            ) : (
+              <>
+                {children}
+                {activeAdoption.status === 'offer' ||
+                activeAdoption.status === 'submitting' ||
+                activeAdoption.status === 'retryable' ? (
+                  <AdoptionDialog
+                    state={activeAdoption}
+                    onChoose={(decision) => value.chooseAdoption(decision)}
+                    onRetry={value.retryAdoption}
+                  />
+                ) : null}
+              </>
+            )}
+          </AccountPersistenceBridge>
         )}
       </TrainingStoreProvider>
     </AccountWorkspaceContext.Provider>
+  );
+}
+
+function GuestWorkspaceSurface({
+  children,
+  signInState,
+  onRetry,
+}: {
+  readonly children: ReactNode;
+  readonly signInState: 'idle' | 'saving' | 'failed';
+  readonly onRetry: () => void;
+}) {
+  const retryRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (signInState === 'failed') retryRef.current?.focus({ preventScroll: true });
+  }, [signInState]);
+
+  return (
+    <>
+      {signInState === 'saving' ? (
+        <section
+          id="guest-sign-in-status"
+          className="persistence-recovery"
+          aria-labelledby="guest-sign-in-title"
+          role="status"
+          tabIndex={-1}
+        >
+          <div className="recovery-card">
+            <h1 id="guest-sign-in-title">Saving before sign-in</h1>
+            <p>KendoMenu is confirming your latest guest changes on this device.</p>
+          </div>
+        </section>
+      ) : null}
+      {signInState === 'failed' ? (
+        <aside className="persistence-warning" role="alert">
+          <h2>Guest changes could not be saved</h2>
+          <p>Your guest workspace is still here. Retry sign-in after storage recovers.</p>
+          <button ref={retryRef} className="primary-button" type="button" onClick={onRetry}>
+            Retry sign-in
+          </button>
+        </aside>
+      ) : null}
+      <div inert={signInState === 'saving'} aria-hidden={signInState === 'saving'}>
+        {children}
+      </div>
+    </>
+  );
+}
+
+function RestoredSessionGate({
+  state,
+  onRetry,
+}: {
+  readonly state: 'checking' | 'failed';
+  readonly onRetry: () => void;
+}) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    (state === 'failed' ? retryRef.current : headingRef.current)?.focus({ preventScroll: true });
+  }, [state]);
+
+  return (
+    <main className="persistence-recovery" aria-labelledby="restored-session-title">
+      <section className="recovery-card">
+        <p className="eyebrow">Account session</p>
+        <h1 id="restored-session-title" ref={headingRef} tabIndex={-1}>
+          Checking account status
+        </h1>
+        <p role={state === 'failed' ? 'alert' : 'status'}>
+          {state === 'failed'
+            ? 'KendoMenu could not verify the current account session. Retry before opening this device workspace.'
+            : 'KendoMenu is verifying the current account session before opening a workspace.'}
+        </p>
+        {state === 'failed' ? (
+          <button ref={retryRef} className="primary-button" type="button" onClick={onRetry}>
+            Retry account check
+          </button>
+        ) : null}
+      </section>
+    </main>
+  );
+}
+
+function AdoptionProgress({ workspace }: { readonly workspace: AccountWorkspaceContextValue }) {
+  const state = workspace.snapshot.mode === 'account' ? workspace.snapshot.adoption : null;
+  const storageFailure = state?.status === 'storage-recovery';
+  const decisionConfirmed = storageFailure && state.decisionConfirmed;
+  const decisionCompleting = state?.status === 'completing';
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
+  const retryVisible = storageFailure || state?.status === 'retryable';
+  const focusRecovery = retryVisible || decisionCompleting;
+
+  useEffect(() => {
+    if (!focusRecovery) return;
+    (retryVisible ? retryRef.current : headingRef.current)?.focus({ preventScroll: true });
+  }, [focusRecovery, retryVisible]);
+
+  return (
+    <main className="persistence-recovery" aria-labelledby="adoption-progress-title">
+      <section className="recovery-card">
+        <p className="eyebrow">Account workspace</p>
+        <h1 id="adoption-progress-title" ref={headingRef} tabIndex={-1}>
+          {decisionConfirmed || decisionCompleting
+            ? 'Saving your account decision'
+            : storageFailure
+              ? 'Recovering account storage'
+              : 'Checking your guest menus'}
+        </h1>
+        <p role={storageFailure ? 'alert' : 'status'} aria-live="polite">
+          {decisionConfirmed
+            ? 'The server confirmed your choice, but this device could not finish saving the account workspace. Your guest menus remain untouched. Retry to recover the account copy.'
+            : decisionCompleting
+              ? 'KendoMenu confirmed your choice and is saving the account workspace on this device. Your guest menus remain untouched.'
+              : storageFailure
+                ? 'This device could not safely read or prepare account storage. Your guest menus remain untouched, and no adoption decision was confirmed. Retry after storage recovers.'
+                : state?.status === 'retryable'
+                  ? 'KendoMenu could not check whether a guest copy is available. Your account menus remain protected until the check succeeds.'
+                  : 'KendoMenu is checking whether this new account can copy the complete guest workspace.'}
+        </p>
+        {storageFailure || state?.status === 'retryable' ? (
+          <button
+            ref={retryRef}
+            className="primary-button"
+            type="button"
+            onClick={() => void workspace.retryAdoption()}
+          >
+            Retry
+          </button>
+        ) : null}
+      </section>
+    </main>
   );
 }
 
@@ -716,9 +1010,27 @@ function GuestWorkspaceRefresh() {
   );
 }
 
+function AdoptionCompletionGate() {
+  return (
+    <main className="persistence-recovery" aria-labelledby="adoption-completion-title">
+      <section className="recovery-card">
+        <p className="eyebrow">Account workspace</p>
+        <h1 id="adoption-completion-title">Saving your account decision</h1>
+        <p role="status">
+          KendoMenu is confirming the saved account workspace. Keep this tab open.
+        </p>
+      </section>
+    </main>
+  );
+}
+
 function AccountStorageRecovery() {
   const workspace = useAccountWorkspace();
   const [feedback, setFeedback] = useState<string | null>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    retryRef.current?.focus({ preventScroll: true });
+  }, []);
   const isLogoutAvailable = workspace.snapshot.mode === 'account-error';
   const accountId = isLogoutAvailable ? workspace.snapshot.userId : null;
   const [recoveryPage, setRecoveryPage] = useState<{
@@ -793,6 +1105,7 @@ function AccountStorageRecovery() {
         ) : null}
         <div className="recovery-actions">
           <button
+            ref={retryRef}
             className="primary-button"
             type="button"
             onClick={() => {

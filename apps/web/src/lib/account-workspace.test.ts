@@ -1,8 +1,23 @@
-import { DEFAULT_TRAINING_SETS } from '@kendo-menu/domain';
-import { createTrainingStore, type StateStorage, type TrainingStoreApi } from '@kendo-menu/store';
+import { DEFAULT_TRAINING_SETS, getTrainingSetActivities } from '@kendo-menu/domain';
+import {
+  createTrainingStore,
+  serializePersistedTrainingStateV10,
+  type StateStorage,
+  type TrainingStoreApi,
+} from '@kendo-menu/store';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createAccountApiClient } from './account-api';
+import type { AccountSession, DashboardReadResponse, SessionResult } from './account-api';
+import type {
+  AccountSyncState,
+  AccountSyncMutationResult,
+  AccountSynchronizationDatabase,
+  AuthoritativeAdoptionCompletion,
+  PendingCompletion,
+  PendingRequestIntent,
+} from './account-database';
+import type { AccountSynchronizationLockProvider } from './account-synchronization';
 import {
   deriveAccountStorageKey,
   type AccountCacheRecord,
@@ -13,7 +28,10 @@ import {
   type AccountPayloadRecord,
   type AccountRecoveryRecord,
 } from './account-storage';
-import { createAccountWorkspaceController } from './account-workspace';
+import {
+  createAccountWorkspaceController,
+  type AccountWorkspaceOptions,
+} from './account-workspace';
 import {
   createWorkspaceCoordinator,
   type WorkspaceLockProvider,
@@ -48,6 +66,7 @@ class MemoryAccountDatabase implements AccountDatabase {
   readonly recovery: AccountRecoveryRecord[] = [];
   private nextIdentity = 0;
   onWrite: (() => void | Promise<void>) | undefined;
+  onSyncStateRead: (() => void | Promise<void>) | undefined;
   onRead: (() => void | Promise<void>) | undefined;
 
   async readCache(accountId: string): Promise<AccountCacheRecord | null> {
@@ -149,6 +168,228 @@ class MemoryAccountDatabase implements AccountDatabase {
   }
 }
 
+class MemorySynchronizationDatabase
+  extends MemoryAccountDatabase
+  implements AccountSynchronizationDatabase
+{
+  readonly state: AccountSyncState = {
+    cache: {
+      version: 1,
+      accountId: A,
+      cacheValue: empty,
+      identity: 'sync-cache',
+      generation: 0,
+    },
+    acknowledgement: { version: 1, status: 'unknown', provenance: 'new-empty' },
+    pendingRequest: null,
+    activeConflict: null,
+  };
+
+  constructor() {
+    super();
+    if (this.state.cache !== null) this.caches.set(A, this.state.cache);
+  }
+
+  async readSyncState(): Promise<AccountSyncState> {
+    await this.onSyncStateRead?.();
+    return this.state;
+  }
+
+  establishCloudBaseline(): Promise<AccountSyncMutationResult> {
+    return Promise.resolve({ status: 'committed', state: this.state });
+  }
+
+  fastForwardCleanCache(): Promise<AccountSyncMutationResult> {
+    return Promise.resolve({ status: 'committed', state: this.state });
+  }
+
+  preparePendingRequest(
+    accountId: string,
+    expected: { readonly identity: string; readonly generation: number },
+    intent: PendingRequestIntent,
+  ): Promise<AccountSyncMutationResult> {
+    if (intent.kind !== 'adoption')
+      return Promise.resolve({ status: 'mismatch', state: this.state });
+    Object.assign(this.state, {
+      pendingRequest: {
+        version: 1,
+        accountId,
+        kind: 'adoption',
+        cacheVersion: expected,
+        request: intent.request,
+        createdAt: Date.now(),
+      },
+    });
+    return Promise.resolve({ status: 'committed', state: this.state });
+  }
+
+  async acknowledgePendingRequest(
+    accountId: string,
+    requestId: string,
+    completion: PendingCompletion,
+  ): Promise<AccountSyncMutationResult> {
+    await this.onWrite?.();
+    const pending = this.state.pendingRequest;
+    const cache = this.state.cache;
+    if (
+      pending?.kind !== 'adoption' ||
+      pending.accountId !== accountId ||
+      pending.request.expectedAccountWorkspaceId !== accountId ||
+      pending.request.requestId !== requestId ||
+      pending.request.decision !== 'no' ||
+      completion.kind !== 'adoption-declined' ||
+      completion.requestId !== requestId ||
+      pending.cacheVersion.generation !== 0 ||
+      cache === null ||
+      cache.identity !== pending.cacheVersion.identity ||
+      cache.generation !== 0 ||
+      cache.cacheValue !== empty ||
+      this.state.activeConflict !== null
+    )
+      return { status: 'conflict', state: this.state };
+    Object.assign(this.state, {
+      acknowledgement: {
+        version: 1,
+        status: 'adoption-declined',
+        accountWorkspaceId: accountId,
+        requestId,
+        cacheIdentity: cache.identity,
+        generation: cache.generation,
+      },
+      pendingRequest: null,
+    });
+    return { status: 'committed', state: this.state };
+  }
+
+  async completeAcceptedAdoption(
+    accountId: string,
+    requestId: string,
+    acknowledgedRevision: string,
+    timestamp: string,
+  ): Promise<AccountSyncMutationResult> {
+    await this.onWrite?.();
+    const pending = this.state.pendingRequest;
+    const previous = this.state.cache;
+    if (
+      pending?.kind !== 'adoption' ||
+      pending.accountId !== accountId ||
+      pending.request.requestId !== requestId ||
+      pending.request.decision !== 'yes' ||
+      acknowledgedRevision !== '1' ||
+      previous === null
+    )
+      return { status: 'mismatch', state: this.state };
+    const record: AccountCacheRecord = {
+      version: 1,
+      accountId,
+      cacheValue: serializePersistedTrainingStateV10({
+        dashboardEntries: pending.request.dashboard.state.dashboardEntries,
+      }),
+      identity: 'accepted-adoption-cache',
+      generation: previous.generation + 1,
+    };
+    this.caches.set(accountId, record);
+    Object.assign(this.state, {
+      cache: record,
+      acknowledgement: {
+        version: 1,
+        status: 'acknowledged',
+        accountWorkspaceId: accountId,
+        revision: acknowledgedRevision,
+        requestId,
+        cacheIdentity: record.identity,
+        generation: record.generation,
+        updatedAt: timestamp,
+      },
+      pendingRequest: null,
+    });
+    return { status: 'committed', state: this.state };
+  }
+
+  async reconcileAuthoritativeAdoption(
+    accountId: string,
+    completion: AuthoritativeAdoptionCompletion,
+  ): Promise<AccountSyncMutationResult> {
+    await this.onWrite?.();
+    const pending = this.state.pendingRequest;
+    const cache = this.state.cache;
+    if (
+      pending?.kind !== 'adoption' ||
+      pending.accountId !== accountId ||
+      pending.request.expectedAccountWorkspaceId !== accountId ||
+      cache === null ||
+      cache.identity !== pending.cacheVersion.identity ||
+      pending.cacheVersion.generation !== 0 ||
+      cache.generation !== 0 ||
+      cache.cacheValue !== empty ||
+      this.state.activeConflict !== null
+    ) {
+      return { status: 'conflict', state: this.state };
+    }
+    if (completion.decision === 'yes') {
+      if (
+        completion.cloud.accountWorkspaceId !== accountId ||
+        completion.cloud.dashboard === null ||
+        BigInt(completion.cloud.revision) < BigInt(completion.acknowledgedRevision) ||
+        (completion.cloud.revision === completion.acknowledgedRevision &&
+          completion.cloud.updatedAt !== completion.timestamp)
+      )
+        return { status: 'conflict', state: this.state };
+      const value = JSON.stringify({ version: 10, state: completion.cloud.dashboard.state });
+      const record: AccountCacheRecord = {
+        version: 1,
+        accountId,
+        cacheValue: value,
+        identity: 'authoritative-adoption-cache',
+        generation: cache.generation + 1,
+      };
+      this.caches.set(accountId, record);
+      Object.assign(this.state, {
+        cache: record,
+        acknowledgement: {
+          version: 1,
+          status: 'acknowledged',
+          accountWorkspaceId: accountId,
+          revision: completion.cloud.revision,
+          requestId:
+            completion.cloud.revision === completion.acknowledgedRevision
+              ? completion.requestId
+              : null,
+          cacheIdentity: record.identity,
+          generation: record.generation,
+          updatedAt: completion.cloud.updatedAt,
+        },
+        pendingRequest: null,
+      });
+    } else {
+      Object.assign(this.state, {
+        acknowledgement: {
+          version: 1,
+          status: 'adoption-declined',
+          accountWorkspaceId: accountId,
+          requestId: completion.requestId,
+          cacheIdentity: cache.identity,
+          generation: cache.generation,
+        },
+        pendingRequest: null,
+      });
+    }
+    return { status: 'committed', state: this.state };
+  }
+
+  recordActiveConflict(): Promise<AccountSyncMutationResult> {
+    return Promise.resolve({ status: 'committed', state: this.state });
+  }
+
+  resolveConflictUsingCloud(): Promise<AccountSyncMutationResult> {
+    return Promise.resolve({ status: 'committed', state: this.state });
+  }
+
+  resolveConflictUsingLocal(): Promise<AccountSyncMutationResult> {
+    return Promise.resolve({ status: 'committed', state: this.state });
+  }
+}
+
 function deferred<T>() {
   let resolve: (value: T) => void = () => {
     throw new Error('uninitialized');
@@ -232,6 +473,90 @@ function fixture(withCoordination = true, guestRaw?: string) {
   };
 }
 
+function adoptionFixture(
+  postImplementation: AccountWorkspaceOptions['api']['postAdoption'] = () =>
+    Promise.reject(new Error('Fixture adoption response is unavailable')),
+  eligibleGuest = true,
+) {
+  const f = fixture();
+  if (eligibleGuest) {
+    const training = DEFAULT_TRAINING_SETS.find((set) =>
+      getTrainingSetActivities(set).some(
+        (activity) => activity.quantities?.repetitions !== undefined,
+      ),
+    );
+    if (training === undefined) throw new Error('Expected a training set with editable quantities');
+    f.guestStore.getState().addToDashboard(training.id);
+    const entry = f.guestStore.getState().dashboardEntries[0];
+    if (entry === undefined) throw new Error('Expected the guest dashboard entry');
+    f.guestStore.getState().updateDashboardEntry(entry.id, { notes: 'Preserve this guest note' });
+    const quantityActivity = getTrainingSetActivities(training).find(
+      (activity) => activity.quantities?.repetitions !== undefined,
+    );
+    if (quantityActivity === undefined) throw new Error('Expected a quantity override activity');
+    f.guestStore.getState().setQuantityOverride(entry.id, quantityActivity.id, 'repetitions', 17);
+  }
+  const syncDatabase = new MemorySynchronizationDatabase();
+  let session: AccountSession = {
+    userId: A,
+    verifiedGoogleEmail: null,
+    adoption: { status: 'pending', capability: true },
+  };
+  let cloud: DashboardReadResponse = {
+    transportVersion: 1,
+    accountWorkspaceId: A,
+    catalogueVersion: 'a'.repeat(64),
+    revision: '0',
+    dashboard: null,
+    updatedAt: null,
+  };
+  const getDashboard = vi.fn(() => Promise.resolve(cloud));
+  const postAdoption = vi.fn(postImplementation);
+  const getSession = vi.fn((): Promise<SessionResult> =>
+    Promise.resolve({ status: 'authenticated', session }),
+  );
+  const locks: AccountSynchronizationLockProvider = {
+    request: async (name, _options, callback) => await callback({ name, mode: 'exclusive' }),
+  };
+  const createController = () =>
+    createAccountWorkspaceController({
+      guestStore: f.guestStore,
+      storage: f.storage,
+      api: {
+        getSession,
+        logout: () => f.api.logout(),
+        postAdoption,
+      },
+      coordination: f.coordination,
+      database: f.database,
+      synchronization: {
+        api: {
+          getDashboard,
+          putDashboard: (accountId, request) => f.api.putDashboard(accountId, request),
+          postAdoption,
+        },
+        database: syncDatabase,
+        locks,
+      },
+    });
+  const controller = createController();
+  return {
+    ...f,
+    controller,
+    createController,
+    syncDatabase,
+    postAdoption,
+    getSession,
+    getDashboard,
+    setCloud: (next: DashboardReadResponse) => {
+      cloud = next;
+    },
+    setSession: (next: AccountSession) => {
+      session = next;
+    },
+  };
+}
+
 function add(store: TrainingStoreApi) {
   const training = DEFAULT_TRAINING_SETS[0];
   if (training === undefined) throw new Error('fixture missing');
@@ -239,6 +564,1739 @@ function add(store: TrainingStoreApi) {
 }
 
 describe('internal account bootstrap and isolation', () => {
+  it('keeps an ordinary revision-one dashboard save open when adoption becomes unavailable', async () => {
+    const f = adoptionFixture(undefined, false);
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    const opened = f.controller.getSnapshot();
+    expect(opened).toMatchObject({ mode: 'account', adoption: { status: 'none' } });
+    if (opened.mode !== 'account') throw new Error('Expected account workspace');
+    add(opened.store);
+    await f.controller.flushPersistence();
+    const saved = f.syncDatabase.caches.get(A);
+    if (saved === undefined) throw new Error('Expected a durable account edit');
+    Object.assign(f.syncDatabase.state, {
+      cache: saved,
+      acknowledgement: {
+        version: 1,
+        status: 'acknowledged',
+        accountWorkspaceId: A,
+        revision: '1',
+        requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        cacheIdentity: saved.identity,
+        generation: saved.generation,
+        updatedAt: '2026-09-30T10:00:00.000Z',
+      },
+    });
+    f.setSession({
+      userId: A,
+      verifiedGoogleEmail: null,
+      adoption: { status: 'unavailable', capability: false },
+    });
+
+    for (let check = 0; check < 2; check += 1) {
+      expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+      const current = f.controller.getSnapshot();
+      expect(current).toMatchObject({
+        mode: 'account',
+        session: { adoption: { status: 'unavailable' } },
+        adoption: { status: 'none' },
+      });
+      if (current.mode !== 'account') throw new Error('Expected an open account workspace');
+      expect(current.store.getState().dashboardEntries).toHaveLength(1);
+    }
+    expect(f.postAdoption).not.toHaveBeenCalled();
+    await f.controller.dispose();
+  });
+
+  it.each(['session refresh', 'stale choice'] as const)(
+    'closes a stale peer offer after an ordinary save on %s',
+    async (action) => {
+      const f = adoptionFixture();
+      const guestBefore = f.values.get('kendo-menu');
+      expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+      expect(f.controller.getSnapshot()).toMatchObject({
+        mode: 'account',
+        adoption: { status: 'offer' },
+      });
+      const previous = f.syncDatabase.state.cache;
+      if (previous === null) throw new Error('Expected initial account cache');
+      const saved: AccountCacheRecord = {
+        version: 1,
+        accountId: A,
+        cacheValue: serializePersistedTrainingStateV10({
+          dashboardEntries: f.guestStore.getState().dashboardEntries,
+        }),
+        identity: 'ordinary-peer-save',
+        generation: previous.generation + 1,
+      };
+      f.syncDatabase.caches.set(A, saved);
+      Object.assign(f.syncDatabase.state, {
+        cache: saved,
+        acknowledgement: {
+          version: 1,
+          status: 'acknowledged',
+          accountWorkspaceId: A,
+          revision: '1',
+          requestId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          cacheIdentity: saved.identity,
+          generation: saved.generation,
+          updatedAt: '2026-09-30T10:00:00.000Z',
+        },
+      });
+      f.setSession({
+        userId: A,
+        verifiedGoogleEmail: null,
+        adoption: { status: 'unavailable', capability: false },
+      });
+      f.setCloud({
+        transportVersion: 1,
+        accountWorkspaceId: A,
+        catalogueVersion: 'a'.repeat(64),
+        revision: '2',
+        dashboard: { version: 10, state: { dashboardEntries: [] } },
+        updatedAt: '2026-09-30T10:01:00.000Z',
+      });
+      const cloudReadsBefore = f.getDashboard.mock.calls.length;
+
+      if (action === 'session refresh')
+        expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+      else await f.controller.chooseAdoption('no');
+      const reopened = f.controller.getSnapshot();
+      expect(reopened).toMatchObject({
+        mode: 'account',
+        session: { adoption: { status: 'unavailable' } },
+        adoption: { status: 'none' },
+      });
+      if (reopened.mode !== 'account') throw new Error('Expected authoritative account cache');
+      expect(reopened.store.getState().dashboardEntries).toHaveLength(1);
+      expect(f.values.get('kendo-menu')).toBe(guestBefore);
+      expect(f.postAdoption).not.toHaveBeenCalled();
+      await vi.waitFor(
+        () => expect(f.getDashboard.mock.calls.length).toBeGreaterThan(cloudReadsBefore),
+        { timeout: 3_000 },
+      );
+      await f.controller.dispose();
+    },
+  );
+
+  it('keeps guest mode hidden while a stale offer rehydrates the ordinary peer cache', async () => {
+    const f = adoptionFixture();
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    const previous = f.syncDatabase.state.cache;
+    if (previous === null) throw new Error('Expected initial account cache');
+    const saved: AccountCacheRecord = {
+      version: 1,
+      accountId: A,
+      cacheValue: serializePersistedTrainingStateV10({
+        dashboardEntries: f.guestStore.getState().dashboardEntries,
+      }),
+      identity: 'held-ordinary-peer-save',
+      generation: 1,
+    };
+    f.syncDatabase.caches.set(A, saved);
+    Object.assign(f.syncDatabase.state, {
+      cache: saved,
+      acknowledgement: {
+        version: 1,
+        status: 'acknowledged',
+        accountWorkspaceId: A,
+        revision: '1',
+        requestId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        cacheIdentity: saved.identity,
+        generation: saved.generation,
+        updatedAt: '2026-09-30T10:00:00.000Z',
+      },
+    });
+    f.setSession({
+      userId: A,
+      verifiedGoogleEmail: null,
+      adoption: { status: 'unavailable', capability: false },
+    });
+    const gate = deferred<void>();
+    let readStarted = false;
+    f.syncDatabase.onRead = async () => {
+      readStarted = true;
+      await gate.promise;
+    };
+
+    const rechecking = f.controller.bootstrap();
+    await vi.waitFor(() => expect(readStarted).toBe(true));
+    expect(f.controller.getSnapshot().mode).toBe('adoption-completing');
+    gate.resolve();
+    expect(await rechecking).toEqual({ status: 'ready' });
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'none' },
+    });
+    await f.controller.dispose();
+  });
+
+  it('does not offer adoption over a durable revision-zero PUT when a peer adds guest data', async () => {
+    const f = adoptionFixture(undefined, false);
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    const opened = f.controller.getSnapshot();
+    if (opened.mode !== 'account') throw new Error('Expected account workspace');
+
+    add(opened.store);
+    await f.controller.flushPersistence();
+    const cache = f.syncDatabase.caches.get(A);
+    if (cache === undefined) throw new Error('Expected the durable account edit');
+    const request = {
+      transportVersion: 1 as const,
+      expectedAccountWorkspaceId: A,
+      expectedRevision: '0' as const,
+      requestId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      catalogueVersion: 'a'.repeat(64),
+      dashboard: {
+        version: 10 as const,
+        state: { dashboardEntries: opened.store.getState().dashboardEntries },
+      },
+    };
+    const pending = {
+      version: 1 as const,
+      accountId: A,
+      kind: 'dashboard-put' as const,
+      cacheVersion: { identity: cache.identity, generation: cache.generation },
+      request,
+      createdAt: Date.now(),
+    };
+    f.syncDatabase.caches.set(A, cache);
+    Object.assign(f.syncDatabase.state, { cache, pendingRequest: pending });
+
+    const peerGuestStore = createTrainingStore({ storage: f.storage });
+    add(peerGuestStore);
+    const guestBefore = f.values.get('kendo-menu');
+    expect(guestBefore).toBeDefined();
+
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'none' },
+    });
+    expect(f.syncDatabase.state.pendingRequest).toEqual(pending);
+    expect(f.syncDatabase.state.cache).toEqual(cache);
+    expect(f.postAdoption).not.toHaveBeenCalled();
+    expect(f.values.get('kendo-menu')).toBe(guestBefore);
+    await f.controller.dispose();
+  });
+
+  it.each(['choice', 'retry'] as const)(
+    'rehydrates an untouched stale offer for a peer pending ordinary PUT on %s',
+    async (action) => {
+      const f = adoptionFixture();
+      expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+      expect(f.controller.getSnapshot()).toMatchObject({
+        mode: 'account',
+        adoption: { status: 'offer' },
+      });
+      const guestBefore = f.values.get('kendo-menu');
+      const dashboardEntries = f.guestStore.getState().dashboardEntries;
+      const saved: AccountCacheRecord = {
+        version: 1,
+        accountId: A,
+        cacheValue: serializePersistedTrainingStateV10({ dashboardEntries }),
+        identity: `peer-pending-${action}`,
+        generation: 1,
+      };
+      const pending = {
+        version: 1 as const,
+        accountId: A,
+        kind: 'dashboard-put' as const,
+        cacheVersion: { identity: saved.identity, generation: saved.generation },
+        request: {
+          transportVersion: 1 as const,
+          expectedAccountWorkspaceId: A,
+          expectedRevision: '0' as const,
+          requestId:
+            action === 'choice'
+              ? '12121212-1212-4212-8212-121212121212'
+              : '34343434-3434-4434-8434-343434343434',
+          catalogueVersion: 'a'.repeat(64),
+          dashboard: { version: 10 as const, state: { dashboardEntries } },
+        },
+        createdAt: Date.now(),
+      };
+      f.database.caches.set(A, saved);
+      f.syncDatabase.caches.set(A, saved);
+      Object.assign(f.syncDatabase.state, { cache: saved, pendingRequest: pending });
+
+      if (action === 'choice') await f.controller.chooseAdoption('yes');
+      else await f.controller.retryAdoption();
+
+      const reopened = f.controller.getSnapshot();
+      expect(reopened).toMatchObject({ mode: 'account', adoption: { status: 'none' } });
+      if (reopened.mode !== 'account') throw new Error('Expected the peer pending cache to reopen');
+      expect(reopened.store.getState().dashboardEntries).toEqual(dashboardEntries);
+      expect(f.syncDatabase.state.pendingRequest).toEqual(pending);
+      expect(f.postAdoption).not.toHaveBeenCalled();
+      expect(f.values.get('kendo-menu')).toBe(guestBefore);
+      await f.controller.dispose();
+    },
+  );
+
+  it('rehydrates a newer local cache while an earlier ordinary generation remains pending', async () => {
+    const f = adoptionFixture();
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    const guestBefore = f.values.get('kendo-menu');
+    const peerValues = new Map<string, string>();
+    const peerStore = createTrainingStore({
+      storage: {
+        getItem: (key) => peerValues.get(key) ?? null,
+        setItem: (key, value) => peerValues.set(key, value),
+        removeItem: (key) => peerValues.delete(key),
+      },
+    });
+    const first = DEFAULT_TRAINING_SETS[0];
+    const second = DEFAULT_TRAINING_SETS[1];
+    if (first === undefined || second === undefined) throw new Error('Expected two training sets');
+    peerStore.getState().addToDashboard(first.id);
+    const pendingDashboardEntries = peerStore.getState().dashboardEntries;
+    peerStore.getState().addToDashboard(second.id);
+    const latestDashboardEntries = peerStore.getState().dashboardEntries;
+    const saved: AccountCacheRecord = {
+      version: 1,
+      accountId: A,
+      cacheValue: serializePersistedTrainingStateV10({
+        dashboardEntries: latestDashboardEntries,
+      }),
+      identity: 'peer-pending-with-later-edit',
+      generation: 2,
+    };
+    const pending = {
+      version: 1 as const,
+      accountId: A,
+      kind: 'dashboard-put' as const,
+      cacheVersion: { identity: saved.identity, generation: 1 },
+      request: {
+        transportVersion: 1 as const,
+        expectedAccountWorkspaceId: A,
+        expectedRevision: '0' as const,
+        requestId: '78787878-7878-4878-8878-787878787878',
+        catalogueVersion: 'a'.repeat(64),
+        dashboard: {
+          version: 10 as const,
+          state: { dashboardEntries: pendingDashboardEntries },
+        },
+      },
+      createdAt: Date.now(),
+    };
+    f.database.caches.set(A, saved);
+    f.syncDatabase.caches.set(A, saved);
+    Object.assign(f.syncDatabase.state, { cache: saved, pendingRequest: pending });
+
+    await f.controller.chooseAdoption('yes');
+
+    const reopened = f.controller.getSnapshot();
+    expect(reopened).toMatchObject({ mode: 'account', adoption: { status: 'none' } });
+    if (reopened.mode !== 'account') throw new Error('Expected the latest peer cache to reopen');
+    expect(reopened.store.getState().dashboardEntries).toEqual(latestDashboardEntries);
+    expect(f.syncDatabase.state.pendingRequest).toEqual(pending);
+    expect(f.syncDatabase.state.cache).toEqual(saved);
+    expect(f.postAdoption).not.toHaveBeenCalled();
+    expect(f.values.get('kendo-menu')).toBe(guestBefore);
+    await f.controller.dispose();
+  });
+
+  it('blocks a stale offer when a pending ordinary request is not bound to its shared cache', async () => {
+    const f = adoptionFixture();
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    const guestBefore = f.values.get('kendo-menu');
+    const dashboardEntries = f.guestStore.getState().dashboardEntries;
+    const saved: AccountCacheRecord = {
+      version: 1,
+      accountId: A,
+      cacheValue: serializePersistedTrainingStateV10({ dashboardEntries }),
+      identity: 'divergent-peer-pending',
+      generation: 1,
+    };
+    f.database.caches.set(A, saved);
+    f.syncDatabase.caches.set(A, saved);
+    Object.assign(f.syncDatabase.state, {
+      cache: saved,
+      pendingRequest: {
+        version: 1,
+        accountId: A,
+        kind: 'dashboard-put',
+        cacheVersion: { identity: saved.identity, generation: saved.generation },
+        request: {
+          transportVersion: 1,
+          expectedAccountWorkspaceId: A,
+          expectedRevision: '0',
+          requestId: '56565656-5656-4656-8656-565656565656',
+          catalogueVersion: 'a'.repeat(64),
+          dashboard: { version: 10, state: { dashboardEntries: [] } },
+        },
+        createdAt: Date.now(),
+      },
+    });
+
+    await f.controller.chooseAdoption('yes');
+
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'storage-recovery', decisionConfirmed: false },
+    });
+    expect(f.syncDatabase.state.cache).toEqual(saved);
+    expect(f.postAdoption).not.toHaveBeenCalled();
+    expect(f.values.get('kendo-menu')).toBe(guestBefore);
+    await f.controller.dispose();
+  });
+
+  it('rehydrates a peer ordinary save at cache generation two acknowledged at cloud revision one', async () => {
+    const f = adoptionFixture();
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'offer' },
+    });
+    const guestBefore = f.values.get('kendo-menu');
+    const dashboardEntries = f.guestStore.getState().dashboardEntries;
+    const savedValue = serializePersistedTrainingStateV10({ dashboardEntries });
+    const saved: AccountCacheRecord = {
+      version: 1,
+      accountId: A,
+      cacheValue: savedValue,
+      identity: 'ordinary-peer-generation-two',
+      generation: 2,
+    };
+    f.database.caches.set(A, saved);
+    f.syncDatabase.caches.set(A, saved);
+    Object.assign(f.syncDatabase.state, {
+      cache: saved,
+      acknowledgement: {
+        version: 1,
+        status: 'acknowledged',
+        accountWorkspaceId: A,
+        revision: '1',
+        requestId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+        cacheIdentity: saved.identity,
+        generation: saved.generation,
+        updatedAt: '2026-09-30T10:00:00.000Z',
+      },
+    });
+    f.setSession({
+      userId: A,
+      verifiedGoogleEmail: null,
+      adoption: { status: 'unavailable', capability: false },
+    });
+    await f.controller.chooseAdoption('no');
+
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      session: { adoption: { status: 'unavailable' } },
+      adoption: { status: 'none' },
+    });
+    const reopened = f.controller.getSnapshot();
+    if (reopened.mode !== 'account') throw new Error('Expected the peer account cache to reopen');
+    expect(reopened.store.getState().dashboardEntries).toEqual(dashboardEntries);
+    expect(f.postAdoption).not.toHaveBeenCalled();
+    expect(f.values.get('kendo-menu')).toBe(guestBefore);
+    await f.controller.dispose();
+  });
+
+  it('keeps a generation-two peer cache blocked when its acknowledgement is still at generation one', async () => {
+    const f = adoptionFixture();
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    const guestBefore = f.values.get('kendo-menu');
+    const dashboardEntries = f.guestStore.getState().dashboardEntries;
+    const saved: AccountCacheRecord = {
+      version: 1,
+      accountId: A,
+      cacheValue: serializePersistedTrainingStateV10({ dashboardEntries }),
+      identity: 'divergent-peer-generation-two',
+      generation: 2,
+    };
+    f.database.caches.set(A, saved);
+    f.syncDatabase.caches.set(A, saved);
+    Object.assign(f.syncDatabase.state, {
+      cache: saved,
+      acknowledgement: {
+        version: 1,
+        status: 'acknowledged',
+        accountWorkspaceId: A,
+        revision: '1',
+        requestId: 'abababab-abab-4bab-8bab-abababababab',
+        cacheIdentity: 'previous-peer-generation',
+        generation: 1,
+        updatedAt: '2026-09-30T10:00:00.000Z',
+      },
+    });
+    f.setSession({
+      userId: A,
+      verifiedGoogleEmail: null,
+      adoption: { status: 'unavailable', capability: false },
+    });
+
+    await f.controller.chooseAdoption('no');
+
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account-error',
+      storageFailure: 'unavailable',
+    });
+    expect(f.syncDatabase.state.cache).toEqual(saved);
+    expect(f.postAdoption).not.toHaveBeenCalled();
+    expect(f.values.get('kendo-menu')).toBe(guestBefore);
+    await f.controller.dispose();
+  });
+
+  it('resumes a pending ordinary PUT after the verified session makes adoption unavailable', async () => {
+    const f = adoptionFixture(undefined, false);
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    const opened = f.controller.getSnapshot();
+    if (opened.mode !== 'account') throw new Error('Expected account workspace');
+    add(opened.store);
+    await f.controller.flushPersistence();
+    const cache = f.syncDatabase.caches.get(A);
+    if (cache === undefined) throw new Error('Expected a durable account edit');
+    Object.assign(f.syncDatabase.state, {
+      cache,
+      pendingRequest: {
+        version: 1,
+        accountId: A,
+        kind: 'dashboard-put',
+        cacheVersion: { identity: cache.identity, generation: cache.generation },
+        request: {
+          transportVersion: 1,
+          expectedAccountWorkspaceId: A,
+          expectedRevision: '0',
+          requestId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          catalogueVersion: 'a'.repeat(64),
+          dashboard: {
+            version: 10,
+            state: { dashboardEntries: opened.store.getState().dashboardEntries },
+          },
+        },
+        createdAt: Date.now(),
+      },
+    });
+    f.setSession({
+      userId: A,
+      verifiedGoogleEmail: null,
+      adoption: { status: 'unavailable', capability: false },
+    });
+
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'none' },
+      session: { adoption: { status: 'unavailable' } },
+    });
+    expect(f.syncDatabase.state.pendingRequest?.kind).toBe('dashboard-put');
+    await f.controller.dispose();
+  });
+
+  it('releases a stalled adoption eligibility read into explicit recovery', async () => {
+    const f = adoptionFixture();
+    f.getDashboard.mockImplementationOnce(() => new Promise<never>(() => undefined));
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'storage-recovery', decisionConfirmed: false },
+    });
+    await f.controller.dispose();
+  }, 15_000);
+
+  it('releases a stalled adoption POST while retaining the durable choice for retry', async () => {
+    const f = adoptionFixture();
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    f.postAdoption.mockImplementationOnce(() => new Promise<never>(() => undefined));
+    await f.controller.chooseAdoption('no');
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'retryable', decision: 'no' },
+    });
+    expect(f.syncDatabase.state.pendingRequest).toMatchObject({
+      kind: 'adoption',
+      request: { decision: 'no' },
+    });
+    await f.controller.dispose();
+  }, 15_000);
+
+  it('keeps a cold account activation blocked until durable adoption state is read', async () => {
+    const f = adoptionFixture();
+    const gate = deferred<void>();
+    let readStarted = false;
+    f.syncDatabase.onSyncStateRead = async () => {
+      readStarted = true;
+      await gate.promise;
+    };
+
+    const opening = f.controller.bootstrap();
+    await vi.waitFor(() => expect(readStarted).toBe(true));
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'checking' },
+    });
+
+    gate.resolve();
+    expect(await opening).toEqual({ status: 'ready' });
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'offer', entryCount: 1 },
+    });
+    await f.controller.dispose();
+  });
+
+  it('closes a stale same-account editor when a terminal receipt has no durable cache', async () => {
+    const f = adoptionFixture();
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'offer', entryCount: 1 },
+    });
+
+    f.setSession({
+      userId: A,
+      verifiedGoogleEmail: null,
+      adoption: {
+        status: 'accepted',
+        capability: false,
+        completion: {
+          decision: 'yes',
+          requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          acknowledgedRevision: '1',
+          timestamp: '2026-09-30T10:00:00.000Z',
+        },
+      },
+    });
+
+    expect(await f.controller.bootstrap()).toEqual({ status: 'retryable', reason: 'storage' });
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account-error',
+      session: { adoption: { status: 'accepted' } },
+    });
+    await f.controller.dispose();
+  });
+
+  it.each(['yes', 'no'] as const)(
+    'rehydrates a stale offer after another controller completes %s in shared storage',
+    async (decision) => {
+      const timestamp = '2026-09-30T10:00:00.000Z';
+      const post: AccountWorkspaceOptions['api']['postAdoption'] = (accountId, request) => {
+        if (request.decision === 'yes') {
+          f.setSession({
+            userId: A,
+            verifiedGoogleEmail: null,
+            adoption: {
+              status: 'accepted',
+              capability: false,
+              completion: {
+                decision: 'yes',
+                requestId: request.requestId,
+                acknowledgedRevision: '1',
+                timestamp,
+              },
+            },
+          });
+          return Promise.resolve({
+            status: 'accepted',
+            completion: {
+              decision: 'yes',
+              requestId: request.requestId,
+              acknowledgedRevision: '1',
+              timestamp,
+            },
+            acknowledgement: {
+              transportVersion: 1,
+              accountWorkspaceId: accountId,
+              requestId: request.requestId,
+              revision: '1',
+              updatedAt: timestamp,
+            },
+          });
+        }
+        f.setSession({
+          userId: A,
+          verifiedGoogleEmail: null,
+          adoption: {
+            status: 'declined',
+            capability: false,
+            completion: { decision: 'no', requestId: request.requestId },
+          },
+        });
+        return Promise.resolve({
+          status: 'declined',
+          completion: { decision: 'no', requestId: request.requestId },
+        });
+      };
+      const f = adoptionFixture(post);
+      const peer = f.createController();
+      const guestBefore = f.values.get('kendo-menu');
+      expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+      expect(await peer.bootstrap()).toEqual({ status: 'ready' });
+      expect(peer.getSnapshot()).toMatchObject({ mode: 'account', adoption: { status: 'offer' } });
+
+      await f.controller.chooseAdoption(decision);
+      expect(f.syncDatabase.state.pendingRequest).toBeNull();
+      expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+      expect(f.controller.getSnapshot().mode).toBe('account');
+      await peer.chooseAdoption(decision === 'yes' ? 'no' : 'yes');
+      expect(peer.getSnapshot()).toMatchObject({
+        mode: 'account',
+        adoption: { status: 'none' },
+      });
+      expect(f.postAdoption).toHaveBeenCalledTimes(1);
+      expect(f.syncDatabase.state.cache?.generation).toBe(decision === 'yes' ? 1 : 0);
+      const peerSnapshot = peer.getSnapshot();
+      expect(
+        peerSnapshot.mode === 'account'
+          ? peerSnapshot.store.getState().dashboardEntries.length
+          : -1,
+      ).toBe(decision === 'yes' ? 1 : 0);
+      expect(f.values.get('kendo-menu')).toBe(guestBefore);
+      await peer.dispose();
+      await f.controller.dispose();
+    },
+  );
+
+  it('rehydrates a peer completion that lands after the choice first reads shared storage', async () => {
+    const f = adoptionFixture();
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'offer' },
+    });
+    const requestId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const timestamp = '2026-09-30T10:00:00.000Z';
+    const terminal: AccountSession = {
+      userId: A,
+      verifiedGoogleEmail: null,
+      adoption: {
+        status: 'accepted',
+        capability: false,
+        completion: { decision: 'yes', requestId, acknowledgedRevision: '1', timestamp },
+      },
+    };
+    const cache: AccountCacheRecord = {
+      version: 1,
+      accountId: A,
+      cacheValue: serializePersistedTrainingStateV10({
+        dashboardEntries: f.guestStore.getState().dashboardEntries,
+      }),
+      identity: 'peer-after-first-read',
+      generation: 1,
+    };
+    f.setSession(terminal);
+    f.getSession.mockImplementationOnce(() => {
+      // chooseAdoption already observed the old generation-zero state. The peer's
+      // transaction becomes visible as the guarded session check completes.
+      f.syncDatabase.caches.set(A, cache);
+      Object.assign(f.syncDatabase.state, {
+        cache,
+        pendingRequest: null,
+        acknowledgement: {
+          version: 1,
+          status: 'acknowledged',
+          accountWorkspaceId: A,
+          revision: '1',
+          requestId,
+          cacheIdentity: cache.identity,
+          generation: 1,
+          updatedAt: timestamp,
+        },
+      });
+      return Promise.resolve({ status: 'authenticated', session: terminal });
+    });
+
+    await f.controller.chooseAdoption('no');
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'none' },
+    });
+    const snapshot = f.controller.getSnapshot();
+    expect(
+      snapshot.mode === 'account' ? snapshot.store.getState().dashboardEntries.length : -1,
+    ).toBe(1);
+    expect(f.postAdoption).not.toHaveBeenCalled();
+    await f.controller.dispose();
+  });
+
+  it('keeps a completed peer cache gated until the server verifies the terminal account decision', async () => {
+    const timestamp = '2026-09-30T10:00:00.000Z';
+    const post: AccountWorkspaceOptions['api']['postAdoption'] = (accountId, request) => {
+      if (request.decision !== 'yes') return Promise.reject(new Error('Expected Yes'));
+      f.setSession({
+        userId: A,
+        verifiedGoogleEmail: null,
+        adoption: {
+          status: 'accepted',
+          capability: false,
+          completion: {
+            decision: 'yes',
+            requestId: request.requestId,
+            acknowledgedRevision: '1',
+            timestamp,
+          },
+        },
+      });
+      return Promise.resolve({
+        status: 'accepted',
+        completion: {
+          decision: 'yes',
+          requestId: request.requestId,
+          acknowledgedRevision: '1',
+          timestamp,
+        },
+        acknowledgement: {
+          transportVersion: 1,
+          accountWorkspaceId: accountId,
+          requestId: request.requestId,
+          revision: '1',
+          updatedAt: timestamp,
+        },
+      });
+    };
+    const f = adoptionFixture(post);
+    const peer = f.createController();
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    expect(await peer.bootstrap()).toEqual({ status: 'ready' });
+    await f.controller.chooseAdoption('yes');
+    f.setSession({
+      userId: A,
+      verifiedGoogleEmail: null,
+      adoption: { status: 'pending', capability: true },
+    });
+    await peer.chooseAdoption('no');
+    expect(peer.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'storage-recovery', decisionConfirmed: false },
+    });
+    const acknowledgement = f.syncDatabase.state.acknowledgement;
+    if (acknowledgement.status !== 'acknowledged' || acknowledgement.requestId === null)
+      throw new Error('Expected completed peer adoption');
+    f.setSession({
+      userId: A,
+      verifiedGoogleEmail: null,
+      adoption: {
+        status: 'accepted',
+        capability: false,
+        completion: {
+          decision: 'yes',
+          requestId: acknowledgement.requestId,
+          acknowledgedRevision: '1',
+          timestamp,
+        },
+      },
+    });
+    await peer.retryAdoption();
+    expect(peer.getSnapshot()).toMatchObject({ mode: 'account', adoption: { status: 'none' } });
+    await peer.dispose();
+    await f.controller.dispose();
+  });
+
+  it.each([
+    { local: 'yes', winner: 'no' },
+    { local: 'no', winner: 'yes' },
+  ] as const)(
+    'reconciles the other tab’s authoritative $winner decision over local $local',
+    async ({ local, winner }) => {
+      const authoritativeRequestId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const timestamp = '2026-09-30T10:00:00.000Z';
+      const post: AccountWorkspaceOptions['api']['postAdoption'] = () => {
+        f.setSession({
+          userId: A,
+          verifiedGoogleEmail: null,
+          adoption:
+            winner === 'yes'
+              ? {
+                  status: 'accepted',
+                  capability: false,
+                  completion: {
+                    decision: 'yes',
+                    requestId: authoritativeRequestId,
+                    acknowledgedRevision: '1',
+                    timestamp,
+                  },
+                }
+              : {
+                  status: 'declined',
+                  capability: false,
+                  completion: { decision: 'no', requestId: authoritativeRequestId },
+                },
+        });
+        if (winner === 'yes') {
+          f.setCloud({
+            transportVersion: 1,
+            accountWorkspaceId: A,
+            catalogueVersion: 'a'.repeat(64),
+            revision: '1',
+            dashboard: { version: 10, state: { dashboardEntries: [] } },
+            updatedAt: timestamp,
+          });
+        }
+        return Promise.reject(new Error('ADOPTION_UNAVAILABLE'));
+      };
+      const f = adoptionFixture(post);
+      const guestBefore = f.values.get('kendo-menu');
+      expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+
+      await f.controller.chooseAdoption(local);
+
+      expect(f.syncDatabase.state.pendingRequest).toBeNull();
+      expect(f.syncDatabase.state.acknowledgement).toMatchObject(
+        winner === 'yes'
+          ? {
+              status: 'acknowledged',
+              requestId: authoritativeRequestId,
+              revision: '1',
+              updatedAt: timestamp,
+            }
+          : { status: 'adoption-declined', requestId: authoritativeRequestId },
+      );
+      expect(f.syncDatabase.state.cache?.cacheValue).toContain('"dashboardEntries":[]');
+      expect(f.values.get('kendo-menu')).toBe(guestBefore);
+      expect(f.controller.getSnapshot()).toMatchObject({
+        mode: 'account',
+        adoption: { status: 'none' },
+      });
+
+      await f.controller.dispose();
+      const reloaded = f.createController();
+      expect(await reloaded.bootstrap()).toEqual({ status: 'ready' });
+      expect(reloaded.getSnapshot()).toMatchObject({
+        mode: 'account',
+        adoption: { status: 'none' },
+      });
+      expect(f.syncDatabase.state.pendingRequest).toBeNull();
+      await reloaded.dispose();
+    },
+  );
+
+  it.each(['yes', 'no'] as const)(
+    'reconciles a same-decision terminal receipt with another tab’s request ID (%s)',
+    async (decision) => {
+      const authoritativeRequestId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const timestamp = '2026-09-30T10:00:00.000Z';
+      const post: AccountWorkspaceOptions['api']['postAdoption'] = () => {
+        f.setSession({
+          userId: A,
+          verifiedGoogleEmail: null,
+          adoption:
+            decision === 'yes'
+              ? {
+                  status: 'accepted',
+                  capability: false,
+                  completion: {
+                    decision: 'yes',
+                    requestId: authoritativeRequestId,
+                    acknowledgedRevision: '1',
+                    timestamp,
+                  },
+                }
+              : {
+                  status: 'declined',
+                  capability: false,
+                  completion: { decision: 'no', requestId: authoritativeRequestId },
+                },
+        });
+        if (decision === 'yes') {
+          f.setCloud({
+            transportVersion: 1,
+            accountWorkspaceId: A,
+            catalogueVersion: 'a'.repeat(64),
+            revision: '1',
+            dashboard: { version: 10, state: { dashboardEntries: [] } },
+            updatedAt: timestamp,
+          });
+        }
+        return Promise.reject(new Error('ADOPTION_UNAVAILABLE'));
+      };
+      const f = adoptionFixture(post);
+      expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+      await f.controller.chooseAdoption(decision);
+
+      expect(f.syncDatabase.state.pendingRequest).toBeNull();
+      expect(f.syncDatabase.state.acknowledgement).toMatchObject({
+        requestId: authoritativeRequestId,
+        status: decision === 'yes' ? 'acknowledged' : 'adoption-declined',
+      });
+      if (decision === 'yes') {
+        expect(f.syncDatabase.state.cache?.cacheValue).toContain('"dashboardEntries":[]');
+        expect(f.syncDatabase.state.cache?.cacheValue).not.toContain('Preserve this guest note');
+      }
+      await f.controller.dispose();
+    },
+  );
+
+  it('recovers a losing tab after 409 and a later authoritative session receipt', async () => {
+    const timestamp = '2026-09-30T10:00:00.000Z';
+    const authoritativeRequestId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const post: AccountWorkspaceOptions['api']['postAdoption'] = () =>
+      Promise.reject(new Error('ADOPTION_UNAVAILABLE'));
+    const f = adoptionFixture(post);
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    await f.controller.chooseAdoption('yes');
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'retryable', decision: 'yes' },
+    });
+    expect(f.syncDatabase.state.pendingRequest).toMatchObject({ kind: 'adoption' });
+
+    f.setSession({
+      userId: A,
+      verifiedGoogleEmail: null,
+      adoption: {
+        status: 'accepted',
+        capability: false,
+        completion: {
+          decision: 'yes',
+          requestId: authoritativeRequestId,
+          acknowledgedRevision: '1',
+          timestamp,
+        },
+      },
+    });
+    f.setCloud({
+      transportVersion: 1,
+      accountWorkspaceId: A,
+      catalogueVersion: 'a'.repeat(64),
+      revision: '1',
+      dashboard: { version: 10, state: { dashboardEntries: [] } },
+      updatedAt: timestamp,
+    });
+    await f.controller.retryAdoption();
+
+    expect(f.postAdoption).toHaveBeenCalledTimes(1);
+    expect(f.syncDatabase.state.pendingRequest).toBeNull();
+    expect(f.syncDatabase.state.acknowledgement).toMatchObject({
+      requestId: authoritativeRequestId,
+      revision: '1',
+      updatedAt: timestamp,
+    });
+    await f.controller.dispose();
+  });
+
+  it('installs the later authenticated cloud revision without attributing it to adoption', async () => {
+    const post: AccountWorkspaceOptions['api']['postAdoption'] = () =>
+      Promise.reject(new Error('ADOPTION_UNAVAILABLE'));
+    const f = adoptionFixture(post);
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    await f.controller.chooseAdoption('yes');
+    const guestBefore = f.values.get('kendo-menu');
+
+    f.setSession({
+      userId: A,
+      verifiedGoogleEmail: null,
+      adoption: {
+        status: 'accepted',
+        capability: false,
+        completion: {
+          decision: 'yes',
+          requestId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+          acknowledgedRevision: '1',
+          timestamp: '2026-09-30T10:00:00.000Z',
+        },
+      },
+    });
+    f.setCloud({
+      transportVersion: 1,
+      accountWorkspaceId: A,
+      catalogueVersion: 'a'.repeat(64),
+      revision: '2',
+      dashboard: { version: 10, state: { dashboardEntries: [] } },
+      updatedAt: '2026-09-30T10:01:00.000Z',
+    });
+    await f.controller.retryAdoption();
+
+    expect(f.syncDatabase.state.pendingRequest).toBeNull();
+    expect(f.syncDatabase.state.cache?.cacheValue).toContain('"dashboardEntries":[]');
+    expect(f.syncDatabase.state.acknowledgement).toMatchObject({
+      status: 'acknowledged',
+      revision: '2',
+      updatedAt: '2026-09-30T10:01:00.000Z',
+      requestId: null,
+    });
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'none' },
+    });
+    expect(f.values.get('kendo-menu')).toBe(guestBefore);
+    await f.controller.dispose();
+  });
+
+  it('uses the latest cloud snapshot even when the terminal receipt matches the pending request', async () => {
+    const f = adoptionFixture();
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    await f.controller.chooseAdoption('yes');
+    const pending = f.syncDatabase.state.pendingRequest;
+    if (pending?.kind !== 'adoption') throw new Error('Expected pending Yes request');
+    f.setSession({
+      userId: A,
+      verifiedGoogleEmail: null,
+      adoption: {
+        status: 'accepted',
+        capability: false,
+        completion: {
+          decision: 'yes',
+          requestId: pending.request.requestId,
+          acknowledgedRevision: '1',
+          timestamp: '2026-09-30T10:00:00.000Z',
+        },
+      },
+    });
+    f.setCloud({
+      transportVersion: 1,
+      accountWorkspaceId: A,
+      catalogueVersion: 'a'.repeat(64),
+      revision: '2',
+      dashboard: { version: 10, state: { dashboardEntries: [] } },
+      updatedAt: '2026-09-30T10:01:00.000Z',
+    });
+    await f.controller.retryAdoption();
+    expect(f.syncDatabase.state.acknowledgement).toMatchObject({
+      status: 'acknowledged',
+      revision: '2',
+      requestId: null,
+    });
+    expect(f.syncDatabase.state.cache?.cacheValue).not.toContain('Preserve this guest note');
+    await f.controller.dispose();
+  });
+
+  it('keeps the adoption gate closed when identity changes during cloud reconciliation', async () => {
+    const f = adoptionFixture();
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    await f.controller.chooseAdoption('yes');
+    const pending = f.syncDatabase.state.pendingRequest;
+    const cloudRead = deferred<DashboardReadResponse>();
+    f.getDashboard.mockImplementationOnce(() => cloudRead.promise);
+    const previousCloudReads = f.getDashboard.mock.calls.length;
+    f.setSession({
+      userId: A,
+      verifiedGoogleEmail: null,
+      adoption: {
+        status: 'accepted',
+        capability: false,
+        completion: {
+          decision: 'yes',
+          requestId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+          acknowledgedRevision: '1',
+          timestamp: '2026-09-30T10:00:00.000Z',
+        },
+      },
+    });
+    const retry = f.controller.retryAdoption();
+    await vi.waitFor(() =>
+      expect(f.getDashboard.mock.calls.length).toBeGreaterThan(previousCloudReads),
+    );
+    f.setSession({
+      userId: B,
+      verifiedGoogleEmail: null,
+      adoption: { status: 'unavailable', capability: false },
+    });
+    cloudRead.resolve({
+      transportVersion: 1,
+      accountWorkspaceId: A,
+      catalogueVersion: 'a'.repeat(64),
+      revision: '1',
+      dashboard: { version: 10, state: { dashboardEntries: [] } },
+      updatedAt: '2026-09-30T10:00:00.000Z',
+    });
+    await retry;
+    expect(f.syncDatabase.state.pendingRequest).toEqual(pending);
+    expect(f.syncDatabase.state.acknowledgement.status).toBe('unknown');
+    expect(f.controller.getSnapshot().mode).toBe('guest');
+    await f.controller.dispose();
+  });
+
+  it.each([
+    { label: 'zero', revision: '0', updatedAt: null, dashboard: null, accountId: A },
+    {
+      label: 'lower',
+      revision: '1',
+      updatedAt: '2026-09-30T10:01:00.000Z',
+      dashboard: { version: 10, state: { dashboardEntries: [] } },
+      accountId: A,
+    },
+    {
+      label: 'malformed',
+      revision: 'bogus',
+      updatedAt: '2026-09-30T10:01:00.000Z',
+      dashboard: { version: 10, state: { dashboardEntries: [] } },
+      accountId: A,
+    },
+    {
+      label: 'wrong account',
+      revision: '2',
+      updatedAt: '2026-09-30T10:01:00.000Z',
+      dashboard: { version: 10, state: { dashboardEntries: [] } },
+      accountId: B,
+    },
+    {
+      label: 'invalid timestamp',
+      revision: '2',
+      updatedAt: '2026-99-30T10:01:00.000Z',
+      dashboard: { version: 10, state: { dashboardEntries: [] } },
+      accountId: A,
+    },
+  ] as const)(
+    'keeps pending adoption intact for a $label authoritative dashboard',
+    async ({ revision, updatedAt, dashboard, accountId }) => {
+      const f = adoptionFixture();
+      expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+      await f.controller.chooseAdoption('yes');
+      const pending = f.syncDatabase.state.pendingRequest;
+      f.setSession({
+        userId: A,
+        verifiedGoogleEmail: null,
+        adoption: {
+          status: 'accepted',
+          capability: false,
+          completion: {
+            decision: 'yes',
+            requestId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+            acknowledgedRevision: '2',
+            timestamp: '2026-09-30T10:00:00.000Z',
+          },
+        },
+      });
+      f.setCloud({
+        transportVersion: 1,
+        accountWorkspaceId: accountId,
+        catalogueVersion: 'a'.repeat(64),
+        revision,
+        dashboard,
+        updatedAt,
+      });
+      await f.controller.retryAdoption();
+      expect(f.syncDatabase.state.pendingRequest).toEqual(pending);
+      expect(f.syncDatabase.state.acknowledgement.status).toBe('unknown');
+      expect(f.controller.getSnapshot().mode).toBe('account-error');
+      await f.controller.dispose();
+    },
+  );
+
+  it('keeps reconciliation blocked when the cache diverges or IndexedDB fails', async () => {
+    for (const failure of ['diverged', 'indexeddb'] as const) {
+      const authoritativeRequestId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      let terminalAvailable = false;
+      const post: AccountWorkspaceOptions['api']['postAdoption'] = () => {
+        f.setSession(
+          terminalAvailable
+            ? {
+                userId: A,
+                verifiedGoogleEmail: null,
+                adoption: {
+                  status: 'declined',
+                  capability: false,
+                  completion: { decision: 'no', requestId: authoritativeRequestId },
+                },
+              }
+            : {
+                userId: A,
+                verifiedGoogleEmail: null,
+                adoption: { status: 'pending', capability: true },
+              },
+        );
+        return Promise.reject(new Error('ADOPTION_UNAVAILABLE'));
+      };
+      const f = adoptionFixture(post);
+      expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+      await f.controller.chooseAdoption('yes');
+      const pending = f.syncDatabase.state.pendingRequest;
+      if (pending === null) throw new Error('Expected the pending local adoption request');
+      const originalCache = f.syncDatabase.state.cache;
+      if (originalCache === null) throw new Error('Expected the account cache');
+      if (failure === 'diverged') {
+        Object.assign(f.syncDatabase.state, {
+          cache: { ...originalCache, generation: 1 },
+        });
+      } else {
+        f.syncDatabase.onWrite = () => Promise.reject(new Error('IndexedDB quota fixture'));
+      }
+      terminalAvailable = true;
+      f.setSession({
+        userId: A,
+        verifiedGoogleEmail: null,
+        adoption: {
+          status: 'declined',
+          capability: false,
+          completion: { decision: 'no', requestId: authoritativeRequestId },
+        },
+      });
+      await f.controller.retryAdoption();
+      expect(f.syncDatabase.state.pendingRequest).toEqual(pending);
+      expect(f.syncDatabase.state.cache?.cacheValue).toBe(originalCache.cacheValue);
+      expect(f.controller.getSnapshot().mode).toBe('account-error');
+      await f.controller.dispose();
+    }
+  });
+
+  it.each(['yes', 'no'] as const)(
+    'keeps a durable %s decision request stable across retry and reload',
+    async (decision) => {
+      const f = adoptionFixture();
+      expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+
+      await f.controller.chooseAdoption(decision);
+      expect(f.controller.getSnapshot()).toMatchObject({
+        mode: 'account',
+        adoption: { status: 'retryable', decision },
+      });
+      const pending = f.syncDatabase.state.pendingRequest;
+      if (pending?.kind !== 'adoption') throw new Error('Expected a durable adoption request');
+      const originalRequest = pending.request;
+      expect(f.postAdoption).toHaveBeenCalledTimes(1);
+      expect(f.postAdoption.mock.calls[0]?.[1]).toEqual(originalRequest);
+
+      if (decision === 'yes') {
+        if (originalRequest.decision !== 'yes') throw new Error('Expected a Yes request');
+        const payloadEntry = originalRequest.dashboard.state.dashboardEntries[0];
+        if (payloadEntry === undefined) throw new Error('Expected the guest payload entry');
+        expect(payloadEntry.notes).toBe('Preserve this guest note');
+        expect(Object.keys(payloadEntry.quantityOverrides)).toHaveLength(1);
+        expect(Object.values(payloadEntry.quantityOverrides)[0]).toMatchObject({ repetitions: 17 });
+      } else {
+        expect(Object.keys(originalRequest).sort()).toEqual([
+          'decision',
+          'expectedAccountWorkspaceId',
+          'requestId',
+          'transportVersion',
+        ]);
+      }
+
+      await f.controller.retryAdoption();
+      expect(f.postAdoption).toHaveBeenCalledTimes(2);
+      expect(f.postAdoption.mock.calls[1]?.[1]).toEqual(originalRequest);
+
+      await f.controller.dispose();
+      const restored = f.createController();
+      expect(await restored.bootstrap()).toEqual({ status: 'ready' });
+      await vi.waitFor(() => expect(f.postAdoption).toHaveBeenCalledTimes(3));
+      expect(f.postAdoption.mock.calls[2]?.[1]).toEqual(originalRequest);
+      expect(f.syncDatabase.state.pendingRequest).toMatchObject({
+        kind: 'adoption',
+        request: { decision, requestId: originalRequest.requestId },
+      });
+      await restored.dispose();
+    },
+  );
+
+  it('completes from a matching Yes response when the following session request fails', async () => {
+    const timestamp = '2026-09-30T10:00:00.000Z';
+    const acceptedResponse: AccountWorkspaceOptions['api']['postAdoption'] = (
+      accountId,
+      request,
+    ) => {
+      if (request.decision !== 'yes') {
+        return Promise.reject(new Error('Expected a Yes request'));
+      }
+      return Promise.resolve({
+        status: 'accepted',
+        completion: {
+          decision: 'yes',
+          requestId: request.requestId,
+          acknowledgedRevision: '1',
+          timestamp,
+        },
+        acknowledgement: {
+          transportVersion: 1,
+          accountWorkspaceId: accountId,
+          requestId: request.requestId,
+          revision: '1',
+          updatedAt: timestamp,
+        },
+      });
+    };
+    const f = adoptionFixture(acceptedResponse);
+    let sessionReads = 0;
+    f.getSession.mockImplementation(() => {
+      sessionReads += 1;
+      if (sessionReads === 3) {
+        expect(f.syncDatabase.state.pendingRequest).toBeNull();
+        return Promise.reject(new Error('Session endpoint unavailable after acceptance'));
+      }
+      return Promise.resolve({
+        status: 'authenticated' as const,
+        session: {
+          userId: A,
+          verifiedGoogleEmail: null,
+          adoption: { status: 'pending', capability: true },
+        },
+      });
+    });
+
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    await f.controller.chooseAdoption('yes');
+
+    expect(f.syncDatabase.state.pendingRequest).toBeNull();
+    expect(f.syncDatabase.state.acknowledgement).toMatchObject({
+      status: 'acknowledged',
+      revision: '1',
+      updatedAt: timestamp,
+    });
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      session: { adoption: { status: 'accepted' } },
+      adoption: { status: 'none' },
+    });
+    expect(f.syncDatabase.state.cache?.cacheValue).toContain('Preserve this guest note');
+    expect(sessionReads).toBe(2);
+    expect(f.values.get('kendo-menu')).toContain('Preserve this guest note');
+    await f.controller.dispose();
+  });
+
+  it('recovers a lost No response from the matching terminal session receipt', async () => {
+    const lostResponse: AccountWorkspaceOptions['api']['postAdoption'] = (_accountId, request) => {
+      f.setSession({
+        userId: A,
+        verifiedGoogleEmail: null,
+        adoption: {
+          status: 'declined',
+          capability: false,
+          completion: { decision: 'no', requestId: request.requestId },
+        },
+      });
+      return Promise.reject(new Error('The accepted response was lost'));
+    };
+    const f = adoptionFixture(lostResponse);
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+
+    await f.controller.chooseAdoption('no');
+
+    expect(f.syncDatabase.state.pendingRequest).toBeNull();
+    expect(f.syncDatabase.state.acknowledgement).toMatchObject({
+      status: 'adoption-declined',
+      accountWorkspaceId: A,
+      requestId: f.postAdoption.mock.calls[0]?.[1].requestId,
+    });
+    expect(f.postAdoption).toHaveBeenCalledTimes(1);
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'none' },
+    });
+    await f.controller.dispose();
+  });
+
+  it.each(['signed-out', 'different-account'] as const)(
+    'hides account A when adoption recovery verifies %s',
+    async (identityResult) => {
+      const f = adoptionFixture(() => Promise.reject(new Error('Response was lost')));
+      expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+      let recoveryReads = 0;
+      f.getSession.mockImplementation(() => {
+        recoveryReads += 1;
+        if (recoveryReads === 1) {
+          return Promise.resolve({
+            status: 'authenticated' as const,
+            session: {
+              userId: A,
+              verifiedGoogleEmail: null,
+              adoption: { status: 'pending' as const, capability: true },
+            },
+          });
+        }
+        return Promise.resolve(
+          identityResult === 'signed-out'
+            ? { status: 'signed-out' as const }
+            : {
+                status: 'authenticated' as const,
+                session: {
+                  userId: B,
+                  verifiedGoogleEmail: null,
+                  adoption: { status: 'unavailable' as const, capability: false },
+                },
+              },
+        );
+      });
+
+      await f.controller.chooseAdoption('no');
+
+      expect(f.controller.getSnapshot().mode).toBe('guest');
+      expect(f.syncDatabase.state.pendingRequest).toMatchObject({
+        kind: 'adoption',
+        request: { decision: 'no' },
+      });
+      await f.controller.dispose();
+    },
+  );
+
+  it('keeps a declined request pending when the account cache diverges before completion', async () => {
+    const response: AccountWorkspaceOptions['api']['postAdoption'] = (accountId, request) => {
+      if (request.decision !== 'no') return Promise.reject(new Error('Expected No'));
+      const cache = f.syncDatabase.state.cache;
+      if (cache !== null) {
+        Object.assign(f.syncDatabase.state, {
+          cache: { ...cache, generation: 1 },
+        });
+      }
+      return Promise.resolve({
+        status: 'declined',
+        completion: { decision: 'no', requestId: request.requestId },
+      });
+    };
+    const f = adoptionFixture(response);
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+
+    await f.controller.chooseAdoption('no');
+
+    expect(f.syncDatabase.state.pendingRequest).toMatchObject({
+      kind: 'adoption',
+      request: { decision: 'no' },
+    });
+    expect(f.syncDatabase.state.cache).toMatchObject({ generation: 1, cacheValue: empty });
+    expect(f.syncDatabase.state.acknowledgement.status).not.toBe('adoption-declined');
+    expect(f.controller.getSnapshot()).toMatchObject({ mode: 'account-error' });
+    await f.controller.dispose();
+  });
+
+  it('keeps editing hidden when acceptance is confirmed but the cache transaction fails', async () => {
+    const timestamp = '2026-09-30T10:00:00.000Z';
+    const acceptedResponse: AccountWorkspaceOptions['api']['postAdoption'] = (
+      accountId,
+      request,
+    ) => {
+      if (request.decision !== 'yes') return Promise.reject(new Error('Expected a Yes request'));
+      return Promise.resolve({
+        status: 'accepted',
+        completion: {
+          decision: 'yes',
+          requestId: request.requestId,
+          acknowledgedRevision: '1',
+          timestamp,
+        },
+        acknowledgement: {
+          transportVersion: 1,
+          accountWorkspaceId: accountId,
+          requestId: request.requestId,
+          revision: '1',
+          updatedAt: timestamp,
+        },
+      });
+    };
+    const f = adoptionFixture(acceptedResponse);
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+    f.syncDatabase.onWrite = () => {
+      throw new Error('IndexedDB quota fixture');
+    };
+
+    await f.controller.chooseAdoption('yes');
+
+    expect(f.controller.getSnapshot()).toMatchObject({ mode: 'account-error', userId: A });
+    expect(f.syncDatabase.state.pendingRequest).toMatchObject({
+      kind: 'adoption',
+      request: { decision: 'yes' },
+    });
+    expect(f.values.get('kendo-menu')).toContain('Preserve this guest note');
+    await f.controller.dispose();
+  });
+
+  it('keeps a dedicated blocked state while the accepted cache transaction is pending', async () => {
+    const gate = deferred<void>();
+    const response: AccountWorkspaceOptions['api']['postAdoption'] = (accountId, request) => {
+      if (request.decision !== 'yes') return Promise.reject(new Error('Expected Yes'));
+      f.syncDatabase.onWrite = () => gate.promise;
+      const timestamp = '2026-09-30T10:00:00.000Z';
+      return Promise.resolve({
+        status: 'accepted',
+        completion: {
+          decision: 'yes',
+          requestId: request.requestId,
+          acknowledgedRevision: '1',
+          timestamp,
+        },
+        acknowledgement: {
+          transportVersion: 1,
+          accountWorkspaceId: accountId,
+          requestId: request.requestId,
+          revision: '1',
+          updatedAt: timestamp,
+        },
+      });
+    };
+    const f = adoptionFixture(response);
+    expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+
+    const choosing = f.controller.chooseAdoption('yes');
+    await vi.waitFor(() =>
+      expect(f.controller.getSnapshot()).toMatchObject({
+        mode: 'account',
+        adoption: { status: 'completing', decision: 'yes' },
+      }),
+    );
+    gate.resolve();
+    await choosing;
+    expect(f.controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      session: { adoption: { status: 'accepted' } },
+      adoption: { status: 'none' },
+    });
+    await f.controller.dispose();
+  });
+
+  it.each(['yes', 'no'] as const)(
+    'does not reopen a signed-out account after a held %s completion commits',
+    async (decision) => {
+      const gate = deferred<void>();
+      const response: AccountWorkspaceOptions['api']['postAdoption'] = (accountId, request) => {
+        if (request.decision !== decision) return Promise.reject(new Error('Wrong decision'));
+        f.syncDatabase.onWrite = () => gate.promise;
+        const completion = {
+          decision: 'yes' as const,
+          requestId: request.requestId,
+          acknowledgedRevision: '1',
+          timestamp: '2026-09-30T10:00:00.000Z',
+        };
+        return Promise.resolve(
+          decision === 'yes'
+            ? {
+                status: 'accepted',
+                completion,
+                acknowledgement: {
+                  transportVersion: 1,
+                  accountWorkspaceId: accountId,
+                  requestId: request.requestId,
+                  revision: '1',
+                  updatedAt: completion.timestamp,
+                },
+              }
+            : { status: 'declined', completion: { decision: 'no', requestId: request.requestId } },
+        );
+      };
+      const f = adoptionFixture(response);
+      expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+      const choosing = f.controller.chooseAdoption(decision);
+      await vi.waitFor(() =>
+        expect(f.controller.getSnapshot()).toMatchObject({
+          mode: 'account',
+          adoption: { status: 'completing', decision },
+        }),
+      );
+      f.getSession.mockResolvedValue({ status: 'signed-out' });
+      f.syncDatabase.onWrite = undefined;
+      expect(await f.controller.bootstrap()).toEqual({ status: 'signed-out' });
+      gate.resolve();
+      await choosing;
+      expect(f.controller.getSnapshot().mode).toBe('guest');
+      expect(f.syncDatabase.state.pendingRequest).toBeNull();
+      await f.controller.dispose();
+    },
+  );
+
+  it.each(['yes', 'no'] as const)(
+    'does not replace a newly verified account B after a held %s completion commits for A',
+    async (decision) => {
+      const gate = deferred<void>();
+      const response: AccountWorkspaceOptions['api']['postAdoption'] = (accountId, request) => {
+        if (request.decision !== decision) return Promise.reject(new Error('Wrong decision'));
+        f.syncDatabase.onWrite = () => gate.promise;
+        const timestamp = '2026-09-30T10:00:00.000Z';
+        return Promise.resolve(
+          decision === 'yes'
+            ? {
+                status: 'accepted',
+                completion: {
+                  decision: 'yes',
+                  requestId: request.requestId,
+                  acknowledgedRevision: '1',
+                  timestamp,
+                },
+                acknowledgement: {
+                  transportVersion: 1,
+                  accountWorkspaceId: accountId,
+                  requestId: request.requestId,
+                  revision: '1',
+                  updatedAt: timestamp,
+                },
+              }
+            : { status: 'declined', completion: { decision: 'no', requestId: request.requestId } },
+        );
+      };
+      const f = adoptionFixture(response);
+      expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+      const choosing = f.controller.chooseAdoption(decision);
+      await vi.waitFor(() =>
+        expect(f.controller.getSnapshot()).toMatchObject({
+          mode: 'account',
+          adoption: { status: 'completing', decision },
+        }),
+      );
+      f.setSession({
+        userId: B,
+        verifiedGoogleEmail: null,
+        adoption: { status: 'unavailable', capability: false },
+      });
+      f.syncDatabase.onWrite = undefined;
+      expect(await f.controller.bootstrap()).toEqual({ status: 'ready' });
+      gate.resolve();
+      await choosing;
+      expect(f.controller.getSnapshot()).toMatchObject({ mode: 'account', userId: B });
+      await f.controller.dispose();
+    },
+  );
+
+  it('refreshes the offer when guest content changes without changing its displayed count', async () => {
+    const f = fixture();
+    add(f.guestStore);
+    const guestRaw = f.values.get('kendo-menu');
+    if (guestRaw === undefined) throw new Error('Expected the guest snapshot');
+
+    const verifiedSession: AccountSession = {
+      userId: A,
+      verifiedGoogleEmail: null,
+      adoption: { status: 'pending', capability: true },
+    };
+    const syncDatabase = new MemorySynchronizationDatabase();
+    const cloud: DashboardReadResponse = {
+      transportVersion: 1,
+      accountWorkspaceId: A,
+      catalogueVersion: 'a'.repeat(64),
+      revision: '0',
+      dashboard: null,
+      updatedAt: null,
+    };
+    const postAdoptionRequest: AccountWorkspaceOptions['api']['postAdoption'] = (
+      accountId,
+      request,
+    ) => f.api.postAdoption(accountId, request);
+    const postAdoption = vi.fn(postAdoptionRequest);
+    const controller = createAccountWorkspaceController({
+      guestStore: f.guestStore,
+      storage: f.storage,
+      api: {
+        getSession: vi.fn(() =>
+          Promise.resolve({ status: 'authenticated' as const, session: verifiedSession }),
+        ),
+        logout: () => f.api.logout(),
+        postAdoption,
+      },
+      coordination: f.coordination,
+      database: f.database,
+      synchronization: {
+        api: {
+          getDashboard: vi.fn(() => Promise.resolve(cloud)),
+          putDashboard: (accountId, request) => f.api.putDashboard(accountId, request),
+          postAdoption,
+        },
+        database: syncDatabase,
+        locks: {
+          request: async (name, _options, callback) => await callback({ name, mode: 'exclusive' }),
+        },
+      },
+    });
+
+    expect(await controller.bootstrap()).toEqual({ status: 'ready' });
+    expect(controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'offer', entryCount: 1 },
+    });
+    const guestEntry = f.guestStore.getState().dashboardEntries[0];
+    if (guestEntry === undefined) throw new Error('Expected one guest entry');
+    f.guestStore.getState().updateDashboardEntry(guestEntry.id, { notes: 'Changed after offer' });
+    const updatedGuestRaw = f.values.get('kendo-menu');
+    expect(updatedGuestRaw).not.toBe(guestRaw);
+
+    await controller.chooseAdoption('yes');
+
+    expect(controller.getSnapshot()).toMatchObject({
+      mode: 'account',
+      adoption: { status: 'offer', entryCount: 1 },
+    });
+    expect(postAdoption).not.toHaveBeenCalled();
+    expect(syncDatabase.state.pendingRequest).toBeNull();
+    expect(f.values.get('kendo-menu')).toBe(updatedGuestRaw);
+    await controller.dispose();
+  });
+
   it('exposes account write pending state and waits for durable readback on flush', async () => {
     const f = fixture();
     await expect(f.controller.bootstrap()).resolves.toMatchObject({ status: 'ready' });
@@ -508,9 +2566,6 @@ describe('internal account bootstrap and isolation', () => {
       database: f.database,
       guestCleanup: {
         readRaw: () => f.values.get('kendo-menu') ?? null,
-        removeRaw: () => {
-          f.values.delete('kendo-menu');
-        },
         prepare: () => {
           prepared = true;
         },

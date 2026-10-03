@@ -50,19 +50,20 @@ activity quantities and notes can be adapted without mutating the built-in libra
 - The guest dashboard uses Zustand with browser LocalStorage; a verified signed-in dashboard uses
   Zustand with an account-scoped IndexedDB cache and cloud API. Persisted JSON is untrusted and must
   be validated, versioned, and migrated when its shape changes.
-- The verified account workspace foundation and local backend contracts are implemented on the
-  integration branch. Public Google entry and guest adoption remain unmounted in 6D-A; the account
-  service has not been deployed or connected to real Google accounts. This document does not
-  authorize deployment or provisioning. Paid tiers and initialization of `apps/mobile` remain out
-  of scope.
+- The integration checkout implements public Google entry, the verified account workspace, and
+  the one-time guest-adoption choice against local account contracts. Real Google login, Neon,
+  HTTPS cookies, and Vercel production behavior remain unverified deployment gates. This document
+  does not authorize deployment or provisioning. Paid tiers and initialization of `apps/mobile`
+  remain out of scope.
 
 ## Account journey — local integration only
 
-Anonymous use remains fully supported and free. Planned optional Google-only KendoMenu accounts add
+Anonymous use remains fully supported and free. Optional Google-only KendoMenu accounts are locally
+implemented to add
 cross-device continuity through local-first, whole-dashboard synchronization with explicit conflict
 handling. Guest and account workspaces remain separate; signing in must not silently combine them.
 
-A planned blocking Yes/No guest-adoption choice applies only to a **newly created KendoMenu account**
+A blocking Yes/No guest-adoption choice applies only to a **newly created KendoMenu account**
 when this browser has an eligible guest dashboard. Yes copies the complete guest dashboard into the
 account; the guest LocalStorage copy stays unchanged, even after server acknowledgement. No
 permanently declines the offer and also leaves the guest dashboard unchanged. There is no dismiss
@@ -72,8 +73,8 @@ is a separate decision. After successful sign-in, guest use requires signing out
 the homepage. An empty cloud dashboard alone does not prove a new account or create a default menu.
 
 Realtime connections, CRDTs, automatic field merging, collaboration, paid tiers, and public sharing
-are excluded. The verified account workspace foundation is implemented locally; public account
-entry, guest adoption, and cross-device continuity are not current production functionality.
+are excluded. Public account entry and guest adoption are implemented in this local integration
+checkout; real provider and production continuity behavior remain unverified.
 See [ADR 0006](docs/adr/0006-independent-dashboards-one-time-guest-copy.md) and the
 [account and synchronization design](docs/ACCOUNT_SYNC.md) for accepted decisions,
 recommendations awaiting confirmation, and the gates for later implementation jobs.

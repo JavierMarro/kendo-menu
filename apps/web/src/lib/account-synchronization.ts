@@ -142,6 +142,8 @@ export interface AccountSynchronizationOptions {
   readonly accountStorage: AccountStorageController;
   readonly guestStorage: StateStorage;
   readonly currentCacheValue: () => string;
+  /** The account editor may be visible but blocked by an unresolved adoption choice. */
+  readonly canSynchronize?: () => boolean;
   readonly locks?: AccountSynchronizationLockProvider | null;
   readonly createRequestId?: () => string;
   /** Synchronously hide the confirmed store before a remote cache transaction starts. */
@@ -224,6 +226,7 @@ export function createAccountSynchronizer(options: AccountSynchronizationOptions
   let started = false;
   let lastResult: AccountSynchronizationResult = { status: 'paused' };
   const abort = new AbortController();
+  const adoptionGateAllowsWork = () => options.canSynchronize?.() !== false;
   const createRequestId = options.createRequestId ?? (() => crypto.randomUUID());
   const rejectAuthentication = (error: unknown): boolean => {
     if (!(error instanceof AccountApiError) || error.kind !== 'http' || error.status !== 401) {
@@ -241,7 +244,7 @@ export function createAccountSynchronizer(options: AccountSynchronizationOptions
   const savePending = async (
     pending: PendingAccountRequest,
   ): Promise<AccountSynchronizationResult> => {
-    if (stopped) return { status: 'paused' };
+    if (stopped || !adoptionGateAllowsWork()) return { status: 'paused' };
     if (pending.kind === 'adoption') return { status: 'awaiting-adoption' };
     const dashboard = cacheSnapshot(
       JSON.stringify({ state: pending.request.dashboard.state, version: 10 }),
@@ -312,30 +315,14 @@ export function createAccountSynchronizer(options: AccountSynchronizationOptions
     }
   };
 
-  // Guest adoption retains priority while a first-write capability is still usable. An ordinary
-  // pending PUT resumes only after that eligibility check no longer requires a Yes/No choice.
+  // A durable ordinary request was prepared while no eligible guest adoption was waiting.
+  // Replay that exact request ahead of any guest data that appears later; a successful write
+  // consumes the server capability without inventing an adoption decision.
   const replayPending = async (
     pending: PendingAccountRequest,
   ): Promise<AccountSynchronizationResult> => {
-    if (stopped) return { status: 'paused' };
+    if (stopped || !adoptionGateAllowsWork()) return { status: 'paused' };
     if (pending.kind === 'adoption') return { status: 'awaiting-adoption' };
-    if (
-      pending.request.expectedRevision === '0' &&
-      session.adoption.status === 'pending' &&
-      session.adoption.capability
-    ) {
-      const cloud = await options.api.getDashboard(options.accountId, abort.signal);
-      if (stopped) return { status: 'paused' };
-      if (cloud.revision === '0') {
-        const guestRaw = await options.guestStorage.getItem('kendo-menu');
-        if (
-          inspectGuestAdoptionEligibility(guestRaw, options.accountId, cloud.catalogueVersion)
-            .status === 'eligible'
-        ) {
-          return { status: 'awaiting-adoption' };
-        }
-      }
-    }
     return savePending(pending);
   };
 
@@ -383,12 +370,12 @@ export function createAccountSynchronizer(options: AccountSynchronizationOptions
   // Confirm the visible Zustand value on device before consulting the cloud. Every subsequent
   // comparison uses cache identity/generation so a late local edit cannot be marked clean.
   const synchronize = async (): Promise<AccountSynchronizationResult> => {
-    if (stopped) return { status: 'paused' };
+    if (stopped || !adoptionGateAllowsWork()) return { status: 'paused' };
     try {
       await options.accountStorage.flush();
       const localValue = options.currentCacheValue();
       await options.accountStorage.confirmCurrentValue(localValue);
-      if (stopped) return { status: 'paused' };
+      if (stopped || !adoptionGateAllowsWork()) return { status: 'paused' };
       const initial = await options.database.readSyncState(options.accountId);
       if (initial.pendingRequest !== null) return replayPending(initial.pendingRequest);
       if (initial.activeConflict !== null) return { status: 'conflict' };
@@ -396,7 +383,7 @@ export function createAccountSynchronizer(options: AccountSynchronizationOptions
         return { status: 'retryable' };
       }
       const cloud = await options.api.getDashboard(options.accountId, abort.signal);
-      if (stopped) return { status: 'paused' };
+      if (stopped || !adoptionGateAllowsWork()) return { status: 'paused' };
       const current = await options.database.readSyncState(options.accountId);
       if (current.pendingRequest !== null) return replayPending(current.pendingRequest);
       if (current.activeConflict !== null) return { status: 'conflict' };
@@ -413,6 +400,7 @@ export function createAccountSynchronizer(options: AccountSynchronizationOptions
           return { status: 'awaiting-adoption' };
         }
       }
+      if (!adoptionGateAllowsWork()) return { status: 'paused' };
 
       const cache = current.cache;
       if (cache === null) return { status: 'retryable' };
@@ -492,7 +480,7 @@ export function createAccountSynchronizer(options: AccountSynchronizationOptions
   };
 
   const check = (): Promise<AccountSynchronizationResult> => {
-    if (stopped) return Promise.resolve({ status: 'paused' });
+    if (stopped || !adoptionGateAllowsWork()) return Promise.resolve({ status: 'paused' });
     if (authenticationPaused) return Promise.resolve({ status: 'paused' });
     if (permanentlyBlocked) return Promise.resolve({ status: 'blocked' });
     if (activeRun !== undefined) {
@@ -535,7 +523,7 @@ export function createAccountSynchronizer(options: AccountSynchronizationOptions
   };
 
   const schedule = () => {
-    if (stopped || permanentlyBlocked || authenticationPaused) return;
+    if (stopped || permanentlyBlocked || authenticationPaused || !adoptionGateAllowsWork()) return;
     if (timer !== undefined) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = undefined;
@@ -554,7 +542,7 @@ export function createAccountSynchronizer(options: AccountSynchronizationOptions
   // Re-read the current cloud before honoring an explicit choice: the stored conflict snapshot
   // may already be stale. The replacement gate closes editing before the atomic losing-copy save.
   const useCloud = async (conflictId: string): Promise<AccountSynchronizationResult> => {
-    if (stopped) return { status: 'paused' };
+    if (stopped || !adoptionGateAllowsWork()) return { status: 'paused' };
     try {
       const locked = await withAccountSynchronizationLock(
         options.accountId,
@@ -585,7 +573,7 @@ export function createAccountSynchronizer(options: AccountSynchronizationOptions
   };
 
   const useLocal = async (conflictId: string): Promise<AccountSynchronizationResult> => {
-    if (stopped) return { status: 'paused' };
+    if (stopped || !adoptionGateAllowsWork()) return { status: 'paused' };
     try {
       const locked = await withAccountSynchronizationLock(
         options.accountId,

@@ -22,17 +22,49 @@ import {
   type AccountStorageController,
   type AccountStorageFailureCode,
 } from './account-storage';
-import type { AccountApiClient, AccountSession, SessionResult } from './account-api';
+import {
+  type AccountApiClient,
+  type AccountSession,
+  type DashboardSnapshot,
+  type DashboardReadResponse,
+  type AdoptionRequest,
+  type AdoptionResponse,
+  type SessionResult,
+  isRevision,
+  isTimestamp,
+} from './account-api';
 import {
   createIndexedDbAccountDatabase,
+  type AccountAdoptionRequest,
+  type AuthoritativeAdoptionCompletion,
+  type AccountSyncState,
   type AccountSynchronizationDatabase,
 } from './account-database';
 import {
   createAccountSynchronizer,
   type AccountSynchronizationLockProvider,
   type AccountSynchronizationResult,
+  inspectGuestAdoptionEligibility,
+  withAccountSynchronizationLock,
 } from './account-synchronization';
-import { accountWorkspaceScope, type WorkspaceCoordinator } from './workspace-coordination';
+import {
+  accountWorkspaceScope,
+  type WorkspaceCoordinator,
+  withGuestWorkspaceLock,
+} from './workspace-coordination';
+
+export type AdoptionWorkspaceState =
+  | { readonly status: 'none' }
+  | { readonly status: 'checking' }
+  | { readonly status: 'offer'; readonly entryCount: number }
+  | { readonly status: 'submitting'; readonly decision: 'yes' | 'no' }
+  | { readonly status: 'completing'; readonly decision: 'yes' | 'no' }
+  | { readonly status: 'retryable'; readonly decision?: 'yes' | 'no' }
+  | { readonly status: 'storage-recovery'; readonly decisionConfirmed: boolean };
+
+type AdoptionProof =
+  | { readonly kind: 'response'; readonly response: AdoptionResponse }
+  | { readonly kind: 'session'; readonly session: AccountSession };
 
 // Internal composition only. Public routes deliberately do not instantiate this controller.
 
@@ -124,6 +156,7 @@ export type WorkspaceOperationResult =
 export type WorkspaceSnapshot =
   | { readonly mode: 'guest'; readonly epoch: number; readonly store: TrainingStoreApi }
   | { readonly mode: 'guest-refreshing'; readonly epoch: number; readonly failed: boolean }
+  | { readonly mode: 'adoption-completing'; readonly epoch: number }
   | {
       readonly mode: 'account';
       readonly epoch: number;
@@ -138,6 +171,7 @@ export type WorkspaceSnapshot =
       readonly persistencePending: boolean;
       readonly recoveryFailure: AccountStorageFailureCode | null;
       readonly serverRevocationConfirmed: boolean;
+      readonly adoption: AdoptionWorkspaceState;
     }
   | {
       readonly mode: 'account-error';
@@ -150,13 +184,12 @@ export type WorkspaceSnapshot =
 
 export interface AccountWorkspaceOptions {
   readonly guestStore: TrainingStoreApi;
-  readonly api: Pick<AccountApiClient, 'getSession' | 'logout'>;
+  readonly api: Pick<AccountApiClient, 'getSession' | 'logout' | 'postAdoption'>;
   readonly storage: StateStorage;
   readonly coordination: WorkspaceCoordinator;
-  /** Provider-owned direct mutation and non-persisting guest-store replacement for adoption cleanup. */
+  /** Provider-owned guest snapshot reads and coordinated guest-store refreshes. */
   readonly guestCleanup?: {
     readonly readRaw: () => string | null | Promise<string | null>;
-    readonly removeRaw: () => void | Promise<void>;
     readonly prepare: () => void | Promise<void>;
     readonly refreshFromRaw: (
       rawValue: string | null,
@@ -165,7 +198,7 @@ export interface AccountWorkspaceOptions {
   };
   readonly database?: AccountDatabase;
   readonly synchronization?: {
-    readonly api: Pick<AccountApiClient, 'getDashboard' | 'putDashboard'>;
+    readonly api: Pick<AccountApiClient, 'getDashboard' | 'putDashboard' | 'postAdoption'>;
     readonly database?: AccountSynchronizationDatabase;
     readonly locks?: AccountSynchronizationLockProvider | null;
   };
@@ -179,6 +212,7 @@ interface ActiveWorkspace {
   readonly storage: AccountStorageController;
   readonly unsubscribe: () => void;
   synchronizer?: ReturnType<typeof createAccountSynchronizer>;
+  synchronizationDatabase?: AccountSynchronizationDatabase;
   unsubscribeStore?: () => void;
   storageChanged: boolean;
   serverRevocationConfirmed: boolean;
@@ -204,6 +238,30 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
   let requestSequence = 0;
   let disposed = false;
   let active: ActiveWorkspace | undefined;
+  let adoptionState: AdoptionWorkspaceState = { status: 'none' };
+  let offeredGuestSnapshot: string | undefined;
+  let adoptionRecoveryAccountId: string | undefined;
+  let adoptionCompletionPending = false;
+  const adoptionSessionOverrides = new Map<string, AccountSession>();
+  let pendingAdoptionResume: AccountSession | undefined;
+  let adoptionOperation = 0;
+  const withAdoptionTimeout = async <T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> => {
+    const abort = new AbortController();
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timeoutId = setTimeout(() => {
+        abort.abort();
+        reject(new Error('Adoption request timed out.'));
+      }, 10_000);
+    });
+    try {
+      // A transport or test double may ignore AbortSignal; the race still releases the
+      // account lock and leaves the durable request available for a verified retry.
+      return await Promise.race([work(abort.signal), timeout]);
+    } finally {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    }
+  };
   let guestStore = options.guestStore;
   let guestRefreshPending = false;
   let guestRefreshFailed = false;
@@ -398,6 +456,1187 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
     }
   };
 
+  const workspaceIsCurrent = (workspace: ActiveWorkspace): boolean =>
+    !disposed && active === workspace && workspace.epoch === epoch;
+
+  const setAdoptionState = (state: AdoptionWorkspaceState): void => {
+    adoptionState = state;
+    if (state.status === 'none') active?.synchronizer?.schedule();
+    notify();
+  };
+
+  const queueCompletionSynchronization = (): void => {
+    const reopened = active;
+    if (reopened === undefined) return;
+    // Completion may still be returning from the exclusive account Web Lock.
+    // Queue the cloud check after that caller releases the non-reentrant lock.
+    setTimeout(() => {
+      if (
+        workspaceIsCurrent(reopened) &&
+        adoptionState.status === 'none' &&
+        !adoptionCompletionPending
+      ) {
+        reopened.synchronizer?.schedule();
+      }
+    }, 0);
+  };
+
+  const applyDurableDecline = (
+    session: AccountSession,
+    state: AccountSyncState | undefined,
+  ): AccountSession => {
+    const acknowledgement = state?.acknowledgement;
+    if (
+      acknowledgement?.status !== 'adoption-declined' ||
+      acknowledgement.accountWorkspaceId !== session.userId
+    )
+      return session;
+    return {
+      ...session,
+      adoption: {
+        status: 'declined',
+        capability: false,
+        completion: { decision: 'no', requestId: acknowledgement.requestId },
+      },
+    };
+  };
+
+  const hasPotentialAdoptionCompletion = (state: AccountSyncState | undefined): boolean =>
+    state !== undefined &&
+    state.pendingRequest === null &&
+    (state.acknowledgement.status === 'adoption-declined' ||
+      (state.acknowledgement.status === 'acknowledged' && state.acknowledgement.revision !== '0'));
+
+  const reopenPeerDashboardSave = async (
+    workspace: ActiveWorkspace,
+    session: AccountSession,
+    state: AccountSyncState,
+  ): Promise<'unchanged' | 'reopened' | 'blocked'> => {
+    const cache = state.cache;
+    const localVersion = workspace.storage.confirmedCacheVersion;
+    if (
+      cache !== null &&
+      localVersion?.identity === cache.identity &&
+      localVersion.generation === cache.generation &&
+      workspace.storage.confirmedCacheValue === cache.cacheValue
+    )
+      return 'unchanged';
+
+    const acknowledgement = state.acknowledgement;
+    const empty = serializePersistedTrainingStateV10({ dashboardEntries: [] });
+    const safeOrdinarySave =
+      session.adoption.status === 'unavailable' &&
+      state.pendingRequest === null &&
+      state.activeConflict === null &&
+      cache !== null &&
+      cache.accountId === workspace.userId &&
+      cache.generation > 0 &&
+      acknowledgement.status === 'acknowledged' &&
+      acknowledgement.accountWorkspaceId === workspace.userId &&
+      acknowledgement.requestId !== null &&
+      isRevision(acknowledgement.revision) &&
+      acknowledgement.revision !== '0' &&
+      acknowledgement.updatedAt !== null &&
+      isTimestamp(acknowledgement.updatedAt) &&
+      acknowledgement.cacheIdentity === cache.identity &&
+      acknowledgement.generation === cache.generation &&
+      localVersion?.generation === 0 &&
+      workspace.storage.confirmedCacheValue === empty &&
+      serializePersistedTrainingStateV10({
+        dashboardEntries: workspace.store.getState().dashboardEntries,
+      }) === empty;
+    if (!safeOrdinarySave) {
+      verifiedStorageFailure = { session, code: 'unavailable' };
+      setAdoptionState({ status: 'storage-recovery', decisionConfirmed: false });
+      deactivate(true);
+      return 'blocked';
+    }
+
+    pendingAdoptionResume = session;
+    adoptionCompletionPending = true;
+    deactivate();
+    const reopened = await controller.bootstrap();
+    if (reopened.status === 'ready') {
+      try {
+        const latest = await workspace.synchronizationDatabase?.readSyncState(workspace.userId);
+        if (
+          latest === undefined ||
+          latest.pendingRequest !== null ||
+          latest.cache?.identity !== cache.identity ||
+          latest.cache.generation !== cache.generation ||
+          JSON.stringify(latest.acknowledgement) !== JSON.stringify(acknowledgement)
+        ) {
+          verifiedStorageFailure = { session, code: 'unavailable' };
+          deactivate(true);
+        }
+      } catch {
+        verifiedStorageFailure = { session, code: 'unavailable' };
+        deactivate(true);
+      }
+    }
+    if (
+      reopened.status === 'retryable' &&
+      active === undefined &&
+      verifiedStorageFailure === undefined
+    )
+      verifiedStorageFailure = { session, code: 'unavailable' };
+    adoptionCompletionPending = false;
+    queueCompletionSynchronization();
+    notify();
+    return reopened.status === 'ready' && active?.userId === workspace.userId
+      ? 'reopened'
+      : 'blocked';
+  };
+
+  const resumePendingDashboardPut = async (
+    workspace: ActiveWorkspace,
+    session: AccountSession,
+    state: AccountSyncState,
+  ): Promise<'open' | 'reopened' | 'blocked'> => {
+    const pending = state.pendingRequest;
+    if (pending?.kind !== 'dashboard-put') return 'blocked';
+    const cache = state.cache;
+    const localVersion = workspace.storage.confirmedCacheVersion;
+    const pendingCacheValue = serializePersistedTrainingStateV10({
+      dashboardEntries: pending.request.dashboard.state.dashboardEntries,
+    });
+    if (
+      cache === null ||
+      cache.accountId !== workspace.userId ||
+      pending.accountId !== workspace.userId ||
+      pending.request.expectedAccountWorkspaceId !== workspace.userId ||
+      pending.request.expectedRevision !== '0' ||
+      pending.cacheVersion.identity !== cache.identity ||
+      pending.cacheVersion.generation > cache.generation ||
+      (pending.cacheVersion.generation === cache.generation &&
+        pendingCacheValue !== cache.cacheValue) ||
+      state.activeConflict !== null
+    ) {
+      setAdoptionState({ status: 'storage-recovery', decisionConfirmed: false });
+      return 'blocked';
+    }
+    if (
+      cache.identity !== localVersion?.identity ||
+      cache.generation !== localVersion.generation ||
+      cache.cacheValue !== workspace.storage.confirmedCacheValue
+    ) {
+      const empty = serializePersistedTrainingStateV10({ dashboardEntries: [] });
+      const safePeerPending =
+        localVersion?.generation === 0 &&
+        workspace.storage.confirmedCacheValue === empty &&
+        serializePersistedTrainingStateV10({
+          dashboardEntries: workspace.store.getState().dashboardEntries,
+        }) === empty;
+      if (!safePeerPending) {
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: false });
+        return 'blocked';
+      }
+      // A stale offered tab may still hold the untouched generation-zero cache while another
+      // tab has durably prepared the ordinary write. Reopen the exactly bound shared cache so
+      // the existing request can replay without manufacturing an adoption choice.
+      pendingAdoptionResume = session;
+      adoptionCompletionPending = true;
+      deactivate();
+      const reopened = await controller.bootstrap();
+      adoptionCompletionPending = false;
+      queueCompletionSynchronization();
+      notify();
+      return reopened.status === 'ready' &&
+        active?.userId === workspace.userId &&
+        adoptionState.status === 'none'
+        ? 'reopened'
+        : 'blocked';
+    }
+    workspace.session = session;
+    workspace.synchronizer?.updateSession(session);
+    offeredGuestSnapshot = undefined;
+    adoptionRecoveryAccountId = undefined;
+    setAdoptionState({ status: 'none' });
+    return 'open';
+  };
+
+  const resolveUnavailableAdoption = async (
+    workspace: ActiveWorkspace,
+    session: AccountSession,
+    state: AccountSyncState,
+  ): Promise<'open' | 'reopened' | 'blocked'> => {
+    if (session.adoption.status !== 'unavailable' || state.pendingRequest?.kind === 'adoption')
+      return 'blocked';
+    if (state.pendingRequest?.kind === 'dashboard-put') {
+      return resumePendingDashboardPut(workspace, session, state);
+    }
+    const peer = await reopenPeerDashboardSave(workspace, session, state);
+    if (peer !== 'unchanged') return peer;
+    if (!workspaceIsCurrent(workspace)) return 'blocked';
+    workspace.session = session;
+    workspace.synchronizer?.updateSession(session);
+    offeredGuestSnapshot = undefined;
+    adoptionRecoveryAccountId = undefined;
+    setAdoptionState({ status: 'none' });
+    return 'open';
+  };
+
+  const readGuestSnapshot = async (
+    accountId: string,
+    catalogueVersion: string,
+  ): Promise<{
+    readonly canonical: string;
+    readonly entryCount: number;
+    readonly dashboard: DashboardSnapshot;
+  } | null> => {
+    let raw: string | null;
+    try {
+      // Read the durable guest value inside guest coordination. The guest store's writer
+      // tracks an older expected value and can reject a legitimate edit from another tab.
+      raw = await (options.guestCleanup === undefined
+        ? options.storage.getItem('kendo-menu')
+        : options.guestCleanup.readRaw());
+    } catch {
+      throw new Error('GUEST_READ_FAILED');
+    }
+    const eligibility = inspectGuestAdoptionEligibility(raw, accountId, catalogueVersion);
+    if (eligibility.status !== 'eligible') return null;
+    const inspected = classifyTrainingStorageValue(raw);
+    if (inspected.status !== 'ready' && inspected.status !== 'migrated') return null;
+    try {
+      return {
+        canonical: serializePersistedTrainingStateV10(inspected.state),
+        entryCount: eligibility.dashboard.state.dashboardEntries.length,
+        dashboard: eligibility.dashboard,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const verifyAdoptionSession = async (
+    workspace: ActiveWorkspace,
+  ): Promise<AccountSession | null> => {
+    let result: SessionResult;
+    try {
+      result = await options.api.getSession();
+    } catch (error) {
+      // A 401 is an authoritative identity transition. Other failures remain retryable and
+      // keep the verified workspace protected behind the adoption recovery UI.
+      if (isUnauthenticated(error) && workspaceIsCurrent(workspace)) {
+        authenticationReverificationRequired = true;
+        authenticationRecoverySession = workspace.session;
+        deactivate(true);
+      }
+      return null;
+    }
+    if (!workspaceIsCurrent(workspace)) return null;
+    if (result.status !== 'authenticated' || result.session.userId !== workspace.userId) {
+      authenticationReverificationRequired = true;
+      authenticationRecoverySession = workspace.session;
+      deactivate(true);
+      return null;
+    }
+    workspace.session = result.session;
+    workspace.synchronizer?.updateSession(result.session);
+    notify();
+    return result.session;
+  };
+
+  const hasMatchingTerminalReceipt = (
+    session: AccountSession,
+    request: AdoptionRequest,
+  ): boolean => {
+    if (session.userId !== request.expectedAccountWorkspaceId) return false;
+    if (request.decision === 'no') {
+      return (
+        session.adoption.status === 'declined' &&
+        session.adoption.completion.decision === 'no' &&
+        session.adoption.completion.requestId === request.requestId
+      );
+    }
+    return (
+      session.adoption.status === 'accepted' &&
+      session.adoption.completion.decision === 'yes' &&
+      session.adoption.completion.requestId === request.requestId &&
+      session.adoption.completion.acknowledgedRevision === '1' &&
+      session.adoption.completion.timestamp.length > 0
+    );
+  };
+
+  const hasTerminalAdoptionDecision = (session: AccountSession): boolean =>
+    session.adoption.status === 'accepted' || session.adoption.status === 'declined';
+
+  const reopenPeerCompletion = async (
+    workspace: ActiveWorkspace,
+    session: AccountSession,
+    state: AccountSyncState,
+  ): Promise<'not-completed' | 'reopened' | 'blocked'> => {
+    if (state.pendingRequest !== null) return 'not-completed';
+    const terminal = session.adoption;
+    const acknowledgement = state.acknowledgement;
+    if (terminal.status !== 'accepted' && terminal.status !== 'declined') return 'not-completed';
+    if (acknowledgement.status !== 'acknowledged' && acknowledgement.status !== 'adoption-declined')
+      return 'not-completed';
+    const cache = state.cache;
+    const localVersion = workspace.storage.confirmedCacheVersion;
+    const empty = serializePersistedTrainingStateV10({ dashboardEntries: [] });
+    const localUntouched =
+      localVersion !== null &&
+      localVersion !== undefined &&
+      localVersion.generation === 0 &&
+      workspace.storage.confirmedCacheValue === empty &&
+      serializePersistedTrainingStateV10({
+        dashboardEntries: workspace.store.getState().dashboardEntries,
+      }) === empty;
+    const commonValid =
+      cache !== null &&
+      cache.accountId === workspace.userId &&
+      acknowledgement.accountWorkspaceId === workspace.userId &&
+      acknowledgement.cacheIdentity === cache.identity &&
+      acknowledgement.generation === cache.generation &&
+      state.activeConflict === null;
+    const acceptedValid =
+      terminal.status === 'accepted' &&
+      acknowledgement.status === 'acknowledged' &&
+      cache?.generation === 1 &&
+      isRevision(acknowledgement.revision) &&
+      BigInt(acknowledgement.revision) >= BigInt(terminal.completion.acknowledgedRevision) &&
+      isTimestamp(acknowledgement.updatedAt) &&
+      (acknowledgement.revision !== terminal.completion.acknowledgedRevision ||
+        (acknowledgement.requestId === terminal.completion.requestId &&
+          acknowledgement.updatedAt === terminal.completion.timestamp));
+    const declinedValid =
+      terminal.status === 'declined' &&
+      acknowledgement.status === 'adoption-declined' &&
+      acknowledgement.requestId === terminal.completion.requestId &&
+      cache?.generation === 0 &&
+      cache.cacheValue === empty &&
+      cache.identity === localVersion?.identity;
+    if (!localUntouched || !commonValid || (!acceptedValid && !declinedValid)) {
+      verifiedStorageFailure = { session, code: 'unavailable' };
+      setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+      deactivate(true);
+      return 'blocked';
+    }
+    adoptionSessionOverrides.set(workspace.userId, session);
+    pendingAdoptionResume = session;
+    adoptionCompletionPending = true;
+    deactivate();
+    offeredGuestSnapshot = undefined;
+    adoptionRecoveryAccountId = undefined;
+    adoptionState = { status: 'none' };
+    const reopened = await controller.bootstrap();
+    if (reopened.status === 'ready') {
+      try {
+        const latest = await workspace.synchronizationDatabase?.readSyncState(workspace.userId);
+        if (
+          latest === undefined ||
+          latest.pendingRequest !== null ||
+          latest.cache?.identity !== cache.identity ||
+          latest.cache.generation !== cache.generation ||
+          JSON.stringify(latest.acknowledgement) !== JSON.stringify(acknowledgement)
+        ) {
+          verifiedStorageFailure = { session, code: 'unavailable' };
+          deactivate(true);
+        }
+      } catch {
+        verifiedStorageFailure = { session, code: 'unavailable' };
+        deactivate(true);
+      }
+    }
+    adoptionCompletionPending = false;
+    queueCompletionSynchronization();
+    notify();
+    return reopened.status === 'ready' && active !== undefined ? 'reopened' : 'blocked';
+  };
+
+  const reconcileTerminalSession = async (
+    workspace: ActiveWorkspace,
+    pendingRequest: AdoptionRequest,
+    terminalSession: AccountSession,
+    verificationSequence: number,
+  ): Promise<boolean> => {
+    if (
+      !workspaceIsCurrent(workspace) ||
+      requestSequence !== verificationSequence ||
+      terminalSession.userId !== pendingRequest.expectedAccountWorkspaceId
+    ) {
+      return false;
+    }
+    const terminal = terminalSession.adoption;
+    if (terminal.status !== 'accepted' && terminal.status !== 'declined') return false;
+
+    let existing: AccountSyncState | undefined;
+    try {
+      existing = await workspace.synchronizationDatabase?.readSyncState(workspace.userId);
+    } catch {
+      if (workspaceIsCurrent(workspace) && requestSequence === verificationSequence) {
+        verifiedStorageFailure = { session: terminalSession, code: 'unavailable' };
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+        deactivate(true);
+      }
+      return false;
+    }
+    if (!workspaceIsCurrent(workspace) || requestSequence !== verificationSequence) return false;
+    if (existing !== undefined) {
+      const peer = await reopenPeerCompletion(workspace, terminalSession, existing);
+      if (peer !== 'not-completed') return peer === 'reopened';
+    }
+
+    // Keep the original request's matching idempotent receipt fast path. A different request
+    // ID or opposite terminal choice belongs to the server's winning tab and is reconciled
+    // from that authoritative receipt instead.
+    if (
+      terminal.status === 'declined' &&
+      hasMatchingTerminalReceipt(terminalSession, pendingRequest)
+    ) {
+      return finishPendingAdoption(workspace, pendingRequest, terminalSession, {
+        kind: 'session',
+        session: terminalSession,
+      });
+    }
+    const database = workspace.synchronizationDatabase;
+    if (database === undefined) return false;
+    const reconciliationId = ++adoptionOperation;
+    const reconciliationIsCurrent = () =>
+      workspaceIsCurrent(workspace) &&
+      requestSequence === verificationSequence &&
+      reconciliationId === adoptionOperation;
+
+    let completion: AuthoritativeAdoptionCompletion;
+    if (terminal.status === 'declined') {
+      completion = {
+        decision: 'no',
+        requestId: terminal.completion.requestId,
+      };
+    } else {
+      let cloud: DashboardReadResponse | undefined;
+      try {
+        const syncApi = options.synchronization?.api;
+        cloud =
+          syncApi === undefined
+            ? undefined
+            : await withAdoptionTimeout((signal) =>
+                syncApi.getDashboard(terminalSession.userId, signal),
+              );
+      } catch {
+        if (reconciliationIsCurrent()) {
+          verifiedStorageFailure = { session: terminalSession, code: 'unavailable' };
+          setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+          deactivate(true);
+        }
+        return false;
+      }
+      if (
+        !reconciliationIsCurrent() ||
+        cloud === undefined ||
+        cloud.accountWorkspaceId !== terminalSession.userId ||
+        cloud.dashboard === null ||
+        !isRevision(cloud.revision) ||
+        !isTimestamp(cloud.updatedAt) ||
+        BigInt(cloud.revision) < BigInt(terminal.completion.acknowledgedRevision) ||
+        (cloud.revision === terminal.completion.acknowledgedRevision &&
+          cloud.updatedAt !== terminal.completion.timestamp)
+      ) {
+        if (reconciliationIsCurrent()) {
+          verifiedStorageFailure = { session: terminalSession, code: 'unavailable' };
+          setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+          deactivate(true);
+        }
+        return false;
+      }
+      // Fetching the snapshot can take time. Reverify identity and terminal receipt before
+      // allowing the account-scoped transaction to reconcile either local record.
+      const refreshedSession = await verifyAdoptionSession(workspace);
+      if (
+        refreshedSession === null ||
+        !reconciliationIsCurrent() ||
+        refreshedSession.userId !== terminalSession.userId ||
+        refreshedSession.adoption.status !== 'accepted' ||
+        refreshedSession.adoption.completion.requestId !== terminal.completion.requestId ||
+        refreshedSession.adoption.completion.acknowledgedRevision !==
+          terminal.completion.acknowledgedRevision ||
+        refreshedSession.adoption.completion.timestamp !== terminal.completion.timestamp
+      ) {
+        if (reconciliationIsCurrent()) {
+          verifiedStorageFailure = { session: terminalSession, code: 'unavailable' };
+          setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+          deactivate(true);
+        }
+        return false;
+      }
+      completion = {
+        decision: 'yes',
+        requestId: refreshedSession.adoption.completion.requestId,
+        acknowledgedRevision: refreshedSession.adoption.completion.acknowledgedRevision,
+        timestamp: refreshedSession.adoption.completion.timestamp,
+        cloud,
+      };
+      terminalSession = refreshedSession;
+    }
+
+    adoptionRecoveryAccountId = terminalSession.userId;
+    if (!reconciliationIsCurrent()) return false;
+    setAdoptionState({ status: 'completing', decision: completion.decision });
+    try {
+      const reconciled = await database.reconcileAuthoritativeAdoption(
+        terminalSession.userId,
+        completion,
+      );
+      if (!reconciliationIsCurrent()) return false;
+      if (reconciled.status !== 'committed' || reconciled.state.pendingRequest !== null) {
+        if (reconciled.state.pendingRequest === null) {
+          const peer = await reopenPeerCompletion(workspace, terminalSession, reconciled.state);
+          if (peer === 'reopened') return true;
+          if (peer === 'blocked') return false;
+        }
+        verifiedStorageFailure = { session: terminalSession, code: 'unavailable' };
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+        deactivate(true);
+        return false;
+      }
+      const completedSession: AccountSession = {
+        ...terminalSession,
+        adoption:
+          completion.decision === 'yes'
+            ? {
+                status: 'accepted',
+                capability: false,
+                completion: {
+                  decision: 'yes',
+                  requestId: completion.requestId,
+                  acknowledgedRevision: completion.acknowledgedRevision,
+                  timestamp: completion.timestamp,
+                },
+              }
+            : {
+                status: 'declined',
+                capability: false,
+                completion: { decision: 'no', requestId: completion.requestId },
+              },
+      };
+      workspace.session = completedSession;
+      workspace.synchronizer?.updateSession(completedSession);
+      adoptionSessionOverrides.set(workspace.userId, completedSession);
+      pendingAdoptionResume = completedSession;
+      adoptionCompletionPending = true;
+      deactivate();
+      verifiedStorageFailure = undefined;
+      adoptionRecoveryAccountId = undefined;
+      offeredGuestSnapshot = undefined;
+      adoptionState = { status: 'none' };
+      const reopened = await controller.bootstrap();
+      adoptionCompletionPending = false;
+      queueCompletionSynchronization();
+      notify();
+      return reopened.status === 'ready';
+    } catch {
+      if (reconciliationIsCurrent()) {
+        verifiedStorageFailure = { session: terminalSession, code: 'unavailable' };
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+        deactivate(true);
+      }
+      return false;
+    }
+  };
+
+  const responseMatchesRequest = (response: AdoptionResponse, request: AdoptionRequest): boolean =>
+    response.completion.decision === request.decision &&
+    response.completion.requestId === request.requestId &&
+    (request.decision === 'no'
+      ? response.status === 'declined' || response.status === 'replayed'
+      : (response.status === 'accepted' || response.status === 'replayed') &&
+        response.completion.decision === 'yes' &&
+        response.completion.acknowledgedRevision === '1' &&
+        response.completion.timestamp.length > 0);
+
+  const finishPendingAdoption = async (
+    workspace: ActiveWorkspace,
+    request: AdoptionRequest,
+    verifiedSession: AccountSession,
+    proof: AdoptionProof,
+  ): Promise<boolean> => {
+    if (
+      !workspaceIsCurrent(workspace) ||
+      verifiedSession.userId !== request.expectedAccountWorkspaceId
+    )
+      return false;
+    if (
+      proof.kind === 'response'
+        ? !responseMatchesRequest(proof.response, request)
+        : proof.session.userId !== verifiedSession.userId ||
+          !hasMatchingTerminalReceipt(proof.session, request)
+    )
+      return false;
+    const database = workspace.synchronizationDatabase;
+    if (database === undefined) return false;
+    let acknowledgedRevision: string | undefined;
+    let timestamp: string | undefined;
+    if (request.decision === 'yes') {
+      if (proof.kind === 'response' && proof.response.completion.decision === 'yes') {
+        acknowledgedRevision = proof.response.completion.acknowledgedRevision;
+        timestamp = proof.response.completion.timestamp;
+      } else if (proof.kind === 'session' && proof.session.adoption.status === 'accepted') {
+        acknowledgedRevision = proof.session.adoption.completion.acknowledgedRevision;
+        timestamp = proof.session.adoption.completion.timestamp;
+      }
+      if (acknowledgedRevision !== '1' || timestamp === undefined || timestamp.length === 0)
+        return false;
+    }
+    const completedSession: AccountSession = {
+      ...verifiedSession,
+      adoption:
+        request.decision === 'yes'
+          ? {
+              status: 'accepted',
+              capability: false,
+              completion: {
+                decision: 'yes',
+                requestId: request.requestId,
+                acknowledgedRevision: acknowledgedRevision ?? '1',
+                timestamp: timestamp ?? '',
+              },
+            }
+          : {
+              status: 'declined',
+              capability: false,
+              completion: { decision: 'no', requestId: request.requestId },
+            },
+    };
+    // A matching POST response is authoritative even if /api/session has not reflected it yet.
+    // Refresh the synchronizer before the workspace is reopened so it cannot remain paused.
+    workspace.session = completedSession;
+    workspace.synchronizer?.updateSession(completedSession);
+    adoptionSessionOverrides.set(workspace.userId, completedSession);
+    const requestGeneration = ++adoptionOperation;
+    const verificationSequence = requestSequence;
+    adoptionRecoveryAccountId = workspace.userId;
+    setAdoptionState({ status: 'completing', decision: request.decision });
+    // The provider renders the dedicated completing state, so no editor can race this
+    // transaction. Keep this controller snapshot blocked across the cache reopen as well.
+    try {
+      let completed;
+      if (request.decision === 'yes') {
+        completed = await database.completeAcceptedAdoption(
+          request.expectedAccountWorkspaceId,
+          request.requestId,
+          acknowledgedRevision ?? '1',
+          timestamp ?? '',
+        );
+      } else {
+        completed = await database.acknowledgePendingRequest(
+          request.expectedAccountWorkspaceId,
+          request.requestId,
+          { kind: 'adoption-declined', requestId: request.requestId },
+        );
+      }
+      // A newer verification or exit owns the visible workspace, even when this
+      // transaction committed for the former account while it was in flight.
+      if (!workspaceIsCurrent(workspace) || requestSequence !== verificationSequence) return false;
+      if (requestGeneration !== adoptionOperation) return false;
+      if (completed.status !== 'committed' || completed.state.pendingRequest !== null) {
+        if (completed.state.pendingRequest === null) {
+          const refreshed = await verifyAdoptionSession(workspace);
+          if (!workspaceIsCurrent(workspace) || requestSequence !== verificationSequence)
+            return false;
+          if (refreshed !== null) {
+            const peer = await reopenPeerCompletion(
+              workspace,
+              refreshed.adoption.status === 'pending' && proof.kind === 'response'
+                ? completedSession
+                : refreshed,
+              completed.state,
+            );
+            if (peer === 'reopened') return true;
+            if (peer === 'blocked') return false;
+          }
+        }
+        verifiedStorageFailure = { session: completedSession, code: 'unavailable' };
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+        deactivate(true);
+        return false;
+      }
+      adoptionCompletionPending = true;
+      pendingAdoptionResume = completedSession;
+      deactivate();
+      verifiedStorageFailure = undefined;
+      adoptionRecoveryAccountId = undefined;
+      offeredGuestSnapshot = undefined;
+      adoptionState = { status: 'none' };
+      const reopened = await controller.bootstrap();
+      adoptionCompletionPending = false;
+      queueCompletionSynchronization();
+      notify();
+      if (reopened.status !== 'ready') return false;
+      return true;
+    } catch {
+      if (
+        workspaceIsCurrent(workspace) &&
+        requestSequence === verificationSequence &&
+        requestGeneration === adoptionOperation
+      ) {
+        verifiedStorageFailure = { session: completedSession, code: 'unavailable' };
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+        deactivate(true);
+      }
+      return false;
+    }
+  };
+
+  const recoverOrReplayPendingAdoption = async (
+    workspace: ActiveWorkspace,
+    request: AdoptionRequest,
+  ): Promise<boolean> => {
+    if (!workspaceIsCurrent(workspace)) return false;
+    const verificationSequence = requestSequence;
+    const session = await verifyAdoptionSession(workspace);
+    if (
+      session === null ||
+      !workspaceIsCurrent(workspace) ||
+      requestSequence !== verificationSequence
+    )
+      return false;
+    if (session.adoption.status === 'accepted' || session.adoption.status === 'declined') {
+      return reconcileTerminalSession(workspace, request, session, verificationSequence);
+    }
+    if (
+      session.adoption.status !== 'pending' ||
+      !session.adoption.capability ||
+      session.userId !== request.expectedAccountWorkspaceId
+    ) {
+      return false;
+    }
+    const database = workspace.synchronizationDatabase;
+    if (database === undefined) return false;
+    const locked = await withAccountSynchronizationLock(
+      workspace.userId,
+      async () => submitStoredAdoptionUnderLock(workspace, request, verificationSequence),
+      options.synchronization?.locks,
+    );
+    if (!workspaceIsCurrent(workspace) || requestSequence !== verificationSequence) return false;
+    if (locked.status === 'unavailable') {
+      setAdoptionState({ status: 'retryable', decision: request.decision });
+      return false;
+    }
+    return locked.value;
+  };
+
+  const submitStoredAdoptionUnderLock = async (
+    workspace: ActiveWorkspace,
+    request: AdoptionRequest,
+    expectedVerificationSequence: number,
+  ): Promise<boolean> => {
+    const stillCurrent = () =>
+      workspaceIsCurrent(workspace) && requestSequence === expectedVerificationSequence;
+    if (!stillCurrent()) return false;
+    const operationId = ++adoptionOperation;
+    setAdoptionState({ status: 'submitting', decision: request.decision });
+    const verifiedBeforeSend = workspace.session;
+    if (
+      !stillCurrent() ||
+      verifiedBeforeSend.userId !== request.expectedAccountWorkspaceId ||
+      verifiedBeforeSend.adoption.status !== 'pending' ||
+      !verifiedBeforeSend.adoption.capability
+    ) {
+      if (stillCurrent()) setAdoptionState({ status: 'retryable', decision: request.decision });
+      return false;
+    }
+    try {
+      const response = await withAdoptionTimeout((signal) =>
+        options.api.postAdoption(workspace.userId, request, signal),
+      );
+      if (!stillCurrent() || operationId !== adoptionOperation) return false;
+      if (!responseMatchesRequest(response, request)) {
+        setAdoptionState({ status: 'retryable', decision: request.decision });
+        return false;
+      }
+      return finishPendingAdoption(workspace, request, verifiedBeforeSend, {
+        kind: 'response',
+        response,
+      });
+    } catch {
+      if (!stillCurrent() || operationId !== adoptionOperation) return false;
+      const verified = await verifyAdoptionSession(workspace);
+      if (!stillCurrent()) return false;
+      if (
+        verified !== null &&
+        (verified.adoption.status === 'accepted' || verified.adoption.status === 'declined')
+      ) {
+        return reconcileTerminalSession(workspace, request, verified, expectedVerificationSequence);
+      }
+      setAdoptionState({ status: 'retryable', decision: request.decision });
+      return false;
+    }
+  };
+
+  const checkAdoptionEligibility = async (workspace: ActiveWorkspace): Promise<void> => {
+    const verificationSequence = requestSequence;
+    const stillCurrent = () =>
+      workspaceIsCurrent(workspace) && requestSequence === verificationSequence;
+    if (!stillCurrent()) return;
+    if (workspace.session.adoption.status !== 'pending' || !workspace.session.adoption.capability) {
+      adoptionState = { status: 'none' };
+      return;
+    }
+    setAdoptionState({ status: 'checking' });
+    try {
+      const locked = await withAccountSynchronizationLock(
+        workspace.userId,
+        async () => {
+          const durableState = await workspace.synchronizationDatabase?.readSyncState(
+            workspace.userId,
+          );
+          if (!stillCurrent()) return null;
+          if (durableState?.pendingRequest?.kind === 'dashboard-put') {
+            await resumePendingDashboardPut(workspace, workspace.session, durableState);
+            return null;
+          }
+          const syncApi = options.synchronization?.api;
+          const cloud =
+            syncApi === undefined
+              ? undefined
+              : await withAdoptionTimeout((signal) =>
+                  syncApi.getDashboard(workspace.userId, signal),
+                );
+          if (cloud === undefined || !stillCurrent()) return null;
+          if (cloud.revision !== '0' || cloud.dashboard !== null) {
+            const verified = await verifyAdoptionSession(workspace);
+            if (!stillCurrent() || verified === null) return null;
+            const latest = await workspace.synchronizationDatabase?.readSyncState(workspace.userId);
+            if (!stillCurrent()) return null;
+            if (latest?.pendingRequest?.kind === 'adoption') {
+              setAdoptionState({
+                status: 'retryable',
+                decision: latest.pendingRequest.request.decision,
+              });
+              return null;
+            }
+            if (latest !== undefined && verified.adoption.status === 'unavailable') {
+              await resolveUnavailableAdoption(workspace, verified, latest);
+              return null;
+            }
+            if (latest !== undefined && hasPotentialAdoptionCompletion(latest)) {
+              if (hasTerminalAdoptionDecision(verified)) {
+                const peer = await reopenPeerCompletion(workspace, verified, latest);
+                if (peer !== 'not-completed') return null;
+              }
+            }
+            setAdoptionState({
+              status: 'storage-recovery',
+              decisionConfirmed:
+                verified.adoption.status === 'accepted' || verified.adoption.status === 'declined',
+            });
+            return null;
+          }
+          return withGuestWorkspaceLock(options.coordination, async () => {
+            if (!stillCurrent()) return null;
+            const guest = await readGuestSnapshot(workspace.userId, cloud.catalogueVersion);
+            return stillCurrent() ? guest : null;
+          });
+        },
+        options.synchronization?.locks,
+      );
+      if (!stillCurrent()) return;
+      if (locked.status === 'unavailable') {
+        setAdoptionState({ status: 'retryable' });
+        return;
+      }
+      if (adoptionState.status === 'storage-recovery' || adoptionState.status === 'retryable')
+        return;
+      const guest = locked.value;
+      if (guest === null) {
+        setAdoptionState({ status: 'none' });
+        return;
+      }
+      offeredGuestSnapshot = guest.canonical;
+      setAdoptionState({ status: 'offer', entryCount: guest.entryCount });
+    } catch {
+      if (stillCurrent())
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: false });
+    }
+  };
+
+  const chooseAdoption = async (decision: 'yes' | 'no'): Promise<void> => {
+    const workspace = active;
+    if (workspace === undefined || !workspaceIsCurrent(workspace)) return;
+    const verificationSequence = requestSequence;
+    const stillCurrent = () =>
+      workspaceIsCurrent(workspace) && requestSequence === verificationSequence;
+    let pendingState;
+    try {
+      pendingState = await workspace.synchronizationDatabase?.readSyncState(workspace.userId);
+    } catch {
+      if (stillCurrent())
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: false });
+      return;
+    }
+    if (!stillCurrent()) return;
+    if (pendingState?.pendingRequest?.kind === 'dashboard-put') {
+      const session = await verifyAdoptionSession(workspace);
+      if (!stillCurrent() || session === null) return;
+      if (session.adoption.status === 'unavailable') {
+        await resolveUnavailableAdoption(workspace, session, pendingState);
+      } else if (session.adoption.status === 'pending' && session.adoption.capability) {
+        await resumePendingDashboardPut(workspace, session, pendingState);
+      } else {
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: false });
+      }
+      return;
+    }
+    if (hasPotentialAdoptionCompletion(pendingState) && pendingState !== undefined) {
+      const session = await verifyAdoptionSession(workspace);
+      if (!stillCurrent() || session === null) return;
+      if (hasTerminalAdoptionDecision(session)) {
+        const peer = await reopenPeerCompletion(workspace, session, pendingState);
+        if (peer !== 'not-completed') return;
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+      } else if (session.adoption.status === 'unavailable') {
+        await resolveUnavailableAdoption(workspace, session, pendingState);
+      } else {
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: false });
+      }
+      return;
+    }
+    if (pendingState?.pendingRequest?.kind === 'adoption') {
+      setAdoptionState({
+        status: 'retryable',
+        decision: pendingState.pendingRequest.request.decision,
+      });
+      await recoverOrReplayPendingAdoption(workspace, pendingState.pendingRequest.request);
+      return;
+    }
+    if (adoptionState.status !== 'offer' || offeredGuestSnapshot === undefined) return;
+    if (workspace.session.adoption.status !== 'pending' || !workspace.session.adoption.capability) {
+      setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+      return;
+    }
+    const database = workspace.synchronizationDatabase;
+    if (database === undefined) {
+      setAdoptionState({ status: 'storage-recovery', decisionConfirmed: false });
+      return;
+    }
+    const displayedSnapshot = offeredGuestSnapshot;
+    try {
+      const locked = await withAccountSynchronizationLock(
+        workspace.userId,
+        async (): Promise<
+          | { readonly status: 'refreshed' | 'ineligible' | 'pending' | 'storage' | 'terminal' }
+          | { readonly status: 'prepared'; readonly request: AdoptionRequest }
+          | { readonly status: 'finished'; readonly succeeded: boolean }
+        > => {
+          const verified = await verifyAdoptionSession(workspace);
+          if (!stillCurrent() || verified === null) {
+            return { status: 'ineligible' };
+          }
+          if (verified.adoption.status === 'accepted' || verified.adoption.status === 'declined') {
+            // The server can become terminal after the offer's first shared-IDB read.
+            // Recheck under the account lock before reopening this stale editor.
+            const latest = await database.readSyncState(workspace.userId);
+            if (!stillCurrent()) return { status: 'ineligible' };
+            if (latest.pendingRequest?.kind === 'adoption') return { status: 'pending' };
+            const peer = await reopenPeerCompletion(workspace, verified, latest);
+            if (peer === 'not-completed') {
+              setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+            }
+            return { status: 'terminal' };
+          }
+          if (verified.adoption.status === 'unavailable') {
+            const latest = await database.readSyncState(workspace.userId);
+            if (!stillCurrent()) return { status: 'ineligible' };
+            if (latest.pendingRequest?.kind === 'adoption') return { status: 'pending' };
+            await resolveUnavailableAdoption(workspace, verified, latest);
+            return { status: 'terminal' };
+          }
+          if (verified.adoption.status !== 'pending' || !verified.adoption.capability) {
+            return { status: 'ineligible' };
+          }
+          const syncApi = options.synchronization?.api;
+          const cloud =
+            syncApi === undefined
+              ? undefined
+              : await withAdoptionTimeout((signal) =>
+                  syncApi.getDashboard(workspace.userId, signal),
+                );
+          if (!stillCurrent()) return { status: 'ineligible' };
+          if (cloud === undefined || cloud.revision !== '0' || cloud.dashboard !== null) {
+            await verifyAdoptionSession(workspace);
+            return { status: 'ineligible' };
+          }
+          const syncState = await database.readSyncState(workspace.userId);
+          if (!stillCurrent()) return { status: 'ineligible' };
+          if (syncState.pendingRequest !== null) return { status: 'pending' };
+          const currentCache = syncState.cache;
+          if (
+            currentCache === null ||
+            syncState.activeConflict !== null ||
+            currentCache.generation !== 0 ||
+            currentCache.cacheValue !== serializePersistedTrainingStateV10({ dashboardEntries: [] })
+          ) {
+            return { status: 'ineligible' };
+          }
+          if (decision === 'yes') {
+            const prepared = await withGuestWorkspaceLock(options.coordination, async () => {
+              const guest = await readGuestSnapshot(workspace.userId, cloud.catalogueVersion);
+              if (!stillCurrent()) return { status: 'ineligible' as const };
+              if (guest === null) return { status: 'ineligible' as const };
+              if (guest.canonical !== displayedSnapshot) {
+                offeredGuestSnapshot = guest.canonical;
+                setAdoptionState({ status: 'offer', entryCount: guest.entryCount });
+                return { status: 'refreshed' as const };
+              }
+              const requestId = globalThis.crypto.randomUUID();
+              const request: AccountAdoptionRequest = {
+                decision: 'yes',
+                transportVersion: 1,
+                expectedAccountWorkspaceId: workspace.userId,
+                expectedRevision: '0',
+                requestId,
+                catalogueVersion: cloud.catalogueVersion,
+                dashboard: guest.dashboard,
+              };
+              if (!stillCurrent()) return { status: 'ineligible' as const };
+              const result = await database.preparePendingRequest(workspace.userId, currentCache, {
+                kind: 'adoption',
+                request,
+              });
+              return result.status === 'committed'
+                ? { status: 'prepared' as const, request }
+                : { status: 'storage' as const };
+            });
+            if (prepared.status === 'ineligible' || prepared.status === 'refreshed') {
+              return { status: prepared.status };
+            }
+            if (prepared.status !== 'prepared') return { status: 'storage' };
+            return {
+              status: 'finished',
+              succeeded: await submitStoredAdoptionUnderLock(
+                workspace,
+                prepared.request,
+                verificationSequence,
+              ),
+            };
+          }
+          const requestId = globalThis.crypto.randomUUID();
+          const request: AccountAdoptionRequest = {
+            decision: 'no',
+            transportVersion: 1,
+            expectedAccountWorkspaceId: workspace.userId,
+            requestId,
+          };
+          if (currentCache === null) return { status: 'storage' };
+          if (!stillCurrent()) return { status: 'ineligible' };
+          const result = await database.preparePendingRequest(workspace.userId, currentCache, {
+            kind: 'adoption',
+            request,
+          });
+          return result.status === 'committed'
+            ? {
+                status: 'finished',
+                succeeded: await submitStoredAdoptionUnderLock(
+                  workspace,
+                  request,
+                  verificationSequence,
+                ),
+              }
+            : { status: 'storage' };
+        },
+        options.synchronization?.locks,
+      );
+      if (!stillCurrent()) return;
+      if (locked.status === 'unavailable') {
+        setAdoptionState({ status: 'retryable' });
+        return;
+      }
+      if (locked.value.status === 'refreshed') return;
+      if (locked.value.status === 'pending') {
+        const state = await database.readSyncState(workspace.userId);
+        if (!stillCurrent()) return;
+        if (state.pendingRequest?.kind === 'adoption') {
+          setAdoptionState({
+            status: 'retryable',
+            decision: state.pendingRequest.request.decision,
+          });
+          await recoverOrReplayPendingAdoption(workspace, state.pendingRequest.request);
+        }
+        return;
+      }
+      if (locked.value.status === 'ineligible') {
+        // An ineligible offer can mean identity, cloud, or guest state changed while
+        // preflighting. Keep editing closed until a fresh verified recovery resolves it.
+        setAdoptionState({
+          status: 'storage-recovery',
+          decisionConfirmed: hasTerminalAdoptionDecision(workspace.session),
+        });
+        return;
+      }
+      if (locked.value.status === 'terminal') return;
+      if (locked.value.status === 'storage') {
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: false });
+        return;
+      }
+      // An ambiguous POST keeps its durable request and retry state. It never authorizes an
+      // opposite choice or closes the account decision gate.
+      if (locked.value.status === 'finished') return;
+    } catch {
+      if (stillCurrent())
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: false });
+    }
+  };
+
+  const retryAdoption = async (): Promise<void> => {
+    const workspace = active;
+    if (workspace === undefined) {
+      if (adoptionRecoveryAccountId !== undefined) {
+        await controller.bootstrap();
+      }
+      return;
+    }
+    const verificationSequence = requestSequence;
+    const stillCurrent = () =>
+      workspaceIsCurrent(workspace) && requestSequence === verificationSequence;
+    let state;
+    try {
+      state = await workspace.synchronizationDatabase?.readSyncState(workspace.userId);
+    } catch {
+      if (stillCurrent())
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: false });
+      return;
+    }
+    if (!stillCurrent()) return;
+    if (state?.pendingRequest?.kind === 'dashboard-put') {
+      const session = await verifyAdoptionSession(workspace);
+      if (!stillCurrent() || session === null) return;
+      if (session.adoption.status === 'unavailable') {
+        await resolveUnavailableAdoption(workspace, session, state);
+      } else if (session.adoption.status === 'pending' && session.adoption.capability) {
+        await resumePendingDashboardPut(workspace, session, state);
+      } else {
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: false });
+      }
+      return;
+    }
+    if (hasPotentialAdoptionCompletion(state) && state !== undefined) {
+      const session = await verifyAdoptionSession(workspace);
+      if (!stillCurrent() || session === null) return;
+      if (hasTerminalAdoptionDecision(session)) {
+        const peer = await reopenPeerCompletion(workspace, session, state);
+        if (peer !== 'not-completed') return;
+        setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+        return;
+      }
+      if (session.adoption.status === 'unavailable') {
+        await resolveUnavailableAdoption(workspace, session, state);
+        return;
+      }
+    }
+    if (state?.pendingRequest?.kind === 'adoption') {
+      setAdoptionState({ status: 'retryable', decision: state.pendingRequest.request.decision });
+      await recoverOrReplayPendingAdoption(workspace, state.pendingRequest.request);
+      return;
+    }
+    if (hasTerminalAdoptionDecision(workspace.session)) {
+      setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+      return;
+    }
+    await checkAdoptionEligibility(workspace);
+  };
+
   const isUnauthenticated = (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&
@@ -497,6 +1736,7 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
 
     getSnapshot: (): WorkspaceSnapshot => {
       if (disposed) return { mode: 'disposed', epoch };
+      if (adoptionCompletionPending) return { mode: 'adoption-completing', epoch };
       if (verifiedStorageFailure !== undefined)
         return {
           mode: 'account-error',
@@ -526,6 +1766,7 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
         persistencePending: active.storage.hasPendingWrites,
         recoveryFailure: active.storage.lastRecoveryFailure?.code ?? null,
         serverRevocationConfirmed: active.serverRevocationConfirmed,
+        adoption: adoptionState,
       };
     },
 
@@ -619,12 +1860,18 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
     bootstrap: async (): Promise<WorkspaceOperationResult> => {
       const localResume = pendingLocalResume;
       pendingLocalResume = undefined;
-      const ordinaryBootstrap = localResume === undefined;
+      const adoptionResume = pendingAdoptionResume;
+      pendingAdoptionResume = undefined;
+      const ordinaryBootstrap = localResume === undefined && adoptionResume === undefined;
       if (ordinaryBootstrap) ordinaryBootstrapsInFlight += 1;
       try {
         if (disposed) return { status: 'disposed' };
         if (active === undefined && authenticationLogoutInFlight) return { status: 'superseded' };
-        if (localResume === undefined && replacementGate?.resuming) {
+        if (
+          localResume === undefined &&
+          adoptionResume === undefined &&
+          replacementGate?.resuming
+        ) {
           // A competing verification must not cancel offline rehydration of the
           // already-open workspace. Hide and logout still supersede it directly.
           return { status: 'superseded' };
@@ -632,7 +1879,12 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
         let result: SessionResult;
         let operation: ReturnType<typeof startRequest>;
         const pendingExit = exitIntent;
-        if (localResume !== undefined) {
+        if (adoptionResume !== undefined) {
+          // A matching POST acknowledgement or session receipt is authoritative. Reopen
+          // the committed cache without a stale follow-up /session response vetoing it.
+          operation = startRequest();
+          result = { status: 'authenticated', session: adoptionResume };
+        } else if (localResume !== undefined) {
           if (
             replacementGate !== localResume ||
             !localResume.transactionComplete ||
@@ -704,6 +1956,18 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
           }
         }
         if (!isCurrent(operation)) return { status: 'superseded' };
+        if (result.status === 'authenticated') {
+          const localTerminal = adoptionSessionOverrides.get(result.session.userId);
+          if (
+            localTerminal !== undefined &&
+            (localTerminal.adoption.status === 'accepted' ||
+              localTerminal.adoption.status === 'declined')
+          ) {
+            // A direct matching POST acknowledgement is authoritative even if the next
+            // session read still reports the former pending capability.
+            result = { status: 'authenticated', session: localTerminal };
+          }
+        }
         const pendingReplacement = replacementGate;
         if (pendingReplacement !== undefined) {
           if (pendingReplacement.revocationPending || pendingReplacement.logoutInFlight) {
@@ -745,8 +2009,78 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
           notify();
         }
         if (active?.userId === userId) {
-          active.session = result.session;
-          active.synchronizer?.updateSession(result.session);
+          const adoptionGateOpen =
+            active.session.adoption.status === 'pending' || adoptionState.status !== 'none';
+          let syncState: AccountSyncState | undefined;
+          try {
+            syncState = await active.synchronizationDatabase?.readSyncState(userId);
+          } catch {
+            active.session = result.session;
+            active.synchronizer?.updateSession(result.session);
+            offeredGuestSnapshot = undefined;
+            setAdoptionState({ status: 'storage-recovery', decisionConfirmed: false });
+            return { status: 'ready' };
+          }
+          if (!workspaceIsCurrent(active)) return { status: 'superseded' };
+          if (adoptionGateOpen && syncState !== undefined && syncState.pendingRequest === null) {
+            if (hasTerminalAdoptionDecision(result.session)) {
+              const peer = await reopenPeerCompletion(active, result.session, syncState);
+              if (peer === 'reopened') return { status: 'ready' };
+              if (peer === 'blocked') return { status: 'retryable', reason: 'storage' };
+              if (hasPotentialAdoptionCompletion(syncState)) {
+                setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+                return { status: 'ready' };
+              }
+            }
+          }
+          if (
+            adoptionGateOpen &&
+            result.session.adoption.status === 'unavailable' &&
+            syncState !== undefined &&
+            syncState.pendingRequest?.kind !== 'adoption'
+          ) {
+            const resolved = await resolveUnavailableAdoption(active, result.session, syncState);
+            if (resolved === 'reopened' || resolved === 'open') return { status: 'ready' };
+            return active === undefined
+              ? { status: 'retryable', reason: 'storage' }
+              : { status: 'ready' };
+          }
+          if (
+            adoptionGateOpen &&
+            (result.session.adoption.status === 'accepted' ||
+              result.session.adoption.status === 'declined')
+          ) {
+            verifiedStorageFailure = { session: result.session, code: 'unavailable' };
+            setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+            deactivate(true);
+            return { status: 'retryable', reason: 'storage' };
+          }
+          if (syncState?.pendingRequest?.kind === 'adoption') {
+            active.session = result.session;
+            adoptionRecoveryAccountId = userId;
+            setAdoptionState({
+              status: 'retryable',
+              decision: syncState.pendingRequest.request.decision,
+            });
+            await recoverOrReplayPendingAdoption(active, syncState.pendingRequest.request);
+            if (!workspaceIsCurrent(active)) return { status: 'superseded' };
+          } else {
+            const reconciledSession = applyDurableDecline(result.session, syncState);
+            active.session = reconciledSession;
+            active.synchronizer?.updateSession(reconciledSession);
+            offeredGuestSnapshot = undefined;
+            if (
+              reconciledSession.adoption.status === 'pending' &&
+              reconciledSession.adoption.capability
+            ) {
+              adoptionRecoveryAccountId = undefined;
+              setAdoptionState({ status: 'checking' });
+              await checkAdoptionEligibility(active);
+            } else {
+              adoptionRecoveryAccountId = undefined;
+              setAdoptionState({ status: 'none' });
+            }
+          }
           active.serverRevocationConfirmed = false;
           authenticationReverificationRequired = false;
           authenticationRecoverySession = undefined;
@@ -896,6 +2230,10 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
             if (!activationCurrent()) return { status: 'superseded' };
           }
           const activatedStore = store;
+          // Keep a verified account uneditable until its durable adoption state has been
+          // read. This also covers reloads where a terminal server receipt and a pending
+          // local request must be reconciled before the empty cache can become visible.
+          adoptionState = { status: 'checking' };
           active = {
             userId,
             session: result.session,
@@ -903,11 +2241,12 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
             store: activatedStore,
             storage,
             unsubscribe,
+            ...(synchronizationDatabase === undefined ? {} : { synchronizationDatabase }),
             storageChanged: sawLegacyChange,
             serverRevocationConfirmed: false,
           };
+          const openedWorkspace = active;
           verifiedStorageFailure = undefined;
-          notify();
           if (options.synchronization !== undefined && synchronizationDatabase !== undefined) {
             const synchronizer = createAccountSynchronizer({
               accountId: userId,
@@ -920,6 +2259,11 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
                 serializePersistedTrainingStateV10({
                   dashboardEntries: activatedStore.getState().dashboardEntries,
                 }),
+              canSynchronize: () =>
+                workspaceIsCurrent(openedWorkspace) &&
+                adoptionState.status === 'none' &&
+                !adoptionCompletionPending &&
+                verifiedStorageFailure === undefined,
               // This synchronous gate closes account editing before IndexedDB can replace its
               // cache. The callback settles only after the transaction and synchronization lock.
               beginRemoteReplacement: (expectedCacheValue) => {
@@ -985,8 +2329,40 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
               synchronizer.schedule();
               notify();
             });
-            synchronizer.start();
           }
+          const syncState = await synchronizationDatabase?.readSyncState(userId);
+          if (!workspaceIsCurrent(openedWorkspace)) return { status: 'superseded' };
+          const reconciledSession = applyDurableDecline(openedWorkspace.session, syncState);
+          openedWorkspace.session = reconciledSession;
+          openedWorkspace.synchronizer?.updateSession(reconciledSession);
+          if (syncState?.pendingRequest?.kind === 'adoption') {
+            setAdoptionState({
+              status: 'retryable',
+              decision: syncState.pendingRequest.request.decision,
+            });
+            await recoverOrReplayPendingAdoption(openedWorkspace, syncState.pendingRequest.request);
+            if (active !== openedWorkspace) return { status: 'superseded' };
+          } else {
+            offeredGuestSnapshot = undefined;
+            if (
+              (openedWorkspace.session.adoption.status === 'accepted' &&
+                syncState?.acknowledgement.status !== 'acknowledged') ||
+              (openedWorkspace.session.adoption.status === 'declined' &&
+                syncState?.acknowledgement.status !== 'adoption-declined')
+            ) {
+              verifiedStorageFailure = { session: openedWorkspace.session, code: 'unavailable' };
+              setAdoptionState({ status: 'storage-recovery', decisionConfirmed: true });
+              deactivate(true);
+              return { status: 'retryable', reason: 'storage' };
+            }
+            if (syncState?.acknowledgement.status === 'adoption-declined') {
+              setAdoptionState({ status: 'none' });
+            } else {
+              await checkAdoptionEligibility(openedWorkspace);
+            }
+            if (!workspaceIsCurrent(openedWorkspace)) return { status: 'superseded' };
+          }
+          openedWorkspace.synchronizer?.start();
           preparing = undefined;
           unconfirmedEdits.delete(userId);
           recoveryViews.delete(userId);
@@ -1302,6 +2678,9 @@ export function createAccountWorkspaceController(options: AccountWorkspaceOption
     },
 
     readSynchronizationState: async () => active?.synchronizer?.readState() ?? null,
+
+    chooseAdoption,
+    retryAdoption,
 
     useCloudVersion: async (conflictId: string): Promise<AccountSynchronizationResult> =>
       active?.synchronizer?.useCloud(conflictId) ?? { status: 'paused' },

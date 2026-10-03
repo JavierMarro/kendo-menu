@@ -63,7 +63,7 @@ export function broadcastAccountTransition(signal: AccountTransitionSignal): voi
 
 export function subscribeToAccountTransitions(
   listener: (signal: AccountTransitionSignal) => void,
-): () => void {
+): { readonly unsubscribe: () => void; readonly available: boolean } {
   try {
     const channel = new BroadcastChannel(ACCOUNT_TRANSITION_CHANNEL);
     const onMessage = (event: MessageEvent<unknown>) => {
@@ -87,11 +87,14 @@ export function subscribeToAccountTransitions(
         listener(signal);
     };
     channel.addEventListener('message', onMessage);
-    return () => {
-      channel.removeEventListener('message', onMessage);
-      channel.close();
+    return {
+      available: true,
+      unsubscribe: () => {
+        channel.removeEventListener('message', onMessage);
+        channel.close();
+      },
     };
   } catch {
-    return () => undefined;
+    return { available: false, unsubscribe: () => undefined };
   }
 }

@@ -5,6 +5,7 @@
  * writes cannot imply a false acknowledgement or discard the losing local dashboard.
  */
 import { parseDashboardPersistenceV10 } from '@kendo-menu/domain/dashboard-persistence';
+import type { PersistedTrainingWireStateV10 } from '@kendo-menu/domain/dashboard-persistence';
 import {
   classifyTrainingStorageValue,
   serializePersistedTrainingStateV10,
@@ -29,7 +30,7 @@ export type AccountPayloadKind = 'pending-request' | 'active-conflict';
 
 export interface AccountDashboardSnapshot {
   readonly version: 10;
-  readonly state: unknown;
+  readonly state: PersistedTrainingWireStateV10;
 }
 
 export interface AccountDashboardReadResponse {
@@ -143,6 +144,17 @@ export type PendingCompletion =
     }
   | { readonly kind: 'adoption-declined'; readonly requestId: string };
 
+/** A terminal result freshly observed from `/api/session`, with the matching cloud snapshot for Yes. */
+export type AuthoritativeAdoptionCompletion =
+  | { readonly decision: 'no'; readonly requestId: string }
+  | {
+      readonly decision: 'yes';
+      readonly requestId: string;
+      readonly acknowledgedRevision: string;
+      readonly timestamp: string;
+      readonly cloud: AccountDashboardReadResponse;
+    };
+
 export type AccountSyncMutationResult =
   | { readonly status: 'committed'; readonly state: AccountSyncState }
   | { readonly status: 'conflict'; readonly state: AccountSyncState }
@@ -221,6 +233,16 @@ export interface AccountSynchronizationDatabase extends AccountDatabase {
     accountId: string,
     requestId: string,
     completion: PendingCompletion,
+  ): Promise<AccountSyncMutationResult>;
+  completeAcceptedAdoption(
+    accountId: string,
+    requestId: string,
+    acknowledgedRevision: string,
+    timestamp: string,
+  ): Promise<AccountSyncMutationResult>;
+  reconcileAuthoritativeAdoption(
+    accountId: string,
+    completion: AuthoritativeAdoptionCompletion,
   ): Promise<AccountSyncMutationResult>;
   recordActiveConflict(
     accountId: string,
@@ -387,7 +409,7 @@ function canonicalCacheValue(value: string): string | null {
 function cacheValueFromSnapshot(snapshot: AccountDashboardSnapshot): string {
   const state = parseDashboardPersistenceV10(snapshot.state);
   if (state === null) throw new Error('Dashboard snapshot is invalid.');
-  return JSON.stringify({ version: 10, state });
+  return serializePersistedTrainingStateV10(state);
 }
 
 function cacheValuesEqual(left: string, right: string): boolean {
@@ -1853,6 +1875,23 @@ export function createIndexedDbAccountDatabase(
         await done;
         return { status: 'mismatch', state };
       }
+      const cache = state.cache;
+      if (
+        pending.request.expectedAccountWorkspaceId !== accountId ||
+        pending.cacheVersion.generation !== 0 ||
+        cache === null ||
+        !cacheVersionMatches(cache, pending.cacheVersion) ||
+        cache.generation !== 0 ||
+        state.activeConflict !== null ||
+        state.acknowledgement.status === 'adoption-declined' ||
+        !cacheValuesEqual(
+          cache.cacheValue,
+          serializePersistedTrainingStateV10({ dashboardEntries: [] }),
+        )
+      ) {
+        await done;
+        return { status: 'conflict', state };
+      }
       acknowledgement = {
         version: 1,
         status: 'adoption-declined',
@@ -1885,17 +1924,222 @@ export function createIndexedDbAccountDatabase(
       };
     }
     const ackRecord = acknowledgementMetadata(accountId, acknowledgement);
-    await commitTransaction(transaction, done, () => {
+    let confirmed: AccountSyncState | undefined;
+    await commitTransaction(transaction, done, async () => {
       store.put(ackRecord);
       store.delete(payloadKey(accountId, 'pending-request'));
+      confirmed = await readSyncStateFromStore(store, accountId);
+      if (
+        confirmed.pendingRequest !== null ||
+        JSON.stringify(confirmed.acknowledgement) !== JSON.stringify(acknowledgement) ||
+        (completion.kind === 'adoption-declined' &&
+          (confirmed.cache === null ||
+            confirmed.cache.identity !== state.cache?.identity ||
+            confirmed.cache.generation !== 0 ||
+            !cacheValuesEqual(
+              confirmed.cache.cacheValue,
+              serializePersistedTrainingStateV10({ dashboardEntries: [] }),
+            )))
+      ) {
+        throw new Error('Pending acknowledgement transaction readback did not match.');
+      }
     });
-    const confirmed = await readSyncState(accountId);
+    if (confirmed === undefined)
+      throw new Error('Pending acknowledgement readback was unavailable.');
+    return { status: 'committed', state: confirmed };
+  };
+
+  // Accepted adoption replaces only the untouched, empty first-account cache. The cloud
+  // snapshot, revision acknowledgement, and pending-request removal commit as one transaction.
+  const completeAcceptedAdoption = async (
+    accountId: string,
+    requestId: string,
+    acknowledgedRevision: string,
+    timestamp: string,
+  ): Promise<AccountSyncMutationResult> => {
     if (
-      confirmed.pendingRequest !== null ||
-      JSON.stringify(confirmed.acknowledgement) !== JSON.stringify(acknowledgement)
+      !isAccountId(accountId) ||
+      !isRequestId(requestId) ||
+      acknowledgedRevision !== '1' ||
+      !isTimestamp(timestamp)
     ) {
-      throw new Error('Pending acknowledgement transaction readback did not match.');
+      throw new Error('Accepted adoption completion is invalid.');
     }
+    const database = await db();
+    const transaction = database.transaction(STORE_NAME, 'readwrite');
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore(STORE_NAME);
+    const state = await readSyncStateFromStore(store, accountId);
+    const pending = state.pendingRequest;
+    const cache = state.cache;
+    if (
+      pending === null ||
+      pending.kind !== 'adoption' ||
+      pending.request.decision !== 'yes' ||
+      pending.request.requestId !== requestId ||
+      pending.request.expectedAccountWorkspaceId !== accountId ||
+      pending.cacheVersion.generation !== 0 ||
+      cache === null ||
+      !cacheVersionMatches(cache, pending.cacheVersion) ||
+      cache.generation !== 0 ||
+      state.activeConflict !== null ||
+      state.acknowledgement.status === 'adoption-declined' ||
+      !cacheValuesEqual(
+        cache.cacheValue,
+        serializePersistedTrainingStateV10({ dashboardEntries: [] }),
+      )
+    ) {
+      await done;
+      return { status: 'conflict', state };
+    }
+    const nextCacheValue = cacheValueFromSnapshot(pending.request.dashboard);
+    const nextCache = nextCacheRecord(accountId, cache, nextCacheValue);
+    const acknowledgement: AccountAcknowledgement = {
+      version: 1,
+      status: 'acknowledged',
+      accountWorkspaceId: accountId,
+      revision: acknowledgedRevision,
+      requestId,
+      cacheIdentity: nextCache.identity,
+      generation: nextCache.generation,
+      updatedAt: timestamp,
+    };
+    const ackRecord = acknowledgementMetadata(accountId, acknowledgement);
+    let confirmed: AccountSyncState | undefined;
+    await commitTransaction(transaction, done, async () => {
+      store.put(nextCache);
+      store.put(ackRecord);
+      store.delete(payloadKey(accountId, 'pending-request'));
+      confirmed = await readSyncStateFromStore(store, accountId);
+      if (
+        confirmed.pendingRequest !== null ||
+        confirmed.cache?.cacheValue !== nextCacheValue ||
+        confirmed.cache.identity !== nextCache.identity ||
+        confirmed.cache.generation !== nextCache.generation ||
+        JSON.stringify(confirmed.acknowledgement) !== JSON.stringify(acknowledgement)
+      ) {
+        throw new Error('Accepted adoption transaction readback did not match.');
+      }
+    });
+    if (confirmed === undefined) throw new Error('Accepted adoption readback was unavailable.');
+    return { status: 'committed', state: confirmed };
+  };
+
+  // A terminal `/api/session` result can belong to another tab's request. Reconcile that
+  // server decision only against the untouched empty account cache, and commit it with the
+  // authoritative request ID. In particular, accepted results use the fetched cloud snapshot,
+  // never the losing tab's pending Yes payload.
+  const reconcileAuthoritativeAdoption = async (
+    accountId: string,
+    completion: AuthoritativeAdoptionCompletion,
+  ): Promise<AccountSyncMutationResult> => {
+    if (!isAccountId(accountId) || !isRequestId(completion.requestId)) {
+      throw new Error('Authoritative adoption identity is invalid.');
+    }
+    let authoritativeCloud: AccountDashboardReadResponse | null = null;
+    if (completion.decision === 'yes') {
+      authoritativeCloud = parseDashboardReadResponse(completion.cloud);
+      if (
+        !isRevision(completion.acknowledgedRevision) ||
+        completion.acknowledgedRevision === '0' ||
+        !isTimestamp(completion.timestamp) ||
+        authoritativeCloud === null ||
+        authoritativeCloud.accountWorkspaceId !== accountId ||
+        authoritativeCloud.dashboard === null ||
+        BigInt(authoritativeCloud.revision) < BigInt(completion.acknowledgedRevision) ||
+        (authoritativeCloud.revision === completion.acknowledgedRevision &&
+          authoritativeCloud.updatedAt !== completion.timestamp)
+      ) {
+        throw new Error('Authoritative accepted adoption snapshot is invalid.');
+      }
+    }
+
+    const database = await db();
+    const transaction = database.transaction(STORE_NAME, 'readwrite');
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore(STORE_NAME);
+    const state = await readSyncStateFromStore(store, accountId);
+    const pending = state.pendingRequest;
+    const cache = state.cache;
+    const emptyCacheValue = serializePersistedTrainingStateV10({ dashboardEntries: [] });
+    const baselineAcknowledgement =
+      state.acknowledgement.status === 'unknown' ||
+      (state.acknowledgement.status === 'acknowledged' &&
+        state.acknowledgement.revision === '0' &&
+        state.acknowledgement.generation === 0);
+    if (
+      pending === null ||
+      pending.kind !== 'adoption' ||
+      pending.accountId !== accountId ||
+      pending.request.expectedAccountWorkspaceId !== accountId ||
+      pending.cacheVersion.generation !== 0 ||
+      cache === null ||
+      !cacheVersionMatches(cache, pending.cacheVersion) ||
+      cache.generation !== 0 ||
+      !cacheValuesEqual(cache.cacheValue, emptyCacheValue) ||
+      state.activeConflict !== null ||
+      !baselineAcknowledgement ||
+      (state.acknowledgement.status === 'acknowledged' &&
+        (state.acknowledgement.accountWorkspaceId !== accountId ||
+          state.acknowledgement.cacheIdentity !== cache.identity))
+    ) {
+      await done;
+      return { status: 'conflict', state };
+    }
+
+    let nextCache: AccountCacheRecord = cache;
+    let acknowledgement: AccountAcknowledgement;
+    if (completion.decision === 'no') {
+      acknowledgement = {
+        version: 1,
+        status: 'adoption-declined',
+        accountWorkspaceId: accountId,
+        requestId: completion.requestId,
+        cacheIdentity: cache.identity,
+        generation: cache.generation,
+      };
+    } else {
+      if (authoritativeCloud === null) throw new Error('Accepted adoption snapshot is missing.');
+      const cloudCacheValue = cacheValueFromCloud(authoritativeCloud);
+      if (!validCacheValue(cloudCacheValue)) {
+        throw new Error('Authoritative adoption dashboard is not valid account data.');
+      }
+      nextCache = nextCacheRecord(accountId, cache, cloudCacheValue);
+      acknowledgement = {
+        version: 1,
+        status: 'acknowledged',
+        accountWorkspaceId: accountId,
+        revision: authoritativeCloud.revision,
+        requestId:
+          authoritativeCloud.revision === completion.acknowledgedRevision
+            ? completion.requestId
+            : null,
+        cacheIdentity: nextCache.identity,
+        generation: nextCache.generation,
+        updatedAt: authoritativeCloud.updatedAt,
+      };
+    }
+    const ackRecord = acknowledgementMetadata(accountId, acknowledgement);
+    let confirmed: AccountSyncState | undefined;
+    await commitTransaction(transaction, done, async () => {
+      if (completion.decision === 'yes') store.put(nextCache);
+      store.put(ackRecord);
+      store.delete(payloadKey(accountId, 'pending-request'));
+      // Verify all values through this same transaction before it commits. A failed readback
+      // aborts the transaction and leaves both the prior cache and pending request intact.
+      confirmed = await readSyncStateFromStore(store, accountId);
+      if (
+        confirmed.pendingRequest !== null ||
+        confirmed.cache?.cacheValue !== nextCache.cacheValue ||
+        confirmed.cache.identity !== nextCache.identity ||
+        confirmed.cache.generation !== nextCache.generation ||
+        JSON.stringify(confirmed.acknowledgement) !== JSON.stringify(acknowledgement)
+      ) {
+        throw new Error('Authoritative adoption transaction readback did not match.');
+      }
+    });
+    if (confirmed === undefined)
+      throw new Error('Authoritative adoption readback was unavailable.');
     return { status: 'committed', state: confirmed };
   };
 
@@ -2143,6 +2387,8 @@ export function createIndexedDbAccountDatabase(
     fastForwardCleanCache,
     preparePendingRequest,
     acknowledgePendingRequest,
+    completeAcceptedAdoption,
+    reconcileAuthoritativeAdoption,
     recordActiveConflict,
     resolveConflictUsingCloud,
     resolveConflictUsingLocal,

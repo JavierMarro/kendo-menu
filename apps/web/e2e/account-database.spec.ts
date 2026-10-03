@@ -115,6 +115,177 @@ test('quota failure aborts use-cloud transaction and leaves the conflict and sou
   expect(after).toEqual(before);
 });
 
+test('Yes and No completion commit atomically while divergent caches keep pending decisions', async ({
+  page,
+}) => {
+  await page.goto('/e2e/account-database-fixture.html?observer=1');
+  await expect(page.locator('#result')).toHaveText('observer');
+  await page.evaluate(() => window.dispatchEvent(new Event('e2e-db-complete-adoption')));
+  await expect(page.locator('#operation')).toContainText('"accepted"');
+  const result: unknown = JSON.parse(await page.locator('#operation').innerText());
+  expect(result).toMatchObject({
+    accepted: {
+      status: 'committed',
+      acknowledgement: {
+        status: 'acknowledged',
+        revision: '1',
+        requestId: '88888888-8888-4888-8888-888888888888',
+        updatedAt: '2026-09-30T10:00:00.000Z',
+      },
+      pending: null,
+    },
+    divergent: { status: 'conflict', pending: { kind: 'adoption' } },
+    declined: {
+      status: 'committed',
+      acknowledgement: {
+        status: 'adoption-declined',
+        requestId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      },
+      pending: null,
+    },
+    divergentDecline: { status: 'conflict', pending: { kind: 'adoption' } },
+  });
+  if (
+    typeof result !== 'object' ||
+    result === null ||
+    !('guestRaw' in result) ||
+    typeof result.guestRaw !== 'string' ||
+    !('emptyRaw' in result) ||
+    typeof result.emptyRaw !== 'string' ||
+    !('accepted' in result) ||
+    typeof result.accepted !== 'object' ||
+    result.accepted === null ||
+    !('cacheValue' in result.accepted) ||
+    !('divergent' in result) ||
+    typeof result.divergent !== 'object' ||
+    result.divergent === null ||
+    !('cacheValue' in result.divergent) ||
+    !('declined' in result) ||
+    typeof result.declined !== 'object' ||
+    result.declined === null ||
+    !('cacheValue' in result.declined) ||
+    !('divergentDecline' in result) ||
+    typeof result.divergentDecline !== 'object' ||
+    result.divergentDecline === null ||
+    !('cacheValue' in result.divergentDecline)
+  ) {
+    throw new Error('Adoption completion fixture returned an invalid result');
+  }
+  expect(result.accepted.cacheValue).toBe(result.guestRaw);
+  expect(result.divergent.cacheValue).toBe(result.guestRaw);
+  expect(result.declined.cacheValue).toBe(result.emptyRaw);
+  expect(result.divergentDecline.cacheValue).toBe(result.guestRaw);
+  expect(await indexedDbState(page, '66666666-6666-4666-8666-666666666666')).toMatchObject({
+    acknowledgement: { status: 'acknowledged', revision: '1' },
+    pending: null,
+  });
+  expect(await indexedDbState(page, '77777777-7777-4777-8777-777777777777')).toMatchObject({
+    pending: { kind: 'pending-request' },
+  });
+  expect(await indexedDbState(page, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toMatchObject({
+    acknowledgement: { status: 'adoption-declined' },
+    pending: null,
+  });
+  expect(await indexedDbState(page, 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')).toMatchObject({
+    pending: { kind: 'pending-request' },
+  });
+});
+
+test('authoritative terminal reconciliation keeps pending requests after quota or readback failure', async ({
+  page,
+}) => {
+  await page.goto('/e2e/account-database-fixture.html?observer=1');
+  await expect(page.locator('#result')).toHaveText('observer');
+  await page.evaluate(() => window.dispatchEvent(new Event('e2e-db-reconcile-adoption')));
+  await expect(page.locator('#operation')).toContainText('"failure"');
+  const result: unknown = JSON.parse(await page.locator('#operation').innerText());
+  expect(result).toMatchObject({
+    accepted: {
+      status: 'committed',
+      acknowledgement: {
+        status: 'acknowledged',
+        requestId: '14141414-1414-4414-8414-141414141414',
+        revision: '1',
+        updatedAt: '2026-09-30T10:00:00.000Z',
+      },
+      pending: null,
+    },
+    advanced: {
+      status: 'committed',
+      acknowledgement: {
+        status: 'acknowledged',
+        requestId: null,
+        revision: '2',
+        updatedAt: '2026-09-30T10:01:00.000Z',
+      },
+      pending: null,
+    },
+    declined: {
+      status: 'committed',
+      acknowledgement: {
+        status: 'adoption-declined',
+        requestId: '14141414-1414-4414-8414-141414141414',
+      },
+      pending: null,
+    },
+    failure: {
+      name: 'QuotaExceededError',
+      acknowledgement: { status: 'unknown' },
+      pending: { kind: 'adoption' },
+    },
+    acceptedReadback: {
+      errorName: 'UnknownError',
+      acknowledgement: { status: 'unknown' },
+      pending: { kind: 'adoption' },
+    },
+    declinedReadback: {
+      errorName: 'UnknownError',
+      acknowledgement: { status: 'unknown' },
+      pending: { kind: 'adoption' },
+    },
+  });
+  if (
+    typeof result !== 'object' ||
+    result === null ||
+    !('accepted' in result) ||
+    typeof result.accepted !== 'object' ||
+    result.accepted === null ||
+    !('cacheValue' in result.accepted) ||
+    !('declined' in result) ||
+    typeof result.declined !== 'object' ||
+    result.declined === null ||
+    !('cacheValue' in result.declined) ||
+    !('failure' in result) ||
+    typeof result.failure !== 'object' ||
+    result.failure === null ||
+    !('cacheValue' in result.failure) ||
+    !('advanced' in result) ||
+    typeof result.advanced !== 'object' ||
+    result.advanced === null ||
+    !('cacheValue' in result.advanced) ||
+    !('acceptedReadback' in result) ||
+    typeof result.acceptedReadback !== 'object' ||
+    result.acceptedReadback === null ||
+    !('cacheValue' in result.acceptedReadback) ||
+    !('declinedReadback' in result) ||
+    typeof result.declinedReadback !== 'object' ||
+    result.declinedReadback === null ||
+    !('cacheValue' in result.declinedReadback) ||
+    !('winningRaw' in result) ||
+    !('losingRaw' in result) ||
+    !('emptyRaw' in result)
+  ) {
+    throw new Error('Authoritative reconciliation fixture returned an invalid result');
+  }
+  expect(result.accepted.cacheValue).toBe(result.winningRaw);
+  expect(result.advanced.cacheValue).toBe(result.winningRaw);
+  expect(result.accepted.cacheValue).not.toBe(result.losingRaw);
+  expect(result.declined.cacheValue).toBe(result.emptyRaw);
+  expect(result.failure.cacheValue).toBe(result.emptyRaw);
+  expect(result.acceptedReadback.cacheValue).toBe(result.emptyRaw);
+  expect(result.declinedReadback.cacheValue).toBe(result.emptyRaw);
+});
+
 test('two tabs cannot replace one another’s pending request and acknowledgement survives reload', async ({
   page,
   context,

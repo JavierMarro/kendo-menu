@@ -123,6 +123,9 @@ function AccountSessionControls({
           onClick={() => {
             setExitMessage(null);
             void workspace.signOut().then((result) => {
+              if (result.status === 'signed-out') {
+                return;
+              }
               if (result.status === 'retryable') {
                 setExitMessage(
                   result.reason === 'storage'
@@ -134,24 +137,6 @@ function AccountSessionControls({
           }}
         >
           Sign out
-        </button>
-        <button
-          className="text-button"
-          type="button"
-          onClick={() => {
-            setExitMessage(null);
-            void workspace.openThisDevice().then((result) => {
-              if (result.status === 'retryable') {
-                setExitMessage(
-                  result.reason === 'storage'
-                    ? 'Could not switch to this device because account changes could not be saved. Your account remains open. Retry when local storage is available.'
-                    : 'Could not switch to this device. Your account remains open; please retry.',
-                );
-              }
-            });
-          }}
-        >
-          Use this device
         </button>
         {exitMessage ? <span role="status">{exitMessage}</span> : null}
       </div>
@@ -179,7 +164,15 @@ function AccountSessionControls({
     );
   }
   if (workspace.verification === 'signed-out') {
-    return null;
+    return (
+      <button
+        className="primary-button account-google-entry"
+        type="button"
+        onClick={workspace.startGoogleSignIn}
+      >
+        Continue with Google
+      </button>
+    );
   }
   return null;
 }

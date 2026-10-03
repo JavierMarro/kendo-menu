@@ -185,11 +185,6 @@ try {
             }),
           );
         }
-        if (guestMode === 'appears' && dashboardGetCount === 3) {
-          const set = DEFAULT_TRAINING_SETS[0];
-          if (set === undefined) throw new Error('Training set fixture missing');
-          guestStore.getState().addToDashboard(set.id);
-        }
         const { revision, dashboard, updatedAt } = cloudState();
         return Promise.resolve(
           new Response(
@@ -206,6 +201,13 @@ try {
         );
       }
       if (path === '/api/dashboard' && init?.method === 'PUT') {
+        // The request is already durable before the API call. Introduce an eligible guest at
+        // this boundary to prove that later guest data cannot displace the prepared write.
+        if (guestMode === 'appears' && localStorage.getItem('kendo-menu') === null) {
+          const set = DEFAULT_TRAINING_SETS[0];
+          if (set === undefined) throw new Error('Training set fixture missing');
+          guestStore.getState().addToDashboard(set.id);
+        }
         if (networkOffline) return Promise.reject(new TypeError('Fixture is offline'));
         if (typeof init.body !== 'string') throw new Error('Fixture PUT body missing');
         const value: unknown = JSON.parse(init.body);

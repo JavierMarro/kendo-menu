@@ -8,6 +8,7 @@ import {
   MAX_JSON_RESPONSE_BYTES,
   createAccountApiClient,
   type AccountApiError,
+  type AdoptionRequest,
   type DashboardReadResponse,
   type DashboardWriteRequest,
 } from './account-api';
@@ -284,6 +285,180 @@ describe('account API boundary', () => {
     expect(writeInit).toMatchObject({ headers: { 'x-csrf-token': CSRF_TOKEN } });
     expect(JSON.stringify(logoutInit)).not.toContain('__Host-kendomenu-session');
     expect(JSON.stringify(writeInit)).not.toContain('__Host-kendomenu-session');
+  });
+
+  it('sends exact No and Yes adoption envelopes through the hardened POST boundary', async () => {
+    const timestamp = '2026-09-25T12:00:00.000Z';
+    const noRequest = {
+      decision: 'no' as const,
+      transportVersion: 1 as const,
+      expectedAccountWorkspaceId: ACCOUNT_ID,
+      requestId: REQUEST_ID,
+    };
+    const noFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ status: 'declined', completion: { decision: 'no', requestId: REQUEST_ID } }),
+      );
+    const noClient = createAccountApiClient({
+      fetch: noFetch,
+      readCookie: () => `${CSRF_COOKIE_NAME}=${CSRF_TOKEN}`,
+    });
+    await expect(noClient.postAdoption(ACCOUNT_ID, noRequest)).resolves.toEqual({
+      status: 'declined',
+      completion: { decision: 'no', requestId: REQUEST_ID },
+    });
+    expect(noFetch).toHaveBeenCalledWith(
+      '/api/dashboard/adoption',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        redirect: 'error',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+          'x-csrf-token': CSRF_TOKEN,
+        },
+        body: JSON.stringify(noRequest),
+      }),
+    );
+
+    const yesRequest = {
+      decision: 'yes' as const,
+      ...dashboardWrite(),
+      expectedRevision: '0' as const,
+      dashboard: { version: 10 as const, state: { dashboardEntries: [] } },
+    };
+    const acknowledgement = {
+      transportVersion: 1,
+      accountWorkspaceId: ACCOUNT_ID,
+      requestId: REQUEST_ID,
+      revision: '1',
+      updatedAt: timestamp,
+    };
+    const yesFetch = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        status: 'accepted',
+        completion: {
+          decision: 'yes',
+          requestId: REQUEST_ID,
+          acknowledgedRevision: '1',
+          timestamp,
+        },
+        acknowledgement,
+      }),
+    );
+    const yesClient = createAccountApiClient({
+      fetch: yesFetch,
+      readCookie: () => `${CSRF_COOKIE_NAME}=${CSRF_TOKEN}`,
+    });
+    await expect(yesClient.postAdoption(ACCOUNT_ID, yesRequest)).resolves.toMatchObject({
+      status: 'accepted',
+      completion: { decision: 'yes', requestId: REQUEST_ID, acknowledgedRevision: '1', timestamp },
+      acknowledgement,
+    });
+    expect(yesFetch).toHaveBeenCalledWith(
+      '/api/dashboard/adoption',
+      expect.objectContaining({ body: JSON.stringify(yesRequest) }),
+    );
+  });
+
+  it('preserves a 409 adoption-unavailable response for session-receipt recovery', async () => {
+    const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'ADOPTION_UNAVAILABLE' }), {
+        status: 409,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const client = createAccountApiClient({
+      fetch: requestFetch,
+      readCookie: () => `${CSRF_COOKIE_NAME}=${CSRF_TOKEN}`,
+    });
+    await expect(
+      client.postAdoption(ACCOUNT_ID, {
+        decision: 'no',
+        transportVersion: 1,
+        expectedAccountWorkspaceId: ACCOUNT_ID,
+        requestId: REQUEST_ID,
+      }),
+    ).rejects.toMatchObject({
+      name: 'AccountApiError',
+      kind: 'http',
+      status: 409,
+      code: 'ADOPTION_UNAVAILABLE',
+    });
+  });
+
+  it('rejects adoption acknowledgements that mismatch the durable decision identity', async () => {
+    const request = {
+      decision: 'no' as const,
+      transportVersion: 1 as const,
+      expectedAccountWorkspaceId: ACCOUNT_ID,
+      requestId: REQUEST_ID,
+    };
+    for (const body of [
+      {
+        status: 'declined',
+        completion: { decision: 'no', requestId: '01234567-89ab-4cde-8fab-0123456789ad' },
+      },
+      {
+        status: 'declined',
+        completion: { decision: 'no', requestId: REQUEST_ID, extra: true },
+      },
+    ]) {
+      const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(body));
+      await expectAccountError(
+        createAccountApiClient({
+          fetch: requestFetch,
+          readCookie: () => `${CSRF_COOKIE_NAME}=${CSRF_TOKEN}`,
+        }).postAdoption(ACCOUNT_ID, request),
+        'invalid-response',
+      );
+    }
+  });
+
+  it('strictly parses both replayed decision arms and the accepted replay without an optional acknowledgement', async () => {
+    const timestamp = '2026-09-25T12:00:00.000Z';
+    const yesRequest: AdoptionRequest = {
+      ...dashboardWrite(),
+      decision: 'yes',
+      expectedRevision: '0',
+    };
+    const noRequest: AdoptionRequest = {
+      decision: 'no',
+      transportVersion: 1,
+      expectedAccountWorkspaceId: ACCOUNT_ID,
+      requestId: REQUEST_ID,
+    };
+    const completion = {
+      decision: 'yes',
+      requestId: REQUEST_ID,
+      acknowledgedRevision: '1',
+      timestamp,
+    };
+    const acknowledgement = {
+      transportVersion: 1,
+      accountWorkspaceId: ACCOUNT_ID,
+      requestId: REQUEST_ID,
+      revision: '1',
+      updatedAt: timestamp,
+    };
+    for (const { request, body } of [
+      { request: yesRequest, body: { status: 'replayed', completion, acknowledgement } },
+      { request: yesRequest, body: { status: 'replayed', completion } },
+      {
+        request: noRequest,
+        body: { status: 'replayed', completion: { decision: 'no', requestId: REQUEST_ID } },
+      },
+    ]) {
+      const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(body));
+      const client = createAccountApiClient({
+        fetch: requestFetch,
+        readCookie: () => `${CSRF_COOKIE_NAME}=${CSRF_TOKEN}`,
+      });
+      await expect(client.postAdoption(ACCOUNT_ID, request)).resolves.toEqual(body);
+    }
   });
 
   it('rejects wrong-account, wrong-request, wrong-revision, and unsupported acknowledgements', async () => {

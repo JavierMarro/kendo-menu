@@ -301,10 +301,12 @@ export function RouteRoot() {
       cancelScheduledPageview.current = null;
     };
     window.addEventListener('kendomenu:sign-in-started', cancelPageview);
-    const unsubscribeFromTransitions = subscribeToAccountTransitions(cancelPageview);
+    window.addEventListener('kendomenu:session-verification-started', cancelPageview);
+    const transitions = subscribeToAccountTransitions(cancelPageview);
     return () => {
       window.removeEventListener('kendomenu:sign-in-started', cancelPageview);
-      unsubscribeFromTransitions();
+      window.removeEventListener('kendomenu:session-verification-started', cancelPageview);
+      transitions.unsubscribe();
       if (cancelScheduledPageview.current?.()) pageviewScheduled.current = false;
       cancelScheduledPageview.current = null;
     };

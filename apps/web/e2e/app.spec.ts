@@ -538,11 +538,8 @@ test.describe('routed training flows', () => {
       name: 'Close International dojo menu details.',
     });
     await expect(closeButton).toBeFocused();
-    await expect(page.locator('.app-shell').locator('xpath=..')).toHaveAttribute('inert', '');
-    await expect(page.locator('.app-shell').locator('xpath=..')).toHaveAttribute(
-      'aria-hidden',
-      'true',
-    );
+    await expect(page.locator('#root')).toHaveAttribute('inert', '');
+    await expect(page.locator('#root')).toHaveAttribute('aria-hidden', 'true');
     await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
 
     await page

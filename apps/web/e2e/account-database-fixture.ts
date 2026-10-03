@@ -1,4 +1,5 @@
 import { DEFAULT_TRAINING_SETS } from '@kendo-menu/domain';
+import { parseDashboardPersistenceV10 } from '@kendo-menu/domain/dashboard-persistence';
 import { createTrainingStore, serializePersistedTrainingStateV10 } from '@kendo-menu/store';
 
 import {
@@ -20,7 +21,9 @@ function snapshot(raw: string): AccountDashboardSnapshot {
   if (typeof value !== 'object' || value === null || !('state' in value)) {
     throw new Error('Serialized dashboard fixture is invalid');
   }
-  return { version: 10, state: value.state };
+  const state = parseDashboardPersistenceV10(value.state);
+  if (state === null) throw new Error('Serialized dashboard fixture state is invalid');
+  return { version: 10, state };
 }
 
 function persisted(store: ReturnType<typeof createTrainingStore>): string {
@@ -149,11 +152,362 @@ function installRaceEvents(
   });
 }
 
+function installAdoptionCompletionEvent(
+  database: ReturnType<typeof createIndexedDbAccountDatabase>,
+): void {
+  window.addEventListener('e2e-db-complete-adoption', () => {
+    void (async () => {
+      const acceptedAccountId = '66666666-6666-4666-8666-666666666666';
+      const divergentAccountId = '77777777-7777-4777-8777-777777777777';
+      const acceptedRequestId = '88888888-8888-4888-8888-888888888888';
+      const divergentRequestId = '99999999-9999-4999-8999-999999999999';
+      const declinedAccountId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const divergentDeclineAccountId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const declinedRequestId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      const divergentDeclineRequestId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      const firstSet = DEFAULT_TRAINING_SETS[0];
+      if (firstSet === undefined) throw new Error('Training fixture missing');
+      const guestStore = createTrainingStore({
+        storage: localStorage,
+        storageKey: 'e2e-adoption-guest',
+      });
+      guestStore.getState().addToDashboard(firstSet.id);
+      const guestRaw = persisted(guestStore);
+      const guestDashboard = snapshot(guestRaw);
+      const emptyRaw = serializePersistedTrainingStateV10({ dashboardEntries: [] });
+      const timestamp = '2026-09-30T10:00:00.000Z';
+
+      const prepare = async (targetAccountId: string, requestId: string) => {
+        const cache = await database.migrateCacheIfAbsent(targetAccountId, emptyRaw);
+        const prepared = await database.preparePendingRequest(targetAccountId, cache, {
+          kind: 'adoption',
+          request: {
+            decision: 'yes',
+            transportVersion: 1,
+            expectedAccountWorkspaceId: targetAccountId,
+            expectedRevision: '0',
+            requestId,
+            catalogueVersion,
+            dashboard: guestDashboard,
+          },
+        });
+        if (prepared.status !== 'committed') throw new Error('Adoption fixture preparation failed');
+        return cache;
+      };
+
+      await prepare(acceptedAccountId, acceptedRequestId);
+      const accepted = await database.completeAcceptedAdoption(
+        acceptedAccountId,
+        acceptedRequestId,
+        '1',
+        timestamp,
+      );
+      const divergentCache = await prepare(divergentAccountId, divergentRequestId);
+      const changed = await database.compareAndSwapCache(
+        divergentAccountId,
+        divergentCache,
+        guestRaw,
+      );
+      if (changed.status !== 'committed') throw new Error('Divergent fixture cache write failed');
+      const divergent = await database.completeAcceptedAdoption(
+        divergentAccountId,
+        divergentRequestId,
+        '1',
+        timestamp,
+      );
+
+      const prepareNo = async (targetAccountId: string, requestId: string) => {
+        const cache = await database.migrateCacheIfAbsent(targetAccountId, emptyRaw);
+        const prepared = await database.preparePendingRequest(targetAccountId, cache, {
+          kind: 'adoption',
+          request: {
+            decision: 'no',
+            transportVersion: 1,
+            expectedAccountWorkspaceId: targetAccountId,
+            requestId,
+          },
+        });
+        if (prepared.status !== 'committed') throw new Error('Decline fixture preparation failed');
+        return cache;
+      };
+      await prepareNo(declinedAccountId, declinedRequestId);
+      const declined = await database.acknowledgePendingRequest(
+        declinedAccountId,
+        declinedRequestId,
+        { kind: 'adoption-declined', requestId: declinedRequestId },
+      );
+      const divergentDeclineCache = await prepareNo(
+        divergentDeclineAccountId,
+        divergentDeclineRequestId,
+      );
+      const changedDecline = await database.compareAndSwapCache(
+        divergentDeclineAccountId,
+        divergentDeclineCache,
+        guestRaw,
+      );
+      if (changedDecline.status !== 'committed')
+        throw new Error('Divergent decline fixture cache write failed');
+      const divergentDecline = await database.acknowledgePendingRequest(
+        divergentDeclineAccountId,
+        divergentDeclineRequestId,
+        { kind: 'adoption-declined', requestId: divergentDeclineRequestId },
+      );
+      confirmedOperationOutput.textContent = JSON.stringify({
+        guestRaw,
+        emptyRaw,
+        accepted: {
+          status: accepted.status,
+          cacheValue: accepted.state.cache?.cacheValue ?? null,
+          acknowledgement: accepted.state.acknowledgement,
+          pending: accepted.state.pendingRequest,
+        },
+        divergent: {
+          status: divergent.status,
+          cacheValue: divergent.state.cache?.cacheValue ?? null,
+          pending: divergent.state.pendingRequest,
+        },
+        declined: {
+          status: declined.status,
+          cacheValue: declined.state.cache?.cacheValue ?? null,
+          acknowledgement: declined.state.acknowledgement,
+          pending: declined.state.pendingRequest,
+        },
+        divergentDecline: {
+          status: divergentDecline.status,
+          cacheValue: divergentDecline.state.cache?.cacheValue ?? null,
+          pending: divergentDecline.state.pendingRequest,
+        },
+      });
+    })();
+  });
+}
+
+function installAuthoritativeReconciliationEvent(
+  database: ReturnType<typeof createIndexedDbAccountDatabase>,
+): void {
+  window.addEventListener('e2e-db-reconcile-adoption', () => {
+    void (async () => {
+      const acceptedAccountId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+      const advancedAccountId = '17171717-1717-4717-8717-171717171717';
+      const declinedAccountId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+      const failureAccountId = '12121212-1212-4212-8212-121212121212';
+      const acceptedReadbackAccountId = '15151515-1515-4515-8515-151515151515';
+      const declinedReadbackAccountId = '16161616-1616-4616-8616-161616161616';
+      const losingRequestId = '13131313-1313-4313-8313-131313131313';
+      const winningRequestId = '14141414-1414-4414-8414-141414141414';
+      const timestamp = '2026-09-30T10:00:00.000Z';
+      const first = DEFAULT_TRAINING_SETS[0];
+      const second = DEFAULT_TRAINING_SETS[1];
+      if (first === undefined || second === undefined) throw new Error('Training fixture missing');
+      const losingStore = createTrainingStore({ storage: localStorage, storageKey: 'e2e-losing' });
+      losingStore.getState().addToDashboard(first.id);
+      const cloudStore = createTrainingStore({ storage: localStorage, storageKey: 'e2e-winning' });
+      cloudStore.getState().addToDashboard(second.id);
+      const losingRaw = persisted(losingStore);
+      const winningRaw = persisted(cloudStore);
+      const emptyRaw = serializePersistedTrainingStateV10({ dashboardEntries: [] });
+      const prepare = async (targetAccountId: string) => {
+        const cache = await database.migrateCacheIfAbsent(targetAccountId, emptyRaw);
+        const result = await database.preparePendingRequest(targetAccountId, cache, {
+          kind: 'adoption',
+          request: {
+            decision: 'yes',
+            transportVersion: 1,
+            expectedAccountWorkspaceId: targetAccountId,
+            expectedRevision: '0',
+            requestId: losingRequestId,
+            catalogueVersion,
+            dashboard: snapshot(losingRaw),
+          },
+        });
+        if (result.status !== 'committed') throw new Error('Pending fixture preparation failed');
+      };
+      await prepare(acceptedAccountId);
+      await prepare(advancedAccountId);
+      await prepare(declinedAccountId);
+      await prepare(failureAccountId);
+      await prepare(acceptedReadbackAccountId);
+      const declinedReadbackCache = await database.migrateCacheIfAbsent(
+        declinedReadbackAccountId,
+        emptyRaw,
+      );
+      const declinedReadbackPrepared = await database.preparePendingRequest(
+        declinedReadbackAccountId,
+        declinedReadbackCache,
+        {
+          kind: 'adoption',
+          request: {
+            decision: 'no',
+            transportVersion: 1,
+            expectedAccountWorkspaceId: declinedReadbackAccountId,
+            requestId: losingRequestId,
+          },
+        },
+      );
+      if (declinedReadbackPrepared.status !== 'committed')
+        throw new Error('Decline readback fixture preparation failed');
+      const accepted = await database.reconcileAuthoritativeAdoption(acceptedAccountId, {
+        decision: 'yes',
+        requestId: winningRequestId,
+        acknowledgedRevision: '1',
+        timestamp,
+        cloud: {
+          transportVersion: 1,
+          accountWorkspaceId: acceptedAccountId,
+          catalogueVersion,
+          revision: '1',
+          dashboard: snapshot(winningRaw),
+          updatedAt: timestamp,
+        },
+      });
+      const advanced = await database.reconcileAuthoritativeAdoption(advancedAccountId, {
+        decision: 'yes',
+        requestId: winningRequestId,
+        acknowledgedRevision: '1',
+        timestamp,
+        cloud: {
+          transportVersion: 1,
+          accountWorkspaceId: advancedAccountId,
+          catalogueVersion,
+          revision: '2',
+          dashboard: snapshot(winningRaw),
+          updatedAt: '2026-09-30T10:01:00.000Z',
+        },
+      });
+      const declined = await database.reconcileAuthoritativeAdoption(declinedAccountId, {
+        decision: 'no',
+        requestId: winningRequestId,
+      });
+      const prototype = IDBObjectStore.prototype;
+      // Preserve the native method so this fault affects only the selected ack write.
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      const originalPut = prototype.put;
+      prototype.put = function (
+        this: IDBObjectStore,
+        value: unknown,
+        key?: IDBValidKey,
+      ): IDBRequest<IDBValidKey> {
+        if (
+          typeof value === 'object' &&
+          value !== null &&
+          'key' in value &&
+          value.key === `${failureAccountId}:ack`
+        ) {
+          throw new DOMException('Injected quota failure', 'QuotaExceededError');
+        }
+        return originalPut.call(this, value, key);
+      };
+      let failureName = 'none';
+      try {
+        await database.reconcileAuthoritativeAdoption(failureAccountId, {
+          decision: 'no',
+          requestId: winningRequestId,
+        });
+      } catch (error) {
+        failureName = error instanceof DOMException ? error.name : 'Error';
+      } finally {
+        prototype.put = originalPut;
+      }
+      const failedState = await database.readSyncState(failureAccountId);
+      const failReadback = async (targetAccountId: string, action: () => Promise<unknown>) => {
+        // Once the acknowledgement is queued, fail the same transaction's readback.
+        // eslint-disable-next-line @typescript-eslint/unbound-method
+        const nativePut = prototype.put;
+        // eslint-disable-next-line @typescript-eslint/unbound-method
+        const nativeGet = prototype.get;
+        let acknowledgementQueued = false;
+        prototype.put = function (
+          this: IDBObjectStore,
+          value: unknown,
+          key?: IDBValidKey,
+        ): IDBRequest<IDBValidKey> {
+          if (
+            typeof value === 'object' &&
+            value !== null &&
+            'key' in value &&
+            value.key === `${targetAccountId}:ack`
+          )
+            acknowledgementQueued = true;
+          return nativePut.call(this, value, key);
+        };
+        prototype.get = function (this: IDBObjectStore, query: IDBValidKey | IDBKeyRange) {
+          if (acknowledgementQueued && query === `${targetAccountId}:cache`)
+            throw new DOMException('Injected readback failure', 'UnknownError');
+          return nativeGet.call(this, query);
+        };
+        let errorName = 'none';
+        try {
+          await action();
+        } catch (error) {
+          errorName = error instanceof DOMException ? error.name : 'Error';
+        } finally {
+          prototype.put = nativePut;
+          prototype.get = nativeGet;
+        }
+        const state = await database.readSyncState(targetAccountId);
+        return {
+          errorName,
+          cacheValue: state.cache?.cacheValue ?? null,
+          acknowledgement: state.acknowledgement,
+          pending: state.pendingRequest,
+        };
+      };
+      const acceptedReadback = await failReadback(acceptedReadbackAccountId, () =>
+        database.completeAcceptedAdoption(
+          acceptedReadbackAccountId,
+          losingRequestId,
+          '1',
+          timestamp,
+        ),
+      );
+      const declinedReadback = await failReadback(declinedReadbackAccountId, () =>
+        database.acknowledgePendingRequest(declinedReadbackAccountId, losingRequestId, {
+          kind: 'adoption-declined',
+          requestId: losingRequestId,
+        }),
+      );
+      confirmedOperationOutput.textContent = JSON.stringify({
+        losingRaw,
+        winningRaw,
+        emptyRaw,
+        accepted: {
+          status: accepted.status,
+          cacheValue: accepted.state.cache?.cacheValue ?? null,
+          acknowledgement: accepted.state.acknowledgement,
+          pending: accepted.state.pendingRequest,
+        },
+        advanced: {
+          status: advanced.status,
+          cacheValue: advanced.state.cache?.cacheValue ?? null,
+          acknowledgement: advanced.state.acknowledgement,
+          pending: advanced.state.pendingRequest,
+        },
+        declined: {
+          status: declined.status,
+          cacheValue: declined.state.cache?.cacheValue ?? null,
+          acknowledgement: declined.state.acknowledgement,
+          pending: declined.state.pendingRequest,
+        },
+        failure: {
+          name: failureName,
+          cacheValue: failedState.cache?.cacheValue ?? null,
+          acknowledgement: failedState.acknowledgement,
+          pending: failedState.pendingRequest,
+        },
+        acceptedReadback,
+        declinedReadback,
+      });
+    })();
+  });
+}
+
 const observerMode = new URLSearchParams(location.search).get('observer') === '1';
 if (observerMode) {
   const database = createIndexedDbAccountDatabase();
   output.textContent = 'observer';
   installRaceEvents(database, false);
+  installAdoptionCompletionEvent(database);
+  installAuthoritativeReconciliationEvent(database);
 } else
   try {
     const database = createIndexedDbAccountDatabase();
@@ -223,6 +577,8 @@ if (observerMode) {
     }
     output.textContent = 'ready';
     installRaceEvents(database, true);
+    installAdoptionCompletionEvent(database);
+    installAuthoritativeReconciliationEvent(database);
 
     window.addEventListener('e2e-db-abort-cloud', () => {
       void (async () => {

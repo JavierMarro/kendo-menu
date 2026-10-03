@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   classifyTrainingStorageValue,
   createTrainingStore,
+  serializePersistedTrainingStateV10,
   type StateStorage,
 } from '@kendo-menu/store';
 
@@ -166,8 +167,8 @@ export function PersistenceGate({
     storeBundleRef.current = storeBundle;
     createStoreBundleRef.current = createStoreBundle;
   }, [createStoreBundle, storeBundle]);
-  // Account legacy keys must remain readable while adoption temporarily disables the guest
-  // writer for exact-source cleanup. Only the guest key follows the replaceable writer.
+  // Account legacy keys remain readable during account activation. Only the guest key follows
+  // the replaceable writer; adoption reads guest data without deleting or rewriting it.
   const guestStorageProxy = useMemo<StateStorage>(
     () => ({
       getItem: (name) =>
@@ -195,7 +196,33 @@ export function PersistenceGate({
   const guestCleanup = useMemo(
     () => ({
       readRaw: () => window.localStorage.getItem(TRAINING_STORAGE_KEY),
-      removeRaw: () => window.localStorage.removeItem(TRAINING_STORAGE_KEY),
+      confirmDurable: async () => {
+        const bundle = storeBundleRef.current;
+        if (bundle === null || !bundle.storage.isEnabled())
+          throw new Error('Guest storage is unavailable.');
+        await bundle.storage.flush();
+        // A successful flush includes each write's readback. Confirm the source remains
+        // identical to the visible guest store before leaving this document. This also
+        // protects session-only work and edits made by another tab during the flush.
+        const inspection = classifyTrainingStorageValue(
+          window.localStorage.getItem(TRAINING_STORAGE_KEY),
+        );
+        if (
+          inspection.status !== 'empty' &&
+          inspection.status !== 'ready' &&
+          inspection.status !== 'migrated'
+        )
+          throw new Error('Guest storage could not be confirmed.');
+        const persistedEntries =
+          inspection.status === 'empty' ? [] : inspection.state.dashboardEntries;
+        const persisted = serializePersistedTrainingStateV10({
+          dashboardEntries: persistedEntries,
+        });
+        const visible = serializePersistedTrainingStateV10({
+          dashboardEntries: bundle.store.getState().dashboardEntries,
+        });
+        if (persisted !== visible) throw new Error('Guest changes are not saved yet.');
+      },
       prepare: async () => {
         await storeBundleRef.current?.storage.flush();
         storeBundleRef.current?.storage.disable();

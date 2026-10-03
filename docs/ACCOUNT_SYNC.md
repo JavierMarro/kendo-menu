@@ -1,6 +1,6 @@
 # Accounts and synchronization
 
-Documentation baseline: 2026-09-11; local integration status updated for 6D-A on 2026-09-29.
+Documentation baseline: 2026-09-11; local integration status updated for 6D-B on 2026-10-01.
 **No production authentication or synchronization exists.**
 Job 4B connects local Google OIDC and opaque-session HTTP behavior to Job 4A PostgreSQL persistence;
 real Google, Neon, HTTPS-browser, and Vercel integration remain unverified.
@@ -138,7 +138,8 @@ not prove browser HTTPS or provider behavior; never infer those from health test
 
 The accepted driver direction is PostgreSQL via **`pg` everywhere**, with Drizzle's node-postgres
 integration. Job 4A implements the local pool, transaction, and migration foundation. Neon
-endpoints, browser adoption UI, and Vercel execution remain later-job work:
+endpoints and Vercel execution remain later deployment work; the browser adoption UI is locally
+implemented in Job 6D-B:
 
 - The local adapter caches a bounded `pg.Pool` per warm module instance (maximum 5, idle timeout
   5 seconds). A Neon pooled endpoint remains the later runtime target; no request uses Neon yet.
@@ -665,11 +666,10 @@ the server's pending adoption capability. The internal controller checks saved e
 one-second debounce and on focus/reconnect, with at most three timed retry attempts and a stop on
 nonretryable request failures. A dashboard 401 immediately hides the account workspace and
 retains its latest entries privately where possible. Explicit retry first re-verifies
-`/api/session`; dashboard requests resume only after success. Job 6D remains
-responsible for account entry points,
-the adoption choice, and conflict UI; this job does not expose them publicly.
-Job 6D will also add the adoption POST client and execute Yes/No decisions. Job 6C-B only
-preflights eligibility and reserves a validated, account-scoped pending adoption shape.
+`/api/session`; dashboard requests resume only after success. Job 6D-B now mounts the public
+Google entry and blocking adoption choice in the local integration checkout, with an adoption POST
+client and durable Yes/No recovery. The reachable conflict UI remains Job 6D-C work. Real Google
+login, Neon, HTTPS cookies, and Vercel production behavior remain unverified deployment gates.
 
 ## 3. Remaining gates for later jobs
 
@@ -682,8 +682,8 @@ Confirm or revise the remaining recommendations before their implementation:
 - [ ] Local HTTPS tooling before real browser/provider integration; Fluid Compute lifecycle remains unverified.
 - [x] Cloud byte limit and consequences for locally valid oversized dashboards accepted in Job 5A.
 - [x] Job 6A server eligibility: only the new account's active creating session at revision zero;
-      returning accounts receive no capability. Browser guest validation and the blocking Yes/No
-      interaction remain later-job work.
+      returning accounts receive no capability. Job 6D-B locally implements browser guest
+      validation and the blocking Yes/No interaction.
 - [x] Job 6B offline access for an already activated account, isolated cache retention, logout
       versus local hiding, and account-switch isolation; account UI remains inaccessible.
 - [x] Internal synchronization triggers and explicit conflict resolution accepted in Job 6C-B;
