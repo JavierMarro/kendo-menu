@@ -1,6 +1,6 @@
 ---
 name: code-reviewer-pre-commit
-description: Perform a semantic review of changed files before commit or pull request by tracing functions and data flow, checking logic, error handling, security, design quality, code smells, and counter-hypotheses. Use when asked to review changed code or challenge an implementation beyond linting.
+description: Review changed code for concrete correctness, security, and data-flow defects before commit or on request. Not a general healthcheck or automatic refactor.
 ---
 
 # Code Reviewer: Pre-commit
@@ -61,6 +61,11 @@ Look for concrete evidence of:
 Use repository conventions as the source of truth. Do not demand a framework, dependency, or pattern
 that the project has deliberately not adopted.
 
+Review the approved product contract, not a stronger hypothetical one. The managed-auth transition
+deliberately removes offline account caches, creating-session eligibility, and durable guest-copy
+recovery. Do not classify their absence as a defect. Account isolation, guest preservation, request
+validation, and atomic writes remain required. Separate optional improvements from actual blockers.
+
 ## Risk-based investigation
 
 Use counter-hypotheses for plausible failure modes in risky or complex changes, rather than requiring
@@ -77,3 +82,8 @@ Every issue must include impact, reproduction or reasoning, and a precise `file:
 available. Distinguish observed defects from recommendations. Use `NEEDS WORK` for unresolved
 critical or security issues, a broken required baseline, or a material risk that prevents confidence
 in the change. Do not treat an unsupported hypothetical as a confirmed defect.
+
+For a bounded correction, review the changed paths and affected invariants. Re-review fixes to
+substantive findings without restarting an unrelated whole-codebase audit. Report scoped completion
+separately from branch/release readiness; inherited full-suite failures are not cleared by isolated
+passes. A real newly discovered security or data-integrity issue must still be reported.

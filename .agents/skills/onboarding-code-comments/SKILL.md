@@ -1,6 +1,6 @@
 ---
 name: onboarding-code-comments
-description: Add concise senior-engineer onboarding comments to an explicitly selected implementation scope without changing runtime behavior. Invoke only with `$onboarding-code-comments`; do not use for ordinary implementation, documentation, generated files, or tests unless the user expressly includes them.
+description: Add behavior-preserving onboarding comments to an explicitly selected implementation scope. Invoke only with `$onboarding-code-comments`.
 ---
 
 # Onboarding Code Comments

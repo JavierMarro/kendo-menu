@@ -26,6 +26,8 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-10-04 — agent guidance refresh](./2026-10-04-agent-guidance-refresh.md)
+
 - [2026-10-04 — managed auth transition plan](./2026-10-04-managed-auth-transition-plan.md)
 
 - [2026-09-30 — guest adoption web](./2026-09-30-guest-adoption-web.md)

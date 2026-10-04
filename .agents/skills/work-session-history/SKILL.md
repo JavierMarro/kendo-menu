@@ -1,13 +1,13 @@
 ---
 name: work-session-history
-description: Record completed work sessions as evidence-based handoffs with a strict eight-line maximum. Use when a session ends or when asked to create, compact, update, or backfill repository work-session history.
+description: Record completed implementation or requested history updates as evidence-based handoffs of at most eight lines. Not read-only review logging.
 ---
 
 # Work Session History
 
-Create a factual Markdown record for every completed work session. Treat it as a tiny handoff for
-future agents, not a diary or a replacement for code documentation. Every dated entry has a hard
-maximum of eight physical lines.
+Create a factual Markdown record for completed implementation or a requested history update, not
+an unsolicited read-only review log. Treat it as a tiny handoff, not a diary or a replacement for
+code documentation. Every dated entry has a hard maximum of eight physical lines.
 
 ## Workflow
 

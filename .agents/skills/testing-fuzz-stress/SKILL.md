@@ -1,13 +1,12 @@
 ---
 name: testing-fuzz-stress
-description: Attack a specified module, file, public API, or directory with black-box seeded fuzzing, state-space exploration, corruption tests, round-trip checks, concurrency interleavings, and stress tests. Use when the user asks to destroy an implementation, find edge cases, fuzz a module, or perform paranoid robustness testing.
+description: Run requested seeded fuzz, corruption, concurrency, or stress testing against a specified target. Not routine feature verification or every code review.
 ---
 
 # Testing: Fuzz and Stress
 
-Act as a paranoid testing engineer. Attack the supplied file, module, public API, or directory and
-try to expose bugs through combinations of internal states. Optimize for state coverage and
-reproducibility, not ritual TDD or line-coverage numbers.
+Attack the supplied public contract with bounded, reproducible inputs and operation sequences.
+Optimize for meaningful state coverage, not ritual TDD, line coverage, or new product guarantees.
 
 ## Operating contract
 
@@ -29,6 +28,8 @@ reproducibility, not ritual TDD or line-coverage numbers.
    `package.json` and workspace configuration to identify the package manager and test runner.
 2. Establish the API contract: accepted inputs, outputs, errors, persistence effects, idempotence,
    ordering guarantees, resource limits, and invariants that must always hold.
+   Use the current approved contract; do not fuzz retired offline-account or copy-recovery behavior
+   as if it remained a requirement of the managed-auth replacement.
 3. Use existing test conventions. If no runner exists, report that limitation and propose the
    smallest appropriate setup; do not silently invent a command that cannot run.
 4. For this repository, use the workspace's Vitest configuration through pnpm from the repository
@@ -74,43 +75,10 @@ Exercise each applicable category and record its iteration count:
 - Re-run every failure once from the printed seed and input. If it does not reproduce, classify the
   result as nondeterminism and investigate the uncontrolled source.
 
-## Antirez report
+## Report
 
-Return a report in the response or at the repository's test-report location, using this structure:
-
-```markdown
-## Antirez Report: [module]
-
-### Structural Tensions
-
-- tension -> file:line
-
-### Test File
-
-- Path: path/to/test_file
-- Iterations: N per fuzz loop
-- Seed: [value]
-
-### Results
-
-| Category    | Count | Pass | Fail |
-| ----------- | ----- | ---- | ---- |
-| Boundary    |       |      |      |
-| Fuzz        |       |      |      |
-| Round-trip  |       |      |      |
-| Corruption  |       |      |      |
-| Stress      |       |      |      |
-| Concurrency |       |      |      |
-
-### Bugs Found
-
-1. **[severity]** description — seed: X, input: Y -> file:line
-
-### Recommendations
-
-- what to fix and why
-```
-
-Do not call a run clean when categories were not applicable or not executed: mark them `N/A` or
-`NOT RUN` with a reason. Separate confirmed bugs from hypotheses and include the exact reproduction
-command for every confirmed failure.
+Report the target/public contract, test paths, seeds, iterations/time budget, results and concrete
+findings with reproduction commands. Use a category table when it makes multiple runs easier to
+compare; use the Antirez title when explicitly requested. Mark unexecuted categories `NOT RUN` or
+`N/A` with a reason, and separate confirmed bugs from hypotheses. Do not create a report file unless
+the user requests one or the established workflow requires it.

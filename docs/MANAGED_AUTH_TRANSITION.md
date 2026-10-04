@@ -22,7 +22,10 @@ not evidence that managed authentication has been integrated or deployed.
 - Preserve the approved one-time complete guest copy for a genuinely new KendoMenu account:
   Yes copies into the cloud and keeps guest LocalStorage unchanged; No permanently declines;
   returning accounts receive no offer. Complete it on a separate setup screen before the account
-  dashboard opens. No automatic later transfer or merging.
+  dashboard opens. The owner accepts a missed copy opportunity after interruption: no creating-
+  session restriction, durable pending copy, or interrupted-copy recovery. Store consumption
+  server-side per account, preserve atomic copying and honest acknowledgements, and let a failed or
+  unconfirmed copy exit to ordinary account use. No later transfer, merging, or retry-import button.
 - Retain Node 24, Elysia, Neon PostgreSQL, Drizzle/pg, the TypeScript pnpm monorepo, and one lockfile.
   Neon **managed** auth replaces the custom Google OAuth/session implementation. Installing and
   running Better Auth ourselves is not this plan.
@@ -30,14 +33,21 @@ not evidence that managed authentication has been integrated or deployed.
   and idempotent save handling. Do not introduce realtime connections, offline account caches,
   background sync, paid tiers, a new frontend framework, or the Neon Data API.
 
-The existing ADRs still describe the previous implementation. Migration A will explicitly record
-which decisions are superseded and which remain in force; historical ADRs and session evidence stay.
+The existing ADRs still describe the previous implementation. The target above includes the owner's
+later clarification that creating-session eligibility and durable interrupted-copy recovery are no
+longer required. Migration A will explicitly record which decisions are superseded and which remain
+in force; historical ADRs and session evidence stay. This guidance update changes no runtime code.
 
 ## 1. Preserve the current work before restructuring
 
-Observed checkout: `codex/account-sync-integration`, HEAD `25350c1`, with uncommitted 6D-B changes.
-Recheck before using these commands; do not run them while another agent is editing the checkout.
-The suggested new branch names have not been checked for availability.
+The following is a historical owner-run checkpoint recipe, not agent authorization to change Git
+state. The owner has since created `codex/managed-auth-online-dashboard` from checkpoint `a4ca0c4`.
+Do not rerun it during Migration A; verify current branch/status instead. Any future staging,
+commit, or branch operation requires the owner's explicit request.
+
+At the original preparation, the observed checkout was `codex/account-sync-integration`, HEAD
+`25350c1`, with uncommitted 6D-B changes; the suggested new branch names had not yet been checked.
+Recheck before any future owner-authorized use; never run while another agent is editing.
 
 Create a local archive branch, stage the known work, inspect it, and make a checkpoint:
 
@@ -155,11 +165,15 @@ Record a concise superseding ADR and reconcile current-vs-target guidance withou
 transition complete. Map keep/rewrite/remove files and existing user/session SQL coupling.
 
 Implement only the SDK client, the smallest proof UI, and a development proof endpoint that
-verifies managed identity in our Node/Elysia API. Select and document a provider-supported
-credential handoff that actually works with React/Vite and our custom backend; do not copy a
+verifies managed identity in our Node/Elysia API. Prove the selected Neon JWT bearer handoff using
+supported SDK retrieval and established JWKS verification; do not copy a
 Next.js-only integration or assume Neon's cookies are sent to the KendoMenu API automatically.
 Use standard verified credential handling, require the configured provider/branch, validate
 applicable signature/issuer/audience/expiry, and never trust browser-supplied user IDs or email.
+Necessary managed HttpOnly session cookies are expected. Do not persist bearer/session credentials
+in JavaScript-readable browser storage or logs. Inspect and test the actual pinned SDK's session
+refresh/broadcast storage behavior; do not disguise it with SDK-internal monkey patches or global
+LocalStorage overrides. If that invariant cannot be met, report the precise provider constraint.
 Explain the chosen session expiry/revocation behavior; do not promise instant JWT revocation
 unless the selected method demonstrates it. Do not create a second custom session system.
 Confirm Google-only provider configuration, including disabled email/password authentication;
@@ -173,8 +187,9 @@ works; do not delete guest storage, dashboard code, migrations, or old auth in t
 Add focused tests for missing/invalid/expired identity, provider mismatch, sanitized failures and
 unauthorized requests. Provide a manual real-Google procedure for two accounts, reload, sign-out,
 and backend identity verification. The owner performs Google login privately; do not ask for tokens.
-Mocks do not establish live compatibility. If the managed service cannot support the required
-backend handoff or new-KendoMenu-account distinction, report the exact gap before broader work.
+Mocks do not establish live compatibility. If the managed service cannot support the selected
+backend handoff, report the exact gap before broader work. Managed session IDs are not required
+for guest-copy eligibility; Migration B owns server-side new-KendoMenu-account/copy-consumption state.
 
 Run affected package checks and relevant proof tests; reuse guest baseline evidence where valid.
 Obtain independent security review. Report dependency versions, exact configuration/loading,
@@ -205,10 +220,13 @@ guards, optimistic revisions, request-id replay, and atomic database writes. Sav
 commit; ambiguous outcomes stay recoverable. Define manageable provider-expiry/revocation semantics
 instead of recreating custom token machinery to mimic the previous session implementation.
 
-Retain the new-account-only complete guest-copy/permanent-decline rules. Establish eligibility
-server-side from KendoMenu account creation and a supported verified managed-session mechanism;
-neither an empty dashboard nor a newUserCallbackURL proves it. Report any unsupported creating-
-session requirement as a precise plan amendment instead of weakening it or inventing another login.
+Retain the new-account-only complete guest-copy/permanent-decline rules. Establish eligibility and
+one-time consumption server-side from KendoMenu account creation; neither an empty dashboard nor
+a newUserCallbackURL proves it. No creating-session binding, durable pending decision, or recovery
+of interrupted guest copies is required. The owner accepts that an interrupted attempt may consume
+the opportunity. Keep ownership, duplicate prevention and an atomic Yes copy, but do not indefinitely
+block ordinary account access on an unconfirmed outcome. No later import/retry-import operation.
+Keep ordinary Save-to-account request-id handling separate from the removed copy-recovery protocol.
 
 Generate reviewed forward migrations where needed; preserve applied migration history. Do not
 drop legacy data or edit neon_auth tables. Local integration uses the guarded kendomenu_test
@@ -253,8 +271,9 @@ keeps a recoverable memory draft and a clear unavailable state. A 401 or account
 account content and fences late requests. Warn before intentionally discarding unsaved drafts.
 
 No account dashboards, tokens or draft queues in LocalStorage/IndexedDB, no automatic background
-sync, and no offline account editor. The pending new-account copy screen is a separate guarded
-route for Migration D; do not offer the ordinary account editor before that setup gate is resolved.
+sync, and no offline account editor. The initial new-account copy screen is a separate guarded
+route for Migration D; offer ordinary account editing after completion, decline, a reported failed
+or unconfirmed attempt, or ineligibility. Do not resurrect a durable pending-decision gate.
 
 Retire old account cache/sync/workspace modules and bridges only after their callers are migrated.
 Ignore old browser account caches without deleting them or uploading them. Keep guest bytes and
@@ -281,18 +300,19 @@ cloud-size-compliant guest data. Yes copies the exact snapshot into the cloud an
 LocalStorage unchanged; No permanently declines. Returning accounts receive no offer. Never
 infer newness from cloud revision zero or the OAuth callback's URL.
 
-Use one small adoption module for decision recovery. Persist only the bounded copy-request
-material needed to recover an interrupted choice, isolated from guest data and keyed by internal
-account ID; do not recreate a general account cache or offline sync engine. Use a stable request
-ID and the server's authoritative terminal outcome. After completion, load the current cloud
-dashboard into the memory-only account store. A peer's completed decision wins; do not insist
-on replaying a losing local choice. Preserve guest bytes for Yes, No and every failure.
+Use one small module for a single copy attempt against B's account-level one-time contract. No
+persisted pending copy payload, decision-recovery journal, background retries, or later import
+button. Disable duplicate submissions in memory and rely on the server for ownership, one-time
+consumption and atomic copy. After completion or decline, load the current cloud dashboard into
+the memory-only account store. Report a failed/lost acknowledgement honestly and allow ordinary
+account use without assuming the copy succeeded. The opportunity may have been consumed. Preserve
+guest bytes for Yes, No and every failure.
 
 Keep the existing same-guest-snapshot check before Yes, session/account guards, complete byte
-validation, and accessible non-dismissable dialog. Define the small set of exits for success,
-peer completion, lost response, reload, storage failure and session change before implementation.
-No account editing while a decision is unresolved. Do not create an implicit No for absent,
-invalid or oversized guest data; follow the reviewed B rules for ordinary account entry.
+validation, and accessible choice UI. Define exits for copied, declined, failed/unconfirmed attempt,
+ineligibility and identity change before implementation. Block ordinary editing only during the
+initial choice or in-flight attempt, not indefinitely for recovery. Do not record a user-chosen No
+for absent, invalid or oversized guest data; follow B's eligibility rules for ordinary account entry.
 
 Finish removing unreachable custom-auth/offline-account files, dependencies, fixtures and stale
 comments. Preserve shared validation/security tests and historical SQL/ADRs/evidence. No destructive
