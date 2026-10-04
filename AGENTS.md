@@ -49,6 +49,18 @@ Vercel projects/configuration, DNS, domains, analytics, secrets, or remote envir
 without authorization for that exact action. Do not stage, commit, push, merge, or switch branches
 unless explicitly asked; preserve staged and unstaged owner work.
 
+## Private configuration and credentials
+
+- Do not inspect or display private `.env`/`.env.*` contents, credential files, or raw environment
+  dumps for context. Exclude them from searches and collected logs. Read `.env.example` only as a
+  placeholder template; never put actual credentials in it.
+- Applications and approved test commands may load private configuration for an authorized target
+  without exposing its values. Do not extract credentials into command arguments, chat, logs,
+  fixtures, or generated artifacts; sanitize connection errors before reporting them.
+- Check configuration presence and sanitized success/failure, not secret values. Let the owner fill
+  private files; request missing configuration rather than passwords. Any necessary secret inspection
+  requires explicit, scoped owner authorization. `.gitignore` prevents Git tracking, not file access.
+
 ## Code and data invariants
 
 - Use TypeScript source. Preserve strict mode and every `tsconfig.base.json` safeguard, including
