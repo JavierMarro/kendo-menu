@@ -4,6 +4,15 @@ KendoMenu is a React/Vite single-page web app with a platform-neutral domain pac
 Zustand store. Its core workflow is local-first: a practitioner can plan, adapt, and save a
 session in the browser without an account, server, or network dependency.
 
+## Managed-auth transition status
+
+The account/authentication descriptions in this document remain the implemented legacy boundaries.
+[ADR 0007](adr/0007-managed-auth-online-account-drafts.md) records the approved managed-auth and
+online-account replacement. [Migration A](MANAGED_AUTH_PROOF.md) implements an isolated development proof using
+one callback-only session exchange, a fresh document, and subsequent token-only retrieval. Single-account identity and inspected sign-in/out, reload and JWT-refresh storage checks have owner-reported passes. The second-account check is owner-deferred until public release and alone no longer gates a reviewed A commit or internal B. Production providers, routes
+and SQL retain the legacy implementation.
+The [transition handoff](MANAGED_AUTH_TRANSITION.md) owns the sequential replacement scope.
+
 ## Boundaries and flow
 
 These are different relationships:

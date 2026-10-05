@@ -10,6 +10,7 @@
     "playwright.config.ts",
     "playwright.preview.config.ts",
     "playwright.pwa.config.ts",
+    "playwright.managed-auth.config.ts",
     "vite.preview.config.ts",
     "e2e"
   ]

@@ -13,11 +13,13 @@
     "test:watch": "vitest --config vitest.config.ts",
     "test:e2e": "playwright test --config playwright.config.ts",
     "test:e2e:preview": "playwright test --config playwright.preview.config.ts",
-    "test:e2e:pwa": "playwright test pwa.spec.ts --config playwright.pwa.config.ts"
+    "test:e2e:pwa": "playwright test pwa.spec.ts --config playwright.pwa.config.ts",
+    "test:e2e:managed-auth": "playwright test --config playwright.managed-auth.config.ts"
   },
   "dependencies": {
     "@kendo-menu/domain": "workspace:*",
     "@kendo-menu/store": "workspace:*",
+    "@neondatabase/auth": "0.5.0-beta",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",

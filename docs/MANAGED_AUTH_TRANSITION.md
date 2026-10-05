@@ -3,6 +3,22 @@
 Prepared 4 October 2026 from the owner's approved simplification. This is a transition handoff,
 not evidence that managed authentication has been integrated or deployed.
 
+Migration A now has an [isolated development proof](MANAGED_AUTH_PROOF.md) with callback-only session
+bootstrap and subsequent token retrieval. The owner reports single-account callback/backend,
+reload, JWT-refresh and sign-out passes. Initial live storage evidence was limited to sign-in/out;
+the subsequent private owner inspection reports credential-free storage/no account IndexedDB or
+CacheStorage after reload and JWT refresh, with stable identity. No storage invariant was waived.
+[ADR 0007](adr/0007-managed-auth-online-account-drafts.md) records the approved superseding target.
+The legacy runtime remains implemented; the proof route is development-only.
+
+On 5 October 2026 the owner deferred second-account distinction and return-to-first-account
+stability because only one dedicated Google test account is available and personal accounts will
+not be used. Record this as **NOT RUN — owner-deferred**, never PASS. It alone no longer blocks a
+reviewed Migration A implementation commit or subsequent internal Migration B work; it remains
+outstanding before public account release. No other A gate or limited storage evidence is waived.
+Internal B still requires the reviewed A predecessor and remaining A evidence; this amendment
+does not authorize beginning B during A review or claim complete live multi-account validation.
+
 ## Target and limits
 
 - Guests keep the existing Zustand/LocalStorage dashboard and offline PWA workflow.
@@ -185,8 +201,10 @@ Pin justified dependencies in the existing lockfile. Keep the old path isolated 
 works; do not delete guest storage, dashboard code, migrations, or old auth in this proof job.
 
 Add focused tests for missing/invalid/expired identity, provider mismatch, sanitized failures and
-unauthorized requests. Provide a manual real-Google procedure for two accounts, reload, sign-out,
-and backend identity verification. The owner performs Google login privately; do not ask for tokens.
+unauthorized requests. Provide a manual real-Google procedure for backend identity, reload, sign-out,
+storage after reload/JWT refresh, and two dedicated accounts before public account release;
+the owner-deferred second-account check alone does not gate a reviewed A commit or internal B.
+The owner performs Google login privately; do not ask for tokens.
 Mocks do not establish live compatibility. If the managed service cannot support the selected
 backend handoff, report the exact gap before broader work. Managed session IDs are not required
 for guest-copy eligibility; Migration B owns server-side new-KendoMenu-account/copy-consumption state.
@@ -198,7 +216,10 @@ Update work-session history. Do not commit or change provider/Vercel configurati
 ```
 
 Do not proceed to B on the strength of a mock-only login proof. The managed identity must reach
-the actual Node/Elysia verification path in a browser. At A, a database-backed dashboard write is
+the actual Node/Elysia verification path in a browser. The owner-deferred second-account check is
+a public-release gate, not an internal B gate; storage safety remains required, with explicit
+owner-reported passes now covering reload/JWT refresh as well as inspected sign-in/out.
+At A, a database-backed dashboard write is
 not claimed; B supplies and verifies that behavior.
 
 ### Migration B — connect managed identity to protected PostgreSQL dashboards

@@ -9,6 +9,7 @@ import { WebStandardAdapter } from 'elysia/adapter/web-standard';
 import type { Authentication } from './auth/contracts.js';
 import type { Adoption } from './adoption/adoption.js';
 import type { Dashboard } from './dashboard/dashboard.js';
+import type { ManagedIdentityVerifier } from './auth/managed-identity.js';
 import { createRuntimeServices } from './runtime.js';
 
 const CACHE_CONTROL = 'private, no-store';
@@ -28,6 +29,8 @@ export interface AppOptions {
   readonly authentication?: Authentication;
   readonly dashboard?: Dashboard;
   readonly adoption?: Adoption;
+  /** Enables the isolated development proof route only when explicitly injected. */
+  readonly managedIdentity?: ManagedIdentityVerifier;
 }
 
 export const createApp = (options: AppOptions = {}) => {
@@ -40,13 +43,14 @@ export const createApp = (options: AppOptions = {}) => {
   const authentication = options.authentication ?? runtime?.authentication;
   const dashboard = options.dashboard ?? runtime?.dashboard;
   const adoption = options.adoption ?? runtime?.adoption;
+  const managedIdentity = options.managedIdentity;
   if (authentication === undefined || dashboard === undefined || adoption === undefined) {
     throw new Error('RUNTIME_SERVICES_NOT_COMPOSED');
   }
   // This route table is the single ordering point shared by both runtime adapters.
   // Dashboard PUT and adoption POST opt out of framework parsing so their bounded
   // handlers see raw bodies and can authenticate before reading them.
-  return new Elysia({ adapter: WebStandardAdapter })
+  const app = new Elysia({ adapter: WebStandardAdapter })
     .onRequest(({ request, set }) => {
       set.headers['cache-control'] = CACHE_CONTROL;
       if (new URL(request.url).pathname === '/api/auth/google/callback') {
@@ -86,6 +90,26 @@ export const createApp = (options: AppOptions = {}) => {
     .head('/api/dashboard/adoption', ({ request }) => adoption.handle(request), { parse: 'none' })
     .all('/api/dashboard/adoption', ({ request }) => adoption.handle(request), { parse: 'none' })
     .all('/api/dashboard', ({ request }) => dashboard.handle(request), { parse: 'none' });
+
+  if (managedIdentity === undefined) return app;
+
+  return app.get('/api/dev/managed-identity', async ({ request }) => {
+    const authorization = request.headers.get('authorization');
+    const match = authorization?.match(/^Bearer ([^\s]+)$/iu);
+    if (match?.[1] === undefined) {
+      return Response.json({ error: 'UNAUTHENTICATED' }, { status: 401 });
+    }
+
+    const result = await managedIdentity(match[1]);
+    if (result.status === 'invalid') {
+      return Response.json({ error: 'UNAUTHENTICATED' }, { status: 401 });
+    }
+    if (result.status === 'unavailable') {
+      return Response.json({ error: 'MANAGED_AUTH_UNAVAILABLE' }, { status: 503 });
+    }
+
+    return Response.json({ identity: result.identity });
+  });
 };
 
 export type App = ReturnType<typeof createApp>;

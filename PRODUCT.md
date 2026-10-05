@@ -58,6 +58,12 @@ activity quantities and notes can be adapted without mutating the built-in libra
 
 ## Account journey — local integration only
 
+The account behavior below describes the preserved legacy implementation. The approved replacement
+uses Neon managed Google authentication and online-only account drafts with explicit saves;
+[ADR 0007](docs/adr/0007-managed-auth-online-account-drafts.md) supersedes the old account caching,
+session and interrupted-copy requirements. [Migration A](docs/MANAGED_AUTH_PROOF.md) has an isolated development proof with callback-only session bootstrap and subsequent token retrieval; single-account identity and inspected sign-in/out, reload and JWT-refresh storage checks have owner-reported passes. The second-account check is owner-deferred until public release. The production
+replacement journey is not enabled.
+
 Anonymous use remains fully supported and free. Optional Google-only KendoMenu accounts are locally
 implemented to add
 cross-device continuity through local-first, whole-dashboard synchronization with explicit conflict

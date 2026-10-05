@@ -1,9 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { isLoopbackProofRequest, managedAuthProofPlugin } from './dev/managed-auth-proof-plugin';
 
 export default defineConfig({
   plugins: [
+    managedAuthProofPlugin(),
     react(),
     VitePWA({
       registerType: 'prompt',
@@ -52,4 +54,13 @@ export default defineConfig({
       },
     }),
   ],
+  server: {
+    host: 'localhost',
+    proxy: {
+      '^/api/dev/managed-identity(?:\\?.*)?$': {
+        target: 'http://127.0.0.1:3001',
+        bypass: (request) => (isLoopbackProofRequest(request) ? undefined : false),
+      },
+    },
+  },
 });

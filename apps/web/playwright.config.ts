@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: '**/pwa.spec.ts',
+  testIgnore: ['**/pwa.spec.ts', '**/managed-auth-proof.spec.ts'],
   fullyParallel: true,
   forbidOnly: Boolean(process.env['CI']),
   retries: process.env['CI'] === undefined ? 0 : 2,
