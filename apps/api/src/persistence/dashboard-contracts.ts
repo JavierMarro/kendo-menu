@@ -3,7 +3,7 @@
  * Its outcome union keeps storage failures sanitized, while the interface records the ordering,
  * isolation, and idempotency guarantees every concrete adapter must preserve.
  */
-import type { SessionAuthorizationProof } from '../auth/session-authorization.js';
+import type { AccountAuthorizationProof } from '../auth/account-authorization.js';
 import type {
   DashboardReadResponse,
   DashboardWriteAcknowledgement,
@@ -32,7 +32,7 @@ export type DashboardWriteOutcome =
   | DashboardPersistenceFailure;
 
 /**
- * Every operation must revalidate the server-established proof against the active session.
+ * Every operation must revalidate the server-established managed identity mapping and JWT expiry.
  * The proof's user is authoritative; the request workspace is only a mismatch guard.
  * Reads, failures and retained retries must not touch activity, cookies or receipts.
  *
@@ -42,15 +42,15 @@ export type DashboardWriteOutcome =
  * different digests conflict. No caller may treat this interface or fake tests as SQL evidence.
  *
  * New writes use bigint arithmetic, increment even for identical/empty content, and atomically
- * commit dashboard + receipt + cleanup + final session touch. Only successful new writes remove
+ * commit dashboard + receipt + cleanup + unused copy-opportunity invalidation. Only successful new writes remove
  * receipts aged >= seven days and then evict oldest revisions to the 1,024/account cap. Expiry,
- * revocation, revision exhaustion and ambiguous commits fail closed; never retry writes here.
+ * mapping mismatch, revision exhaustion and ambiguous commits fail closed; never retry writes here.
  * Concrete adapters must prove these guarantees with their own locking and failure-injection tests.
  */
 export interface DashboardPersistence {
-  read(proof: SessionAuthorizationProof): Promise<DashboardReadOutcome>;
+  read(proof: AccountAuthorizationProof): Promise<DashboardReadOutcome>;
   compareAndWrite(
-    proof: SessionAuthorizationProof,
+    proof: AccountAuthorizationProof,
     intent: ValidatedDashboardWrite,
     isCatalogueCompatible: (intent: ValidatedDashboardWrite) => boolean,
   ): Promise<DashboardWriteOutcome>;

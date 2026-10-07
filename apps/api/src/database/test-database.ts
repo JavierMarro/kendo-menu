@@ -28,6 +28,9 @@ export type TestDatabaseUrlErrorCode =
 
 export interface TestDatabaseOptions {
   readonly clock?: () => Date;
+  readonly afterCopyOpportunityConsumed?: () => Promise<void>;
+  readonly afterCopyWriteBeforeCommit?: () => Promise<void>;
+  readonly afterCopyCommitResponseLost?: () => Promise<void>;
 }
 
 export interface TestDatabase {
@@ -166,11 +169,20 @@ export async function createTestDatabase(options: TestDatabaseOptions = {}): Pro
     await client.connect();
     await verifyTestDatabase(client);
     await client.query(`SET search_path TO ${quoteIdentifier(schema)}`);
-    const persistence = createPostgresPersistence(
-      options.clock === undefined
-        ? { connectionString, schema }
-        : { connectionString, schema, clock: options.clock },
-    );
+    const persistence = createPostgresPersistence({
+      connectionString,
+      schema,
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
+      ...(options.afterCopyOpportunityConsumed === undefined
+        ? {}
+        : { afterCopyOpportunityConsumed: options.afterCopyOpportunityConsumed }),
+      ...(options.afterCopyWriteBeforeCommit === undefined
+        ? {}
+        : { afterCopyWriteBeforeCommit: options.afterCopyWriteBeforeCommit }),
+      ...(options.afterCopyCommitResponseLost === undefined
+        ? {}
+        : { afterCopyCommitResponseLost: options.afterCopyCommitResponseLost }),
+    });
     let closed = false;
     return {
       persistence,

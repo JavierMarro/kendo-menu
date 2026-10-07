@@ -21,22 +21,32 @@ import {
 
 const SHA256_HEX_CHECK = sql`~ '^[0-9a-f]{64}$'`;
 
-// The generated UUID is KendoMenu's internal identity. Google `sub` is the
-// unique external identity; verified email remains nullable, mutable metadata.
+// The generated UUID is KendoMenu's internal identity. Managed provider identity
+// is stored separately from preserved legacy Google subjects; email is metadata.
 export const users = pgTable(
   'users',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    googleSub: varchar('google_sub', { length: 255 }).notNull(),
+    googleSub: varchar('google_sub', { length: 255 }),
+    managedProvider: varchar('managed_provider', { length: 32 }),
+    managedIssuer: varchar('managed_issuer', { length: 512 }),
+    managedSubject: varchar('managed_subject', { length: 255 }),
     verifiedGoogleEmail: varchar('verified_google_email', { length: 320 }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex('users_google_sub_key').on(table.googleSub),
+    uniqueIndex('users_managed_identity_key')
+      .on(table.managedProvider, table.managedIssuer, table.managedSubject)
+      .where(sql`${table.managedProvider} IS NOT NULL`),
+    check(
+      'users_managed_identity_shape',
+      sql`(((${table.managedProvider} IS NULL AND ${table.managedIssuer} IS NULL AND ${table.managedSubject} IS NULL) OR (${table.managedProvider} = 'neon' AND ${table.managedIssuer} IS NOT NULL AND ${table.managedSubject} IS NOT NULL)) IS TRUE)`,
+    ),
     check(
       'users_google_sub_no_controls',
-      sql`(${table.googleSub} <> '' AND ${table.googleSub} !~ '[[:cntrl:]]')`,
+      sql`(${table.googleSub} IS NULL OR (${table.googleSub} <> '' AND ${table.googleSub} !~ '[[:cntrl:]]'))`,
     ),
     check(
       'users_verified_google_email_no_controls',
@@ -45,6 +55,37 @@ export const users = pgTable(
     check(
       'users_timestamp_order',
       sql`(isfinite(${table.createdAt}) AND isfinite(${table.updatedAt}) AND ${table.updatedAt} >= ${table.createdAt})`,
+    ),
+  ],
+);
+
+// New managed accounts get one in-memory-delivered capability. It stores no
+// dashboard payload and no recovery journal; consumption survives interruption.
+export const accountCopyOpportunities = pgTable(
+  'account_copy_opportunities',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    opportunityId: uuid('opportunity_id').notNull().defaultRandom(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'date' }),
+    outcome: varchar('outcome', { length: 16 }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('account_copy_opportunities_id_key').on(table.opportunityId),
+    check(
+      'account_copy_opportunities_outcome_shape',
+      sql`(((${table.consumedAt} IS NULL AND ${table.outcome} IS NULL) OR (${table.consumedAt} IS NOT NULL AND ${table.outcome} IN ('consumed', 'accepted', 'declined', 'saved'))) IS TRUE)`,
+    ),
+    check(
+      'account_copy_opportunities_finite_timestamps',
+      sql`(isfinite(${table.createdAt}) AND (${table.consumedAt} IS NULL OR isfinite(${table.consumedAt})))`,
+    ),
+    check(
+      'account_copy_opportunities_consumed_order',
+      sql`(${table.consumedAt} IS NULL OR ${table.consumedAt} >= ${table.createdAt})`,
     ),
   ],
 );
@@ -312,6 +353,7 @@ export const dashboardWriteReceipts = pgTable(
 
 /** One schema object is shared by every Drizzle database bound to a checked-out client. */
 export const persistenceSchema = {
+  accountCopyOpportunities,
   accountAdoptions,
   applicationSessions,
   cloudDashboards,

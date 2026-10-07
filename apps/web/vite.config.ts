@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
-import { isLoopbackProofRequest, managedAuthProofPlugin } from './dev/managed-auth-proof-plugin';
+import { isLoopbackProofRequest, managedAuthProofPlugin } from './dev/managed-auth-proof-plugin.ts';
 
 export default defineConfig({
   plugins: [

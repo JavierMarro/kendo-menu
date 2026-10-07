@@ -71,10 +71,14 @@ async function oldRows() {
     'cloud_dashboards',
     'dashboard_write_receipts',
   ]) {
+    const projection =
+      table === 'users'
+        ? "(to_jsonb(t) - 'managed_provider' - 'managed_issuer' - 'managed_subject')::text"
+        : 'row_to_json(t)::text';
     rows.push(
       (
         await database.client.query<{ data: string }>(
-          `SELECT row_to_json(t)::text AS data FROM ${table} t ORDER BY row_to_json(t)::text`,
+          `SELECT ${projection} AS data FROM ${table} t ORDER BY ${projection}`,
         )
       ).rows,
     );
@@ -84,6 +88,13 @@ async function oldRows() {
 
 async function restoreJob5B() {
   await seedPreviousData();
+  await database.client.query('DROP TABLE account_copy_opportunities');
+  await database.client.query('DROP TRIGGER users_managed_identity_immutable ON users');
+  await database.client.query('DROP FUNCTION reject_managed_identity_change()');
+  await database.client.query(
+    'ALTER TABLE users DROP COLUMN managed_provider, DROP COLUMN managed_issuer, DROP COLUMN managed_subject',
+  );
+  await database.client.query('ALTER TABLE users ALTER COLUMN google_sub SET NOT NULL');
   await database.client.query('DROP TABLE account_adoptions');
   const migration = readMigrationFiles({ migrationsFolder: folder })[2];
   if (migration === undefined) throw new Error('TEST_ADOPTION_MIGRATION_MISSING');

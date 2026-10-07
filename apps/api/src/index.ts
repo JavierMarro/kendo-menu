@@ -5,6 +5,8 @@
  */
 export { createApp } from './app.js';
 export type { App } from './app.js';
+export { createAccount } from './account/account.js';
+export type { Account } from './account/account.js';
 export { createAdoption } from './adoption/adoption.js';
-export type { Adoption, AdoptionDependencies } from './adoption/adoption.js';
-export { createRuntimeAuthentication, createRuntimeServices } from './runtime.js';
+export type { Adoption } from './adoption/adoption.js';
+export { createRuntimeServices } from './runtime.js';

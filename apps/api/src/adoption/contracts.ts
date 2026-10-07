@@ -58,6 +58,7 @@ export interface AdoptionNoRequest {
   readonly decision: 'no';
   readonly transportVersion: 1;
   readonly expectedAccountWorkspaceId: AccountWorkspaceId;
+  readonly copyOpportunityId: string;
   readonly requestId: RequestId;
 }
 
@@ -65,6 +66,7 @@ export interface AdoptionYesRequest {
   readonly decision: 'yes';
   readonly transportVersion: 1;
   readonly expectedAccountWorkspaceId: AccountWorkspaceId;
+  readonly copyOpportunityId: string;
   readonly expectedRevision: '0';
   readonly requestId: RequestId;
   readonly catalogueVersion: CatalogueVersion;
@@ -214,6 +216,7 @@ export function validateAdoptionRequest(
           'decision',
           'transportVersion',
           'expectedAccountWorkspaceId',
+          'copyOpportunityId',
           'requestId',
         ])
       ) {
@@ -230,7 +233,12 @@ export function validateAdoptionRequest(
       }
       const expectedAccountWorkspaceId = value['expectedAccountWorkspaceId'];
       const requestId = value['requestId'];
-      if (!isAccountWorkspaceId(expectedAccountWorkspaceId) || !isRequestId(requestId)) {
+      const copyOpportunityId = value['copyOpportunityId'];
+      if (
+        !isAccountWorkspaceId(expectedAccountWorkspaceId) ||
+        !isRequestId(requestId) ||
+        !isAccountWorkspaceId(copyOpportunityId)
+      ) {
         return invalid('INVALID_ADOPTION_REQUEST');
       }
       if (expectedAccountWorkspaceId !== accountWorkspaceId) {
@@ -240,6 +248,7 @@ export function validateAdoptionRequest(
         decision: 'no',
         transportVersion: 1,
         expectedAccountWorkspaceId,
+        copyOpportunityId,
         requestId,
       });
       return {
@@ -257,6 +266,7 @@ export function validateAdoptionRequest(
         'decision',
         'transportVersion',
         'expectedAccountWorkspaceId',
+        'copyOpportunityId',
         'expectedRevision',
         'requestId',
         'catalogueVersion',
@@ -277,11 +287,13 @@ export function validateAdoptionRequest(
     const expectedAccountWorkspaceId = value['expectedAccountWorkspaceId'];
     const expectedRevision = value['expectedRevision'];
     const requestId = value['requestId'];
+    const copyOpportunityId = value['copyOpportunityId'];
     const catalogueVersion = value['catalogueVersion'];
     if (
       !isAccountWorkspaceId(expectedAccountWorkspaceId) ||
       !isRevision(expectedRevision) ||
       !isRequestId(requestId) ||
+      !isAccountWorkspaceId(copyOpportunityId) ||
       !isCatalogueVersion(catalogueVersion)
     ) {
       return invalid('INVALID_ADOPTION_REQUEST');
@@ -317,10 +329,19 @@ export function validateAdoptionRequest(
       }
     }
     const dashboardIntent = dashboardValidation.intent;
+    const dashboardState = dashboardIntent.request.dashboard.state;
+    if (
+      !isRecord(dashboardState) ||
+      !Array.isArray(dashboardState['dashboardEntries']) ||
+      dashboardState['dashboardEntries'].length === 0
+    ) {
+      return invalid('INVALID_DASHBOARD');
+    }
     const request: AdoptionYesRequest = Object.freeze({
       decision: 'yes',
       transportVersion: 1,
       expectedAccountWorkspaceId,
+      copyOpportunityId,
       expectedRevision: '0',
       requestId,
       catalogueVersion,

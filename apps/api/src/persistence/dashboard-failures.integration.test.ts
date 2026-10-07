@@ -3,7 +3,7 @@
  *
  * Every failure is introduced in the harness-owned PostgreSQL schema. The
  * adapter still runs its real checked-out-client transaction, row locks,
- * cleanup, and session touch; these tests only make one real SQL stage fail so
+ * cleanup, and copy-opportunity invalidation; these tests only make one real SQL stage fail so
  * the complete pre-write state can be compared afterward.
  */
 import { createHash, randomUUID } from 'node:crypto';
@@ -11,9 +11,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createSessionAuthorization } from '../auth/session-authorization.js';
-import type { SessionAuthorizationProof } from '../auth/session-authorization.js';
-import { CSRF_COOKIE_NAME, SESSION_COOKIE_NAME } from '../auth/contracts.js';
+import {
+  createAccountAuthorization,
+  type AccountAuthorizationProof,
+} from '../auth/account-authorization.js';
+import type { ManagedIdentity } from '../auth/managed-identity.js';
 import { createTestDatabase, type TestDatabase } from '../database/test-database.js';
 import {
   createDashboardCatalogue,
@@ -21,14 +23,11 @@ import {
   validateDashboardWrite,
 } from '../dashboard/validation.js';
 import type { AccountWorkspaceId } from '../dashboard/contracts.js';
-import type { UserRecord } from './contracts.js';
 
 const BASE_TIME = new Date('2026-01-01T12:00:00.000Z');
 const DAY = 24 * 60 * 60 * 1_000;
 const APP_ORIGIN = 'https://app.example.test';
 const catalogue = createDashboardCatalogue();
-const TOKEN = Buffer.alloc(32, 1).toString('base64url');
-const CSRF = Buffer.alloc(32, 2).toString('base64url');
 
 let database: TestDatabase | undefined;
 let currentTime = new Date(BASE_TIME.getTime());
@@ -52,36 +51,32 @@ interface ReceiptSnapshotRow {
   readonly created_at: string;
 }
 
-interface ActivitySnapshotRow {
-  readonly id: string;
+interface OpportunitySnapshotRow {
   readonly user_id: string;
-  readonly session_token_hash: string;
-  readonly csrf_token_hash: string;
+  readonly opportunity_id: string;
+  readonly consumed_at: string | null;
+  readonly outcome: string | null;
   readonly created_at: string;
-  readonly last_activity_at: string;
-  readonly idle_expires_at: string;
-  readonly absolute_expires_at: string;
-  readonly revoked_at: string | null;
 }
 
 interface DatabaseSnapshot {
   readonly dashboards: readonly DashboardSnapshotRow[];
   readonly receipts: readonly ReceiptSnapshotRow[];
-  readonly activity: readonly ActivitySnapshotRow[];
+  readonly opportunities: readonly OpportunitySnapshotRow[];
 }
 
 interface DashboardFixture {
-  readonly user: UserRecord;
+  readonly user: { readonly id: string };
   readonly userId: AccountWorkspaceId;
-  readonly proof: SessionAuthorizationProof;
-  readonly readProof: SessionAuthorizationProof;
+  readonly proof: AccountAuthorizationProof;
+  readonly readProof: AccountAuthorizationProof;
 }
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
-function workspace(user: UserRecord): AccountWorkspaceId {
+function workspace(user: { readonly id: string }): AccountWorkspaceId {
   if (!isAccountWorkspaceId(user.id)) {
     throw new Error('TEST_WORKSPACE_INVALID');
   }
@@ -121,41 +116,24 @@ function requireDatabase(): TestDatabase {
 
 async function createFixture(): Promise<DashboardFixture> {
   const db = requireDatabase();
-  const user = await db.persistence.users.resolveByGoogleSubject({
-    googleSub: `dashboard-failure-${randomUUID()}`,
-  });
-  await db.persistence.sessions.create({
-    userId: user.id,
-    sessionTokenHash: sha256(TOKEN),
-    csrfTokenHash: sha256(CSRF),
-    createdAt: new Date(BASE_TIME.getTime()),
-    lastActivityAt: new Date(BASE_TIME.getTime()),
-    idleExpiresAt: new Date(BASE_TIME.getTime() + 7 * DAY),
-    absoluteExpiresAt: new Date(BASE_TIME.getTime() + 30 * DAY),
-  });
-  const authorization = createSessionAuthorization({
-    persistence: db.persistence,
-    getAppOrigin: () => APP_ORIGIN,
-    clock: () => new Date(currentTime.getTime()),
-  });
-  const cookies = `${SESSION_COOKIE_NAME}=${TOKEN}; ${CSRF_COOKIE_NAME}=${CSRF}`;
-  const read = await authorization.authorizeRead(
-    new Request(`${APP_ORIGIN}/api/dashboard`, { headers: { cookie: cookies } }),
-  );
-  if (read.status !== 'authorized') throw new Error('TEST_READ_AUTHORIZATION_FAILED');
-  const write = await authorization.authorizeWrite(
-    new Request(`${APP_ORIGIN}/api/dashboard`, {
-      method: 'PUT',
-      headers: { cookie: cookies, origin: APP_ORIGIN, 'x-csrf-token': CSRF },
-    }),
-  );
-  if (write.status !== 'authorized') throw new Error('TEST_WRITE_AUTHORIZATION_FAILED');
-  return {
-    user,
-    userId: workspace(user),
-    proof: write.proof,
-    readProof: read.proof,
+  const identity: ManagedIdentity = {
+    provider: 'neon',
+    issuer: 'https://auth.example.test',
+    subject: `dashboard-failure-${randomUUID()}`,
+    verifiedEmail: null,
+    expiresAt: Math.floor(BASE_TIME.getTime() / 1000) + (30 * DAY) / 1000,
   };
+  const initialized = await db.persistence.managedAccounts.initializeManagedAccount(identity);
+  if (initialized.status !== 'initialized') throw new Error('TEST_ACCOUNT_INITIALIZATION_FAILED');
+  const user = { id: initialized.account.accountId };
+  const authorization = createAccountAuthorization({
+    verify: () => Promise.resolve({ status: 'verified', identity }),
+    lookup: db.persistence.managedAccounts,
+    getAppOrigin: () => APP_ORIGIN,
+    now: () => Math.floor(currentTime.getTime() / 1000),
+  });
+  const proof = authorization.createProof(identity, user.id);
+  return { user, userId: workspace(user), proof, readProof: proof };
 }
 
 async function write(fixture: DashboardFixture, expectedRevision: string, requestId?: string) {
@@ -226,29 +204,21 @@ async function snapshot(fixture: DashboardFixture): Promise<DatabaseSnapshot> {
       ORDER BY acknowledged_revision, request_id`,
     [fixture.user.id],
   );
-  const activity = await db.client.query<ActivitySnapshotRow>(
-    `SELECT id::text AS id,
-            user_id::text AS user_id,
-            session_token_hash,
-            csrf_token_hash,
-            created_at::text AS created_at,
-            last_activity_at::text AS last_activity_at,
-            idle_expires_at::text AS idle_expires_at,
-            absolute_expires_at::text AS absolute_expires_at,
-            revoked_at::text AS revoked_at
-       FROM application_sessions
-      WHERE id = $1`,
-    [fixture.proof.sessionId],
+  const opportunities = await db.client.query<OpportunitySnapshotRow>(
+    `SELECT user_id::text AS user_id, opportunity_id::text AS opportunity_id,
+            consumed_at::text AS consumed_at, outcome, created_at::text AS created_at
+       FROM account_copy_opportunities WHERE user_id = $1`,
+    [fixture.user.id],
   );
   return {
     dashboards: dashboards.rows,
     receipts: receipts.rows,
-    activity: activity.rows,
+    opportunities: opportunities.rows,
   };
 }
 
 async function installFailureTrigger(
-  table: 'cloud_dashboards' | 'dashboard_write_receipts' | 'application_sessions',
+  table: 'cloud_dashboards' | 'dashboard_write_receipts' | 'account_copy_opportunities',
   timing: 'AFTER' | 'BEFORE',
   events: string,
   functionName: string,
@@ -349,20 +319,18 @@ describe('PostgreSQL dashboard write failure atomicity', () => {
     await expect(snapshot(fixture)).resolves.toEqual(before);
   });
 
-  it('rolls back a failure during final session activity touch', async () => {
+  it('rolls back a failure during copy-opportunity invalidation on the first Save', async () => {
     const fixture = await createFixture();
-    await write(fixture, '0');
     await seedExpiryReceipt(fixture);
     const before = await snapshot(fixture);
     await installFailureTrigger(
-      'application_sessions',
+      'account_copy_opportunities',
       'AFTER',
-      'UPDATE OF last_activity_at',
-      'fail_dashboard_touch_for_test',
-      'fail_dashboard_touch_trigger',
+      'UPDATE',
+      'fail_opportunity_update_for_test',
+      'fail_opportunity_update_trigger',
     );
-
-    expect(await write(fixture, '1')).toEqual({ status: 'unavailable' });
+    expect(await write(fixture, '0')).toEqual({ status: 'unavailable' });
     await expect(snapshot(fixture)).resolves.toEqual(before);
   });
 
@@ -442,7 +410,7 @@ describe('PostgreSQL dashboard write failure atomicity', () => {
     const afterCommit = await snapshot(fixture);
     expect(afterCommit.dashboards).not.toEqual(before.dashboards);
     expect(afterCommit.receipts).not.toEqual(before.receipts);
-    expect(afterCommit.activity).not.toEqual(before.activity);
+    expect(afterCommit.opportunities).toEqual(before.opportunities);
 
     query.mockRestore();
     const replay = await write(fixture, '1', requestId);

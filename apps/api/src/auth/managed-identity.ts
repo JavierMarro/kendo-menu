@@ -8,6 +8,19 @@ export interface ManagedIdentity {
   readonly expiresAt: number;
 }
 
+export function hasControlCharacters(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (
+      codePoint !== undefined &&
+      (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export type ManagedIdentityResult =
   | { readonly status: 'verified'; readonly identity: ManagedIdentity }
   | { readonly status: 'invalid' }
@@ -134,10 +147,24 @@ export function createManagedIdentityVerifier(
       if (
         typeof payload.sub !== 'string' ||
         payload.sub.length === 0 ||
+        payload.sub.length > 255 ||
+        hasControlCharacters(payload.sub) ||
         typeof payload.exp !== 'number' ||
         !Number.isSafeInteger(payload.exp) ||
         payload['role'] !== 'authenticated' ||
         payload['isAnonymous'] === true
+      ) {
+        return { status: 'invalid' };
+      }
+
+      const verifiedEmail = payload['emailVerified'] === true ? payload['email'] : null;
+      if (
+        payload['emailVerified'] === true &&
+        (typeof verifiedEmail !== 'string' ||
+          verifiedEmail.length === 0 ||
+          verifiedEmail.length > 320 ||
+          verifiedEmail.trim() !== verifiedEmail ||
+          hasControlCharacters(verifiedEmail))
       ) {
         return { status: 'invalid' };
       }
@@ -148,10 +175,7 @@ export function createManagedIdentityVerifier(
           provider: 'neon',
           issuer,
           subject: payload.sub,
-          verifiedEmail:
-            payload['emailVerified'] === true && typeof payload['email'] === 'string'
-              ? payload['email']
-              : null,
+          verifiedEmail: typeof verifiedEmail === 'string' ? verifiedEmail : null,
           expiresAt: payload.exp,
         },
       };

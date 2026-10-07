@@ -47,22 +47,27 @@ activity quantities and notes can be adapted without mutating the built-in libra
 - The production MVP is a React + Vite + TypeScript web app with React Router. Domain contracts live
   in `packages/domain`; the platform-neutral Zustand store lives in `packages/store` and receives an
   injected storage adapter.
-- The guest dashboard uses Zustand with browser LocalStorage; a verified signed-in dashboard uses
-  Zustand with an account-scoped IndexedDB cache and cloud API. Persisted JSON is untrusted and must
-  be validated, versioned, and migrated when its shape changes.
-- The integration checkout implements public Google entry, the verified account workspace, and
-  the one-time guest-adoption choice against local account contracts. Real Google login, Neon,
-  HTTPS cookies, and Vercel production behavior remain unverified deployment gates. This document
+- The guest dashboard uses Zustand with browser LocalStorage. The preserved legacy browser account
+  client uses an account-scoped IndexedDB cache and the retired session API; it requires Migration C
+  to consume B and C/D to implement the approved memory-only account drafts. Persisted JSON is
+  untrusted and must be validated, versioned, and migrated when its shape changes.
+- The checkout preserves legacy public Google entry, account workspaces and the guest-adoption UI
+  against predecessor contracts. Migration A has owner-reported single-account Google/Neon identity
+  and storage passes; B's live dashboard reads/writes and remote migration, the multi-account check,
+  and production HTTPS/Vercel behavior remain unverified gates. This document
   does not authorize deployment or provisioning. Paid tiers and initialization of `apps/mobile`
   remain out of scope.
 
 ## Account journey — local integration only
 
-The account behavior below describes the preserved legacy implementation. The approved replacement
+The account behavior below describes the preserved browser implementation before B's server cutover,
+not a working journey against B's API. The approved replacement
 uses Neon managed Google authentication and online-only account drafts with explicit saves;
 [ADR 0007](docs/adr/0007-managed-auth-online-account-drafts.md) supersedes the old account caching,
 session and interrupted-copy requirements. [Migration A](docs/MANAGED_AUTH_PROOF.md) has an isolated development proof with callback-only session bootstrap and subsequent token retrieval; single-account identity and inspected sign-in/out, reload and JWT-refresh storage checks have owner-reported passes. The second-account check is owner-deferred until public release. The production
-replacement journey is not enabled.
+replacement browser journey is not enabled. [Migration B](docs/MANAGED_DASHBOARDS.md) replaces
+the API with managed identity and protected dashboards; the preserved browser integration requires
+Migration C to consume its account/bearer contract, followed by Migration D's routing/cache retirement.
 
 Anonymous use remains fully supported and free. Optional Google-only KendoMenu accounts are locally
 implemented to add

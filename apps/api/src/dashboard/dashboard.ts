@@ -6,9 +6,9 @@
 import { randomUUID } from 'node:crypto';
 
 import {
-  sessionAuthorizationFailureResponse,
-  type SessionAuthorization,
-} from '../auth/session-authorization.js';
+  accountAuthorizationFailureResponse,
+  type AccountAuthorization,
+} from '../auth/account-authorization.js';
 import type {
   DashboardPersistenceFailure,
   DashboardPersistenceProvider,
@@ -34,7 +34,7 @@ export interface DashboardLogEntry {
 }
 
 export interface DashboardDependencies {
-  readonly authorization: SessionAuthorization;
+  readonly authorization: AccountAuthorization;
   readonly persistence: DashboardPersistenceProvider;
   readonly catalogue?: DashboardCatalogue;
   readonly diagnosticId?: () => string;
@@ -52,9 +52,9 @@ function json(status: number, body: unknown): Response {
 function failure(outcome: DashboardPersistenceFailure): Response {
   switch (outcome.status) {
     case 'unauthenticated':
-      return sessionAuthorizationFailureResponse('UNAUTHENTICATED');
+      return accountAuthorizationFailureResponse('unauthenticated');
     case 'auth-unavailable':
-      return sessionAuthorizationFailureResponse('AUTH_UNAVAILABLE');
+      return accountAuthorizationFailureResponse('unavailable');
     case 'workspace-mismatch':
       return json(403, { error: 'ACCOUNT_WORKSPACE_MISMATCH' });
     case 'unavailable':
@@ -112,12 +112,14 @@ export function createDashboard(dependencies: DashboardDependencies): Dashboard 
             ? await dependencies.authorization.authorizeRead(request)
             : await dependencies.authorization.authorizeWrite(request);
       } catch {
-        return sessionAuthorizationFailureResponse('AUTH_UNAVAILABLE');
+        return accountAuthorizationFailureResponse('unavailable');
       }
-      if (authorized.status === 'rejected') return authorized.response;
+      if (authorized.status !== 'authorized') {
+        return accountAuthorizationFailureResponse(authorized.status);
+      }
       const proof = authorized.proof;
-      if (!isAccountWorkspaceId(proof.userId))
-        return sessionAuthorizationFailureResponse('AUTH_UNAVAILABLE');
+      if (!isAccountWorkspaceId(proof.accountId))
+        return accountAuthorizationFailureResponse('unavailable');
 
       if (request.method === 'GET') {
         // Reads are validated again against the current catalogue before stored
@@ -129,7 +131,7 @@ export function createDashboard(dependencies: DashboardDependencies): Dashboard 
               : dependencies.persistence;
           const outcome = await persistence.read(proof);
           if (outcome.status !== 'read') return failure(outcome);
-          const response = catalogue.validateRead(outcome.response, proof.userId);
+          const response = catalogue.validateRead(outcome.response, proof.accountId);
           return response === null ? unavailable() : json(200, response);
         } catch {
           return unavailable();
@@ -146,7 +148,7 @@ export function createDashboard(dependencies: DashboardDependencies): Dashboard 
           ? json(error.status, { error: error.code })
           : json(400, { error: 'INVALID_DASHBOARD_REQUEST' });
       }
-      const validation = validateDashboardWrite(value, proof.userId);
+      const validation = validateDashboardWrite(value, proof.accountId);
       if (validation.status === 'invalid') {
         const status =
           validation.error === 'INVALID_DASHBOARD_REQUEST'

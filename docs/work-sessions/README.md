@@ -26,6 +26,7 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-10-05 — managed dashboard backend](./2026-10-05-managed-dashboard-backend.md)
 - [2026-10-05 — managed auth owner review and gate amendment](./2026-10-05-managed-auth-owner-review.md)
 - [2026-10-04 — managed auth callback handoff](./2026-10-04-managed-auth-callback-handoff.md)
 - [2026-10-04 — managed auth storage gate (initial token-only attempt)](./2026-10-04-managed-auth-storage-gate.md)

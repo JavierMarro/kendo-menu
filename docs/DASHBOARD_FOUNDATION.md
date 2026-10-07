@@ -1,5 +1,10 @@
 # Job 5A dashboard application foundation
 
+Historical Job 5A handoff. [Migration B](MANAGED_DASHBOARDS.md) now registers the protected API with
+managed bearer authorization and internal account proofs. B preserves the strict transport,
+dashboard validation, revision and ordinary Save-receipt guarantees; the session/CSRF dependencies
+below describe the predecessor.
+
 This is an unregistered, locally tested application foundation. `/api/dashboard` still returns
 the production application's JSON 404. No dashboard table, migration, PostgreSQL adapter, route,
 or runtime composition is added. The source of truth for transport types is

@@ -6,12 +6,42 @@ session in the browser without an account, server, or network dependency.
 
 ## Managed-auth transition status
 
-The account/authentication descriptions in this document remain the implemented legacy boundaries.
 [ADR 0007](adr/0007-managed-auth-online-account-drafts.md) records the approved managed-auth and
 online-account replacement. [Migration A](MANAGED_AUTH_PROOF.md) implements an isolated development proof using
-one callback-only session exchange, a fresh document, and subsequent token-only retrieval. Single-account identity and inspected sign-in/out, reload and JWT-refresh storage checks have owner-reported passes. The second-account check is owner-deferred until public release and alone no longer gates a reviewed A commit or internal B. Production providers, routes
-and SQL retain the legacy implementation.
-The [transition handoff](MANAGED_AUTH_TRANSITION.md) owns the sequential replacement scope.
+one callback-only session exchange, a fresh document, and subsequent token-only retrieval. Single-account identity and inspected sign-in/out, reload and JWT-refresh storage checks have owner-reported passes. The second-account check is owner-deferred until public release and alone no longer gates a reviewed A commit or internal B. Production browser providers, routes
+and account caches retain the legacy integration until Migrations C/D.
+[Migration B](MANAGED_DASHBOARDS.md) replaces the API runtime with managed bearer identity,
+internal account mapping and protected PostgreSQL dashboards. Legacy auth/adoption tables and
+development/test account rows remain preserved, without linking them to managed identities.
+The browser still expects the retired session/CSRF contract and requires Migration C; no public
+account-release compatibility is claimed. The [transition handoff](MANAGED_AUTH_TRANSITION.md)
+owns the sequential replacement scope. Historical handoffs record the predecessor; the preserved
+browser descriptions below depend on server auth and copy-recovery contracts superseded by B.
+
+### Managed account API boundary
+
+The Node and Vercel adapters share listener-free Elysia composition and one lazy PostgreSQL pool.
+Health/import/build do not connect to the database. The dedicated managed verifier binds EdDSA
+JWT signature, issuer, audience and expiry to the configured Neon branch. Explicit bearer
+credentials establish managed identity; cookies and browser identity fields never authorize it.
+Account initialization maps provider/issuer/subject uniquely to a generated internal UUID and
+creates its one-time random copy opportunity in the same transaction. Email is nullable verified
+metadata. Inspection creates nothing and never reissues an opportunity.
+
+Protected dashboard and adoption operations carry an internally branded account proof. Missing
+mapping returns `409 ACCOUNT_NOT_INITIALIZED`. Mutation authorization checks exact configured
+Origin before reading a body. Complete bounded v10 validation, workspace mismatch guards,
+optimistic revisions and ordinary Save receipts remain. SQL mutations serialize on the account
+first and recheck JWT expiry after waits and before completion; no custom session locks, activity
+updates, CSRF cookies or application-token issuance remain in runtime composition.
+
+The copy opportunity contains only ID, consumption and outcome metadata. Valid Yes/No consumption
+commits before a Yes copy starts its second transaction. That transaction reacquires the account
+lock and requires no existing dashboard and revision zero, so an intervening ordinary Save cannot
+be overwritten. Success acknowledges a committed whole snapshot/outcome. Failure or uncertain
+copying leaves consumption final and ordinary account access available; there is no copy replay
+or recovery journal. Guest LocalStorage remains independent. See the
+[B contract and owner-run checklist](MANAGED_DASHBOARDS.md) for frontend integration and gates.
 
 ## Boundaries and flow
 
@@ -148,8 +178,10 @@ Workbox navigation fallback is limited to the app's supported document paths and
 independent of LocalStorage. Installation is prompt-based; the service worker is an asset/navigation
 boundary, not a data-sync or backup system.
 
-First-party browser code sends one GoatCounter image request per document only after `/api/session`
-verifies signed out. Its `/count?p=...` request uses a static route allow-list, drops query strings
+The preserved browser analytics gate sends one GoatCounter image request per document only after
+the legacy `/api/session` contract verifies signed out. B retires that route; when run against B,
+this gate remains unresolved and suppresses analytics until Migration C updates identity handling.
+Its `/count?p=...` request uses a static route allow-list, drops query strings
 and referrer data with an explicit `no-referrer` policy, and carries no account or training content.
 GoatCounter still receives ordinary request metadata such as IP address and user-agent. It does not load GoatCounter
 JavaScript. Unresolved, offline, and authenticated sessions send no analytics request. This limited
@@ -165,83 +197,54 @@ shared platform-neutral UI.
 
 For the original recursive-model decision, see [ADR 0001](./adr/0001-recursive-training-activities.md).
 
-## Local API scaffold and accepted later architecture
+## Local API and managed persistence
 
-Optional accounts and synchronization are implemented locally but have no deployed production
-account service. The local backend authentication and persistence implementation below remains
-separate from production behavior. The accepted decisions
-are [identity and application sessions](adr/0002-identity-application-sessions.md),
-[independent dashboards and one-time guest copy](adr/0006-independent-dashboards-one-time-guest-copy.md),
-and [whole-dashboard synchronization](adr/0004-whole-dashboard-sync.md). The earlier
-[workspace adoption decision](adr/0003-workspaces-guest-adoption.md) is superseded.
+The local API has no deployed production account service. Migration B implements the server
+replacement approved by [ADR 0007](adr/0007-managed-auth-online-account-drafts.md), preserving
+independent dashboards and whole-dashboard atomic writes while retiring application sessions and
+copy recovery. The older auth/synchronization ADRs describe superseded decisions.
 
-The Job 3 local scaffold puts Elysia application behavior in `apps/api`, with separate standalone
-Node and minimal root Vercel function adapters. The `createApp({ authentication })` interface handles standard Requests
-without starting a listener. Job 4B adds Google start/callback and session GET/DELETE routes behind
-one injected authentication module; the local browser integration is described below. Job 4A adds isolated PostgreSQL authentication persistence under `apps/api/src/persistence`,
-using Drizzle and pg for users, login transactions, and application sessions. Its intent-oriented
-interface hides schema, transactions, and driver errors. Job 4B runtime composition injects
-persistence lazily; only root Vercel composition imports its pool attachment helper. The concrete
-PostgreSQL adapter exposes its pool to runtime composition, never to authentication contracts. Explicit migration commands live under `apps/api/src/database`, with
-reviewed SQL and metadata under `apps/api/drizzle`. Database-independent unit tests and isolated
-real-PostgreSQL integration tests are separate commands. Node 24 is the declared target. See [ADR 0005](adr/0005-node-elysia-api-foundation.md).
+Elysia application behavior lives in `apps/api`, with a standalone Node listener and a minimal
+root Vercel adapter. `createApp({ account, dashboard, adoption })` handles standard Requests without
+starting a listener. `createRuntimeServices()` composes managed authorization and all three
+services around a single lazy PostgreSQL provider. Only root Vercel composition attaches the pool
+through its lifecycle helper. PostgreSQL clients and transactions remain behind persistence ports.
+Explicit migration commands live under `apps/api/src/database`, and reviewed SQL, snapshots and
+journal live under `apps/api/drizzle`. Runtime requests never migrate the database. Unit tests and
+guarded schema-isolated local PostgreSQL tests remain separate commands. Node 24 is the target.
 
-### Job 5A protected dashboard foundation
+### Dashboard transport and storage
 
-The API now depends on the platform-neutral domain workspace for strict v10 dashboard wire
-validation. The [domain codec](../packages/domain/src/dashboard-persistence.ts) owns current wire
-DTOs; store aliases preserve its existing imports, migrations and local serialization behavior.
-Node-compatible relative imports and a JSON import attribute let the same domain source work in
-the API's NodeNext and the web's bundler configurations. Neither React nor Zustand enters the API.
+The platform-neutral [domain codec](../packages/domain/src/dashboard-persistence.ts) owns strict
+v10 dashboard wire DTOs. Store aliases preserve existing imports, local migrations and serialization.
+Node-compatible relative imports and JSON import attributes support both API NodeNext and web
+bundler configurations. Neither React nor Zustand enters the API.
 
-[Shared session authorization](../apps/api/src/auth/session-authorization.ts) now serves session
-GET, logout and injected protected application operations. It never touches session activity.
-Logout requires equal CSRF cookie/header credentials bound to the active session. Invalid sessions
-clear application cookies; Origin/CSRF rejection and indeterminate failures preserve them.
+The [dashboard handler](../apps/api/src/dashboard/dashboard.ts) applies method/header rejection,
+managed authorization, bounded strict JSON parsing, lossless domain validation and canonical hashing
+before calling the [persistence port](../apps/api/src/persistence/dashboard-contracts.ts).
+GET/PUT and adoption POST are registered; mutations disable Elysia automatic parsing so authorization
+precedes body acquisition. Stored snapshots and acknowledgements are validated before serialization.
 
-The [dashboard application](../apps/api/src/dashboard/dashboard.ts) implements the Request/Response
-trust pipeline against an injected [protected persistence interface](../apps/api/src/persistence/dashboard-contracts.ts).
-Strict byte/JSON boundaries, canonical hashing and lossless v10 validation precede persistence.
-Current-catalogue compatibility remains separate so retained receipts can be checked first.
-Job 5A left dashboard routes unregistered and dashboard schema absent. Job 5B consumes those
-committed contracts directly; its local implementation is described below. See the
-[stable foundation handoff](DASHBOARD_FOUNDATION.md) for contracts, policy and boundaries.
+The [managed dashboard adapter](../apps/api/src/persistence/postgres/managed-dashboard-adapter.ts)
+stores canonical complete snapshot text in `cloud_dashboards` and bounded ordinary Save
+acknowledgements in `dashboard_write_receipts`. The account-first lock serializes revisions and
+receipts with copy consumption. Retained identical request IDs return their original acknowledgement
+before current catalogue/revision checks. New writes commit snapshot, receipt, receipt cleanup and
+unused-opportunity invalidation together. Uncertain COMMIT outcomes return unavailable; the identical
+ordinary Save request recovers its retained receipt. Copying has a separate consume-then-copy flow,
+without replay/recovery, described in the [managed account contract](MANAGED_DASHBOARDS.md).
 
-### Job 5B local PostgreSQL dashboard integration
+The historical [Job 5A foundation](DASHBOARD_FOUNDATION.md),
+[Job 5B persistence evidence](DASHBOARD_PERSISTENCE.md) and [Job 6A adoption handoff](ADOPTION.md)
+retain predecessor evidence. Their session locks, activity touches, CSRF and pending-copy recovery
+are superseded server behavior; applied migration history and legacy records remain preserved.
 
-`GET /api/dashboard` and `PUT /api/dashboard` now delegate to the existing application handler.
-Explicit HEAD and unsupported-method handlers reject without authorization or body consumption;
-PUT disables Elysia automatic parsing. `createRuntimeServices()` composes authentication and
-dashboard authorization/persistence around one lazy provider. The root function attaches that
-provider's pool once, and the Node adapter retains repeated Set-Cookie headers. Imports and health
-remain independent of database configuration/connectivity.
+### Preserved browser workspace integration — Migration C required
 
-The focused [dashboard adapter](../apps/api/src/persistence/postgres/dashboard-adapter.ts) stores
-canonical snapshot text in `cloud_dashboards` and bounded acknowledgement history in
-`dashboard_write_receipts`. Migration `0001_dashboard_persistence` extends the preserved Job 4A
-migration. With Job 6A, a write locks its internal user, then locks/revalidates the session before inspecting
-receipts or revisions. New dashboard content, its receipt, receipt cleanup and final session
-activity commit together. Retained identical requests return the original acknowledgement without
-activity or cleanup; uncertain commit outcomes return a fixed unavailable response and require
-the unchanged request ID for recovery. There is no server-side write retry or reset operation.
-
-These are local backend changes; the browser integration below has no production migration.
-See [Job 5B evidence and migration guidance](DASHBOARD_PERSISTENCE.md) for verification and the
-remaining Google/HTTPS/Neon/Vercel/Fluid Compute gates.
-
-### Job 6A authoritative adoption
-
-The approved Job 6A boundary adds account-level adoption state and one terminal receipt, with the
-pending capability tied to the session that creates the account. Account creation, session creation,
-and capability issuance are atomic. Returning accounts receive no new capability. Session inspection
-computes availability without writing and lets later authenticated sessions recover accepted or
-declined completion without retaining another dashboard representation.
-
-The adoption POST shares the dashboard transport and authenticated request boundary, with explicit
-Yes/No decisions, account mismatch protection, complete-envelope byte limits, and terminal replay.
-Google callback failures use fixed application redirects and consume authenticated browser-bound
-login attempts before handling provider cancellation or exchange failure. See
-[the Job 6A handoff](ADOPTION.md) for scope, verification, and remaining gates.
+The following browser modules remain implemented but depend on the retired session/CSRF API.
+They are preserved replacement material, not a compatible managed-account journey. Migrations C/D
+own online-only account drafts, production routing and browser-cache retirement.
 
 ### Job 6B internal browser workspace boundary
 

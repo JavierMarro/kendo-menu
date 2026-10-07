@@ -1,5 +1,10 @@
 # Job 5B PostgreSQL dashboard persistence
 
+Historical Job 5B handoff. [Migration B](MANAGED_DASHBOARDS.md) retains the dashboard/revision/Save
+receipt contract while replacing custom-session SQL authorization with managed account proofs.
+It removes runtime session locks/touches and CSRF-cookie requirements. The sections below describe
+the predecessor; applied migrations and legacy records remain preserved.
+
 Job 5B starts from owner commit `07dbace0c557c32ae54cc68c77688d31ec65ed5c` on
 `codex/account-sync-integration`. The initial worktree and diff were clean. That commit contains
 the reviewed Job 5A interfaces, direct tests and review handoff in

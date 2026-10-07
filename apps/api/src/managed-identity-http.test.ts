@@ -13,6 +13,8 @@ const TEST_BASE_URL = `${TEST_ISSUER}/branch/auth`;
 const TEST_KID = 'managed-proof-key';
 
 interface TokenOptions {
+  readonly subject?: string;
+  readonly email?: string;
   readonly audience?: string;
   readonly expiresAt?: number;
   readonly role?: string;
@@ -30,6 +32,12 @@ interface CredentialScenario {
 }
 
 const CREDENTIAL_SCENARIOS: readonly CredentialScenario[] = [
+  { name: 'empty subject', options: { subject: '' }, expected: 'invalid' },
+  { name: 'oversized subject', options: { subject: 'x'.repeat(256) }, expected: 'invalid' },
+  { name: 'control character subject', options: { subject: 'subject\u0000' }, expected: 'invalid' },
+  { name: 'empty verified email', options: { email: '' }, expected: 'invalid' },
+  { name: 'oversized verified email', options: { email: 'x'.repeat(321) }, expected: 'invalid' },
+  { name: 'control character verified email', options: { email: 'email\n' }, expected: 'invalid' },
   {
     name: 'wrong issuer',
     issuer: 'https://wrong-branch.example.test',
@@ -156,14 +164,14 @@ describe('isolated managed identity proof route', () => {
     const jwt = new SignJWT({
       role: options.role ?? 'authenticated',
       isAnonymous: options.isAnonymous ?? false,
-      email: 'proof@example.test',
+      email: options.email ?? 'proof@example.test',
       emailVerified: options.emailVerified ?? true,
     })
       .setProtectedHeader({ alg: 'EdDSA', kid: TEST_KID })
       .setIssuer(issuer)
       .setAudience(options.audience ?? issuer)
       .setIssuedAt(now);
-    if (options.omitSubject !== true) jwt.setSubject('managed-user-subject');
+    if (options.omitSubject !== true) jwt.setSubject(options.subject ?? 'managed-user-subject');
     if (options.omitExpiry !== true) jwt.setExpirationTime(options.expiresAt ?? now + 60);
     return jwt.sign(privateKey);
   }

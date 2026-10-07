@@ -9,7 +9,11 @@ reload, JWT-refresh and sign-out passes. Initial live storage evidence was limit
 the subsequent private owner inspection reports credential-free storage/no account IndexedDB or
 CacheStorage after reload and JWT refresh, with stable identity. No storage invariant was waived.
 [ADR 0007](adr/0007-managed-auth-online-account-drafts.md) records the approved superseding target.
-The legacy runtime remains implemented; the proof route is development-only.
+The proof route remains development-only. [Migration B](MANAGED_DASHBOARDS.md) now replaces the
+API's legacy custom-session runtime with managed identity mapping, protected dashboards and a
+consumed-once guest-copy opportunity. Legacy SQL records remain preserved; production browser
+account providers/routes and caches still require Migrations C/D to consume the new contract.
+No live B dashboard persistence, remote migration or deployment is claimed.
 
 On 5 October 2026 the owner deferred second-account distinction and return-to-first-account
 stability because only one dedicated Google test account is available and personal accounts will

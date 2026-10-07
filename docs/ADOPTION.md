@@ -1,5 +1,10 @@
 # Job 6A: authoritative guest-adoption backend
 
+Historical Job 6A handoff. [Migration B](MANAGED_DASHBOARDS.md) supersedes this runtime contract:
+managed bearer authorization, an in-memory creation-response opportunity ID, permanent consumption
+before Yes copying, and no creating-session restriction or copy replay/recovery. Applied migrations
+and legacy adoption records remain preserved. The sections below describe the predecessor.
+
 ## Approved scope
 
 Job 6A adds server-authoritative adoption and recovery. Jobs 6B–6D own browser workspaces,

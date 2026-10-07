@@ -6,7 +6,7 @@
 import { Elysia } from 'elysia';
 import { WebStandardAdapter } from 'elysia/adapter/web-standard';
 
-import type { Authentication } from './auth/contracts.js';
+import type { Account } from './account/account.js';
 import type { Adoption } from './adoption/adoption.js';
 import type { Dashboard } from './dashboard/dashboard.js';
 import type { ManagedIdentityVerifier } from './auth/managed-identity.js';
@@ -14,48 +14,34 @@ import { createRuntimeServices } from './runtime.js';
 
 const CACHE_CONTROL = 'private, no-store';
 
-function methodNotAllowed(allow: string): Response {
-  return new Response(null, {
-    status: 405,
-    headers: {
-      allow,
-      'cache-control': CACHE_CONTROL,
-    },
-  });
-}
-
 /** Optional service overrides for isolated Request/Response and listener tests. */
 export interface AppOptions {
-  readonly authentication?: Authentication;
+  readonly account?: Account;
   readonly dashboard?: Dashboard;
   readonly adoption?: Adoption;
-  /** Enables the isolated development proof route only when explicitly injected. */
+  /** Isolated development proof only; ordinary composition does not inject it. */
   readonly managedIdentity?: ManagedIdentityVerifier;
 }
 
 export const createApp = (options: AppOptions = {}) => {
   const runtime =
-    options.authentication === undefined ||
+    options.account === undefined ||
     options.dashboard === undefined ||
     options.adoption === undefined
       ? createRuntimeServices()
       : undefined;
-  const authentication = options.authentication ?? runtime?.authentication;
+  const account = options.account ?? runtime?.account;
   const dashboard = options.dashboard ?? runtime?.dashboard;
   const adoption = options.adoption ?? runtime?.adoption;
-  const managedIdentity = options.managedIdentity;
-  if (authentication === undefined || dashboard === undefined || adoption === undefined) {
+  if (account === undefined || dashboard === undefined || adoption === undefined) {
     throw new Error('RUNTIME_SERVICES_NOT_COMPOSED');
   }
   // This route table is the single ordering point shared by both runtime adapters.
   // Dashboard PUT and adoption POST opt out of framework parsing so their bounded
   // handlers see raw bodies and can authenticate before reading them.
   const app = new Elysia({ adapter: WebStandardAdapter })
-    .onRequest(({ request, set }) => {
+    .onRequest(({ request: _request, set }) => {
       set.headers['cache-control'] = CACHE_CONTROL;
-      if (new URL(request.url).pathname === '/api/auth/google/callback') {
-        set.headers['referrer-policy'] = 'no-referrer';
-      }
     })
     .onError({ as: 'global' }, ({ code, set }) => {
       set.headers['cache-control'] = CACHE_CONTROL;
@@ -76,39 +62,37 @@ export const createApp = (options: AppOptions = {}) => {
           },
         }),
     )
-    .get('/api/auth/google/start', ({ request }) => authentication.start(request))
-    .head('/api/auth/google/start', () => methodNotAllowed('GET'))
-    .get('/api/auth/google/callback', ({ request }) => authentication.callback(request))
-    .head('/api/auth/google/callback', () => methodNotAllowed('GET'))
-    .get('/api/session', ({ request }) => authentication.getSession(request))
-    .head('/api/session', () => methodNotAllowed('GET, DELETE'))
-    .delete('/api/session', ({ request }) => authentication.logout(request))
+    .get('/api/account', ({ request }) => account.handle(request))
+    .post('/api/account', ({ request }) => account.handle(request), { parse: 'none' })
+    .head('/api/account', ({ request }) => account.handle(request), { parse: 'none' })
     .get('/api/dashboard', ({ request }) => dashboard.handle(request))
     .put('/api/dashboard', ({ request }) => dashboard.handle(request), { parse: 'none' })
     .head('/api/dashboard', ({ request }) => dashboard.handle(request))
     .post('/api/dashboard/adoption', ({ request }) => adoption.handle(request), { parse: 'none' })
     .head('/api/dashboard/adoption', ({ request }) => adoption.handle(request), { parse: 'none' })
     .all('/api/dashboard/adoption', ({ request }) => adoption.handle(request), { parse: 'none' })
-    .all('/api/dashboard', ({ request }) => dashboard.handle(request), { parse: 'none' });
+    .all('/api/dashboard', ({ request }) => dashboard.handle(request), { parse: 'none' })
+    .all('/api/account', ({ request }) => account.handle(request), { parse: 'none' });
 
+  const managedIdentity = options.managedIdentity;
   if (managedIdentity === undefined) return app;
-
   return app.get('/api/dev/managed-identity', async ({ request }) => {
-    const authorization = request.headers.get('authorization');
-    const match = authorization?.match(/^Bearer ([^\s]+)$/iu);
+    const match = request.headers.get('authorization')?.match(/^Bearer ([^\s]+)$/iu);
     if (match?.[1] === undefined) {
       return Response.json({ error: 'UNAUTHENTICATED' }, { status: 401 });
     }
-
-    const result = await managedIdentity(match[1]);
-    if (result.status === 'invalid') {
-      return Response.json({ error: 'UNAUTHENTICATED' }, { status: 401 });
-    }
-    if (result.status === 'unavailable') {
+    try {
+      const result = await managedIdentity(match[1]);
+      if (result.status === 'invalid') {
+        return Response.json({ error: 'UNAUTHENTICATED' }, { status: 401 });
+      }
+      if (result.status === 'unavailable') {
+        return Response.json({ error: 'MANAGED_AUTH_UNAVAILABLE' }, { status: 503 });
+      }
+      return Response.json({ identity: result.identity });
+    } catch {
       return Response.json({ error: 'MANAGED_AUTH_UNAVAILABLE' }, { status: 503 });
     }
-
-    return Response.json({ identity: result.identity });
   });
 };
 
