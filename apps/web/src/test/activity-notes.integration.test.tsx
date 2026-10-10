@@ -6,6 +6,7 @@ import { asTrainingSetId, type DashboardEntry, type TrainingSet } from '@kendo-m
 
 import { DashboardTrainingSet } from '../features/dashboard/DashboardPage';
 import { PersistenceContext } from '../features/persistence/PersistenceGate';
+import { WorkspaceContextProvider } from '../lib/workspace-context';
 import { renderApp, createTestStore, TestMemoryStorage } from './test-utils';
 
 const INTERNATIONAL_DOJO_ID = asTrainingSetId('international-dojo-2-hour-session');
@@ -363,16 +364,20 @@ describe('dashboard activity notes', () => {
           flush: () => Promise.resolve(),
         }}
       >
-        <DashboardTrainingSet
-          entry={NESTED_NOTE_ENTRY}
-          index={0}
-          trainingSet={NESTED_NOTE_TRAINING_SET}
-          onRemove={() => undefined}
-          onUpdate={() => undefined}
-          onSetQuantity={() => undefined}
-          onClearQuantity={() => undefined}
-          onSetActivityNote={setActivityNote}
-        />
+        <WorkspaceContextProvider
+          value={{ kind: 'guest', basePath: '/app/guest', canEdit: true, accountEmail: null }}
+        >
+          <DashboardTrainingSet
+            entry={NESTED_NOTE_ENTRY}
+            index={0}
+            trainingSet={NESTED_NOTE_TRAINING_SET}
+            onRemove={() => undefined}
+            onUpdate={() => undefined}
+            onSetQuantity={() => undefined}
+            onClearQuantity={() => undefined}
+            onSetActivityNote={setActivityNote}
+          />
+        </WorkspaceContextProvider>
       </PersistenceContext.Provider>,
     );
 

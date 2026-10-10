@@ -1,4 +1,5 @@
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { expect, type Page, type TestInfo } from '@playwright/test';
+import { test } from './guest-test';
 
 import {
   COOKIE_NOTICE_ACKNOWLEDGEMENT_DURATION_MS,
@@ -16,6 +17,7 @@ function isProject(testInfo: TestInfo, projectName: string): boolean {
 }
 
 async function dispatchBeforeInstallPrompt(page: Page): Promise<boolean> {
+  await expect(page.getByRole('heading', { name: 'Plan the keiko you need today.' })).toBeVisible();
   return page.evaluate(() => {
     const event = new Event('beforeinstallprompt', { cancelable: true });
     Object.defineProperties(event, {
@@ -35,7 +37,7 @@ async function prepareStorage(
   page: Page,
   options: { readonly visitCount?: string; readonly acknowledgeCookie: boolean },
 ): Promise<void> {
-  await page.goto('/app/dashboard');
+  await page.goto('/app/guest/dashboard');
   await page.evaluate(
     ({ cookieDuration, cookieKey, dismissalKey, visitCount, visitKey, acknowledgeCookie }) => {
       window.localStorage.removeItem(dismissalKey);
@@ -75,7 +77,7 @@ async function holdSignedOutSession(page: Page): Promise<{
     releaseCheck = resolve;
   });
 
-  await page.route('**/api/session', async (route) => {
+  await page.route('**/neon/auth/token', async (route) => {
     markRequestStarted?.();
     await checkGate;
     await route.fulfill({
@@ -114,7 +116,6 @@ test.describe('installation and cookie notice coordination', () => {
     await expect(
       page.getByRole('heading', { name: 'Plan the keiko you need today.' }),
     ).toBeVisible();
-    await expect(page.getByText('Checking account status')).toBeVisible();
     await page.locator('.landing-page').evaluate((landing) => {
       landing.setAttribute('data-session-check-marker', 'mounted');
     });
@@ -127,7 +128,6 @@ test.describe('installation and cookie notice coordination', () => {
       )
       .toBe('1');
     session.release();
-    await expect(page.getByText('Checking account status')).toHaveCount(0);
     await expect(page.locator('.landing-page')).toHaveAttribute(
       'data-session-check-marker',
       'mounted',
@@ -159,14 +159,12 @@ test.describe('installation and cookie notice coordination', () => {
     await expect(
       page.getByRole('heading', { name: 'Plan the keiko you need today.' }),
     ).toBeVisible();
-    await expect(page.getByText('Checking account status')).toBeVisible();
 
     expect(await dispatchBeforeInstallPrompt(page)).toBe(true);
     const cookieNotice = page.getByRole('complementary', { name: 'Cookie notice' });
     await expect(cookieNotice).toBeVisible();
     await expect(page.getByRole('dialog', { name: INSTALL_PROMO_NAME })).toHaveCount(0);
     session.release();
-    await expect(page.getByText('Checking account status')).toHaveCount(0);
     await expect(cookieNotice).toBeVisible();
     await expect(page.getByRole('dialog', { name: INSTALL_PROMO_NAME })).toHaveCount(0);
 
@@ -180,7 +178,7 @@ test.describe('installation and cookie notice coordination', () => {
       .getByRole('navigation', { name: 'Primary navigation' })
       .getByRole('link', { name: /Keiko library/ })
       .click();
-    await expect(page).toHaveURL(/\/app\/library$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library$/);
     await page.locator('.top-bar').getByRole('link', { name: 'KendoMenu home' }).click();
 
     await expect(page).toHaveURL(/\/app$/);

@@ -12,7 +12,6 @@ function isCanonicalRoute(pathname: string): boolean {
 
   return (
     normalizedPathname === '/app' ||
-    normalizedPathname === '/app/library' ||
     normalizedPathname === '/app/sources' ||
     normalizedPathname === '/app/glossary' ||
     normalizedPathname === '/cookies'

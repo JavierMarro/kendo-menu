@@ -27,6 +27,12 @@ export function managedAuthProofPlugin(): Plugin {
           response.end();
           return;
         }
+        // The browser's credential-free per-tab marker chooses proof or application.
+        // Let the normal entry dispatcher inspect it before either flow is imported.
+        if (rootCallback) {
+          next();
+          return;
+        }
         void (async () => {
           const source = await readFile(
             new URL('./managed-auth-proof.html', import.meta.url),

@@ -7,16 +7,15 @@ session in the browser without an account, server, or network dependency.
 ## Managed-auth transition status
 
 [ADR 0007](adr/0007-managed-auth-online-account-drafts.md) records the approved managed-auth and
-online-account replacement. [Migration A](MANAGED_AUTH_PROOF.md) implements an isolated development proof using
-one callback-only session exchange, a fresh document, and subsequent token-only retrieval. Single-account identity and inspected sign-in/out, reload and JWT-refresh storage checks have owner-reported passes. The second-account check is owner-deferred until public release and alone no longer gates a reviewed A commit or internal B. Production browser providers, routes
-and account caches retain the legacy integration until Migrations C/D.
-[Migration B](MANAGED_DASHBOARDS.md) replaces the API runtime with managed bearer identity,
-internal account mapping and protected PostgreSQL dashboards. Legacy auth/adoption tables and
-development/test account rows remain preserved, without linking them to managed identities.
-The browser still expects the retired session/CSRF contract and requires Migration C; no public
-account-release compatibility is claimed. The [transition handoff](MANAGED_AUTH_TRANSITION.md)
-owns the sequential replacement scope. Historical handoffs record the predecessor; the preserved
-browser descriptions below depend on server auth and copy-recovery contracts superseded by B.
+online-account replacement. [Migration A](MANAGED_AUTH_PROOF.md) provides isolated callback-only
+session bootstrap, a fresh document and subsequent token-only retrieval. Single-account identity,
+reload/JWT-refresh and storage checks have owner-reported passes. [Migration B](MANAGED_DASHBOARDS.md)
+provides managed bearer authorization, internal account mapping and PostgreSQL dashboards.
+[Migration C](MANAGED_ACCOUNT_WEB.md) consumes that contract with separate guest/account routes and
+memory-only explicit account saves. Legacy browser account cache/synchronization modules are retired;
+legacy SQL/auth/adoption rows stay preserved without linking to managed identities. Migration D's
+copy UI is unfinished. Live B persistence and second-account/return-to-first validation remain
+NOT RUN public-release gates. The [transition handoff](MANAGED_AUTH_TRANSITION.md) owns the scope.
 
 ### Managed account API boundary
 
@@ -152,18 +151,18 @@ maps store inspection into UI states. [`PersistenceGate.tsx`](../apps/web/src/fe
 chooses local storage, exposes recovery/reset/backup actions, or explicitly falls back to an
 in-memory session. Guest data is origin-specific and is not a server backup or cross-device sync.
 
-[`ApplicationRecovery.tsx`](../apps/web/src/features/errors/ApplicationRecovery.tsx) keeps an error
-boundary outside the router and inside the persistence gate, preserving the live store when the
-application fails. A second boundary protects the gate itself. The fallback offers reload and,
+[`ApplicationRecovery.tsx`](../apps/web/src/features/errors/ApplicationRecovery.tsx) keeps a global error boundary outside the router. Its guest-specific wrapper owns the guest
+persistence gate and an inner boundary, preserving the live guest store when an editor fails. A
+second guest boundary protects recovery itself; public/account routes mount no guest store. The fallback offers reload and,
 when the gate remains available, access to the existing recovery screen. Explicitly copied
 diagnostics contain only the fixed `KENDOMENU_UNEXPECTED_UI_ERROR` code and a boolean recovery
 availability flag; they never consume exceptions, storage, URLs, or training state.
 
 ## Web, hosting, and external boundaries
 
-[`app-routes.tsx`](../apps/web/src/app/app-routes.tsx) uses React Router for `/app` (landing,
-dashboard, library, library details, custom-session creation, sources, and an app not-found route),
-`/cookies`, and a top-level not-found route. `/` redirects to `/app`; direct refreshes rely on the
+[`app-routes.tsx`](../apps/web/src/app/app-routes.tsx) uses React Router for `/app` (landing),
+separate `/app/guest/*` and `/app/account/*` workspace trees, shared sources, `/cookies`, and
+not-found routes. Workspace trees reuse dashboard, library/details and custom-session creation. `/` redirects to `/app`; direct refreshes rely on the
 hosting fallback.
 
 The root [`vercel.json`](../vercel.json) runs `pnpm build` and serves `apps/web/dist`. The Job 3
@@ -178,14 +177,12 @@ Workbox navigation fallback is limited to the app's supported document paths and
 independent of LocalStorage. Installation is prompt-based; the service worker is an asset/navigation
 boundary, not a data-sync or backup system.
 
-The preserved browser analytics gate sends one GoatCounter image request per document only after
-the legacy `/api/session` contract verifies signed out. B retires that route; when run against B,
-this gate remains unresolved and suppresses analytics until Migration C updates identity handling.
-Its `/count?p=...` request uses a static route allow-list, drops query strings
-and referrer data with an explicit `no-referrer` policy, and carries no account or training content.
-GoatCounter still receives ordinary request metadata such as IP address and user-agent. It does not load GoatCounter
-JavaScript. Unresolved, offline, and authenticated sessions send no analytics request. This limited
-initial page count does not attempt continuing guest-only tracking across tabs.
+The browser analytics gate sends one GoatCounter image request per document only after managed
+identity checking confirms signed out. Verified accounts, unresolved identity and offline state
+send no analytics. Its `/count?p=...` request uses a static route allow-list, drops query strings
+and referrer data with `no-referrer`, and carries no account or training content. It loads no
+GoatCounter JavaScript. Ordinary request metadata such as IP address and user-agent still reaches
+GoatCounter. It does not attempt continuing guest-only tracking across tabs.
 
 ## Current production exclusions
 
@@ -240,89 +237,32 @@ The historical [Job 5A foundation](DASHBOARD_FOUNDATION.md),
 retain predecessor evidence. Their session locks, activity touches, CSRF and pending-copy recovery
 are superseded server behavior; applied migration history and legacy records remain preserved.
 
-### Preserved browser workspace integration — Migration C required
+### Browser workspace boundary — Migration C
 
-The following browser modules remain implemented but depend on the retired session/CSRF API.
-They are preserved replacement material, not a compatible managed-account journey. Migrations C/D
-own online-only account drafts, production routing and browser-cache retirement.
+The dispatcher resolves proof/application root returns before ordinary app imports. A bounded,
+credential-free per-tab flow marker chooses only fixed callback destinations. The proof remains
+isolated; application bootstrap uses the proven fresh-document exchange before entering account
+routes. The managed auth provider performs bounded token-only identity verification and fences
+superseded requests. No `/api/session`, custom OAuth or application CSRF cookie remains in browser
+runtime. Vite's local exact-path proxies preserve browser Origin and B's validation.
 
-### Job 6B internal browser workspace boundary
+The browser [API client](../apps/web/src/lib/account-api.ts) validates strict bounded UTF-8 account
+and complete dashboard responses, account/revision/receipt binding and catalogue compatibility.
+The [account draft controller](../apps/web/src/lib/account-draft.ts) injects memory storage into the
+existing Zustand factory only after validated loading. Each account route lifetime owns its store;
+guest routes own an independent persistence provider. Shared UI reads the selected workspace.
 
-The browser [API client](../apps/web/src/lib/account-api.ts) validates the committed session and
-dashboard contracts without importing Node/server modules. Requests use same-origin credentials,
-no-store caching and redirect rejection. Bounded UTF-8 response parsing rejects HTML, malformed
-JSON, unknown fields, invalid revisions and account mismatches. The CSRF cookie is read only when
-preparing a mutation; cookies and provider credentials never enter frontend persistence.
+A Save freezes the complete envelope and records the submitted baseline. Matching acknowledgement
+advances only that baseline/revision, preserving later edits as dirty. Ambiguous requests remain
+immutable for identical retry. Conflicts retain the draft for download or explicit reload.
+Unavailable service disables editing without a durable offline queue. Authentication uncertainty
+hides content and fences late operations; only explicit same-account verification can reveal the
+current tab's original retained draft. Sign-out, identity change and confirmed exit dispose it.
+No legacy account LocalStorage/IndexedDB cache is read, deleted or uploaded.
 
-The internal [workspace controller](../apps/web/src/lib/account-workspace.ts) receives the existing
-guest store and injected API, storage and coordination boundaries. It verifies `/api/session`
-before constructing an account store or reading account caches. Cold failure exposes only the guest
-store; warm network failure preserves the already activated account. Monotonic epochs and request
-identities guard asynchronous results. Switching/hiding aborts requests, unsubscribes observers,
-disables the old writer and clears/releases its store. Job 6B schedules no timers or background work.
-
-[Account storage](../apps/web/src/lib/account-storage.ts) uses a versioned IndexedDB database for
-account-keyed validated v10 caches and local generations. Its separately bounded metadata starts
-with cloud acknowledgement unknown. The 6C-B synchronization controller uses exact pending-request
-and active-conflict records; retained recovery copies remain local. The guest key remains
-`kendo-menu` in LocalStorage.
-After session verification, migration validates Job 6B's `kendo-menu:account:<internal-user-uuid>`
-legacy value, commits and reads back the IndexedDB copy, then conditionally removes the unchanged
-legacy key while holding the shared account lock. Without that lock, it keeps the legacy source.
-A later divergent legacy write is retained separately for recovery. Metadata at the
-legacy `:sync` key is identity-only and never proves cloud acknowledgement. Durable writes require
-exact read-back; cache identity and generation comparisons stop stale writers, and failures latch
-until recovery. Short account locks and IndexedDB transactions never span network requests. The
-[storage budget](ACCOUNT_SYNC.md#job-6c-a--account-cache-cutover) covers migration overlap and
-retained copies.
-
-Failed/indeterminate logout keeps the account locally accessible and returns a retryable result.
-Local hiding reports that server revocation was not confirmed. If a quota failure coincides with
-authentication changing, the old store is deactivated and its existing immutable unsaved state is
-held privately for this application lifetime, accessible again only after verifying the same user
-and confirming that its durable cache value and identity/generation have not changed. A changed cache preserves both
-versions and stops; verified same-account recovery can download the in-memory copy without
-replacing the newer cache. This job does not choose a conflict winner.
-This cannot survive closing the application; it is not durable storage or a cloud acknowledgement.
-An account dashboard 401 hides the workspace immediately; explicit retry verifies `/api/session`
-before another dashboard request. Cloud replacement synchronously closes the confirmed editor
-before changing IndexedDB, then reloads the cache under the session that verified this already-open
-workspace. This preserves local editing if connectivity drops during replacement. Hide and logout
-supersede reopening; a fresh verification already in flight can switch to another account, while
-an offline failure resumes the previously open account. A failed logout retains revocation context
-for retry.
-
-[Web Locks coordination](../apps/web/src/lib/workspace-coordination.ts) uses guest/internal UUID
-scopes. Current-app guest persistence commits and explicit reset use the same guest lock; guest
-editing still works without it. Guest save confirmations await exact read-back, and pending commits
-show a saving state and guard page unload. Account lock-acquisition failure falls back to local
-persistence only if no commit was attempted. Validated storage events are notifications only, never identity or
-account-selection inputs.
-Absent or unusable coordination is reported as unavailable for account synchronization. Job 6D
-composes the controller into the browser persistence provider and routes: `/api/session` is checked
-on document load, verified account caches supply the account workspace, and guest routes stay usable
-while verification is pending. Account identity, logout, local hide, and storage recovery are
-available after verification. Public Google entry, the one-time copy offer, and the approved
-sign-out-to-home journey remain unmounted; the current local recovery controls do not implement
-that public journey. The browser fixture is an explicit test/preview entry, not a production build
-entry.
-
-Job 6C-B adds an opt-in internal synchronization controller with a distinct Web Lock, validated
-revision and request records, atomic acknowledgement, conditional PUT retries, and explicit
-whole-dashboard conflict resolution. Verified workspace composition enables it for verified
-account routes. Local saves continue when upload coordination is unavailable. The synchronizer
-does not submit an adoption decision on its own.
-Domain validation remains platform-neutral, and injected storage remains a local persistence seam.
-
-The [account and synchronization design](ACCOUNT_SYNC.md) distinguishes owner-approved decisions,
-accepted technology, unapproved behavior/operational recommendations, mandatory correctness/security
-requirements, and later implementation gates.
-The existing local JSON limit counts 2,097,152 JavaScript UTF-16 code units, not network bytes;
-cloud transport limits must be evaluated separately. No production routing or runtime compatibility
-is claimed from this proposed diagram:
-
-```text
-Browser workspace → local store/storage
-        └→ synchronization → same-origin /api/* → Vercel adapter → backend application → PostgreSQL
-                                                        local Node adapter ─┘
-```
+Guest Web Locks/read-back and LocalStorage recovery remain. The only auth flow persistence is the
+finite credential-free callback marker; credentials, identities, drafts and copy opportunities stay
+out of JavaScript-readable persistence. C keeps the validated creation response in memory for D,
+without mounting copy UI or calling adoption. A committed ordinary Save releases that handoff.
+See [Migration C](MANAGED_ACCOUNT_WEB.md) for the state/event table, local startup, retirement and
+verification limits. Historical synchronization ADRs/handoffs retain predecessor evidence.

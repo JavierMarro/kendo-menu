@@ -11,6 +11,7 @@ afterEach(async () => {
   );
   await createAuthClient('https://synthetic-auth.example.invalid/neon/auth').signOut();
   vi.unstubAllGlobals();
+  sessionStorage.clear();
   window.history.replaceState(null, '', '/');
 });
 

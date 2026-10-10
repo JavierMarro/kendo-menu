@@ -7,16 +7,22 @@ export type AccountTransitionSignal = 'sign-in-started' | 'verified-account-acti
 const PUBLIC_ROUTE_PATHS: Readonly<Record<string, string>> = {
   '/': '/app',
   '/app': '/app',
-  '/app/dashboard': '/app/dashboard',
-  '/app/library': '/app/library',
-  '/app/drills/new': '/app/drills/new',
+  '/app/guest/dashboard': '/app/guest/dashboard',
+  '/app/guest/library': '/app/guest/library',
+  '/app/guest/drills/new': '/app/guest/drills/new',
+  '/app/dashboard': '/app/guest/dashboard',
+  '/app/library': '/app/guest/library',
+  '/app/drills/new': '/app/guest/drills/new',
   '/app/sources': '/app/sources',
   '/app/glossary': '/app/glossary',
   '/cookies': '/cookies',
 };
 
 export function getGuestPageviewPath(pathname: string): string {
-  if (pathname.startsWith('/app/library/')) return '/app/library/session';
+  if (pathname.startsWith('/app/guest/library/') || pathname.startsWith('/app/library/')) {
+    return '/app/guest/library/session';
+  }
+  if (pathname.startsWith('/app/account/')) return '/404';
   return PUBLIC_ROUTE_PATHS[pathname] ?? '/404';
 }
 

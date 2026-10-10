@@ -24,6 +24,7 @@ export default defineConfig({
     command: `pnpm build && pnpm preview --host 127.0.0.1 --port ${previewPort}`,
     url: previewUrl,
     reuseExistingServer: false,
+    env: { VITE_NEON_AUTH_URL: 'https://synthetic-auth.example.invalid/neon/auth' },
     timeout: 120_000,
   },
 });

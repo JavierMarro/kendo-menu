@@ -111,6 +111,12 @@ Neon, HTTPS-browser, or Vercel behavior. Run no database work for documentation-
 
 ## Efficient, bounded work
 
+- For coding plans, implementation, fixes, and code review, load the installed Ponytail core skill
+  (`$ponytail:ponytail`) in `full` mode by default alongside the matching project skill. Honor the
+  owner's mode changes or opt-out; see `.agents/skills/README.md` for routing and availability.
+  Prefer the smallest readable solution that meets the approved scope. Ponytail cannot remove
+  approved requirements, validation, security, accessibility, required tests, or independent review;
+  this guide's verification matrix takes precedence over its generic single-self-check advice.
 - Load only matching skills and the current contracts/callers/tests needed for the task. Consult
   historical handoffs only for a relevant unresolved decision or reusable failure.
 - Reuse checks that still cover the exact diff/configuration. Parallelize read-only discovery, but

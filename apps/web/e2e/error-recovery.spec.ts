@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from './guest-test';
 
 test('render fallback supports keyboard recovery, diagnostics failure, and reload without storage', async ({
   page,

@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { appRoutes } from '../app/app-routes';
 import { AppErrorBoundary } from '../features/errors/AppErrorBoundary';
-import { ApplicationRecovery } from '../features/errors/ApplicationRecovery';
+import { GuestApplicationRecovery } from '../features/errors/ApplicationRecovery';
 import { createErrorDiagnostics } from '../lib/error-diagnostics';
 import { useTrainingStoreApi } from '../lib/training-store-context';
 import * as trainingPersistence from '../lib/training-persistence';
@@ -150,9 +150,9 @@ describe('application error recovery', () => {
       { path: '/', errorElement: rootRoute.errorElement, element: <BrokenChild /> },
     ]);
     render(
-      <ApplicationRecovery>
+      <GuestApplicationRecovery>
         <RouterProvider router={router} />
-      </ApplicationRecovery>,
+      </GuestApplicationRecovery>,
     );
     await screen.findByRole('heading', { name: 'KendoMenu couldn’t continue.' });
     expect(screen.getByRole('heading', { name: 'KendoMenu couldn’t continue.' })).toBeVisible();
@@ -169,9 +169,9 @@ describe('application error recovery', () => {
       .spyOn(trainingPersistence, 'downloadCurrentTrainingBackup')
       .mockImplementation(() => undefined);
     render(
-      <ApplicationRecovery>
+      <GuestApplicationRecovery>
         <EditThenFail />
-      </ApplicationRecovery>,
+      </GuestApplicationRecovery>,
     );
     await user.click(await screen.findByRole('button', { name: 'Edit then fail' }));
     await user.click(screen.getByRole('button', { name: 'Open data recovery' }));
@@ -188,9 +188,9 @@ describe('application error recovery', () => {
       throw new Error('blocked');
     });
     render(
-      <ApplicationRecovery>
+      <GuestApplicationRecovery>
         <BrokenChild />
-      </ApplicationRecovery>,
+      </GuestApplicationRecovery>,
     );
     await user.click(screen.getByRole('button', { name: 'Continue without saving' }));
     expect(screen.getByRole('heading', { name: 'KendoMenu couldn’t continue.' })).toBeVisible();

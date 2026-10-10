@@ -35,7 +35,7 @@ const localStorage = new DeterministicStorage();
 const guestOnlyFetch: typeof fetch = (input) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.pathname : input.url;
   return Promise.resolve(
-    url === '/api/session'
+    url === '/api/account'
       ? new Response(JSON.stringify({ error: 'UNAUTHENTICATED' }), {
           status: 401,
           headers: { 'content-type': 'application/json' },

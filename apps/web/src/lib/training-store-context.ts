@@ -24,3 +24,7 @@ export function useTrainingStoreApi(): TrainingStoreHook {
 
   return store;
 }
+
+export function useOptionalTrainingStoreApi(): TrainingStoreHook | null {
+  return useContext(TrainingStoreContext);
+}

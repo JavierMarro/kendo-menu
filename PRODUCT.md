@@ -47,48 +47,43 @@ activity quantities and notes can be adapted without mutating the built-in libra
 - The production MVP is a React + Vite + TypeScript web app with React Router. Domain contracts live
   in `packages/domain`; the platform-neutral Zustand store lives in `packages/store` and receives an
   injected storage adapter.
-- The guest dashboard uses Zustand with browser LocalStorage. The preserved legacy browser account
-  client uses an account-scoped IndexedDB cache and the retired session API; it requires Migration C
-  to consume B and C/D to implement the approved memory-only account drafts. Persisted JSON is
-  untrusted and must be validated, versioned, and migrated when its shape changes.
-- The checkout preserves legacy public Google entry, account workspaces and the guest-adoption UI
-  against predecessor contracts. Migration A has owner-reported single-account Google/Neon identity
-  and storage passes; B's live dashboard reads/writes and remote migration, the multi-account check,
-  and production HTTPS/Vercel behavior remain unverified gates. This document
-  does not authorize deployment or provisioning. Paid tiers and initialization of `apps/mobile`
-  remain out of scope.
+- The guest dashboard uses Zustand with browser LocalStorage and retains its offline/recovery behavior.
+  Internal Migration C account routes use the same store factory with memory-only drafts and an
+  explicit Save to account. Persisted guest JSON remains untrusted, validated, versioned and migrated.
+- Migration A has owner-reported single-account Google/Neon identity and storage passes. Live B
+  persistence, second-account/return-to-first and production HTTPS/Vercel checks remain unverified
+  public-release gates. No deployment or provisioning is authorized. Paid tiers and initialization
+  of `apps/mobile` remain out of scope.
 
-## Account journey — local integration only
+## Account journey — internal Migration C
 
-The account behavior below describes the preserved browser implementation before B's server cutover,
-not a working journey against B's API. The approved replacement
-uses Neon managed Google authentication and online-only account drafts with explicit saves;
-[ADR 0007](docs/adr/0007-managed-auth-online-account-drafts.md) supersedes the old account caching,
-session and interrupted-copy requirements. [Migration A](docs/MANAGED_AUTH_PROOF.md) has an isolated development proof with callback-only session bootstrap and subsequent token retrieval; single-account identity and inspected sign-in/out, reload and JWT-refresh storage checks have owner-reported passes. The second-account check is owner-deferred until public release. The production
-replacement browser journey is not enabled. [Migration B](docs/MANAGED_DASHBOARDS.md) replaces
-the API with managed identity and protected dashboards; the preserved browser integration requires
-Migration C to consume its account/bearer contract, followed by Migration D's routing/cache retirement.
+[Migration C](docs/MANAGED_ACCOUNT_WEB.md) separates `/app/guest/*` and `/app/account/*` routes,
+reusing the dashboard, library and custom-session builder. The landing offers Continue as a guest
+and Continue with Google; each workspace has a dashboard shortcut. Guest use stays local and works
+without authentication availability. Verified signed-in visitors entering guest routes go to the
+matching account route. Account routes require verified identity; unresolved identity hides account
+content and does not authorize analytics. Verified email is shown when supplied.
 
-Anonymous use remains fully supported and free. Optional Google-only KendoMenu accounts are locally
-implemented to add
-cross-device continuity through local-first, whole-dashboard synchronization with explicit conflict
-handling. Guest and account workspaces remain separate; signing in must not silently combine them.
+Account loading validates B's bearer-authenticated complete response before creating a memory-only
+store. An empty account stays empty. Editing requires an online available service. **Save to
+account** submits a frozen whole dashboard with the expected account, revision, catalogue and stable
+request ID. Edits made during Save remain dirty after acknowledgement. An uncertain Save retries
+its identical request; a revision conflict preserves the draft and offers download or explicit
+reload. Failures retain this tab's draft without claiming local durability. Reloading or closing
+can lose unsaved work; intentional discard is warned and browser leave warnings are best effort.
+Sign-out hides account content, fences late requests and returns home.
 
-A blocking Yes/No guest-adoption choice applies only to a **newly created KendoMenu account**
-when this browser has an eligible guest dashboard. Yes copies the complete guest dashboard into the
-account; the guest LocalStorage copy stays unchanged, even after server acknowledgement. No
-permanently declines the offer and also leaves the guest dashboard unchanged. There is no dismiss
-action. Returning accounts never receive another offer, even with an empty cloud dashboard. Later
-changes in either workspace cause no new offer or automatic transfer; a future manual import feature
-is a separate decision. After successful sign-in, guest use requires signing out, which returns to
-the homepage. An empty cloud dashboard alone does not prove a new account or create a default menu.
+Guest and account data remain independent; signing in never combines or uploads guest data. Legacy
+account caches are ignored without deletion. Migration D's separate one-time guest-copy setup UI
+has not begun. C holds B's creation response/opportunity only in memory for that later route; it
+neither infers eligibility from an empty account nor calls adoption. A committed ordinary Save
+consumes an unused opportunity. [ADR 0007](docs/adr/0007-managed-auth-online-account-drafts.md)
+supersedes offline account caching, custom sessions and interrupted-copy recovery. C remains
+internal work, not a public account release.
 
-Realtime connections, CRDTs, automatic field merging, collaboration, paid tiers, and public sharing
-are excluded. Public account entry and guest adoption are implemented in this local integration
-checkout; real provider and production continuity behavior remain unverified.
-See [ADR 0006](docs/adr/0006-independent-dashboards-one-time-guest-copy.md) and the
-[account and synchronization design](docs/ACCOUNT_SYNC.md) for accepted decisions,
-recommendations awaiting confirmation, and the gates for later implementation jobs.
+Realtime connections, CRDTs, automatic field merging, collaboration, paid tiers and public sharing
+remain excluded. See the [transition contract](docs/MANAGED_AUTH_TRANSITION.md) for sequential scope
+and [B's contract](docs/MANAGED_DASHBOARDS.md) for the unchanged backend boundary.
 
 ## Brand Commitments
 

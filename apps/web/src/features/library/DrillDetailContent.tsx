@@ -23,6 +23,7 @@ import {
 } from '../../components/TrainingActivityList';
 import { TrainingSetTags } from '../../components/TrainingSetTags';
 import { usePersistenceStatus } from '../persistence/persistence-context';
+import { useWorkspace, workspacePath } from '../../lib/workspace-context';
 
 interface DrillDetailContentProps {
   readonly titleId: string;
@@ -67,6 +68,7 @@ function renderLibraryActivityAside(context: TrainingActivityRenderContext) {
 export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentProps) {
   const addToDashboard = useTrainingStore((state) => state.addToDashboard);
   const { flush: flushPersistence } = usePersistenceStatus();
+  const workspace = useWorkspace();
   const [statusMessage, setStatusMessage] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const description = getTrainingSetDescription(trainingSet);
@@ -79,12 +81,17 @@ export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentP
     setIsAdding(true);
     let added = false;
     try {
+      if (!workspace.canEdit) throw new Error('The workspace is read-only.');
       addToDashboard(trainingSet.id);
       added = true;
       // Keep the UI's success claim aligned with durable browser storage, not merely the
       // synchronous Zustand mutation.
-      await flushPersistence();
-      setStatusMessage(`${trainingSet.name} added to your dashboard.`);
+      if (workspace.kind === 'guest') await flushPersistence();
+      setStatusMessage(
+        workspace.kind === 'account'
+          ? `${trainingSet.name} added to your account draft. Save to account to keep this change.`
+          : `${trainingSet.name} added to your dashboard.`,
+      );
     } catch {
       setStatusMessage(
         added
@@ -108,7 +115,7 @@ export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentP
           className="primary-button"
           type="button"
           onClick={() => void handleAddToDashboard()}
-          disabled={isAdding}
+          disabled={isAdding || !workspace.canEdit}
           aria-busy={isAdding}
         >
           Add to dashboard
@@ -123,7 +130,8 @@ export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentP
       </p>
       {statusMessage.length > 0 ? (
         <p className="inline-confirmation">
-          {statusMessage} <Link to="/app/dashboard">View dashboard</Link>
+          {statusMessage}{' '}
+          <Link to={workspacePath(workspace.basePath, 'dashboard')}>View dashboard</Link>
         </p>
       ) : null}
 

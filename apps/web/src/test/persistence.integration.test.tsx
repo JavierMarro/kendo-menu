@@ -6,7 +6,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { TRAINING_STORE_PERSISTENCE_VERSION } from '@kendo-menu/store';
 
 import { App } from '../app/App';
+import { ManagedAuthProvider } from '../features/account/ManagedAuthProvider';
 import { PersistenceGate, usePersistenceStatus } from '../features/persistence/PersistenceGate';
+import { WorkspaceContextProvider } from '../lib/workspace-context';
 import {
   inspectBrowserTrainingStorage,
   resetBrowserTrainingStorage,
@@ -113,7 +115,7 @@ describe('browser persistence recovery', () => {
     expect(window.localStorage.getItem(TRAINING_STORAGE_KEY)).toBe(raw);
   });
 
-  it('leaves the application for recovery when persisted data changes during hydration', async () => {
+  it('hides the mounted application for recovery when persisted data changes during hydration', async () => {
     const validRaw = JSON.stringify({
       version: TRAINING_STORE_PERSISTENCE_VERSION,
       state: { dashboardEntries: [] },
@@ -147,7 +149,8 @@ describe('browser persistence recovery', () => {
       ).toBeInTheDocument(),
     );
     expect(screen.getByText('Reason: malformed-json')).toBeInTheDocument();
-    expect(screen.queryByText(/Ready \(/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Ready \(/)).not.toBeVisible();
+    expect(screen.getByText(/Ready \(/).closest('[inert]')).toHaveAttribute('aria-hidden', 'true');
     expect(window.localStorage.getItem(TRAINING_STORAGE_KEY)).toBe(invalidRaw);
   });
 
@@ -199,20 +202,24 @@ describe('browser persistence recovery', () => {
     });
 
     render(
-      <PersistenceGate>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </PersistenceGate>,
+      <ManagedAuthProvider>
+        <PersistenceGate>
+          <WorkspaceContextProvider
+            value={{ kind: 'guest', basePath: '/app/guest', canEdit: true, accountEmail: null }}
+          >
+            <BrowserRouter>
+              <App />
+            </BrowserRouter>
+          </WorkspaceContextProvider>
+        </PersistenceGate>
+      </ManagedAuthProvider>,
     );
-    const appBanner = screen
-      .getByRole('navigation', { name: 'Primary navigation' })
-      .closest('header');
-    if (appBanner === null) {
-      throw new Error('The primary navigation is not inside the application banner.');
-    }
 
-    await user.click(within(appBanner).getByRole('link', { name: /Keiko library/ }));
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
+        name: /Keiko library/,
+      }),
+    );
     const policeDojoCard = screen
       .getByRole('heading', { name: 'Police dojo asageiko menu' })
       .closest('article');
@@ -224,9 +231,7 @@ describe('browser persistence recovery', () => {
     const detailDialog = screen.getByRole('dialog', { name: 'Police dojo asageiko menu' });
     await user.click(within(detailDialog).getByRole('link', { name: 'View dashboard' }));
     await waitFor(() => {
-      expect(
-        within(appBanner).getByRole('status', { name: 'Changes are not being saved' }),
-      ).toBeVisible();
+      expect(screen.getByRole('status', { name: 'Changes are not being saved' })).toBeVisible();
     });
 
     const dashboardCard = screen
@@ -246,12 +251,12 @@ describe('browser persistence recovery', () => {
     expect(screen.getByText('Not saved to this device.')).toBeInTheDocument();
     expect(screen.queryByText('Updated.')).not.toBeInTheDocument();
     expect(screen.queryByText('Saved locally.')).not.toBeInTheDocument();
-    const bannerStatus = within(appBanner).getByRole('status', {
+    const persistenceStatus = screen.getByRole('status', {
       name: 'Changes are not being saved',
       hidden: true,
     });
-    expect(bannerStatus).toBeVisible();
-    expect(bannerStatus).toHaveClass('is-error');
+    expect(persistenceStatus).toBeVisible();
+    expect(persistenceStatus).toHaveClass('is-error');
     const notes = within(dashboardDialog).getByLabelText('Practice notes');
     await user.type(notes, 'Quota test note.');
     await user.tab();

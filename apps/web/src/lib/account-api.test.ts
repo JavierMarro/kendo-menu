@@ -3,602 +3,271 @@ import { encodeDashboardPersistenceV10 } from '@kendo-menu/domain/dashboard-pers
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  CSRF_COOKIE_NAME,
+  AccountApiError,
+  createAccountApiClient,
   MAX_DASHBOARD_REQUEST_BYTES,
   MAX_JSON_RESPONSE_BYTES,
-  createAccountApiClient,
-  type AccountApiError,
-  type AdoptionRequest,
   type DashboardReadResponse,
   type DashboardWriteRequest,
 } from './account-api';
 
-const ACCOUNT_ID = '01234567-89ab-4cde-8fab-0123456789ab';
-const OTHER_ACCOUNT_ID = '01234567-89ab-4cde-8fab-0123456789ac';
-const REQUEST_ID = '01234567-89ab-4cde-8fab-0123456789ac';
-const CATALOGUE_VERSION = 'a'.repeat(64);
-const CSRF_TOKEN = 'A'.repeat(43);
-
-function jsonResponse(value: unknown, status = 200): Response {
-  return new Response(JSON.stringify(value), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
+const ACCOUNT = '01234567-89ab-4cde-8fab-0123456789ab';
+const OTHER = '01234567-89ab-4cde-8fab-0123456789ac';
+const REQUEST = '01234567-89ab-4cde-8fab-0123456789ad';
+const CATALOGUE = 'a'.repeat(64);
+const token = () => Promise.resolve({ status: 'token', token: 'synthetic-bearer' } as const);
+const account = { accountId: ACCOUNT, email: 'practitioner@example.test' };
+const read = (): DashboardReadResponse => ({
+  transportVersion: 1,
+  accountWorkspaceId: ACCOUNT,
+  catalogueVersion: CATALOGUE,
+  revision: '0',
+  dashboard: null,
+  updatedAt: null,
+});
+const write = (): DashboardWriteRequest => ({
+  transportVersion: 1,
+  expectedAccountWorkspaceId: ACCOUNT,
+  expectedRevision: '0',
+  requestId: REQUEST,
+  catalogueVersion: CATALOGUE,
+  dashboard: { version: 10, state: { dashboardEntries: [] } },
+});
+function client(body: unknown, status = 200) {
+  const transport = vi.fn<typeof fetch>().mockResolvedValue(Response.json(body, { status }));
+  return { transport, api: createAccountApiClient({ fetch: transport, getToken: token }) };
 }
 
-function sessionBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    userId: ACCOUNT_ID,
-    verifiedGoogleEmail: 'practitioner@example.test',
-    adoption: { status: 'pending', capability: false },
-    ...overrides,
-  };
-}
-
-function dashboardRead(overrides: Partial<DashboardReadResponse> = {}): DashboardReadResponse {
-  return {
-    transportVersion: 1,
-    accountWorkspaceId: ACCOUNT_ID,
-    catalogueVersion: CATALOGUE_VERSION,
-    revision: '0',
-    dashboard: null,
-    updatedAt: null,
-    ...overrides,
-  };
-}
-
-function dashboardWrite(): DashboardWriteRequest {
-  return {
-    transportVersion: 1,
-    expectedAccountWorkspaceId: ACCOUNT_ID,
-    expectedRevision: '0',
-    requestId: REQUEST_ID,
-    catalogueVersion: CATALOGUE_VERSION,
-    dashboard: { version: 10, state: { dashboardEntries: [] } },
-  };
-}
-
-function nearLimitDashboardRead(): DashboardReadResponse {
-  const trainingSet = DEFAULT_TRAINING_SETS[0];
-  const activity = trainingSet?.activities[0];
-  if (trainingSet === undefined || activity === undefined) {
-    throw new Error('Expected a domain fixture with one activity.');
-  }
-  const note = 'n'.repeat(8_000);
-  const state = encodeDashboardPersistenceV10({
-    dashboardEntries: Array.from({ length: 128 }, (_, index) => ({
-      id: `entry-${index}`,
-      trainingSetId: trainingSet.id,
-      quantityOverrides: {},
-      activityNotes: { [activity.id]: note },
-      notes: note,
-      createdAt: '2026-09-20T10:00:00.000Z',
-    })),
-  });
-  return dashboardRead({
-    revision: '1',
-    dashboard: { version: 10, state },
-    updatedAt: '2026-09-20T10:00:00.000Z',
-  });
-}
-
-function expectAccountError(
-  promise: Promise<unknown>,
-  kind: AccountApiError['kind'],
-): Promise<void> {
-  return expect(promise).rejects.toMatchObject({ name: 'AccountApiError', kind });
-}
-
-describe('account API boundary', () => {
-  it('uses same-origin no-store requests and returns a validated session', async () => {
-    const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(sessionBody()));
-    const readCookie = vi.fn(() => `${CSRF_COOKIE_NAME}=${CSRF_TOKEN}`);
-    const client = createAccountApiClient({ fetch: requestFetch, readCookie });
-
-    await expect(client.getSession()).resolves.toEqual({
-      status: 'authenticated',
-      session: sessionBody(),
-    });
-    expect(requestFetch).toHaveBeenCalledWith(
-      '/api/session',
+describe('managed bearer account API boundary', () => {
+  it('uses token-only bearer authorization, omit/no-store/redirect rejection and bodyless creation', async () => {
+    const { api, transport } = client(account);
+    expect(await api.getAccount()).toEqual(account);
+    expect(transport).toHaveBeenCalledWith(
+      '/api/account',
       expect.objectContaining({
         method: 'GET',
-        credentials: 'same-origin',
+        credentials: 'omit',
         cache: 'no-store',
         redirect: 'error',
+        headers: { accept: 'application/json', authorization: 'Bearer synthetic-bearer' },
       }),
     );
-    expect(readCookie).not.toHaveBeenCalled();
-  });
-
-  it('turns an exact unauthenticated response into signed-out mode', async () => {
-    const requestFetch = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(jsonResponse({ error: 'UNAUTHENTICATED' }, 401));
-    const client = createAccountApiClient({ fetch: requestFetch });
-
-    await expect(client.getSession()).resolves.toEqual({ status: 'signed-out' });
-  });
-
-  it('times out a session response whose body never finishes', async () => {
-    vi.useFakeTimers();
-    try {
-      const stalledBody = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode('{'));
-        },
-      });
-      const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(
-        new Response(stalledBody, {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
-      );
-      const result = expectAccountError(
-        createAccountApiClient({ fetch: requestFetch }).getSession(),
-        'network',
-      );
-      await vi.advanceTimersByTimeAsync(10_000);
-      await result;
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('rejects HTML, malformed JSON, duplicate keys, and redirect responses', async () => {
-    const htmlFetch = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        new Response('<!doctype html>', { status: 200, headers: { 'content-type': 'text/html' } }),
-      );
-    await expectAccountError(
-      createAccountApiClient({ fetch: htmlFetch }).getSession(),
-      'content-type',
+    transport.mockResolvedValue(
+      Response.json({ ...account, created: true, copyOpportunityId: REQUEST }),
     );
-
-    const malformedFetch = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        new Response('{', { status: 200, headers: { 'content-type': 'application/json' } }),
-      );
-    await expectAccountError(
-      createAccountApiClient({ fetch: malformedFetch }).getSession(),
-      'malformed-json',
-    );
-
-    const duplicateFetch = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response('{"userId":"x","userId":"y"}', {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
-    await expectAccountError(
-      createAccountApiClient({ fetch: duplicateFetch }).getSession(),
-      'malformed-json',
-    );
-
-    const redirected = jsonResponse(sessionBody());
-    Object.defineProperty(redirected, 'redirected', { value: true });
-    const redirectFetch = vi.fn<typeof fetch>().mockResolvedValue(redirected);
-    await expectAccountError(
-      createAccountApiClient({ fetch: redirectFetch }).getSession(),
-      'redirect',
-    );
-  });
-
-  it('rejects session fields that could disclose or select another account', async () => {
-    const cases = [
-      sessionBody({ sessionToken: 'secret' }),
-      sessionBody({ adoption: { status: 'unavailable', capability: true } }),
-      sessionBody({ adoption: { status: 'accepted', capability: false, completion: {} } }),
-    ];
-    for (const body of cases) {
-      const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(body));
-      await expectAccountError(
-        createAccountApiClient({ fetch: requestFetch }).getSession(),
-        'invalid-response',
-      );
-    }
-  });
-
-  it('validates dashboard account, revision, and sensitive fields', async () => {
-    const wrongAccountFetch = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(jsonResponse(dashboardRead({ accountWorkspaceId: OTHER_ACCOUNT_ID })));
-    await expectAccountError(
-      createAccountApiClient({ fetch: wrongAccountFetch }).getDashboard(ACCOUNT_ID),
-      'invalid-response',
-    );
-
-    const wrongRevisionFetch = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(jsonResponse(dashboardRead({ revision: '9223372036854775808' })));
-    await expectAccountError(
-      createAccountApiClient({ fetch: wrongRevisionFetch }).getDashboard(ACCOUNT_ID),
-      'invalid-response',
-    );
-
-    const sensitiveResponse = { ...dashboardRead(), sessionToken: 'fixture' };
-    const sensitiveFetch = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(sensitiveResponse));
-    await expectAccountError(
-      createAccountApiClient({ fetch: sensitiveFetch }).getDashboard(ACCOUNT_ID),
-      'invalid-response',
-    );
-
-    for (const revision of ['-1', '01']) {
-      const invalidRevisionFetch = vi
-        .fn<typeof fetch>()
-        .mockResolvedValue(jsonResponse(dashboardRead({ revision })));
-      await expectAccountError(
-        createAccountApiClient({ fetch: invalidRevisionFetch }).getDashboard(ACCOUNT_ID),
-        'invalid-response',
-      );
-    }
-
-    const unsupportedTransportFetch = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(jsonResponse({ ...dashboardRead(), transportVersion: 2 }));
-    await expectAccountError(
-      createAccountApiClient({ fetch: unsupportedTransportFetch }).getDashboard(ACCOUNT_ID),
-      'invalid-response',
-    );
-  });
-
-  it('allows a valid near-limit read response using the derived envelope allowance', async () => {
-    const value = nearLimitDashboardRead();
-    const json = JSON.stringify(value);
-    const currentBytes = new TextEncoder().encode(json).byteLength;
-    expect(currentBytes).toBeGreaterThan(MAX_DASHBOARD_REQUEST_BYTES - 100_000);
-    expect(currentBytes).toBeLessThanOrEqual(MAX_JSON_RESPONSE_BYTES);
-    const requestFetch = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        new Response(json, { status: 200, headers: { 'content-type': 'application/json' } }),
-      );
-    const result = await createAccountApiClient({ fetch: requestFetch }).getDashboard(ACCOUNT_ID);
-    expect(result).toEqual(value);
-    expect(MAX_JSON_RESPONSE_BYTES).toBeGreaterThan(MAX_DASHBOARD_REQUEST_BYTES);
-  });
-
-  it('reads the CSRF cookie only for mutations and never sends the session cookie', async () => {
-    const readCookie = vi.fn(() => `${CSRF_COOKIE_NAME}=${CSRF_TOKEN}`);
-    const requestFetch = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 204 }))
-      .mockResolvedValueOnce(
-        jsonResponse({
-          transportVersion: 1,
-          accountWorkspaceId: ACCOUNT_ID,
-          requestId: REQUEST_ID,
-          revision: '1',
-          updatedAt: '2026-09-20T10:00:00.000Z',
-        }),
-      );
-    const client = createAccountApiClient({ fetch: requestFetch, readCookie });
-
-    await client.logout();
-    await client.putDashboard(ACCOUNT_ID, dashboardWrite());
-    expect(readCookie).toHaveBeenCalledTimes(2);
-    const logoutInit = requestFetch.mock.calls[0]?.[1];
-    const writeInit = requestFetch.mock.calls[1]?.[1];
-    expect(logoutInit).toMatchObject({ headers: { 'x-csrf-token': CSRF_TOKEN } });
-    expect(writeInit).toMatchObject({ headers: { 'x-csrf-token': CSRF_TOKEN } });
-    expect(JSON.stringify(logoutInit)).not.toContain('__Host-kendomenu-session');
-    expect(JSON.stringify(writeInit)).not.toContain('__Host-kendomenu-session');
-  });
-
-  it('sends exact No and Yes adoption envelopes through the hardened POST boundary', async () => {
-    const timestamp = '2026-09-25T12:00:00.000Z';
-    const noRequest = {
-      decision: 'no' as const,
-      transportVersion: 1 as const,
-      expectedAccountWorkspaceId: ACCOUNT_ID,
-      requestId: REQUEST_ID,
-    };
-    const noFetch = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        jsonResponse({ status: 'declined', completion: { decision: 'no', requestId: REQUEST_ID } }),
-      );
-    const noClient = createAccountApiClient({
-      fetch: noFetch,
-      readCookie: () => `${CSRF_COOKIE_NAME}=${CSRF_TOKEN}`,
+    expect(await api.initializeAccount()).toEqual({
+      ...account,
+      created: true,
+      copyOpportunityId: REQUEST,
     });
-    await expect(noClient.postAdoption(ACCOUNT_ID, noRequest)).resolves.toEqual({
-      status: 'declined',
-      completion: { decision: 'no', requestId: REQUEST_ID },
-    });
-    expect(noFetch).toHaveBeenCalledWith(
-      '/api/dashboard/adoption',
-      expect.objectContaining({
-        method: 'POST',
-        credentials: 'same-origin',
-        cache: 'no-store',
-        redirect: 'error',
-        headers: {
-          accept: 'application/json',
-          'content-type': 'application/json',
-          'x-csrf-token': CSRF_TOKEN,
-        },
-        body: JSON.stringify(noRequest),
-      }),
-    );
+    expect(transport.mock.calls[1]?.[1]).not.toHaveProperty('body');
+    expect(transport.mock.calls[1]?.[1]?.headers).not.toHaveProperty('x-csrf-token');
+  });
 
-    const yesRequest = {
-      decision: 'yes' as const,
-      ...dashboardWrite(),
-      expectedRevision: '0' as const,
-      dashboard: { version: 10 as const, state: { dashboardEntries: [] } },
+  it.each([
+    { ...account, accountId: 'browser-subject' },
+    { ...account, email: 'secret\nvalue' },
+    { ...account, unknown: true },
+    { ...account, created: false },
+  ])('rejects invalid inspection metadata without exposing it', async (body) => {
+    await expect(client(body).api.getAccount()).rejects.toMatchObject({ kind: 'invalid-response' });
+  });
+
+  it.each([
+    { ...account, created: false, copyOpportunityId: REQUEST },
+    { ...account, created: true, copyOpportunityId: 'invalid' },
+    { ...account, created: 'yes' },
+  ])('rejects invalid creation handoffs', async (body) => {
+    await expect(client(body).api.initializeAccount()).rejects.toMatchObject({
+      kind: 'invalid-response',
+    });
+  });
+
+  it('preserves the genuinely empty account and accepts a complete catalogue-compatible dashboard', async () => {
+    const { api, transport } = client(read());
+    expect(await api.getDashboard(ACCOUNT)).toEqual(read());
+    const trainingSet = DEFAULT_TRAINING_SETS[0];
+    if (trainingSet === undefined) throw new Error('Expected curated fixture.');
+    const dashboard = {
+      version: 10,
+      state: encodeDashboardPersistenceV10({
+        dashboardEntries: [
+          {
+            id: 'entry-1',
+            trainingSetId: trainingSet.id,
+            quantityOverrides: {},
+            activityNotes: {},
+            notes: 'Practice',
+            createdAt: '2026-10-07T10:00:00.000Z',
+          },
+        ],
+      }),
     };
+    transport.mockResolvedValue(
+      Response.json({ ...read(), revision: '1', dashboard, updatedAt: '2026-10-07T10:00:00.000Z' }),
+    );
+    expect((await api.getDashboard(ACCOUNT)).dashboard).toEqual(dashboard);
+  });
+
+  it.each([
+    { accountWorkspaceId: OTHER },
+    { revision: '00' },
+    { revision: '9223372036854775808' },
+    { revision: '1' },
+    { updatedAt: '2026-10-07T10:00:00.000Z' },
+    { dashboard: { version: 9, state: { dashboardEntries: [] } } },
+    { extra: true },
+    { catalogueVersion: 'not-a-digest' },
+  ])('rejects invalid dashboard envelopes before hydration', async (patch) => {
+    await expect(client({ ...read(), ...patch }).api.getDashboard(ACCOUNT)).rejects.toMatchObject({
+      kind: 'invalid-response',
+    });
+  });
+
+  it('accepts only acknowledgements bound to the submitted account/request/next revision', async () => {
     const acknowledgement = {
       transportVersion: 1,
-      accountWorkspaceId: ACCOUNT_ID,
-      requestId: REQUEST_ID,
+      accountWorkspaceId: ACCOUNT,
+      requestId: REQUEST,
       revision: '1',
-      updatedAt: timestamp,
+      updatedAt: '2026-10-07T10:00:00.000Z',
     };
-    const yesFetch = vi.fn<typeof fetch>().mockResolvedValue(
-      jsonResponse({
-        status: 'accepted',
-        completion: {
-          decision: 'yes',
-          requestId: REQUEST_ID,
-          acknowledgedRevision: '1',
-          timestamp,
-        },
-        acknowledgement,
-      }),
-    );
-    const yesClient = createAccountApiClient({
-      fetch: yesFetch,
-      readCookie: () => `${CSRF_COOKIE_NAME}=${CSRF_TOKEN}`,
-    });
-    await expect(yesClient.postAdoption(ACCOUNT_ID, yesRequest)).resolves.toMatchObject({
-      status: 'accepted',
-      completion: { decision: 'yes', requestId: REQUEST_ID, acknowledgedRevision: '1', timestamp },
-      acknowledgement,
-    });
-    expect(yesFetch).toHaveBeenCalledWith(
-      '/api/dashboard/adoption',
-      expect.objectContaining({ body: JSON.stringify(yesRequest) }),
-    );
+    const { api, transport } = client(acknowledgement);
+    expect(await api.putDashboard(ACCOUNT, write())).toEqual(acknowledgement);
+    const init = transport.mock.calls[0]?.[1];
+    expect(init?.body).toBe(JSON.stringify(write()));
+    expect(init?.credentials).toBe('omit');
+    for (const patch of [
+      { accountWorkspaceId: OTHER },
+      { requestId: OTHER },
+      { revision: '2' },
+      { updatedAt: 'invalid' },
+    ]) {
+      transport.mockResolvedValue(Response.json({ ...acknowledgement, ...patch }));
+      await expect(api.putDashboard(ACCOUNT, write())).rejects.toMatchObject({
+        kind: 'invalid-response',
+      });
+    }
   });
 
-  it('preserves a 409 adoption-unavailable response for session-receipt recovery', async () => {
-    const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify({ error: 'ADOPTION_UNAVAILABLE' }), {
-        status: 409,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
-    const client = createAccountApiClient({
-      fetch: requestFetch,
-      readCookie: () => `${CSRF_COOKIE_NAME}=${CSRF_TOKEN}`,
-    });
+  it('recognizes B revision conflicts with currentRevision without changing the request', async () => {
     await expect(
-      client.postAdoption(ACCOUNT_ID, {
-        decision: 'no',
-        transportVersion: 1,
-        expectedAccountWorkspaceId: ACCOUNT_ID,
-        requestId: REQUEST_ID,
-      }),
-    ).rejects.toMatchObject({
-      name: 'AccountApiError',
-      kind: 'http',
-      status: 409,
-      code: 'ADOPTION_UNAVAILABLE',
-    });
+      client({ error: 'REVISION_CONFLICT', currentRevision: '4' }, 409).api.putDashboard(
+        ACCOUNT,
+        write(),
+      ),
+    ).rejects.toMatchObject({ status: 409, code: 'REVISION_CONFLICT' });
+    await expect(
+      client({ error: 'REVISION_CONFLICT', currentRevision: 'bad' }, 409).api.putDashboard(
+        ACCOUNT,
+        write(),
+      ),
+    ).rejects.toMatchObject({ kind: 'invalid-response' });
+    await expect(
+      client({ error: 'ACCOUNT_NOT_INITIALIZED' }, 409).api.getAccount(),
+    ).rejects.toMatchObject({ status: 409, code: 'ACCOUNT_NOT_INITIALIZED' });
   });
 
-  it('rejects adoption acknowledgements that mismatch the durable decision identity', async () => {
-    const request = {
-      decision: 'no' as const,
-      transportVersion: 1 as const,
-      expectedAccountWorkspaceId: ACCOUNT_ID,
-      requestId: REQUEST_ID,
-    };
-    for (const body of [
-      {
-        status: 'declined',
-        completion: { decision: 'no', requestId: '01234567-89ab-4cde-8fab-0123456789ad' },
-      },
-      {
-        status: 'declined',
-        completion: { decision: 'no', requestId: REQUEST_ID, extra: true },
-      },
-    ]) {
-      const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(body));
-      await expectAccountError(
-        createAccountApiClient({
-          fetch: requestFetch,
-          readCookie: () => `${CSRF_COOKIE_NAME}=${CSRF_TOKEN}`,
-        }).postAdoption(ACCOUNT_ID, request),
-        'invalid-response',
-      );
-    }
-  });
-
-  it('strictly parses both replayed decision arms and the accepted replay without an optional acknowledgement', async () => {
-    const timestamp = '2026-09-25T12:00:00.000Z';
-    const yesRequest: AdoptionRequest = {
-      ...dashboardWrite(),
-      decision: 'yes',
-      expectedRevision: '0',
-    };
-    const noRequest: AdoptionRequest = {
-      decision: 'no',
-      transportVersion: 1,
-      expectedAccountWorkspaceId: ACCOUNT_ID,
-      requestId: REQUEST_ID,
-    };
-    const completion = {
-      decision: 'yes',
-      requestId: REQUEST_ID,
-      acknowledgedRevision: '1',
-      timestamp,
-    };
-    const acknowledgement = {
-      transportVersion: 1,
-      accountWorkspaceId: ACCOUNT_ID,
-      requestId: REQUEST_ID,
-      revision: '1',
-      updatedAt: timestamp,
-    };
-    for (const { request, body } of [
-      { request: yesRequest, body: { status: 'replayed', completion, acknowledgement } },
-      { request: yesRequest, body: { status: 'replayed', completion } },
-      {
-        request: noRequest,
-        body: { status: 'replayed', completion: { decision: 'no', requestId: REQUEST_ID } },
-      },
-    ]) {
-      const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(body));
-      const client = createAccountApiClient({
-        fetch: requestFetch,
-        readCookie: () => `${CSRF_COOKIE_NAME}=${CSRF_TOKEN}`,
-      });
-      await expect(client.postAdoption(ACCOUNT_ID, request)).resolves.toEqual(body);
-    }
-  });
-
-  it('rejects wrong-account, wrong-request, wrong-revision, and unsupported acknowledgements', async () => {
-    const acknowledgement = {
-      transportVersion: 1,
-      accountWorkspaceId: ACCOUNT_ID,
-      requestId: REQUEST_ID,
-      revision: '1',
-      updatedAt: '2026-09-20T10:00:00.000Z',
-    };
-    const cases = [
-      { ...acknowledgement, accountWorkspaceId: OTHER_ACCOUNT_ID },
-      { ...acknowledgement, requestId: '01234567-89ab-4cde-8fab-0123456789ad' },
-      { ...acknowledgement, revision: '2' },
-      { ...acknowledgement, transportVersion: 2 },
-    ];
-    for (const value of cases) {
-      const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(value));
-      const client = createAccountApiClient({
-        fetch: requestFetch,
-        readCookie: () => `${CSRF_COOKIE_NAME}=${CSRF_TOKEN}`,
-      });
-      await expectAccountError(
-        client.putDashboard(ACCOUNT_ID, dashboardWrite()),
-        'invalid-response',
-      );
-    }
-  });
-
-  it('accepts the strict accepted and declined adoption session unions', async () => {
-    const accepted = sessionBody({
-      adoption: {
-        status: 'accepted',
-        capability: false,
-        completion: {
-          decision: 'yes',
-          requestId: REQUEST_ID,
-          acknowledgedRevision: '1',
-          timestamp: '2026-09-20T10:00:00.000Z',
-        },
-      },
-    });
-    const declined = sessionBody({
-      adoption: {
-        status: 'declined',
-        capability: false,
-        completion: { decision: 'no', requestId: REQUEST_ID },
-      },
-    });
-    for (const body of [accepted, declined]) {
-      const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(body));
-      await expect(
-        createAccountApiClient({ fetch: requestFetch }).getSession(),
-      ).resolves.toMatchObject({
-        status: 'authenticated',
-        session: { adoption: body['adoption'] },
-      });
-    }
-  });
-
-  it('rejects missing, duplicate, and malformed CSRF cookies before fetch', async () => {
-    const requestFetch = vi.fn<typeof fetch>();
-    const attempts = [
-      '',
-      `${CSRF_COOKIE_NAME}=${CSRF_TOKEN}; ${CSRF_COOKIE_NAME}=${CSRF_TOKEN}`,
-      `${CSRF_COOKIE_NAME}=bad`,
-      `${CSRF_COOKIE_NAME}; ${CSRF_COOKIE_NAME}=${CSRF_TOKEN}`,
-    ];
-    for (const cookie of attempts) {
-      const client = createAccountApiClient({ fetch: requestFetch, readCookie: () => cookie });
-      await expectAccountError(client.logout(), 'csrf');
-    }
-    expect(requestFetch).not.toHaveBeenCalled();
-  });
-
-  it('rejects invalid UTF-8 and a leading BOM before JSON parsing', async () => {
-    const invalidUtf8Fetch = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(Uint8Array.from([0xc3, 0x28]), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
-    await expectAccountError(
-      createAccountApiClient({ fetch: invalidUtf8Fetch }).getSession(),
-      'malformed-json',
-    );
-
-    const bomFetch = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(Uint8Array.from([0xef, 0xbb, 0xbf, 0x7b, 0x7d]), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
-    await expectAccountError(
-      createAccountApiClient({ fetch: bomFetch }).getSession(),
-      'malformed-json',
-    );
-  });
-
-  it('counts streamed response bytes without trusting Content-Length', async () => {
-    let cancelled = false;
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(new Uint8Array(MAX_JSON_RESPONSE_BYTES + 1));
-      },
-      cancel() {
-        cancelled = true;
-      },
-    });
-    const requestFetch = vi
+  it('fences every 401 even if the response is HTML or malformed', async () => {
+    const transport = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(
-        new Response(stream, { status: 200, headers: { 'content-type': 'application/json' } }),
-      );
-    await expectAccountError(
-      createAccountApiClient({ fetch: requestFetch }).getDashboard(ACCOUNT_ID),
-      'oversized',
-    );
-    expect(cancelled).toBe(true);
+      .mockResolvedValue(new Response('<private>', { status: 401 }));
+    const api = createAccountApiClient({ fetch: transport, getToken: token });
+    await expect(api.getAccount()).rejects.toMatchObject({ status: 401 });
+    await expect(api.getDashboard(ACCOUNT)).rejects.toMatchObject({ status: 401 });
+    await expect(api.putDashboard(ACCOUNT, write())).rejects.toMatchObject({ status: 401 });
   });
 
-  it('maps transport and oversized failures to typed retryable errors', async () => {
-    const networkFetch = vi.fn<typeof fetch>().mockRejectedValue(new TypeError('offline'));
-    await expectAccountError(
-      createAccountApiClient({ fetch: networkFetch }).getSession(),
-      'network',
-    );
+  it.each([
+    ['text/html', JSON.stringify(read()), 'content-type'],
+    ['application/json', '{"transportVersion":1,"transportVersion":1}', 'malformed-json'],
+    ['application/json', '{"private":', 'malformed-json'],
+  ])('rejects unsafe transport syntax and types', async (contentType, text, kind) => {
+    const transport = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(text, { headers: { 'content-type': contentType } }));
+    await expect(
+      createAccountApiClient({ fetch: transport, getToken: token }).getDashboard(ACCOUNT),
+    ).rejects.toMatchObject({ kind });
+  });
 
-    const oversizedFetch = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response('{}', {
-        status: 200,
-        headers: {
-          'content-type': 'application/json',
-          'content-length': String(MAX_JSON_RESPONSE_BYTES + 1),
-        },
+  it('bounds streamed UTF-8 response bytes before parsing', async () => {
+    const transport = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(new Uint8Array(MAX_JSON_RESPONSE_BYTES + 1), {
+        headers: { 'content-type': 'application/json' },
       }),
     );
-    await expectAccountError(
-      createAccountApiClient({ fetch: oversizedFetch }).getDashboard(ACCOUNT_ID),
-      'oversized',
+    await expect(
+      createAccountApiClient({ fetch: transport, getToken: token }).getDashboard(ACCOUNT),
+    ).rejects.toMatchObject({ kind: 'oversized' });
+  });
+
+  it('rejects incompatible activity references instead of letting guest hydration repair them', async () => {
+    const trainingSet = DEFAULT_TRAINING_SETS[0];
+    if (trainingSet === undefined) throw new Error('Expected curated fixture.');
+    const state = encodeDashboardPersistenceV10({
+      dashboardEntries: [
+        {
+          id: 'entry-1',
+          trainingSetId: trainingSet.id,
+          quantityOverrides: {},
+          activityNotes: {},
+          notes: '',
+          createdAt: '2026-10-07T10:00:00.000Z',
+        },
+      ],
+    });
+    const entry = state.dashboardEntries[0];
+    if (entry === undefined) throw new Error('Expected dashboard entry.');
+    const invalid = {
+      ...state,
+      dashboardEntries: [{ ...entry, activityNotes: { 'foreign-activity': 'note' } }],
+    };
+    await expect(
+      client({
+        ...read(),
+        revision: '1',
+        dashboard: { version: 10, state: invalid },
+        updatedAt: '2026-10-07T10:00:00.000Z',
+      }).api.getDashboard(ACCOUNT),
+    ).rejects.toMatchObject({ kind: 'invalid-response' });
+  });
+
+  it('does not send invalid or cloud-oversized envelopes', () => {
+    const { api, transport } = client({});
+    expect(() => api.putDashboard(OTHER, write())).toThrow(AccountApiError);
+    const trainingSet = DEFAULT_TRAINING_SETS[0];
+    const activity = trainingSet?.activities[0];
+    if (trainingSet === undefined || activity === undefined)
+      throw new Error('Expected curated fixture.');
+    const state = encodeDashboardPersistenceV10({
+      dashboardEntries: Array.from({ length: 128 }, (_, index) => ({
+        id: `entry-${index}`,
+        trainingSetId: trainingSet.id,
+        quantityOverrides: {},
+        activityNotes: { [activity.id]: '界'.repeat(8000) },
+        notes: '界'.repeat(8000),
+        createdAt: '2026-10-07T10:00:00.000Z',
+      })),
+    });
+    const oversized = { ...write(), dashboard: { version: 10, state } } as const;
+    expect(new TextEncoder().encode(JSON.stringify(oversized)).byteLength).toBeGreaterThan(
+      MAX_DASHBOARD_REQUEST_BYTES,
     );
+    expect(() => api.putDashboard(ACCOUNT, oversized)).toThrow(AccountApiError);
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it('never sends a token after cancellation and bounds transports that ignore AbortSignal', async () => {
+    const transport = vi.fn<typeof fetch>(() => new Promise(() => undefined));
+    const api = createAccountApiClient({ fetch: transport, getToken: token, requestTimeoutMs: 5 });
+    await expect(api.getAccount()).rejects.toMatchObject({ kind: 'network' });
+    const abort = new AbortController();
+    abort.abort();
+    const fresh = vi.fn<typeof fetch>();
+    await expect(
+      createAccountApiClient({ fetch: fresh, getToken: token }).getAccount(abort.signal),
+    ).rejects.toMatchObject({ kind: 'aborted' });
+    expect(fresh).not.toHaveBeenCalled();
   });
 });

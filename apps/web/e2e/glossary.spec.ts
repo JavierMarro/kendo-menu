@@ -1,10 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from './guest-test';
 
 test('glossary supports footer and FAQ navigation, keyboard search, reload and accessible mobile layout', async ({
   page,
 }, testInfo) => {
   await page.goto('/app');
+  await expect(page.getByRole('heading', { name: 'Plan the keiko you need today.' })).toBeVisible();
   const notice = page.getByRole('button', { name: 'Got it', exact: true });
   if (await notice.isVisible()) await notice.click();
   const footer = page.getByRole('contentinfo');

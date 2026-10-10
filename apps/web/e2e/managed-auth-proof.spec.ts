@@ -7,6 +7,7 @@ test('callback-only bootstrap, cookie-backed token verification and sign-out pre
   let signedOut = false;
   let tokens = 0;
   let bootstraps = 0;
+  let applicationRequests = 0;
   await page.route('https://synthetic-auth.example.invalid/**', async (route) => {
     if (route.request().url().includes('/sign-in/social')) {
       const body: unknown = route.request().postDataJSON();
@@ -95,6 +96,10 @@ test('callback-only bootstrap, cookie-backed token verification and sign-out pre
       },
     });
   });
+  await page.route(/\/api\/(?:account|dashboard)(?:\?.*)?$/, async (route) => {
+    applicationRequests++;
+    await route.fulfill({ status: 503, json: {} });
+  });
   await page.addInitScript(() => {
     localStorage.setItem('kendo-menu', 'synthetic-guest-bytes');
   });
@@ -151,9 +156,10 @@ test('callback-only bootstrap, cookie-backed token verification and sign-out pre
     ),
   ).toBe(false);
   expect(bootstraps).toBe(2);
+  expect(applicationRequests).toBe(0);
 });
 
-test('failed callback exchange is sanitized, retryable and never attempts token or API verification', async ({
+test('failed root callback exchange is sanitized, retryable and never attempts token or API verification', async ({
   page,
 }) => {
   let tokenRequests = 0;
@@ -168,25 +174,58 @@ test('failed callback exchange is sanitized, retryable and never attempts token 
   });
   await page.addInitScript(() => {
     localStorage.setItem('kendo-menu', 'synthetic-guest-bytes');
+    sessionStorage.setItem(
+      'kendomenu:auth-return-v1',
+      JSON.stringify({ version: 1, flow: 'proof', expiresAt: Date.now() + 60_000 }),
+    );
   });
   await page.goto('/?neon_auth_session_verifier=synthetic-verifier');
-  await expect(page.getByRole('status')).toContainText(
-    'callback could not establish a managed session',
-  );
+  await expect(page.getByRole('status')).toContainText('could not establish a managed session');
   await expect(page).toHaveURL(/neon_auth_session_verifier=synthetic-verifier/);
   await page.getByRole('button', { name: 'Verify identity' }).click();
-  await expect(page.getByRole('status')).toContainText(
-    'callback could not establish a managed session',
-  );
+  await expect(page.getByRole('status')).toContainText('could not establish a managed session');
   expect(tokenRequests).toBe(0);
   expect(apiRequests).toBe(0);
   await expect(page.getByText('synthetic-private-provider-error')).toHaveCount(0);
   expect(
-    await page.evaluate(
-      () =>
+    await page.evaluate(() => {
+      const marker: unknown = JSON.parse(
+        sessionStorage.getItem('kendomenu:auth-return-v1') ?? 'null',
+      );
+      return (
         localStorage.getItem('kendo-menu') === 'synthetic-guest-bytes' &&
         localStorage.getItem('better-auth.message') === null &&
-        sessionStorage.length === 0,
-    ),
+        sessionStorage.length === 1 &&
+        typeof marker === 'object' &&
+        marker !== null &&
+        Object.keys(marker).sort().join(',') === 'expiresAt,flow,version' &&
+        'flow' in marker &&
+        marker.flow === 'proof'
+      );
+    }),
   ).toBe(true);
+});
+
+test('failed explicit proof callback exchange is sanitized and isolated', async ({ page }) => {
+  let tokenRequests = 0;
+  let apiRequests = 0;
+  await page.route('https://synthetic-auth.example.invalid/**', async (route) => {
+    if (!route.request().url().includes('/get-session')) tokenRequests++;
+    await route.fulfill({ status: 503, json: { message: 'synthetic-private-provider-error' } });
+  });
+  await page.route('**/api/dev/managed-identity', async (route) => {
+    apiRequests++;
+    await route.fulfill({ status: 503, json: {} });
+  });
+  await page.addInitScript(() => {
+    sessionStorage.setItem(
+      'kendomenu:auth-return-v1',
+      JSON.stringify({ version: 1, flow: 'proof', expiresAt: Date.now() + 60_000 }),
+    );
+  });
+  await page.goto('/managed-auth-proof.html?neon_auth_session_verifier=synthetic-verifier');
+  await expect(page.getByRole('status')).toContainText('could not establish a managed session');
+  expect(tokenRequests).toBe(0);
+  expect(apiRequests).toBe(0);
+  await expect(page.getByText('synthetic-private-provider-error')).toHaveCount(0);
 });

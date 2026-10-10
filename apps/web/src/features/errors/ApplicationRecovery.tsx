@@ -3,11 +3,15 @@ import { useState, type ReactNode } from 'react';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { PersistenceGate } from '../persistence/PersistenceGate';
 
-/** The inner boundary preserves the live store; the outer boundary also protects recovery itself. */
+/** Keeps route errors isolated without mounting guest persistence on public/account routes. */
 export function ApplicationRecovery({ children }: { readonly children: ReactNode }) {
+  return <AppErrorBoundary>{children}</AppErrorBoundary>;
+}
+
+/** Preserve the existing guest store while recovering a failed editor; account routes never mount it. */
+export function GuestApplicationRecovery({ children }: { readonly children: ReactNode }) {
   const [recoveryRequested, setRecoveryRequested] = useState(false);
   const [attempt, setAttempt] = useState(0);
-
   return (
     <AppErrorBoundary>
       <PersistenceGate

@@ -1,7 +1,9 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+
+import { test } from './guest-test';
 
 const STORAGE_KEY = 'kendo-menu';
-const OFFLINE_PATHS = ['/app', '/app/dashboard', '/app/library'] as const;
+const OFFLINE_PATHS = ['/app', '/app/guest/dashboard', '/app/guest/library'] as const;
 const OFFLINE_STORAGE_RAW = JSON.stringify({
   state: {
     dashboardEntries: [
@@ -195,7 +197,7 @@ test.describe('production PWA shell', () => {
           await expect(
             page.getByRole('heading', { name: 'Plan the keiko you need today.', exact: true }),
           ).toBeVisible();
-        } else if (path === '/app/dashboard') {
+        } else if (path === '/app/guest/dashboard') {
           await expect(
             page.getByRole('heading', { name: 'Your dashboard', exact: true }),
           ).toBeVisible();

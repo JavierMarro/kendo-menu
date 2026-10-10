@@ -901,6 +901,19 @@ body:has(.cookie-notice) .install-promo {
   margin-top: var(--space-8);
 }
 
+.landing-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-8);
+}
+
+.landing-entry-actions .landing-cta {
+  margin-top: 0;
+  width: auto;
+  max-width: 100%;
+}
+
 .primary-button.landing-primary-action {
   min-height: 3.25rem;
   padding: var(--space-3) var(--space-6);
@@ -2761,6 +2774,15 @@ textarea[aria-invalid='true'] {
   gap: var(--space-5);
 }
 
+.builder-editable-fields {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .builder-form-section {
   display: grid;
   gap: var(--space-3);
@@ -3455,6 +3477,10 @@ textarea[aria-invalid='true'] {
   .landing-cta {
     margin-top: var(--space-6);
     width: min(100%, 20rem);
+  }
+
+  .landing-entry-actions {
+    margin-top: var(--space-6);
   }
 
   .landing-section {

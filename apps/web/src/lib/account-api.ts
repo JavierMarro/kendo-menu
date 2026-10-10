@@ -1,21 +1,12 @@
-/**
- * Strict browser boundary for the account/session and dashboard HTTP contracts.
- *
- * This module intentionally does not import the server application.  The server
- * contracts run in Node and include persistence concerns; the browser repeats
- * the small wire validation needed before account data is allowed into a store.
- * Cookies remain browser-managed credentials.  The only cookie read here is the
- * session-bound CSRF cookie immediately before a mutation.
- */
+/** Strict, credential-free browser boundary for Migration B's bearer account contract. */
 import {
+  isDashboardCatalogueCompatible,
   parseDashboardPersistenceV10,
   type PersistedTrainingWireStateV10,
 } from '@kendo-menu/domain/dashboard-persistence';
 
-export const SESSION_ENDPOINT = '/api/session';
+export const ACCOUNT_ENDPOINT = '/api/account';
 export const DASHBOARD_ENDPOINT = '/api/dashboard';
-export const CSRF_COOKIE_NAME = '__Host-kendomenu-csrf';
-
 /** The complete server-side request limit, including the dashboard envelope. */
 export const MAX_DASHBOARD_REQUEST_BYTES = 2_097_152;
 const MAX_REVISION = '9223372036854775807';
@@ -57,7 +48,6 @@ export const MAX_JSON_RESPONSE_BYTES =
 
 const MAX_ERROR_RESPONSE_BYTES = 8 * 1024;
 const MAX_EMAIL_CHARACTERS = 320;
-const MAX_CSRF_TOKEN_LENGTH = 43;
 
 const ACCOUNT_WORKSPACE_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -73,7 +63,6 @@ export type AccountApiErrorKind =
   | 'oversized'
   | 'malformed-json'
   | 'invalid-response'
-  | 'csrf'
   | 'request-invalid'
   | 'http';
 
@@ -101,35 +90,6 @@ export class AccountApiError extends Error {
     this.retryable = options.retryable ?? (kind === 'network' || kind === 'aborted');
   }
 }
-
-export type AdoptionStatus =
-  | { readonly status: 'pending'; readonly capability: boolean }
-  | { readonly status: 'unavailable'; readonly capability: false }
-  | {
-      readonly status: 'accepted';
-      readonly capability: false;
-      readonly completion: {
-        readonly decision: 'yes';
-        readonly requestId: string;
-        readonly acknowledgedRevision: string;
-        readonly timestamp: string;
-      };
-    }
-  | {
-      readonly status: 'declined';
-      readonly capability: false;
-      readonly completion: { readonly decision: 'no'; readonly requestId: string };
-    };
-
-export interface AccountSession {
-  readonly userId: string;
-  readonly verifiedGoogleEmail: string | null;
-  readonly adoption: AdoptionStatus;
-}
-
-export type SessionResult =
-  | { readonly status: 'authenticated'; readonly session: AccountSession }
-  | { readonly status: 'signed-out' };
 
 export interface DashboardSnapshot {
   readonly version: 10;
@@ -162,64 +122,37 @@ export interface DashboardWriteAcknowledgement {
   readonly updatedAt: string;
 }
 
-export type AdoptionRequest =
-  | {
-      readonly decision: 'no';
-      readonly transportVersion: 1;
-      readonly expectedAccountWorkspaceId: string;
-      readonly requestId: string;
-    }
-  | {
-      readonly decision: 'yes';
-      readonly transportVersion: 1;
-      readonly expectedAccountWorkspaceId: string;
-      readonly expectedRevision: '0';
-      readonly requestId: string;
-      readonly catalogueVersion: string;
-      readonly dashboard: DashboardSnapshot;
-    };
+export interface ManagedAccountRecord {
+  readonly accountId: string;
+  readonly email: string | null;
+}
 
-export type AdoptionResponse =
-  | {
-      readonly status: 'accepted';
-      readonly completion: Extract<AdoptionStatus, { status: 'accepted' }>['completion'];
-      readonly acknowledgement: DashboardWriteAcknowledgement;
-    }
-  | {
-      readonly status: 'declined';
-      readonly completion: Extract<AdoptionStatus, { status: 'declined' }>['completion'];
-    }
-  | {
-      readonly status: 'replayed';
-      readonly completion:
-        | Extract<AdoptionStatus, { status: 'accepted' }>['completion']
-        | Extract<AdoptionStatus, { status: 'declined' }>['completion'];
-      readonly acknowledgement?: DashboardWriteAcknowledgement;
-    };
+export interface ManagedAccountInitialization extends ManagedAccountRecord {
+  readonly created: boolean;
+  readonly copyOpportunityId?: string;
+}
 
 export interface AccountApiClient {
-  getSession(signal?: AbortSignal): Promise<SessionResult>;
-  logout(signal?: AbortSignal): Promise<void>;
+  getAccount(signal?: AbortSignal): Promise<ManagedAccountRecord>;
+  initializeAccount(signal?: AbortSignal): Promise<ManagedAccountInitialization>;
   getDashboard(accountWorkspaceId: string, signal?: AbortSignal): Promise<DashboardReadResponse>;
   putDashboard(
     accountWorkspaceId: string,
     request: DashboardWriteRequest,
     signal?: AbortSignal,
   ): Promise<DashboardWriteAcknowledgement>;
-  postAdoption(
-    accountWorkspaceId: string,
-    request: AdoptionRequest,
-    signal?: AbortSignal,
-  ): Promise<AdoptionResponse>;
 }
 
 export interface AccountApiDependencies {
-  /** `fetch` is injected so tests never need a network or a real browser session. */
+  readonly getToken: (
+    signal: AbortSignal,
+  ) => Promise<
+    | { readonly status: 'token'; readonly token: string }
+    | { readonly status: 'signed-out' | 'unavailable' }
+  >;
   readonly fetch?: typeof fetch;
-  /** Reads `document.cookie` for logout, dashboard PUT, and adoption POST. */
-  readonly readCookie?: () => string;
-  /** The current application origin used to reject cross-origin final responses. */
   readonly origin?: string;
+  readonly requestTimeoutMs?: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -282,29 +215,6 @@ function isSafeEmail(value: unknown): value is string {
   });
 }
 
-function isCanonicalBase64UrlToken(value: unknown): value is string {
-  if (
-    typeof value !== 'string' ||
-    value.length !== MAX_CSRF_TOKEN_LENGTH ||
-    !/^[A-Za-z0-9_-]+$/u.test(value)
-  ) {
-    return false;
-  }
-
-  try {
-    const binary = globalThis.atob(value.replaceAll('-', '+').replaceAll('_', '/'));
-    if (binary.length !== 32) return false;
-    const canonical = globalThis
-      .btoa(binary)
-      .replaceAll('+', '-')
-      .replaceAll('/', '_')
-      .replace(/=+$/u, '');
-    return canonical === value;
-  } catch {
-    return false;
-  }
-}
-
 function isStrictJsonObject(value: unknown): value is Record<string, unknown> {
   if (!isRecord(value)) return false;
   try {
@@ -316,84 +226,6 @@ function isStrictJsonObject(value: unknown): value is Record<string, unknown> {
   }
 }
 
-function parseAdoptionStatus(value: unknown): AdoptionStatus | null {
-  if (!isStrictJsonObject(value)) return null;
-  const status = value['status'];
-  const capability = value['capability'];
-  if (status === 'pending' || status === 'unavailable') {
-    if (
-      !hasExactKeys(value, ['status', 'capability']) ||
-      typeof capability !== 'boolean' ||
-      (status === 'unavailable' && capability)
-    ) {
-      return null;
-    }
-    return status === 'unavailable'
-      ? Object.freeze({ status, capability: false })
-      : Object.freeze({ status, capability });
-  }
-
-  if (status !== 'accepted' && status !== 'declined') return null;
-  if (!hasExactKeys(value, ['status', 'capability', 'completion']) || capability !== false) {
-    return null;
-  }
-  const completion = value['completion'];
-  if (!isStrictJsonObject(completion)) return null;
-  if (status === 'declined') {
-    const requestId = completion['requestId'];
-    if (
-      !hasExactKeys(completion, ['decision', 'requestId']) ||
-      completion['decision'] !== 'no' ||
-      !isRequestId(requestId)
-    ) {
-      return null;
-    }
-    return Object.freeze({
-      status,
-      capability: false,
-      completion: Object.freeze({ decision: 'no', requestId }),
-    });
-  }
-
-  const requestId = completion['requestId'];
-  const acknowledgedRevision = completion['acknowledgedRevision'];
-  const timestamp = completion['timestamp'];
-  if (
-    !hasExactKeys(completion, ['decision', 'requestId', 'acknowledgedRevision', 'timestamp']) ||
-    completion['decision'] !== 'yes' ||
-    !isRequestId(requestId) ||
-    !isNonZeroRevision(acknowledgedRevision) ||
-    !isTimestamp(timestamp)
-  ) {
-    return null;
-  }
-  return Object.freeze({
-    status,
-    capability: false,
-    completion: Object.freeze({ decision: 'yes', requestId, acknowledgedRevision, timestamp }),
-  });
-}
-
-function parseSession(value: unknown): AccountSession | null {
-  // Only the internal user ID selects a local account workspace. The verified email is
-  // display data; accepting it as a storage key would mix identity and presentation.
-  if (
-    !isStrictJsonObject(value) ||
-    !hasExactKeys(value, ['userId', 'verifiedGoogleEmail', 'adoption']) ||
-    !isAccountWorkspaceId(value['userId']) ||
-    (value['verifiedGoogleEmail'] !== null && !isSafeEmail(value['verifiedGoogleEmail']))
-  ) {
-    return null;
-  }
-  const adoption = parseAdoptionStatus(value['adoption']);
-  if (adoption === null) return null;
-  return Object.freeze({
-    userId: value['userId'],
-    verifiedGoogleEmail: value['verifiedGoogleEmail'],
-    adoption,
-  });
-}
-
 function parseDashboardSnapshot(value: unknown): DashboardSnapshot | null {
   if (
     !isStrictJsonObject(value) ||
@@ -403,7 +235,9 @@ function parseDashboardSnapshot(value: unknown): DashboardSnapshot | null {
     return null;
   }
   const state = parseDashboardPersistenceV10(value['state']);
-  return state === null ? null : Object.freeze({ version: 10, state });
+  return state === null || !isDashboardCatalogueCompatible(state)
+    ? null
+    : Object.freeze({ version: 10, state });
 }
 
 function parseDashboardRead(
@@ -494,155 +328,6 @@ function parseDashboardAcknowledgement(
     revision: value['revision'],
     updatedAt: value['updatedAt'],
   });
-}
-
-function validateAdoptionRequest(
-  value: unknown,
-  accountWorkspaceId: string,
-): AdoptionRequest | null {
-  if (!isStrictJsonObject(value) || value['expectedAccountWorkspaceId'] !== accountWorkspaceId) {
-    return null;
-  }
-  if (value['decision'] === 'no') {
-    return hasExactKeys(value, [
-      'decision',
-      'transportVersion',
-      'expectedAccountWorkspaceId',
-      'requestId',
-    ]) &&
-      value['transportVersion'] === 1 &&
-      isRequestId(value['requestId'])
-      ? Object.freeze({
-          decision: 'no',
-          transportVersion: 1,
-          expectedAccountWorkspaceId: accountWorkspaceId,
-          requestId: value['requestId'],
-        })
-      : null;
-  }
-  if (
-    value['decision'] !== 'yes' ||
-    !hasExactKeys(value, [
-      'decision',
-      'transportVersion',
-      'expectedAccountWorkspaceId',
-      'expectedRevision',
-      'requestId',
-      'catalogueVersion',
-      'dashboard',
-    ]) ||
-    value['transportVersion'] !== 1 ||
-    value['expectedRevision'] !== '0' ||
-    !isRequestId(value['requestId']) ||
-    !isCatalogueVersion(value['catalogueVersion'])
-  ) {
-    return null;
-  }
-  const dashboard = parseDashboardSnapshot(value['dashboard']);
-  return dashboard === null
-    ? null
-    : Object.freeze({
-        decision: 'yes',
-        transportVersion: 1,
-        expectedAccountWorkspaceId: accountWorkspaceId,
-        expectedRevision: '0',
-        requestId: value['requestId'],
-        catalogueVersion: value['catalogueVersion'],
-        dashboard,
-      });
-}
-
-function parseAdoptionResponse(
-  value: unknown,
-  accountWorkspaceId: string,
-  request: AdoptionRequest,
-): AdoptionResponse | null {
-  if (!isStrictJsonObject(value)) return null;
-  const status = value['status'];
-  const completion = value['completion'];
-  if (!isStrictJsonObject(completion)) return null;
-  const decision = completion['decision'];
-  const requestId = completion['requestId'];
-  if (requestId !== request.requestId || !isRequestId(requestId) || decision !== request.decision) {
-    return null;
-  }
-  if (decision === 'no') {
-    if (
-      !hasExactKeys(completion, ['decision', 'requestId']) ||
-      !(
-        (status === 'declined' && hasExactKeys(value, ['status', 'completion'])) ||
-        (status === 'replayed' && hasExactKeys(value, ['status', 'completion']))
-      )
-    ) {
-      return null;
-    }
-    const declinedCompletion = Object.freeze({ decision: 'no' as const, requestId });
-    return Object.freeze({ status, completion: declinedCompletion });
-  }
-
-  const acknowledgedRevision = completion['acknowledgedRevision'];
-  const timestamp = completion['timestamp'];
-  if (
-    !hasExactKeys(completion, ['decision', 'requestId', 'acknowledgedRevision', 'timestamp']) ||
-    !isNonZeroRevision(acknowledgedRevision) ||
-    !isTimestamp(timestamp)
-  ) {
-    return null;
-  }
-  const acceptedCompletion = Object.freeze({
-    decision: 'yes' as const,
-    requestId,
-    acknowledgedRevision,
-    timestamp,
-  });
-  if (status === 'accepted' && hasExactKeys(value, ['status', 'completion', 'acknowledgement'])) {
-    const acknowledgement = parseDashboardAcknowledgement(
-      value['acknowledgement'],
-      accountWorkspaceId,
-      {
-        transportVersion: 1,
-        expectedAccountWorkspaceId: accountWorkspaceId,
-        expectedRevision: '0',
-        requestId,
-        catalogueVersion: request.decision === 'yes' ? request.catalogueVersion : '',
-        dashboard: { version: 10, state: { dashboardEntries: [] } },
-      },
-    );
-    if (
-      acknowledgement === null ||
-      acknowledgement.revision !== acknowledgedRevision ||
-      acknowledgement.updatedAt !== timestamp
-    ) {
-      return null;
-    }
-    return Object.freeze({ status, completion: acceptedCompletion, acknowledgement });
-  }
-  if (status === 'replayed' && hasExactKeys(value, ['status', 'completion', 'acknowledgement'])) {
-    const acknowledgement = parseDashboardAcknowledgement(
-      value['acknowledgement'],
-      accountWorkspaceId,
-      {
-        transportVersion: 1,
-        expectedAccountWorkspaceId: accountWorkspaceId,
-        expectedRevision: '0',
-        requestId,
-        catalogueVersion: request.decision === 'yes' ? request.catalogueVersion : '',
-        dashboard: { version: 10, state: { dashboardEntries: [] } },
-      },
-    );
-    if (
-      acknowledgement === null ||
-      acknowledgement.revision !== acknowledgedRevision ||
-      acknowledgement.updatedAt !== timestamp
-    ) {
-      return null;
-    }
-    return Object.freeze({ status, completion: acceptedCompletion, acknowledgement });
-  }
-  if (status === 'replayed' && hasExactKeys(value, ['status', 'completion'])) {
-    return Object.freeze({ status, completion: acceptedCompletion });
-  }
-  return null;
 }
 
 function validateDashboardWriteRequest(
@@ -930,16 +615,39 @@ function validateJsonContentType(response: Response): void {
   }
 }
 
-function parseErrorCode(value: unknown): string | null {
+function parseAccount(
+  value: unknown,
+  initialization: boolean,
+): ManagedAccountInitialization | ManagedAccountRecord | null {
+  if (!isStrictJsonObject(value)) return null;
+  const keys = initialization
+    ? [
+        'accountId',
+        'email',
+        'created',
+        ...(Object.hasOwn(value, 'copyOpportunityId') ? ['copyOpportunityId'] : []),
+      ]
+    : ['accountId', 'email'];
   if (
-    !isStrictJsonObject(value) ||
-    !hasExactKeys(value, ['error']) ||
-    typeof value['error'] !== 'string'
-  ) {
+    !hasExactKeys(value, keys) ||
+    !isAccountWorkspaceId(value['accountId']) ||
+    (value['email'] !== null && !isSafeEmail(value['email']))
+  )
     return null;
-  }
-  const code = value['error'];
-  return /^[A-Z][A-Z0-9_]{0,63}$/u.test(code) ? code : null;
+  const account = { accountId: value['accountId'], email: value['email'] };
+  if (!initialization) return Object.freeze(account);
+  if (typeof value['created'] !== 'boolean') return null;
+  const opportunity = value['copyOpportunityId'];
+  if (
+    Object.hasOwn(value, 'copyOpportunityId') &&
+    (value['created'] !== true || !isRequestId(opportunity))
+  )
+    return null;
+  return Object.freeze({
+    ...account,
+    created: value['created'],
+    ...(typeof opportunity === 'string' ? { copyOpportunityId: opportunity } : {}),
+  });
 }
 
 function errorForStatus(status: number, code: string): AccountApiError {
@@ -950,329 +658,176 @@ function errorForStatus(status: number, code: string): AccountApiError {
   });
 }
 
-function readCookieHeader(): string {
-  try {
-    return typeof document === 'undefined' ? '' : document.cookie;
-  } catch {
-    return '';
-  }
-}
-
-function csrfHeader(readCookie: () => string): string {
-  let cookieHeader: string;
-  try {
-    cookieHeader = readCookie();
-  } catch {
-    throw new AccountApiError('csrf', 'The CSRF cookie could not be read.');
-  }
-  if (typeof cookieHeader !== 'string') {
-    throw new AccountApiError('csrf', 'The CSRF cookie could not be read.');
-  }
-  let token: string | undefined;
-  for (const part of cookieHeader.split(';')) {
-    const trimmed = part.trim();
-    if (trimmed === '') continue;
-    const separator = trimmed.indexOf('=');
-    if (separator < 1) {
-      if (trimmed === CSRF_COOKIE_NAME) {
-        throw new AccountApiError('csrf', 'The CSRF cookie was missing or malformed.');
-      }
-      continue;
-    }
-    const name = trimmed.slice(0, separator);
-    const value = trimmed.slice(separator + 1);
-    if (name !== CSRF_COOKIE_NAME) continue;
-    if (token !== undefined || !isCanonicalBase64UrlToken(value)) {
-      throw new AccountApiError('csrf', 'The CSRF cookie was missing or malformed.');
-    }
-    token = value;
-  }
-  if (token === undefined) {
-    throw new AccountApiError('csrf', 'The CSRF cookie was missing or malformed.');
-  }
-  return token;
-}
-
-function validateEndpointAccountId(accountWorkspaceId: string): void {
-  if (!isAccountWorkspaceId(accountWorkspaceId)) {
-    throw new AccountApiError('request-invalid', 'The account workspace identifier was invalid.');
-  }
-}
-
-function resolveOrigin(dependencyOrigin: string | undefined): string | undefined {
-  if (dependencyOrigin !== undefined) return dependencyOrigin;
-  try {
-    return typeof location === 'undefined' ? undefined : location.origin;
-  } catch {
-    return undefined;
-  }
-}
-
-function assertResponseStatus(response: Response): number {
-  let status: number;
-  try {
-    status = response.status;
-  } catch {
-    throw new AccountApiError('invalid-response', 'The account response status was invalid.');
-  }
-  if (!Number.isInteger(status) || status < 100 || status > 599) {
-    throw new AccountApiError('invalid-response', 'The account response status was invalid.');
-  }
-  return status;
-}
-
 async function readErrorResponse(response: Response, status: number): Promise<AccountApiError> {
+  // A 401 always fences the workspace, including malformed proxy/error bodies.
+  if (status === 401) return errorForStatus(status, 'UNAUTHENTICATED');
   validateJsonContentType(response);
-  const body = await readJsonBody(response, MAX_ERROR_RESPONSE_BYTES);
-  const code = parseErrorCode(body);
-  if (code === null) {
+  const value = await readJsonBody(response, MAX_ERROR_RESPONSE_BYTES);
+  if (
+    !isStrictJsonObject(value) ||
+    typeof value['error'] !== 'string' ||
+    !/^[A-Z][A-Z0-9_]{0,63}$/u.test(value['error'])
+  ) {
     throw new AccountApiError('invalid-response', 'The account error response was invalid.', {
       status,
-      retryable: status >= 500,
     });
   }
-  return errorForStatus(status, code);
+  const conflict = status === 409 && value['error'] === 'REVISION_CONFLICT';
+  if (
+    !(conflict
+      ? hasExactKeys(value, ['error', 'currentRevision']) && isRevision(value['currentRevision'])
+      : hasExactKeys(value, ['error']))
+  ) {
+    throw new AccountApiError('invalid-response', 'The account error response was invalid.', {
+      status,
+    });
+  }
+  return errorForStatus(status, value['error']);
 }
 
-export function createAccountApiClient(
-  dependencies: AccountApiDependencies = {},
-): AccountApiClient {
+export function serializeDashboardWriteRequest(
+  accountId: string,
+  input: DashboardWriteRequest,
+): string {
+  const value = validateDashboardWriteRequest(input, accountId);
+  if (value === null)
+    throw new AccountApiError('request-invalid', 'The dashboard request was invalid.');
+  const body = JSON.stringify(value);
+  if (new TextEncoder().encode(body).byteLength > MAX_DASHBOARD_REQUEST_BYTES) {
+    throw new AccountApiError('oversized', 'The dashboard request exceeded its size limit.');
+  }
+  return body;
+}
+
+export function createAccountApiClient(dependencies: AccountApiDependencies): AccountApiClient {
   const requestFetch = dependencies.fetch ?? globalThis.fetch.bind(globalThis);
-  const readCookie = dependencies.readCookie ?? readCookieHeader;
-  const origin = resolveOrigin(dependencies.origin);
+  const origin =
+    dependencies.origin ?? (typeof location === 'undefined' ? undefined : location.origin);
+  const timeoutMs = dependencies.requestTimeoutMs ?? 10_000;
+
+  async function run<T>(
+    caller: AbortSignal | undefined,
+    operation: (signal: AbortSignal, token: string) => Promise<T>,
+  ): Promise<T> {
+    const controller = new AbortController();
+    let rejectCancelled: ((error: AccountApiError) => void) | undefined;
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      rejectCancelled = reject;
+    });
+    const cancel = () => {
+      controller.abort();
+      rejectCancelled?.(new AccountApiError('aborted', 'The account request was cancelled.'));
+    };
+    caller?.addEventListener('abort', cancel, { once: true });
+    if (caller?.aborted) cancel();
+    const timer = setTimeout(() => {
+      controller.abort();
+      rejectCancelled?.(
+        new AccountApiError('network', 'The account request timed out.', { retryable: true }),
+      );
+    }, timeoutMs);
+    const work = async () => {
+      if (controller.signal.aborted)
+        throw new AccountApiError('aborted', 'The account request was cancelled.');
+      const result = await dependencies.getToken(controller.signal);
+      if (controller.signal.aborted)
+        throw new AccountApiError('aborted', 'The account request was cancelled.');
+      if (result.status === 'signed-out') throw errorForStatus(401, 'UNAUTHENTICATED');
+      if (result.status !== 'token' || result.token.length === 0)
+        throw errorForStatus(503, 'AUTH_UNAVAILABLE');
+      return operation(controller.signal, result.token);
+    };
+    try {
+      return await Promise.race([work(), cancelled]);
+    } finally {
+      clearTimeout(timer);
+      caller?.removeEventListener('abort', cancel);
+    }
+  }
 
   async function request(
     endpoint: string,
-    method: 'GET' | 'DELETE' | 'PUT' | 'POST',
-    signal: AbortSignal | undefined,
-    headers: HeadersInit,
+    method: 'GET' | 'POST' | 'PUT',
+    signal: AbortSignal,
+    token: string,
     body?: string,
-  ): Promise<{ readonly response: Response; readonly status: number }> {
-    // Redirects are rejected so a login page cannot masquerade as API JSON. Bypass caches
-    // so session and dashboard reads reflect the server's current state.
-    if (signal?.aborted) {
-      throw new AccountApiError('aborted', 'The account request was aborted.');
-    }
-    const init: RequestInit = {
-      method,
-      headers,
-      credentials: 'same-origin',
-      cache: 'no-store',
-      redirect: 'error',
-      ...(body === undefined ? {} : { body }),
-      ...(signal === undefined ? {} : { signal }),
-    };
+  ): Promise<Response> {
     let response: Response;
     try {
-      response = await requestFetch(endpoint, init);
-    } catch (error) {
-      if (signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
-        throw new AccountApiError('aborted', 'The account request was aborted.');
-      }
-      throw new AccountApiError('network', 'The account request could not be completed.', {
-        retryable: true,
+      response = await requestFetch(endpoint, {
+        method,
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${token}`,
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        credentials: 'omit',
+        cache: 'no-store',
+        redirect: 'error',
+        signal,
+        ...(body === undefined ? {} : { body }),
       });
+    } catch {
+      throw new AccountApiError(
+        signal.aborted ? 'aborted' : 'network',
+        'The account request could not be completed.',
+      );
     }
     validateResponseEnvelope(response, endpoint, origin);
-    const status = assertResponseStatus(response);
-    return { response, status };
+    if (response.status !== 200) throw await readErrorResponse(response, response.status);
+    validateJsonContentType(response);
+    return response;
   }
 
   return {
-    async getSession(signal): Promise<SessionResult> {
-      // A stalled identity check must eventually release the guest UI to show Retry.
-      // The timeout also fences a transport that ignores AbortSignal.
-      const timedRequest = new AbortController();
-      const cancelForCaller = () => timedRequest.abort();
-      signal?.addEventListener('abort', cancelForCaller, { once: true });
-      if (signal?.aborted) timedRequest.abort();
-      let timeoutId: ReturnType<typeof setTimeout> | undefined;
-      let timedOut = false;
-      const timeout = new Promise<never>((_resolve, reject) => {
-        timeoutId = setTimeout(() => {
-          timedOut = true;
-          timedRequest.abort();
-          reject(
-            new AccountApiError('network', 'The account session check timed out.', {
-              retryable: true,
-            }),
-          );
-        }, 10_000);
-      });
-      const verifyResponse = async (): Promise<SessionResult> => {
-        const { response, status } = await request(SESSION_ENDPOINT, 'GET', timedRequest.signal, {
-          accept: 'application/json',
-        });
-        if (status === 401) {
-          const error = await readErrorResponse(response, status);
-          if (error.code !== 'UNAUTHENTICATED') throw error;
-          return { status: 'signed-out' };
-        }
-        if (status !== 200) throw await readErrorResponse(response, status);
-        validateJsonContentType(response);
-        const session = parseSession(await readJsonBody(response, MAX_ERROR_RESPONSE_BYTES));
-        if (session === null) {
+    getAccount: (signal) =>
+      run(signal, async (requestSignal, token) => {
+        const response = await request(ACCOUNT_ENDPOINT, 'GET', requestSignal, token);
+        const account = parseAccount(await readJsonBody(response, MAX_ERROR_RESPONSE_BYTES), false);
+        if (account === null)
+          throw new AccountApiError('invalid-response', 'The account response was invalid.');
+        return account;
+      }),
+    initializeAccount: (signal) =>
+      run(signal, async (requestSignal, token) => {
+        const response = await request(ACCOUNT_ENDPOINT, 'POST', requestSignal, token);
+        const account = parseAccount(await readJsonBody(response, MAX_ERROR_RESPONSE_BYTES), true);
+        if (account === null || !('created' in account))
           throw new AccountApiError(
             'invalid-response',
-            'The account session response was invalid.',
-            {
-              status,
-            },
+            'The account creation response was invalid.',
           );
-        }
-        return { status: 'authenticated', session };
-      };
-      try {
-        return await Promise.race([verifyResponse(), timeout]);
-      } catch (error) {
-        if (timedOut) {
-          throw new AccountApiError('network', 'The account session check timed out.', {
-            retryable: true,
-          });
-        }
-        throw error;
-      } finally {
-        if (timeoutId !== undefined) clearTimeout(timeoutId);
-        signal?.removeEventListener('abort', cancelForCaller);
-      }
-    },
-
-    async logout(signal): Promise<void> {
-      const csrf = csrfHeader(readCookie);
-      const { response, status } = await request(SESSION_ENDPOINT, 'DELETE', signal, {
-        accept: 'application/json',
-        'x-csrf-token': csrf,
-      });
-      if (status === 204) {
-        if (responseHeader(response, 'content-type') !== null) {
-          throw new AccountApiError('content-type', 'The logout response had an unexpected type.', {
-            status,
-          });
-        }
-        responseContentLength(response, 0);
-        if (response.body !== null) {
-          const bytes = await readBodyBytes(response, 0);
-          if (bytes.byteLength !== 0) {
-            throw new AccountApiError('invalid-response', 'The logout response had a body.', {
-              status,
-            });
-          }
-        }
-        return;
-      }
-      throw await readErrorResponse(response, status);
-    },
-
-    async getDashboard(accountWorkspaceId, signal): Promise<DashboardReadResponse> {
-      validateEndpointAccountId(accountWorkspaceId);
-      const { response, status } = await request(DASHBOARD_ENDPOINT, 'GET', signal, {
-        accept: 'application/json',
-      });
-      // The observed rejection invalidates this verified workspace even if an error
-      // proxy sends a malformed body or Content-Type.
-      if (status === 401) throw errorForStatus(status, 'UNAUTHENTICATED');
-      if (status !== 200) throw await readErrorResponse(response, status);
-      validateJsonContentType(response);
-      const dashboard = parseDashboardRead(
-        await readJsonBody(response, MAX_JSON_RESPONSE_BYTES),
-        accountWorkspaceId,
-      );
-      if (dashboard === null) {
-        throw new AccountApiError('invalid-response', 'The dashboard response was invalid.', {
-          status,
-        });
-      }
-      return dashboard;
-    },
-
-    async putDashboard(accountWorkspaceId, input, signal): Promise<DashboardWriteAcknowledgement> {
-      validateEndpointAccountId(accountWorkspaceId);
-      const requestValue = validateDashboardWriteRequest(input, accountWorkspaceId);
-      if (requestValue === null) {
-        throw new AccountApiError('request-invalid', 'The dashboard request was invalid.');
-      }
-      let body: string;
-      try {
-        body = JSON.stringify(requestValue);
-      } catch {
-        throw new AccountApiError('request-invalid', 'The dashboard request was invalid.');
-      }
-      if (new TextEncoder().encode(body).byteLength > MAX_DASHBOARD_REQUEST_BYTES) {
-        throw new AccountApiError('oversized', 'The dashboard request exceeded its size limit.');
-      }
-      const csrf = csrfHeader(readCookie);
-      const { response, status } = await request(
-        DASHBOARD_ENDPOINT,
-        'PUT',
-        signal,
-        {
-          accept: 'application/json',
-          'content-type': 'application/json',
-          'x-csrf-token': csrf,
-        },
-        body,
-      );
-      if (status === 401) throw errorForStatus(status, 'UNAUTHENTICATED');
-      if (status !== 200) throw await readErrorResponse(response, status);
-      validateJsonContentType(response);
-      const acknowledgement = parseDashboardAcknowledgement(
-        await readJsonBody(response, MAX_ERROR_RESPONSE_BYTES),
-        accountWorkspaceId,
-        requestValue,
-      );
-      if (acknowledgement === null) {
-        throw new AccountApiError(
-          'invalid-response',
-          'The dashboard acknowledgement was invalid.',
-          {
-            status,
-          },
+        return account;
+      }),
+    getDashboard: (accountId, signal) =>
+      run(signal, async (requestSignal, token) => {
+        if (!isAccountWorkspaceId(accountId))
+          throw new AccountApiError('request-invalid', 'The account identifier was invalid.');
+        const response = await request(DASHBOARD_ENDPOINT, 'GET', requestSignal, token);
+        const dashboard = parseDashboardRead(
+          await readJsonBody(response, MAX_JSON_RESPONSE_BYTES),
+          accountId,
         );
-      }
-      return acknowledgement;
-    },
-
-    async postAdoption(accountWorkspaceId, input, signal): Promise<AdoptionResponse> {
-      validateEndpointAccountId(accountWorkspaceId);
-      const requestValue = validateAdoptionRequest(input, accountWorkspaceId);
-      if (requestValue === null) {
-        throw new AccountApiError('request-invalid', 'The adoption request was invalid.');
-      }
-      let body: string;
-      try {
-        body = JSON.stringify(requestValue);
-      } catch {
-        throw new AccountApiError('request-invalid', 'The adoption request was invalid.');
-      }
-      if (new TextEncoder().encode(body).byteLength > MAX_DASHBOARD_REQUEST_BYTES) {
-        throw new AccountApiError('oversized', 'The adoption request exceeded its size limit.');
-      }
-      const csrf = csrfHeader(readCookie);
-      const { response, status } = await request(
-        '/api/dashboard/adoption',
-        'POST',
-        signal,
-        {
-          accept: 'application/json',
-          'content-type': 'application/json',
-          'x-csrf-token': csrf,
-        },
-        body,
-      );
-      if (status === 401) throw errorForStatus(status, 'UNAUTHENTICATED');
-      if (status !== 200) throw await readErrorResponse(response, status);
-      validateJsonContentType(response);
-      const result = parseAdoptionResponse(
-        await readJsonBody(response, MAX_ERROR_RESPONSE_BYTES),
-        accountWorkspaceId,
-        requestValue,
-      );
-      if (result === null) {
-        throw new AccountApiError('invalid-response', 'The adoption response was invalid.', {
-          status,
-        });
-      }
-      return result;
+        if (dashboard === null)
+          throw new AccountApiError('invalid-response', 'The dashboard response was invalid.');
+        return dashboard;
+      }),
+    putDashboard: (accountId, input, signal) => {
+      const body = serializeDashboardWriteRequest(accountId, input);
+      return run(signal, async (requestSignal, token) => {
+        const response = await request(DASHBOARD_ENDPOINT, 'PUT', requestSignal, token, body);
+        const acknowledgement = parseDashboardAcknowledgement(
+          await readJsonBody(response, MAX_ERROR_RESPONSE_BYTES),
+          accountId,
+          input,
+        );
+        if (acknowledgement === null)
+          throw new AccountApiError(
+            'invalid-response',
+            'The dashboard acknowledgement was invalid.',
+          );
+        return acknowledgement;
+      });
     },
   };
 }

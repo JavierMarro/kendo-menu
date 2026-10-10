@@ -10,6 +10,20 @@ export interface PersistenceContextValue {
   readonly writeFailed: boolean;
   readonly pending: boolean;
   readonly flush: () => Promise<void>;
+  readonly confirmExit?: () => Promise<void>;
+  readonly exitConfirmed?: boolean;
+  readonly setExitConfirmed?: (confirmed: boolean) => void;
+  readonly builderDirty?: boolean;
+  readonly onBuilderDirtyChange?: (dirty: boolean) => void;
+  readonly canEdit?: boolean;
+  readonly dirty?: boolean;
+  readonly saveState?: string;
+  readonly save?: () => Promise<void>;
+  readonly retry?: () => Promise<void>;
+  readonly reload?: () => Promise<void>;
+  readonly download?: () => void;
+  readonly downloadAllowed?: boolean;
+  readonly error?: string | null;
 }
 
 export const PersistenceContext = createContext<PersistenceContextValue | null>(null);
@@ -23,13 +37,13 @@ export function getPersistenceStatusLabel({
 }: PersistenceStatusSnapshot): string {
   // Failure wins over pending so a stuck or rejected write cannot look like an ordinary save.
   if (writeFailed) {
-    return 'Changes are not being saved';
+    return mode === 'account' ? 'Account save needs attention' : 'Changes are not being saved';
   }
   if (pending) {
-    return 'Saving changes';
+    return mode === 'account' ? 'Saving to account' : 'Saving changes';
   }
 
-  if (mode === 'account') return 'Saved to this account on this device';
+  if (mode === 'account') return 'Account draft';
   return mode === 'session' ? 'Session only' : 'Saved on this device';
 }
 
@@ -39,11 +53,15 @@ export function getPersistenceUpdateLabel({
   pending,
 }: Pick<PersistenceContextValue, 'mode' | 'writeFailed' | 'pending'>): string {
   if (writeFailed) {
-    return mode === 'account'
-      ? 'Not saved to this account on this device.'
-      : 'Not saved to this device.';
+    return mode === 'account' ? 'Account draft needs attention.' : 'Not saved to this device.';
   }
-  return pending ? 'Saving…' : mode === 'account' ? 'Saved to this account.' : 'Updated.';
+  return pending
+    ? mode === 'account'
+      ? 'Saving to account…'
+      : 'Saving…'
+    : mode === 'account'
+      ? 'Account draft updated. Choose Save to account.'
+      : 'Updated.';
 }
 
 export function getExplicitPersistenceUpdateLabel({
@@ -58,7 +76,7 @@ export function getExplicitPersistenceUpdateLabel({
     return 'Saving changes…';
   }
 
-  if (mode === 'account') return 'Changes saved to this account on this device.';
+  if (mode === 'account') return 'Account draft is ready. Choose Save to account to keep it.';
   return mode === 'session' ? 'Changes saved for this session.' : 'Changes saved on this device.';
 }
 
@@ -70,4 +88,8 @@ export function usePersistenceStatus(): PersistenceContextValue {
   }
 
   return value;
+}
+
+export function useOptionalPersistenceStatus(): PersistenceContextValue | null {
+  return useContext(PersistenceContext);
 }

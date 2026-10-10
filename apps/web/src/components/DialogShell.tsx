@@ -1,5 +1,6 @@
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useOptionalWorkspace } from '../lib/workspace-context';
 
 interface DialogShellProps {
   readonly children: ReactNode;
@@ -54,8 +55,19 @@ function restoreAttribute(element: HTMLElement, name: string, previousValue: str
 export function DialogShell({ children, closeLabel, onClose, titleId }: DialogShellProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  const workspace = useOptionalWorkspace();
+  const visible = workspace?.canEdit ?? true;
 
   useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!visible) {
+      onCloseRef.current();
+      return undefined;
+    }
     const applicationRoot =
       document.getElementById('root') ?? document.querySelector('.app-shell')?.parentElement;
     const previousInert = applicationRoot?.getAttribute('inert') ?? null;
@@ -75,7 +87,7 @@ export function DialogShell({ children, closeLabel, onClose, titleId }: DialogSh
       document.documentElement.classList.remove('drill-dialog-open');
       document.body.classList.remove('drill-dialog-open');
     };
-  }, []);
+  }, [visible]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {
@@ -114,6 +126,8 @@ export function DialogShell({ children, closeLabel, onClose, titleId }: DialogSh
       firstElement.focus();
     }
   };
+
+  if (!visible) return null;
 
   return createPortal(
     <div className="drill-dialog-layer">

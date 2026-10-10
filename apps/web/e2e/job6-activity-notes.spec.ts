@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { test } from './guest-test';
 
 const STORAGE_KEY = 'kendo-menu';
 const INTERNATIONAL_DOJO_ID = 'international-dojo-2-hour-session';
@@ -22,18 +23,18 @@ async function expectNoBlockingAxeViolations(page: Page): Promise<void> {
 }
 
 async function startFresh(page: Page): Promise<void> {
-  await page.goto('/app/dashboard');
+  await page.goto('/app/guest/dashboard');
   await page.evaluate((key) => window.localStorage.removeItem(key), STORAGE_KEY);
   await page.reload();
 }
 
 async function addInternationalDojoToDashboard(page: Page): Promise<void> {
-  await page.goto(`/app/library?drill=${INTERNATIONAL_DOJO_ID}`);
+  await page.goto(`/app/guest/library?drill=${INTERNATIONAL_DOJO_ID}`);
   const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Add to dashboard' }).click();
   await dialog.getByRole('link', { name: 'View dashboard' }).click();
-  await expect(page).toHaveURL(/\/app\/dashboard$/);
+  await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
 }
 
 function firstDashboardCard(page: Page): Locator {
@@ -56,14 +57,14 @@ test.describe('Job 6 dashboard activity notes', () => {
   test('keeps controls out of the library and persists an eligible activity note beside quantity and session notes', async ({
     page,
   }) => {
-    await page.goto(`/app/library?drill=${INTERNATIONAL_DOJO_ID}`);
+    await page.goto(`/app/guest/library?drill=${INTERNATIONAL_DOJO_ID}`);
     await expect(page.getByRole('button', { name: 'Any extra details?' })).toHaveCount(0);
     const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
     await expect(dialog.getByRole('button', { name: 'Any extra details?' })).toHaveCount(0);
 
     await dialog.getByRole('button', { name: 'Add to dashboard' }).click();
     await dialog.getByRole('link', { name: 'View dashboard' }).click();
-    await expect(page).toHaveURL(/\/app\/dashboard$/);
+    await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
 
     const card = firstDashboardCard(page);
     await expect(card).toHaveCount(1);

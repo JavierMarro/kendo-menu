@@ -10,11 +10,33 @@ import { NotFoundPage } from '../features/not-found/NotFoundPage';
 import { CookiePolicyPage } from '../features/privacy/CookiePolicyPage';
 import { GlossaryPage } from '../features/glossary/GlossaryPage';
 import { SourcesPage } from '../features/sources/SourcesPage';
+import {
+  AccountWorkspaceRoute,
+  AccountWorkspaceIndex,
+} from '../features/account/AccountWorkspaceProvider';
+import { GuestWorkspaceRoute } from '../features/persistence/GuestWorkspaceRoute';
 import { AppLayout, RouteRoot, StandaloneNotFoundPage } from './app-route-components';
 
 function LandingRedirect() {
   const location = useLocation();
   return <Navigate replace to={{ pathname: '/app', search: location.search }} />;
+}
+
+function LegacyWorkspaceRedirect({
+  page,
+}: {
+  readonly page: 'dashboard' | 'library' | 'drills/new' | 'library/:trainingSetId';
+}) {
+  const location = useLocation();
+  const pathname =
+    page === 'library/:trainingSetId'
+      ? `/app/guest/library${location.pathname.slice('/app/library'.length)}`
+      : `/app/guest/${page}`;
+  return <Navigate replace to={{ pathname, search: location.search, hash: location.hash }} />;
+}
+
+function WorkspaceIndex() {
+  return <Navigate replace to="dashboard" />;
 }
 
 export const appRoutes: RouteObject[] = [
@@ -28,10 +50,37 @@ export const appRoutes: RouteObject[] = [
         element: <AppLayout />,
         children: [
           { index: true, element: <LandingPage /> },
-          { path: 'dashboard', element: <DashboardPage /> },
-          { path: 'library', element: <LibraryPage /> },
-          { path: 'library/:trainingSetId', element: <TrainingSetDetailPage /> },
-          { path: 'drills/new', element: <CreateDrillPage /> },
+          { path: 'dashboard', element: <LegacyWorkspaceRedirect page="dashboard" /> },
+          { path: 'library', element: <LegacyWorkspaceRedirect page="library" /> },
+          {
+            path: 'library/:trainingSetId',
+            element: <LegacyWorkspaceRedirect page="library/:trainingSetId" />,
+          },
+          { path: 'drills/new', element: <LegacyWorkspaceRedirect page="drills/new" /> },
+          {
+            path: 'guest',
+            element: <GuestWorkspaceRoute />,
+            children: [
+              { index: true, element: <WorkspaceIndex /> },
+              { path: 'dashboard', element: <DashboardPage /> },
+              { path: 'library', element: <LibraryPage /> },
+              { path: 'library/:trainingSetId', element: <TrainingSetDetailPage /> },
+              { path: 'drills/new', element: <CreateDrillPage /> },
+              { path: '*', element: <NotFoundPage /> },
+            ],
+          },
+          {
+            path: 'account',
+            element: <AccountWorkspaceRoute />,
+            children: [
+              { index: true, element: <AccountWorkspaceIndex /> },
+              { path: 'dashboard', element: <DashboardPage /> },
+              { path: 'library', element: <LibraryPage /> },
+              { path: 'library/:trainingSetId', element: <TrainingSetDetailPage /> },
+              { path: 'drills/new', element: <CreateDrillPage /> },
+              { path: '*', element: <NotFoundPage /> },
+            ],
+          },
           { path: 'sources', element: <SourcesPage /> },
           { path: 'glossary', element: <GlossaryPage /> },
           { path: '*', element: <NotFoundPage /> },

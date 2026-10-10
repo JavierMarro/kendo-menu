@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 
 import { useInstallLandingEntry } from '../install/install-context';
 import { CURATED_EXERCISE_COUNT, CURATED_TRAINING_SET_COUNT } from '../../lib/training-data';
+import { useManagedAuth } from '../../lib/managed-auth-context';
 
 interface FaqItem {
   readonly id: string;
@@ -65,7 +66,8 @@ const FAQ_ITEMS: readonly FaqItem[] = [
   {
     id: 'device-sync',
     question: 'Are my menus synchronised between devices?',
-    answer: 'Menus saved in the current public app stay on the device where you create them.',
+    answer:
+      'Guest menus stay on this device. Google account menus are loaded online and changes move between devices only when you choose Save to account.',
   },
 ];
 
@@ -147,7 +149,9 @@ function useLandingScrollReveal() {
 
 export function LandingPage(): ReactElement {
   useInstallLandingEntry();
+  const { startGoogleSignIn } = useManagedAuth();
   const [openFaqId, setOpenFaqId] = useState<string | null>(null);
+  const [signInError, setSignInError] = useState(false);
   const sectionsRef = useLandingScrollReveal();
 
   return (
@@ -182,13 +186,29 @@ export function LandingPage(): ReactElement {
             Choose from {CURATED_TRAINING_SET_COUNT} curated menus, shape the workload for your
             training and keep polishing mind, spirit and character through varied kendo practice.
           </p>
-          <Link
-            className="primary-button landing-cta landing-primary-action"
-            to="/app/library"
-            aria-label="Browse Keiko library"
-          >
-            BROWSE KEIKO LIBRARY HERE →
-          </Link>
+          <div className="landing-entry-actions">
+            <Link
+              className="primary-button landing-cta landing-primary-action"
+              to="/app/guest/dashboard"
+            >
+              Continue as a guest
+            </Link>
+            <button
+              className="secondary-button landing-cta"
+              type="button"
+              onClick={() => {
+                setSignInError(false);
+                void startGoogleSignIn().then((started) => setSignInError(!started));
+              }}
+            >
+              Continue with Google
+            </button>
+          </div>
+          {signInError ? (
+            <p className="form-error" role="alert">
+              Google sign-in could not be started. You can continue as a guest.
+            </p>
+          ) : null}
         </div>
       </section>
 
@@ -405,7 +425,7 @@ export function LandingPage(): ReactElement {
               </div>
               <Link
                 className="primary-button landing-primary-action landing-reveal-left"
-                to="/app/library"
+                to="/app/guest/dashboard"
                 aria-label="Record your first keiko"
               >
                 RECORD YOUR FIRST KEIKO HERE →

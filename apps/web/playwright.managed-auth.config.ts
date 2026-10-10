@@ -3,7 +3,11 @@ import developmentConfig from './playwright.config';
 
 export default defineConfig({
   ...developmentConfig,
-  testMatch: 'managed-auth-proof.spec.ts',
+  testMatch: [
+    'managed-auth-proof.spec.ts',
+    'managed-auth-app-callback.spec.ts',
+    'managed-auth-referrer.spec.ts',
+  ],
   testIgnore: '**/pwa.spec.ts',
   use: {
     ...developmentConfig.use,

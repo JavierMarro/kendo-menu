@@ -11,7 +11,7 @@ import {
   type TrainingStorageInspection,
 } from '@kendo-menu/store';
 
-import { guestWorkspaceScope, type WorkspaceCoordinator } from './workspace-coordination';
+import type { WorkspaceCoordinator } from './workspace-coordination';
 
 export const TRAINING_STORAGE_KEY = 'kendo-menu';
 
@@ -188,7 +188,7 @@ function runGuestMutation<T>(
   if (coordination === undefined || !coordination.isAvailable) return operation();
   let entered = false;
   return coordination
-    .withLock(guestWorkspaceScope, () => {
+    .withLock(() => {
       entered = true;
       return operation();
     })

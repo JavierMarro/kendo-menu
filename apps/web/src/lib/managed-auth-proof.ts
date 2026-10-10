@@ -1,5 +1,5 @@
-import { createAuthClient, isAuthError } from '@neondatabase/auth';
-import { BetterAuthVanillaAdapter } from '@neondatabase/auth/vanilla';
+import { createManagedAuthClient } from './managed-auth';
+import { AUTH_VERIFIER_PARAMETER } from './auth-return';
 
 export interface ManagedProofIdentity {
   readonly provider: 'neon';
@@ -41,8 +41,9 @@ function parseIdentity(value: unknown): ManagedProofIdentity | null {
     identity.expiresAt <= Date.now() / 1000 ||
     Object.keys(identity).length !== 5 ||
     Object.keys(value).length !== 1
-  )
+  ) {
     return null;
+  }
   return {
     provider: identity.provider,
     issuer: identity.issuer,
@@ -52,86 +53,28 @@ function parseIdentity(value: unknown): ManagedProofIdentity | null {
   };
 }
 
-/** One successful callback exchange per fresh document; later verification retrieves only tokens. */
+/** The proof adapter only calls the isolated identity endpoint after cookie-backed token retrieval. */
 export function createManagedProofClient(
   authUrl: string,
   reloadProof: () => void = () => window.location.replace('/managed-auth-proof.html'),
 ): ManagedProofClient | undefined {
-  let url: URL;
-  try {
-    url = new URL(authUrl);
-    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
-      return undefined;
-    }
-  } catch {
-    return undefined;
-  }
-  const auth = createAuthClient(url.href.replace(/\/$/, ''), {
-    adapter: BetterAuthVanillaAdapter({
-      fetchOptions: { credentials: 'include' },
-      sessionOptions: {
-        refetchOnWindowFocus: false,
-        refetchInterval: 0,
-        refetchWhenOffline: false,
-      },
-    }),
-    allowAnonymous: false,
+  const client = createManagedAuthClient(authUrl, 'proof', {
+    replaceDocument: () => reloadProof(),
   });
-  let callbackBootstrap: Promise<boolean> | undefined;
-  let reloadRequested = false;
+  if (client === undefined) return undefined;
+
   return {
-    async signIn() {
-      try {
-        const result = await auth.signIn.social({
-          provider: 'google',
-          callbackURL: new URL('/managed-auth-proof.html', window.location.origin).href,
-        });
-        return result.error === null;
-      } catch {
-        return false;
-      }
-    },
+    signIn: () => client.signIn(),
     async verify(signal) {
-      if (signal.aborted) return { status: 'unavailable' };
-      if (
-        callbackBootstrap !== undefined ||
-        new URLSearchParams(window.location.search).has('neon_auth_session_verifier')
-      ) {
-        // Only get-session exchanges the verifier for a managed browser session.
-        // Never refresh sessions in this document: that SDK lifecycle broadcasts credentials.
-        callbackBootstrap ??= auth
-          .getSession({ fetchOptions: { signal } })
-          .then(
-            (result) =>
-              result.error === null && result.data?.session != null && result.data.user != null,
-          )
-          .catch(() => false);
-        const established = await callbackBootstrap;
-        if (!established) callbackBootstrap = undefined;
-        if (signal.aborted) return { status: 'unavailable' };
-        if (!established) return { status: 'callback-failed' };
-        // The SDK shares its session cache with /token. A full document replacement
-        // drops that in-memory cache; cookies survive for token-only verification.
-        if (!reloadRequested) {
-          try {
-            reloadProof();
-            reloadRequested = true;
-          } catch {
-            return { status: 'unavailable' };
-          }
-        }
-        return { status: 'reloading' };
+      if (new URLSearchParams(window.location.search).has(AUTH_VERIFIER_PARAMETER)) {
+        const result = await client.bootstrapCallback(signal);
+        return { status: result.status };
       }
+      const token = await client.getToken(signal);
+      if (token.status !== 'token') return { status: token.status };
       try {
-        const result = await auth.token();
-        if (signal.aborted) return { status: 'unavailable' };
-        if (result.error !== null) {
-          return { status: result.error.status === 401 ? 'signed-out' : 'unavailable' };
-        }
-        const token = result.data?.token;
-        if (typeof token !== 'string' || token.length === 0) return { status: 'unavailable' };
         const response = await fetch('/api/dev/managed-identity', {
-          headers: { authorization: `Bearer ${token}` },
+          headers: { authorization: `Bearer ${token.token}` },
           credentials: 'omit',
           cache: 'no-store',
           redirect: 'error',
@@ -143,28 +86,10 @@ export function createManagedProofClient(
         if (text.length > 8192) return { status: 'unavailable' };
         const identity = parseIdentity(JSON.parse(text));
         return identity === null ? { status: 'unavailable' } : { status: 'verified', identity };
-      } catch (error) {
-        return {
-          status: isAuthError(error) && error.status === 401 ? 'signed-out' : 'unavailable',
-        };
-      }
-    },
-    async signOut() {
-      try {
-        // Finish/cancel any cookie-establishing exchange before invalidating the session.
-        await callbackBootstrap;
-        const success = (await auth.signOut()).error === null;
-        if (success) callbackBootstrap = undefined;
-        if (
-          success &&
-          new URLSearchParams(window.location.search).has('neon_auth_session_verifier')
-        ) {
-          window.history.replaceState(null, '', '/managed-auth-proof.html');
-        }
-        return success;
       } catch {
-        return false;
+        return { status: 'unavailable' };
       }
     },
+    signOut: () => client.signOut(),
   };
 }

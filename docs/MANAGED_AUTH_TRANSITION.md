@@ -1,7 +1,7 @@
 # Managed authentication and online account dashboards
 
 Prepared 4 October 2026 from the owner's approved simplification. This is a transition handoff,
-not evidence that managed authentication has been integrated or deployed.
+not evidence of deployment or complete public-release validation.
 
 Migration A now has an [isolated development proof](MANAGED_AUTH_PROOF.md) with callback-only session
 bootstrap and subsequent token retrieval. The owner reports single-account callback/backend,
@@ -11,8 +11,10 @@ CacheStorage after reload and JWT refresh, with stable identity. No storage inva
 [ADR 0007](adr/0007-managed-auth-online-account-drafts.md) records the approved superseding target.
 The proof route remains development-only. [Migration B](MANAGED_DASHBOARDS.md) now replaces the
 API's legacy custom-session runtime with managed identity mapping, protected dashboards and a
-consumed-once guest-copy opportunity. Legacy SQL records remain preserved; production browser
-account providers/routes and caches still require Migrations C/D to consume the new contract.
+consumed-once guest-copy opportunity. [Migration C](MANAGED_ACCOUNT_WEB.md) now consumes B with
+separate guest/account routes and memory-only explicit saves; legacy browser account caches and
+synchronization are retired without deleting stored data. Legacy SQL records remain preserved.
+Migration D's separate copy setup UI has not begun; C holds only the creation response in memory.
 No live B dashboard persistence, remote migration or deployment is claimed.
 
 On 5 October 2026 the owner deferred second-account distinction and return-to-first-account

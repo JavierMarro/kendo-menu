@@ -3,20 +3,24 @@
  * The store remains usable in memory while the gate reports write failures or pending saves.
  * Explicit recovery choices replace the storage adapter rather than replacing live UI state.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
+import { useBlocker } from 'react-router-dom';
 
 import {
   classifyTrainingStorageValue,
   createTrainingStore,
   serializePersistedTrainingStateV10,
-  type StateStorage,
 } from '@kendo-menu/store';
 
 import { PersistenceContext } from './persistence-context';
-import {
-  AccountWorkspaceProvider,
-  useOptionalAccountWorkspace,
-} from '../account/AccountWorkspaceProvider';
 import {
   createBrowserTrainingStorage,
   createMemoryTrainingStorage,
@@ -30,6 +34,8 @@ import {
   type PersistenceInspection,
 } from '../../lib/training-persistence';
 import { createWorkspaceCoordinator } from '../../lib/workspace-coordination';
+import { TrainingStoreProvider } from '../../lib/training-store-provider';
+import { useDataRouterMode } from '../../lib/router-context';
 
 // Compatibility exports keep existing provider test utilities stable while the context lives separately.
 /* eslint-disable-next-line react-refresh/only-export-components */
@@ -67,15 +73,20 @@ export function PersistenceGate({
   const [resetPending, setResetPending] = useState(false);
   const resetPendingRef = useRef(false);
   const [localRecoveryRequested, setLocalRecoveryRequested] = useState(false);
+  const [builderDirty, setBuilderDirty] = useState(false);
+  const [exitConfirmed, setExitConfirmed] = useState(false);
+  const builderRevision = useRef(0);
+  const onBuilderDirtyChange = useCallback((dirty: boolean) => {
+    if (dirty) {
+      builderRevision.current += 1;
+      setExitConfirmed(false);
+    }
+    setBuilderDirty(dirty);
+  }, []);
   // Guest persistence only needs the lock boundary. Storage events are intentionally disabled
   // here because this provider does not consume invalidation notifications, and constructing an
   // event-owning coordinator during render is unsafe under React StrictMode's discarded renders.
   const coordination = useMemo(() => createWorkspaceCoordinator({ events: null }), []);
-  const recoveryWorkspace = useMemo(() => {
-    const storage = createMemoryTrainingStorage();
-    const store = createTrainingStore({ storage, storageKey: TRAINING_STORAGE_KEY });
-    return { store, storage };
-  }, []);
 
   const onWriteError = useCallback(() => {
     setWriteFailed(true);
@@ -154,120 +165,6 @@ export function PersistenceGate({
     }
     return null;
   });
-  const storeBundleRef = useRef(storeBundle);
-  const createStoreBundleRef = useRef(createStoreBundle);
-  const fallbackAccountStorage = useMemo(() => createMemoryTrainingStorage(), []);
-  const useFallbackAccountStorage =
-    sessionOnly || runtimeUnavailable || inspection.status === 'unavailable';
-  const useFallbackAccountStorageRef = useRef(useFallbackAccountStorage);
-  useEffect(() => {
-    useFallbackAccountStorageRef.current = useFallbackAccountStorage;
-  }, [useFallbackAccountStorage]);
-  useEffect(() => {
-    storeBundleRef.current = storeBundle;
-    createStoreBundleRef.current = createStoreBundle;
-  }, [createStoreBundle, storeBundle]);
-  // Account legacy keys remain readable during account activation. Only the guest key follows
-  // the replaceable writer; adoption reads guest data without deleting or rewriting it.
-  const guestStorageProxy = useMemo<StateStorage>(
-    () => ({
-      getItem: (name) =>
-        name === TRAINING_STORAGE_KEY
-          ? (storeBundleRef.current?.storage.getItem(name) ?? null)
-          : useFallbackAccountStorageRef.current
-            ? fallbackAccountStorage.getItem(name)
-            : window.localStorage.getItem(name),
-      setItem: (name, value) => {
-        if (name === TRAINING_STORAGE_KEY)
-          return storeBundleRef.current?.storage.setItem(name, value);
-        return useFallbackAccountStorageRef.current
-          ? fallbackAccountStorage.setItem(name, value)
-          : window.localStorage.setItem(name, value);
-      },
-      removeItem: (name) => {
-        if (name === TRAINING_STORAGE_KEY) return storeBundleRef.current?.storage.removeItem(name);
-        return useFallbackAccountStorageRef.current
-          ? fallbackAccountStorage.removeItem(name)
-          : window.localStorage.removeItem(name);
-      },
-    }),
-    [fallbackAccountStorage],
-  );
-  const guestCleanup = useMemo(
-    () => ({
-      readRaw: () => window.localStorage.getItem(TRAINING_STORAGE_KEY),
-      confirmDurable: async () => {
-        const bundle = storeBundleRef.current;
-        if (bundle === null || !bundle.storage.isEnabled())
-          throw new Error('Guest storage is unavailable.');
-        await bundle.storage.flush();
-        // A successful flush includes each write's readback. Confirm the source remains
-        // identical to the visible guest store before leaving this document. This also
-        // protects session-only work and edits made by another tab during the flush.
-        const inspection = classifyTrainingStorageValue(
-          window.localStorage.getItem(TRAINING_STORAGE_KEY),
-        );
-        if (
-          inspection.status !== 'empty' &&
-          inspection.status !== 'ready' &&
-          inspection.status !== 'migrated'
-        )
-          throw new Error('Guest storage could not be confirmed.');
-        const persistedEntries =
-          inspection.status === 'empty' ? [] : inspection.state.dashboardEntries;
-        const persisted = serializePersistedTrainingStateV10({
-          dashboardEntries: persistedEntries,
-        });
-        const visible = serializePersistedTrainingStateV10({
-          dashboardEntries: bundle.store.getState().dashboardEntries,
-        });
-        if (persisted !== visible) throw new Error('Guest changes are not saved yet.');
-      },
-      prepare: async () => {
-        await storeBundleRef.current?.storage.flush();
-        storeBundleRef.current?.storage.disable();
-      },
-      refreshFromRaw: (rawValue: string | null, { durableWrites }: { durableWrites: boolean }) => {
-        const inspection = classifyTrainingStorageValue(rawValue);
-        if (
-          inspection.status !== 'empty' &&
-          inspection.status !== 'ready' &&
-          inspection.status !== 'migrated'
-        ) {
-          throw new Error('The current guest workspace cannot be opened.');
-        }
-        const previousStorage = storeBundleRef.current?.storage;
-        if (
-          !durableWrites &&
-          previousStorage !== undefined &&
-          (previousStorage.isPending() || previousStorage.lastFailure !== null)
-        ) {
-          throw new Error('Unconfirmed guest edits require coordinated recovery.');
-        }
-        const next = durableWrites
-          ? createStoreBundleRef.current(rawValue)
-          : (() => {
-              const memory = createMemoryTrainingStorage();
-              if (rawValue !== null) memory.setItem(TRAINING_STORAGE_KEY, rawValue);
-              const storage = createTrainingStorageController(memory);
-              const store = createTrainingStore({ storage, storageKey: TRAINING_STORAGE_KEY });
-              return { store, storage };
-            })();
-        storeBundleRef.current?.storage.disable();
-        storeBundleRef.current = next;
-        setStoreBundle(next);
-        if (!durableWrites) {
-          // Without a shared lock, the freshly read guest source remains usable in this
-          // document but must not become a new LocalStorage writer.
-          setSessionOnly(true);
-          setWriteFailed(false);
-        }
-        setInspection(inspectBrowserTrainingStorage(TRAINING_STORAGE_KEY));
-        return next.store;
-      },
-    }),
-    [],
-  );
 
   useEffect(() => {
     if (
@@ -289,18 +186,61 @@ export function PersistenceGate({
 
   const store = storeBundle?.store ?? null;
   const writePending = pendingWriterIds.size > 0;
+  const hasMenus = useSyncExternalStore(
+    useCallback((notify: () => void) => store?.subscribe(notify) ?? (() => undefined), [store]),
+    useCallback(() => (store?.getState().dashboardEntries.length ?? 0) > 0, [store]),
+  );
+  const shouldWarnForGuestData =
+    writePending ||
+    writeFailed ||
+    (store !== null && (runtimeUnavailable || (sessionOnly && hasMenus)));
+  const shouldWarnBeforeExit = shouldWarnForGuestData || builderDirty;
+  const dataRouterMode = useDataRouterMode();
+  const navigationGuard = dataRouterMode ? (
+    <GuestNavigationGuard
+      shouldWarnForGuestData={shouldWarnForGuestData}
+      builderDirty={builderDirty}
+    />
+  ) : null;
 
   const flushPersistence = useCallback(async () => {
     await storeBundle?.storage.flush();
   }, [storeBundle]);
 
+  const confirmGuestExit = useCallback(async () => {
+    const confirmedBuilderRevision = builderRevision.current;
+    const bundle = storeBundle;
+    if (bundle === null || sessionOnly || !bundle.storage.isEnabled()) {
+      throw new Error('Guest changes are not durably saved on this device.');
+    }
+    await bundle.storage.flush();
+    if (confirmedBuilderRevision !== builderRevision.current) {
+      throw new Error('The guest session changed while confirming departure.');
+    }
+    const inspection = classifyTrainingStorageValue(
+      window.localStorage.getItem(TRAINING_STORAGE_KEY),
+    );
+    if (
+      inspection.status !== 'empty' &&
+      inspection.status !== 'ready' &&
+      inspection.status !== 'migrated'
+    ) {
+      throw new Error('Guest changes could not be confirmed on this device.');
+    }
+    const persistedEntries = inspection.status === 'empty' ? [] : inspection.state.dashboardEntries;
+    const persisted = serializePersistedTrainingStateV10({ dashboardEntries: persistedEntries });
+    const visible = serializePersistedTrainingStateV10({
+      dashboardEntries: bundle.store.getState().dashboardEntries,
+    });
+    if (persisted !== visible) throw new Error('Guest changes are still being saved.');
+  }, [sessionOnly, storeBundle]);
+
   useEffect(() => {
-    if (!writePending) {
+    if (!shouldWarnBeforeExit || (exitConfirmed && !shouldWarnForGuestData)) {
       return undefined;
     }
 
-    // A queued browser write is not yet confirmed; warn before closing the tab even though
-    // Zustand has already rendered the edited state.
+    // Rendered recovery data may exist only in memory even after a write settles.
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
@@ -308,9 +248,13 @@ export function PersistenceGate({
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [writePending]);
+  }, [exitConfirmed, shouldWarnBeforeExit, shouldWarnForGuestData]);
 
-  const recoveryIsRequested = recoveryRequested || localRecoveryRequested;
+  useEffect(() => {
+    const restoreProtection = () => setExitConfirmed(false);
+    window.addEventListener('pageshow', restoreProtection);
+    return () => window.removeEventListener('pageshow', restoreProtection);
+  }, []);
 
   const persistCurrentStateWith = useCallback(
     (storage: ReturnType<typeof createMemoryTrainingStorage>) => {
@@ -328,8 +272,10 @@ export function PersistenceGate({
 
   const completeRecovery = useCallback(() => {
     setLocalRecoveryRequested(false);
-    onRecoveryComplete?.();
-  }, [onRecoveryComplete]);
+    // Local storage recovery returns to the same mounted editor. Only an error-boundary
+    // recovery needs to reset the failed child tree.
+    if (recoveryRequested) onRecoveryComplete?.();
+  }, [onRecoveryComplete, recoveryRequested]);
 
   const retry = useCallback(() => {
     setBackupError(null);
@@ -469,12 +415,12 @@ export function PersistenceGate({
     />
   );
 
-  if (
-    store !== null &&
-    storeBundle !== null &&
-    !runtimeUnavailable &&
-    (sessionOnly || inspection.status === 'empty' || inspection.status === 'ready')
-  ) {
+  if (store !== null && storeBundle !== null) {
+    const showRecovery =
+      recoveryRequested ||
+      localRecoveryRequested ||
+      runtimeUnavailable ||
+      (!sessionOnly && inspection.status !== 'empty' && inspection.status !== 'ready');
     return (
       <PersistenceContext.Provider
         value={{
@@ -482,23 +428,25 @@ export function PersistenceGate({
           writeFailed,
           pending: writePending,
           flush: flushPersistence,
+          confirmExit: confirmGuestExit,
+          exitConfirmed,
+          setExitConfirmed,
+          builderDirty,
+          onBuilderDirtyChange,
         }}
       >
-        <AccountWorkspaceProvider
-          guestStore={store}
-          guestStorage={guestStorageProxy}
-          guestCleanup={guestCleanup}
-          guestFallback={recoveryIsRequested ? recoveryView : undefined}
-        >
-          {writeFailed ? (
-            <GuestPersistenceWriteFailureNotice
-              backupError={backupError}
-              onDownload={downloadCurrentBackup}
-              onOpenRecovery={() => setLocalRecoveryRequested(true)}
-            />
-          ) : null}
-          {children}
-        </AccountWorkspaceProvider>
+        {navigationGuard}
+        {writeFailed && !showRecovery ? (
+          <GuestPersistenceWriteFailureNotice
+            backupError={backupError}
+            onDownload={downloadCurrentBackup}
+            onOpenRecovery={() => setLocalRecoveryRequested(true)}
+          />
+        ) : null}
+        <div hidden={showRecovery} inert={showRecovery} aria-hidden={showRecovery}>
+          <TrainingStoreProvider store={store}>{children}</TrainingStoreProvider>
+        </div>
+        {showRecovery ? recoveryView : null}
       </PersistenceContext.Provider>
     );
   }
@@ -510,18 +458,43 @@ export function PersistenceGate({
         writeFailed: false,
         pending: false,
         flush: () => Promise.resolve(),
+        exitConfirmed,
+        setExitConfirmed,
+        builderDirty,
+        onBuilderDirtyChange,
       }}
     >
-      <AccountWorkspaceProvider
-        guestStore={recoveryWorkspace.store}
-        guestStorage={guestStorageProxy}
-        guestCleanup={guestCleanup}
-        guestFallback={recoveryView}
-      >
-        {children}
-      </AccountWorkspaceProvider>
+      {navigationGuard}
+      {recoveryView}
     </PersistenceContext.Provider>
   );
+}
+
+function GuestNavigationGuard({
+  shouldWarnForGuestData,
+  builderDirty,
+}: {
+  readonly shouldWarnForGuestData: boolean;
+  readonly builderDirty: boolean;
+}) {
+  useBlocker(({ currentLocation, nextLocation }) => {
+    const leavingGuest =
+      nextLocation.pathname !== '/app/guest' && !nextLocation.pathname.startsWith('/app/guest/');
+    const leavingDirtyBuilder =
+      builderDirty &&
+      currentLocation.pathname === '/app/guest/drills/new' &&
+      nextLocation.pathname !== currentLocation.pathname;
+    const confirmGuestData = shouldWarnForGuestData && leavingGuest;
+    if (!confirmGuestData && !leavingDirtyBuilder) return false;
+
+    const message = leavingDirtyBuilder
+      ? confirmGuestData
+        ? 'You have an unsaved session draft, and guest changes are not confirmed on this device and may exist only in this tab. Leave and discard both?'
+        : 'You have an unsaved session draft. Leave this page and discard it?'
+      : 'Guest changes are not confirmed on this device and may exist only in this tab. Keep this page open or download a backup. Leave and discard these changes?';
+    return !window.confirm(message);
+  });
+  return null;
 }
 
 interface PersistenceRecoveryProps {
@@ -547,13 +520,7 @@ interface PersistenceWriteFailureNoticeProps {
   readonly onOpenRecovery: () => void;
 }
 
-function GuestPersistenceWriteFailureNotice(props: PersistenceWriteFailureNoticeProps) {
-  const workspace = useOptionalAccountWorkspace();
-  if (workspace?.snapshot.mode !== 'guest') return null;
-  return <PersistenceWriteFailureNotice {...props} />;
-}
-
-function PersistenceWriteFailureNotice({
+function GuestPersistenceWriteFailureNotice({
   backupError,
   onDownload,
   onOpenRecovery,

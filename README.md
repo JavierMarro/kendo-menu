@@ -2,8 +2,8 @@
 
 KendoMenu is a deployed, local-first production MVP for planning kendo training sessions.
 Practitioners can browse 11 curated built-in sessions, add sessions to a dashboard, adapt activity
-quantities, attach notes, and create custom sessions. Product data remains in browser storage; no
-account or server is required.
+quantities, attach notes, and create custom sessions. Guest training data remains in browser
+storage; no account or server is required.
 
 ## Current stack
 
@@ -14,10 +14,11 @@ account or server is required.
 - Elysia local backend in `apps/api`, with separate Node and Vercel adapters (not deployed)
 - An uninitialized `apps/mobile` boundary reserved for explicitly requested future work
 
-Optional accounts and synchronization are accepted product direction. The local backend implements
-Google OIDC and opaque application sessions using PostgreSQL. Real provider/HTTPS integration,
-production authentication, remote sync, and provider resources remain absent.
-See [the account design](docs/ACCOUNT_SYNC.md) for decision status and later gates.
+Internal account integration uses Neon-managed Google authentication and bearer-authorized
+PostgreSQL dashboards. [Migration C](docs/MANAGED_ACCOUNT_WEB.md) separates offline guest routes
+from online account drafts held in memory with explicit saves. Migration D's guest-copy setup UI
+has not begun. Live B persistence, multi-account and production HTTPS/Vercel validation remain
+public-release gates; no public account release is claimed.
 
 ## Workspace layout
 
@@ -67,11 +68,11 @@ browser suite against Vite's production preview. `pnpm test:e2e:pwa` remains the
 artifact suite. The release gate, `pnpm verify:full`, runs `pnpm check`, the preview suite, and the
 PWA suite without rerunning the development-server suite.
 
-`pnpm dev:api` serves the standalone API on local port 3000. Authentication requires the server-only
-configuration documented in the account design; real browser login additionally needs HTTPS. The web development server
-remains separate and does not call it. API request tests cover the application and root Vercel
-adapter without opening a listener; combined Vercel discovery/routing still requires an authorized
-Preview verification. No environment file or credentials are required for the health scaffold.
+The standalone API listens on port 3000. Follow C's [Node 24 local startup](docs/MANAGED_ACCOUNT_WEB.md#local-startup-under-node-24)
+to load the existing private configuration explicitly. Vite proxies account/dashboard requests
+to port 3000 without rewriting browser Origin; the isolated proof identity listener stays on port 3001. No listener runs migrations. API request tests cover application/adapters separately;
+combined Vercel discovery/routing still requires authorized Preview verification. The health
+scaffold needs no credentials.
 
 Curated drill content is authored in `packages/domain/data/default-drills.json`, validated against
 `packages/domain/schema/kendo-drills.schema.json`, and adapted by

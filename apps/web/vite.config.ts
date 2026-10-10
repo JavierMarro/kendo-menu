@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { isLoopbackProofRequest, managedAuthProofPlugin } from './dev/managed-auth-proof-plugin.ts';
+import { createDevelopmentProxyRules } from './src/lib/dev-proxy-rules.ts';
 
 export default defineConfig({
   plugins: [
@@ -56,11 +57,8 @@ export default defineConfig({
   ],
   server: {
     host: 'localhost',
-    proxy: {
-      '^/api/dev/managed-identity(?:\\?.*)?$': {
-        target: 'http://127.0.0.1:3001',
-        bypass: (request) => (isLoopbackProofRequest(request) ? undefined : false),
-      },
-    },
+    // Protect Vite's injected development modules before document meta policy applies.
+    headers: { 'Referrer-Policy': 'no-referrer' },
+    proxy: createDevelopmentProxyRules(isLoopbackProofRequest),
   },
 });

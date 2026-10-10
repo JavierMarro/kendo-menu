@@ -33,5 +33,19 @@ needed for the task. Skill descriptions help routing; the full instructions are 
 Fuzzing is for a requested bounded attack, not every review. Onboarding comments remain explicit-only.
 Reuse valid evidence instead of loading every workflow or repeating the same check through each skill.
 
+## Installed plugin skills
+
+Use the installed Ponytail core skill (`$ponytail:ponytail`) in `full` mode by default for coding
+plans, implementation, fixes, and code review, not general conversation. Read its installed
+`SKILL.md`; do not copy the plugin into this repository or pin a machine-specific cache path here.
+Honor explicit level changes and `stop ponytail` / `normal mode`. If unavailable, report that briefly
+and retain the reuse-first, minimum-scope approach without installing anything automatically.
+
+Ponytail complements the matching project workflow; it does not replace semantic review or the
+required verification matrix. Use existing tests and frameworks, and preserve the approved journey
+and safety invariants. Its review skill is a read-only complexity review, not a correctness or
+security verdict. Load review, whole-repo audit, debt, or gain skills only when requested; do not add
+automatic audits, ledgers, metrics, or hooks to ordinary feature work.
+
 Skills remain subordinate to the user's request, `AGENTS.md`, repository permissions, and explicit
 authorization boundaries.

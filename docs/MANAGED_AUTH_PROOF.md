@@ -1,8 +1,9 @@
 # Migration A — isolated managed-auth proof
 
 The development proof is implemented; live single-account identity checks have owner-reported passes.
-No production auth provider/route, account mapping, database, deployment, or provider settings were
-changed. The second-account check is **NOT RUN — owner-deferred** under the 5 October amendment:
+Migration A changed no application account mapping, database, deployment or provider settings.
+[Migration C](MANAGED_ACCOUNT_WEB.md) reuses this lifecycle in the application while preserving
+proof isolation; its internal account routes do not establish a public release. The second-account check is **NOT RUN — owner-deferred** under the 5 October amendment:
 it does not block a reviewed A implementation commit or subsequent internal B work, but remains
 required before public account release. The owner's subsequent private inspection reports PASS
 for credential-free storage after reload and JWT refresh with the existing dedicated account;
@@ -41,13 +42,21 @@ production build entries, preview returns 404, and ordinary Node/Vercel API comp
 404 for `/api/dev/managed-identity`. The existing account providers, persistence and analytics are
 not imported by the separate proof entry.
 
-The sign-in request explicitly sets the fixed proof callback URL. In the private live attempt,
-the owner reported a return to the origin-root homepage carrying `neon_auth_session_verifier`.
-The development middleware now serves the isolated proof document for that marked root return,
-before the normal SPA entry can run. It does not redirect ordinary homepage visits or register a
-production route. Successful callback session exchange replaces the address with the clean proof URL;
-failed exchange remains retryable. Synthetic browser coverage exercises both the direct proof
-callback and this observed root-return shape.
+The sign-in request sets the fixed proof callback URL. The owner observed a live origin-root
+return carrying `neon_auth_session_verifier`. C preserves isolation now that application login can
+also return to the root: before either sign-in, a read-back-verified SessionStorage marker stores
+only version, `proof`/`application` flow and a 15-minute expiry. Root dispatch happens before normal
+routes, stores or analytics import and chooses only `/managed-auth-proof.html` or
+`/app/auth/callback`. Missing/expired/malformed root markers fail closed in isolated callback UI;
+explicit callback paths accept no arbitrary destinations and reject a present invalid/mismatched
+marker. Proof callbacks never initialize a KendoMenu account.
+
+The proof remains development-only and loopback-guarded. Successful exchange replaces the address
+with the clean proof URL; failed exchange remains retryable with a bounded marker and sanitized
+error. Application callbacks use a separate bootstrap and clean account-dashboard destination.
+Synthetic desktop/mobile tests cover both root-return and explicit callback success/failure for
+both flows, including absence of cross-flow account/proof requests. No credentials, identities,
+drafts or copy opportunities are stored in the marker.
 
 ## Credential handling and SDK constraint
 

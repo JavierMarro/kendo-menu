@@ -27,17 +27,24 @@ export function CookiePolicyPage() {
           <p>
             <b>KendoMenu does not use cookies for analytics, advertising, or tracking.</b>
           </p>
+          <p>
+            Google account sign-in uses Neon-managed session cookies. KendoMenu retrieves a token in
+            memory to authorize account requests; it does not store credentials in local data.
+            Blocking managed session cookies can prevent account sign-in while guest use remains
+            available.
+          </p>
         </section>
 
         <section className="policy-section" aria-labelledby="local-storage-title">
           <h2 id="local-storage-title">Local storage</h2>
           <p>
-            Guest dashboard training sessions are stored locally in your browser and are not sent to
-            an account service unless you choose to add them to a new account. Signed-in account
-            dashboards are saved locally and synchronized with the KendoMenu account service. This
-            training data is separate from cookies. Clearing site data removes the browser copy, but
-            does not delete an account dashboard. Small device-only preferences, including notice
-            acknowledgements and installation prompt state, are stored locally.
+            Guest dashboard training sessions are stored locally in your browser. Signing in does
+            not upload or change them. Account edits stay in this tab’s memory until you choose Save
+            to account and it is confirmed. Reloading or closing the tab can lose unsaved account
+            changes. Existing legacy account caches are ignored without deleting them. Small
+            device-only preferences, including notice acknowledgements and installation prompt
+            state, are stored locally. A short-lived sign-in marker in session storage records only
+            the fixed login flow and expiry; it contains no credentials, identity or training data.
           </p>
         </section>
 

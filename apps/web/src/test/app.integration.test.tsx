@@ -207,10 +207,10 @@ describe('KendoMenu application flows', () => {
       throw new Error('Expected the local storage policy section.');
     }
     expect(localStorageSection).toHaveTextContent(
-      'Guest dashboard training sessions are stored locally in your browser and are not sent to an account service unless you choose to add them to a new account.',
+      'Guest dashboard training sessions are stored locally in your browser. Signing in does not upload or change them.',
     );
     expect(localStorageSection).toHaveTextContent(
-      'Signed-in account dashboards are saved locally and synchronized with the KendoMenu account service.',
+      'Account edits stay in this tab’s memory until you choose Save to account and it is confirmed. Reloading or closing the tab can lose unsaved account changes.',
     );
 
     const analyticsSection = screen.getByRole('heading', { name: 'Analytics' }).closest('section');
@@ -246,7 +246,12 @@ describe('KendoMenu application flows', () => {
       within(footerNavigation)
         .getAllByRole('link')
         .map((link) => link.getAttribute('href')),
-    ).toEqual(['/app#how-it-works-title', '/app/library', '/app/dashboard', '/app#faq-title']);
+    ).toEqual([
+      '/app#how-it-works-title',
+      '/app/guest/library',
+      '/app/guest/dashboard',
+      '/app#faq-title',
+    ]);
 
     const informationNavigation = within(footer).getByRole('navigation', { name: 'Information' });
     expect(within(informationNavigation).getByRole('link', { name: 'Sources' })).toHaveAttribute(
@@ -356,9 +361,6 @@ describe('KendoMenu application flows', () => {
     expect(faqButton).toHaveAttribute('aria-expanded', 'true');
     expect(document.getElementById('what-is-kendomenu-answer')).not.toHaveAttribute('hidden');
 
-    const browseLink = screen.getByRole('link', { name: 'Browse Keiko library' });
-    expect(browseLink).toHaveClass('landing-primary-action');
-    expect(browseLink).toHaveTextContent('BROWSE KEIKO LIBRARY HERE →');
     expect(
       screen.getByText('exercises across all training sessions', { exact: true }),
     ).toBeVisible();
@@ -369,10 +371,23 @@ describe('KendoMenu application flows', () => {
     ).toBeVisible();
 
     const recordLink = screen.getByRole('link', { name: 'Record your first keiko' });
-    expect(recordLink).toHaveAttribute('href', '/app/library');
+    expect(recordLink).toHaveAttribute('href', '/app/guest/dashboard');
     expect(recordLink).toHaveClass('landing-primary-action');
 
-    await user.click(browseLink);
+    const continueAsGuest = screen.getByRole('link', { name: 'Continue as a guest' });
+    expect(continueAsGuest).toHaveAttribute('href', '/app/guest/dashboard');
+    await user.click(continueAsGuest);
+    expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
+    await user.click(within(header).getByRole('link', { name: 'KendoMenu home' }));
+    expect(
+      screen.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
+        name: /Keiko library/,
+      }),
+    );
     expect(screen.getByRole('heading', { name: 'Keiko library' })).toBeInTheDocument();
 
     await user.click(within(header).getByRole('link', { name: 'KendoMenu home' }));
@@ -445,8 +460,8 @@ describe('KendoMenu application flows', () => {
     ).getAllByRole('link');
     expect(navigationLinks.map((link) => link.getAttribute('href'))).toEqual([
       '/app#how-it-works-title',
-      '/app/library',
-      '/app/dashboard',
+      '/app/guest/library',
+      '/app/guest/dashboard',
       '/app#faq-title',
     ]);
     expect(
@@ -466,7 +481,6 @@ describe('KendoMenu application flows', () => {
     const menuToggle = screen.getByRole('button', { name: 'Open navigation' });
     expect(menuToggle).toHaveAttribute('aria-controls', 'primary-navigation');
     expect(menuToggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByRole('status', { name: 'Saved on this device' })).toBeInTheDocument();
 
     await user.click(menuToggle);
     expect(screen.getByRole('button', { name: 'Close navigation' })).toHaveAttribute(
@@ -482,13 +496,14 @@ describe('KendoMenu application flows', () => {
     expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveFocus();
 
     await user.click(screen.getByRole('button', { name: 'Open navigation' }));
-    await user.click(
-      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
-        name: 'Dashboard',
-      }),
-    );
+    const dashboardLink = within(
+      screen.getByRole('navigation', { name: 'Primary navigation' }),
+    ).getByRole('link', { name: 'Dashboard' });
+    expect(dashboardLink).toHaveAttribute('href', '/app/guest/dashboard');
+    await user.click(dashboardLink);
 
     expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Saved on this device' })).toBeInTheDocument();
     expect(screen.getByText('Shape today’s keiko to fit the practice ahead.')).toBeVisible();
     expect(screen.queryByRole('link', { name: /^Create session$/ })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Browse Keiko library' })).toBeVisible();
@@ -537,7 +552,7 @@ describe('KendoMenu application flows', () => {
     renderApp(store, { initialEntries: ['/app/dashboard'] });
 
     const createLink = screen.getByRole('link', { name: 'Create new menu' });
-    expect(createLink).toHaveAttribute('href', '/app/drills/new');
+    expect(createLink).toHaveAttribute('href', '/app/guest/drills/new');
     await user.click(createLink);
     expect(screen.getByRole('heading', { name: 'Create a training session' })).toBeInTheDocument();
   });
@@ -714,7 +729,9 @@ describe('KendoMenu application flows', () => {
     expect(document.title).toBe('Keiko library · KendoMenu');
 
     view.unmount();
-    const builderView = renderApp(createTestStore(), { initialEntries: ['/app/drills/new'] });
+    const builderView = renderApp(createTestStore(), {
+      initialEntries: ['/app/guest/drills/new'],
+    });
     expect(screen.getByRole('heading', { name: 'Create a training session' })).toBeInTheDocument();
     expect(document.title).toBe('Create session · KendoMenu');
     expect(screen.getByLabelText('Session name')).toBeVisible();
@@ -734,7 +751,7 @@ describe('KendoMenu application flows', () => {
     const backLink = screen.getByRole('link', { name: 'Back to keiko library' });
     expect(backLink).toBeVisible();
     expect(backLink).toHaveTextContent('← Back to keiko library');
-    expect(backLink).toHaveAttribute('href', '/app/library');
+    expect(backLink).toHaveAttribute('href', '/app/guest/library');
     expect(screen.queryByRole('link', { name: '← Back to keiko library' })).not.toBeInTheDocument();
     expect(
       screen.getByText(
@@ -754,9 +771,9 @@ describe('KendoMenu application flows', () => {
 
     renderApp(createTestStore(), {
       initialEntries: [
-        '/app/library',
+        '/app/guest/library',
         {
-          pathname: '/app/dashboard',
+          pathname: '/app/guest/dashboard',
           state: createSavedMenuNavigationState(menuName),
         },
       ],
@@ -823,7 +840,7 @@ describe('KendoMenu application flows', () => {
     expect(within(card).getByText('25 activities')).toBeVisible();
     expect(within(card).getByRole('link', { name: 'View session' })).toHaveAttribute(
       'href',
-      '/app/library?drill=international-dojo-2-hour-session',
+      '/app/guest/library?drill=international-dojo-2-hour-session',
     );
     expect(within(card).queryByRole('button')).not.toBeInTheDocument();
   });

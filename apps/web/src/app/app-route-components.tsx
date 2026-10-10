@@ -17,14 +17,17 @@ import {
   readCookieNoticeAcknowledgement,
 } from '../lib/cookie-notice';
 import { updateRouteMetadata } from '../lib/route-metadata';
-import { scheduleGuestPageview, subscribeToAccountTransitions } from '../lib/guest-pageview';
-import { useOptionalAccountWorkspace } from '../features/account/AccountWorkspaceProvider';
+import { scheduleGuestPageview } from '../lib/guest-pageview';
+import { useManagedAuth } from '../lib/managed-auth-context';
 
 const routeTitles: Readonly<Record<string, string>> = {
   '/app': 'Plan your keiko',
-  '/app/dashboard': 'Dashboard',
-  '/app/library': 'Keiko library',
-  '/app/drills/new': 'Create session',
+  '/app/guest/dashboard': 'Dashboard',
+  '/app/guest/library': 'Keiko library',
+  '/app/guest/drills/new': 'Create session',
+  '/app/account/dashboard': 'Dashboard',
+  '/app/account/library': 'Keiko library',
+  '/app/account/drills/new': 'Create session',
   '/app/sources': 'Sources',
   '/app/glossary': 'Glossary',
   '/cookies': 'Cookie Policy',
@@ -211,7 +214,7 @@ function RouteFocusAndTitle(): ReactElement {
   useEffect(() => {
     const title =
       routeTitles[location.pathname] ??
-      (location.pathname.startsWith('/app/library/') ? 'Session details' : 'KendoMenu');
+      (location.pathname.includes('/library/') ? 'Session details' : 'KendoMenu');
     updateRouteMetadata({
       pathname: location.pathname,
       search: location.search,
@@ -235,7 +238,7 @@ export function RouteRoot() {
     authErrorMessages.get(authErrorFromNavigationState(location.state) ?? '') ??
     null;
   const navigate = useNavigate();
-  const accountWorkspace = useOptionalAccountWorkspace();
+  const { identity } = useManagedAuth();
   const pageviewScheduled = useRef(false);
   const cancelScheduledPageview = useRef<(() => boolean) | null>(null);
   const initialPathname = useRef(location.pathname);
@@ -267,46 +270,31 @@ export function RouteRoot() {
   }, [location.pathname, location.search, navigate]);
 
   useEffect(() => {
-    const accountVerification = accountWorkspace?.verification;
-    const workspaceMode = accountWorkspace?.snapshot.mode;
-    if (accountVerification === 'authenticated' || accountVerification === 'retryable') {
-      // The document's initial check did not prove signed out. Later logout or recovery
-      // must not turn an authenticated or unresolved visit into an analytics pageview.
-      pageviewScheduled.current = true;
-      cancelScheduledPageview.current?.();
+    if (identity.status !== 'signed-out' || location.pathname.startsWith('/app/account')) {
+      if (cancelScheduledPageview.current?.()) {
+        pageviewScheduled.current = false;
+      }
       cancelScheduledPageview.current = null;
+      if (identity.status !== 'checking') pageviewScheduled.current = true;
       return;
     }
-    if (
-      accountVerification !== 'signed-out' ||
-      workspaceMode !== 'guest' ||
-      pageviewScheduled.current
-    )
-      return;
+    if (pageviewScheduled.current) return;
     pageviewScheduled.current = true;
     cancelScheduledPageview.current = scheduleGuestPageview(initialPathname.current);
-  }, [accountWorkspace?.snapshot.mode, accountWorkspace?.verification]);
-
-  useEffect(() => {
-    if (accountWorkspace?.snapshot.mode !== 'guest') {
-      cancelScheduledPageview.current?.();
-      cancelScheduledPageview.current = null;
-    }
-  }, [accountWorkspace?.snapshot.mode]);
+  }, [identity.status, location.pathname]);
 
   useEffect(() => {
     const cancelPageview = () => {
-      pageviewScheduled.current = true;
-      cancelScheduledPageview.current?.();
+      const cancelled = cancelScheduledPageview.current?.();
+      if (cancelled === true) pageviewScheduled.current = false;
+      else if (cancelled === false) pageviewScheduled.current = true;
       cancelScheduledPageview.current = null;
     };
     window.addEventListener('kendomenu:sign-in-started', cancelPageview);
     window.addEventListener('kendomenu:session-verification-started', cancelPageview);
-    const transitions = subscribeToAccountTransitions(cancelPageview);
     return () => {
       window.removeEventListener('kendomenu:sign-in-started', cancelPageview);
       window.removeEventListener('kendomenu:session-verification-started', cancelPageview);
-      transitions.unsubscribe();
       if (cancelScheduledPageview.current?.()) pageviewScheduled.current = false;
       cancelScheduledPageview.current = null;
     };
