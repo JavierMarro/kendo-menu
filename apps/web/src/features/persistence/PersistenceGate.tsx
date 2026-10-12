@@ -83,10 +83,7 @@ export function PersistenceGate({
     }
     setBuilderDirty(dirty);
   }, []);
-  // Guest persistence only needs the lock boundary. Storage events are intentionally disabled
-  // here because this provider does not consume invalidation notifications, and constructing an
-  // event-owning coordinator during render is unsafe under React StrictMode's discarded renders.
-  const coordination = useMemo(() => createWorkspaceCoordinator({ events: null }), []);
+  const coordination = useMemo(() => createWorkspaceCoordinator(), []);
 
   const onWriteError = useCallback(() => {
     setWriteFailed(true);

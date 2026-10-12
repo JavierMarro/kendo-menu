@@ -1,58 +1,19 @@
 /**
- * Adoption transport and public-response contracts.
+ * Adoption request transport contracts.
  *
  * Adoption deliberately reuses the complete-dashboard wire payload for a Yes
  * decision. The account/session proof is supplied by the authentication
  * boundary; the expected account identifier remains a mismatch guard only.
  */
-import type { DashboardWriteAcknowledgement, Timestamp } from '../dashboard/contracts.js';
-import { hashCanonicalJson } from '../dashboard/canonicalization.js';
 import {
   isAccountWorkspaceId,
   isCatalogueVersion,
-  isNonZeroRevision,
   isRequestId,
   isRevision,
-  isTimestamp,
   validateDashboardWrite,
 } from '../dashboard/validation.js';
 import type { ValidatedDashboardWrite } from '../dashboard/validation.js';
-import type {
-  AccountWorkspaceId,
-  CatalogueVersion,
-  NonZeroRevision,
-  RequestId,
-} from '../dashboard/contracts.js';
-
-export type AdoptionDecision = 'yes' | 'no';
-
-export interface AdoptionCompletionAccepted {
-  readonly decision: 'yes';
-  readonly requestId: RequestId;
-  readonly acknowledgedRevision: NonZeroRevision;
-  readonly timestamp: Timestamp;
-}
-
-export interface AdoptionCompletionDeclined {
-  readonly decision: 'no';
-  readonly requestId: RequestId;
-}
-
-export type AdoptionCompletion = AdoptionCompletionAccepted | AdoptionCompletionDeclined;
-
-/** Public state returned as part of the authenticated session response. */
-export type AdoptionStatus =
-  | { readonly status: 'pending' | 'unavailable'; readonly capability: boolean }
-  | {
-      readonly status: 'accepted';
-      readonly capability: false;
-      readonly completion: AdoptionCompletionAccepted;
-    }
-  | {
-      readonly status: 'declined';
-      readonly capability: false;
-      readonly completion: AdoptionCompletionDeclined;
-    };
+import type { AccountWorkspaceId, CatalogueVersion, RequestId } from '../dashboard/contracts.js';
 
 export interface AdoptionNoRequest {
   readonly decision: 'no';
@@ -61,7 +22,6 @@ export interface AdoptionNoRequest {
   readonly copyOpportunityId: string;
   readonly requestId: RequestId;
 }
-
 export interface AdoptionYesRequest {
   readonly decision: 'yes';
   readonly transportVersion: 1;
@@ -81,8 +41,6 @@ export type AdoptionRequest = AdoptionYesRequest | AdoptionNoRequest;
 /** The structural result after strict JSON and dashboard validation. */
 export interface ValidatedAdoptionRequest {
   readonly request: AdoptionRequest;
-  /** SHA-256 of the complete canonical adoption envelope, including decision. */
-  readonly requestDigest: string;
   /** Present only for a Yes request, and already validated for this account. */
   readonly dashboardIntent?: ValidatedDashboardWrite;
 }
@@ -99,20 +57,6 @@ export type AdoptionRequestValidation =
   | { readonly status: 'valid'; readonly intent: ValidatedAdoptionRequest }
   | { readonly status: 'invalid'; readonly error: AdoptionValidationError };
 
-/** A response intentionally contains only account-scoped public completion data. */
-export type AdoptionResponse =
-  | {
-      readonly status: 'accepted';
-      readonly completion: AdoptionCompletionAccepted;
-      readonly acknowledgement: DashboardWriteAcknowledgement;
-    }
-  | { readonly status: 'declined'; readonly completion: AdoptionCompletionDeclined }
-  | {
-      readonly status: 'replayed';
-      readonly completion: AdoptionCompletion;
-      readonly acknowledgement?: DashboardWriteAcknowledgement;
-    };
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -121,75 +65,6 @@ function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): 
   return (
     Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key))
   );
-}
-
-/**
- * Validate the public session adoption union at the authentication boundary.
- * Persistence and adapter results are treated as untrusted values here so a
- * malformed row can never add private fields to the response.
- */
-export function validateAdoptionStatus(value: unknown): AdoptionStatus | null {
-  if (!isRecord(value)) return null;
-  const status = value['status'];
-  const capability = value['capability'];
-  if (status === 'pending' || status === 'unavailable') {
-    if (
-      !hasExactKeys(value, ['status', 'capability']) ||
-      typeof capability !== 'boolean' ||
-      (status === 'unavailable' && capability)
-    ) {
-      return null;
-    }
-    return Object.freeze({ status, capability });
-  }
-
-  if (status !== 'accepted' && status !== 'declined') return null;
-  if (capability !== false || !hasExactKeys(value, ['status', 'capability', 'completion'])) {
-    return null;
-  }
-  const completion = value['completion'];
-  if (!isRecord(completion)) return null;
-
-  if (status === 'declined') {
-    const decision = completion['decision'];
-    const requestId = completion['requestId'];
-    if (
-      decision !== 'no' ||
-      !isRequestId(requestId) ||
-      !hasExactKeys(completion, ['decision', 'requestId'])
-    ) {
-      return null;
-    }
-    return Object.freeze({
-      status,
-      capability: false,
-      completion: Object.freeze({ decision: 'no', requestId }),
-    });
-  }
-
-  const decision = completion['decision'];
-  const requestId = completion['requestId'];
-  const acknowledgedRevision = completion['acknowledgedRevision'];
-  const timestamp = completion['timestamp'];
-  if (
-    decision !== 'yes' ||
-    !isRequestId(requestId) ||
-    !isNonZeroRevision(acknowledgedRevision) ||
-    !isTimestamp(timestamp) ||
-    !hasExactKeys(completion, ['decision', 'requestId', 'acknowledgedRevision', 'timestamp'])
-  ) {
-    return null;
-  }
-  return Object.freeze({
-    status,
-    capability: false,
-    completion: Object.freeze({
-      decision: 'yes',
-      requestId,
-      acknowledgedRevision,
-      timestamp,
-    }),
-  });
 }
 
 /**
@@ -255,7 +130,6 @@ export function validateAdoptionRequest(
         status: 'valid',
         intent: Object.freeze({
           request,
-          requestDigest: hashCanonicalJson(request),
         }),
       };
     }
@@ -351,46 +225,10 @@ export function validateAdoptionRequest(
       status: 'valid',
       intent: Object.freeze({
         request,
-        requestDigest: hashCanonicalJson(request),
         dashboardIntent,
       }),
     };
   } catch {
     return invalid('INVALID_ADOPTION_REQUEST');
   }
-}
-
-/** Build an accepted public completion from a persistence result. */
-export function validateAdoptionCompletion(value: unknown): AdoptionCompletion | null {
-  if (!isRecord(value)) return null;
-  const decision = value['decision'];
-  const requestId = value['requestId'];
-  if (decision === 'no') {
-    if (!hasExactKeys(value, ['decision', 'requestId']) || !isRequestId(requestId)) return null;
-    return Object.freeze({ decision: 'no', requestId });
-  }
-  if (
-    decision !== 'yes' ||
-    !hasExactKeys(value, ['decision', 'requestId', 'acknowledgedRevision', 'timestamp'])
-  ) {
-    return null;
-  }
-  const acknowledgedRevision = value['acknowledgedRevision'];
-  const rawTimestamp = value['timestamp'];
-  let timestamp: unknown = rawTimestamp;
-  if (rawTimestamp instanceof Date) {
-    try {
-      timestamp = Date.prototype.toISOString.call(rawTimestamp);
-    } catch {
-      return null;
-    }
-  }
-  if (
-    !isRequestId(requestId) ||
-    !isNonZeroRevision(acknowledgedRevision) ||
-    !isTimestamp(timestamp)
-  ) {
-    return null;
-  }
-  return Object.freeze({ decision: 'yes', requestId, acknowledgedRevision, timestamp });
 }

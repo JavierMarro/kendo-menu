@@ -1,15 +1,10 @@
-import { serializePersistedTrainingStateV10 } from '@kendo-menu/store';
 import { describe, expect, it } from 'vitest';
 
 import {
   createWorkspaceCoordinator,
   GUEST_WORKSPACE_LOCK_NAME,
   type WorkspaceLockProvider,
-  type WorkspaceStorageEvent,
-  type WorkspaceStorageEventSource,
 } from './workspace-coordination';
-
-const EMPTY_CACHE = serializePersistedTrainingStateV10({ dashboardEntries: [] });
 
 class FakeLocks implements WorkspaceLockProvider {
   readonly names: string[] = [];
@@ -32,28 +27,10 @@ class FakeLocks implements WorkspaceLockProvider {
   }
 }
 
-class FakeEvents implements WorkspaceStorageEventSource {
-  listener: ((event: WorkspaceStorageEvent) => void) | undefined;
-  removed = 0;
-
-  addEventListener(_type: 'storage', listener: (event: WorkspaceStorageEvent) => void): void {
-    this.listener = listener;
-  }
-
-  removeEventListener(_type: 'storage', listener: (event: WorkspaceStorageEvent) => void): void {
-    if (this.listener === listener) this.listener = undefined;
-    this.removed += 1;
-  }
-
-  emit(event: WorkspaceStorageEvent): void {
-    this.listener?.(event);
-  }
-}
-
 describe('guest workspace coordination', () => {
   it('serializes operations under the fixed guest lock', async () => {
     const locks = new FakeLocks();
-    const coordinator = createWorkspaceCoordinator({ locks, events: null });
+    const coordinator = createWorkspaceCoordinator({ locks });
     const order: string[] = [];
     const first = coordinator.withLock(async () => {
       order.push('first-start');
@@ -69,7 +46,7 @@ describe('guest workspace coordination', () => {
   });
 
   it('reports unavailable coordination and rejects failed or null locks', async () => {
-    const unavailable = createWorkspaceCoordinator({ locks: null, events: null });
+    const unavailable = createWorkspaceCoordinator({ locks: null });
     expect(unavailable.isAvailable).toBe(false);
     await expect(unavailable.withLock(() => undefined)).rejects.toMatchObject({
       code: 'unavailable',
@@ -78,62 +55,51 @@ describe('guest workspace coordination', () => {
     const rejected: WorkspaceLockProvider = {
       request: () => Promise.reject(new Error('lock failed')),
     };
-    const failed = createWorkspaceCoordinator({ locks: rejected, events: null });
+    const failed = createWorkspaceCoordinator({ locks: rejected });
     await expect(failed.withLock(() => undefined)).rejects.toMatchObject({ code: 'unavailable' });
-    expect(failed.availability).toBe('unavailable');
+    expect(failed.isAvailable).toBe(false);
 
     const nullGrant: WorkspaceLockProvider = {
       request: (_name, callback) => Promise.resolve(callback(null)),
     };
     await expect(
-      createWorkspaceCoordinator({ locks: nullGrant, events: null }).withLock(() => undefined),
+      createWorkspaceCoordinator({ locks: nullGrant }).withLock(() => undefined),
     ).rejects.toMatchObject({ code: 'unavailable' });
   });
 
-  it('notifies only subscribers to valid same-origin guest storage changes', () => {
-    const events = new FakeEvents();
-    const coordinator = createWorkspaceCoordinator({
-      locks: null,
-      events,
-      storageArea: 'local',
-      origin: 'https://menu.test',
-    });
-    const values: Array<string | null> = [];
-    const unsubscribe = coordinator.subscribe((change) => values.push(change.newValue));
-    const valid = {
-      key: 'kendo-menu',
-      newValue: EMPTY_CACHE,
-      storageArea: 'local',
-      url: 'https://menu.test/app',
+  it('rejects a queued lock callback after disposal', async () => {
+    let grantLock: (() => void) | undefined;
+    let entered = false;
+    const locks: WorkspaceLockProvider = {
+      request: (_name, callback) =>
+        new Promise((resolve, reject) => {
+          grantLock = () => {
+            void Promise.resolve()
+              .then(() => callback({ name: GUEST_WORKSPACE_LOCK_NAME, mode: 'exclusive' }))
+              .then(resolve, reject);
+          };
+        }),
     };
-    events.emit(valid);
-    events.emit({ ...valid, key: 'other-key' });
-    events.emit({ ...valid, newValue: '{broken' });
-    events.emit({ ...valid, storageArea: 'session' });
-    events.emit({ ...valid, url: 'https://other.test/app' });
-    events.emit({
-      key: 'kendo-menu',
-      newValue: null,
-      storageArea: 'local',
-      url: 'https://menu.test/app',
+    const coordinator = createWorkspaceCoordinator({ locks });
+    const pending = coordinator.withLock(() => {
+      entered = true;
     });
-    expect(values).toEqual([EMPTY_CACHE, null]);
-    unsubscribe();
-    events.emit(valid);
-    expect(values).toHaveLength(2);
     coordinator.dispose();
-    expect(events.removed).toBe(1);
+    grantLock?.();
+    await expect(pending).rejects.toMatchObject({ code: 'unavailable' });
+    expect(entered).toBe(false);
+    expect(coordinator.isAvailable).toBe(false);
   });
 
   it('preserves operation errors and keeps coordination usable after acquiring the lock', async () => {
-    const coordinator = createWorkspaceCoordinator({ locks: new FakeLocks(), events: null });
+    const coordinator = createWorkspaceCoordinator({ locks: new FakeLocks() });
     const storageError = new Error('Storage write failed');
     await expect(
       coordinator.withLock(() => {
         throw storageError;
       }),
     ).rejects.toBe(storageError);
-    expect(coordinator.availability).toBe('available');
+    expect(coordinator.isAvailable).toBe(true);
     await expect(coordinator.withLock(() => 'recovered')).resolves.toBe('recovered');
   });
 });

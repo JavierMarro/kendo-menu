@@ -73,7 +73,7 @@ describe('browser training persistence adapter', () => {
         return Promise.resolve().then(() => callback({ name, mode: 'exclusive' }));
       },
     };
-    return createWorkspaceCoordinator({ locks, events: null });
+    return createWorkspaceCoordinator({ locks });
   }
 
   it.each([
@@ -145,7 +145,6 @@ describe('browser training persistence adapter', () => {
       locks: {
         request: () => Promise.reject(new Error('lock provider unavailable')),
       },
-      events: null,
     });
     const storage = createBrowserTrainingStorage({
       coordination,
@@ -241,7 +240,7 @@ describe('browser training persistence adapter', () => {
     };
     let writes = 0;
     const storage = createBrowserTrainingStorage({
-      coordination: createWorkspaceCoordinator({ locks, events: null }),
+      coordination: createWorkspaceCoordinator({ locks }),
       storage: {
         getItem: () => null,
         setItem: () => {
