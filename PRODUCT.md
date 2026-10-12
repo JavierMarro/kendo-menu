@@ -55,7 +55,7 @@ activity quantities and notes can be adapted without mutating the built-in libra
   public-release gates. No deployment or provisioning is authorized. Paid tiers and initialization
   of `apps/mobile` remain out of scope.
 
-## Account journey — internal Migration C
+## Account journey — internal Migrations C and D
 
 [Migration C](docs/MANAGED_ACCOUNT_WEB.md) separates `/app/guest/*` and `/app/account/*` routes,
 reusing the dashboard, library and custom-session builder. The landing offers Continue as a guest
@@ -73,10 +73,14 @@ reload. Failures retain this tab's draft without claiming local durability. Relo
 can lose unsaved work; intentional discard is warned and browser leave warnings are best effort.
 Sign-out hides account content, fences late requests and returns home.
 
-Guest and account data remain independent; signing in never combines or uploads guest data. Legacy
-account caches are ignored without deletion. Migration D's separate one-time guest-copy setup UI
-has not begun. C holds B's creation response/opportunity only in memory for that later route; it
-neither infers eligibility from an empty account nor calls adoption. A committed ordinary Save
+Guest and account data remain independent; signing in alone never uploads guest data. Legacy
+account caches are ignored without deletion. [Migration D](docs/MANAGED_GUEST_COPY.md) offers a
+separate Yes/No setup screen only with the winning account-creation response, its one-time
+opportunity, an eligible cloud dashboard and complete valid non-empty guest data. Yes creates an
+independent online copy while leaving guest bytes unchanged; No permanently declines. Dispatch,
+skipping or abandoning setup releases the browser handoff. An interruption may lose the opportunity;
+there is no import retry or later import button. Account editing resumes only after authoritative
+dashboard loading; ordinary load and Save retries remain separate. A committed ordinary Save
 consumes an unused opportunity. [ADR 0007](docs/adr/0007-managed-auth-online-account-drafts.md)
 supersedes offline account caching, custom sessions and interrupted-copy recovery. C remains
 internal work, not a public account release.

@@ -5,7 +5,7 @@ export function createDevelopmentProxyRules(
   proofRequestAllowed: (request: IncomingMessage) => boolean,
 ): Record<string, ProxyOptions> {
   return {
-    '^/api/(?:account|dashboard)(?:\\?.*)?$': {
+    '^/api/(?:account|dashboard(?:/adoption)?)(?:\\?.*)?$': {
       target: 'http://127.0.0.1:3000',
       changeOrigin: false,
     },

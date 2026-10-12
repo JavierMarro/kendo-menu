@@ -3,10 +3,13 @@ import { encodeDashboardPersistenceV10 } from '@kendo-menu/domain/dashboard-pers
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  ADOPTION_ENDPOINT,
   AccountApiError,
   createAccountApiClient,
   MAX_DASHBOARD_REQUEST_BYTES,
   MAX_JSON_RESPONSE_BYTES,
+  type AdoptionAcknowledgement,
+  type AdoptionDecisionRequest,
   type DashboardReadResponse,
   type DashboardWriteRequest,
 } from './account-api';
@@ -15,6 +18,7 @@ const ACCOUNT = '01234567-89ab-4cde-8fab-0123456789ab';
 const OTHER = '01234567-89ab-4cde-8fab-0123456789ac';
 const REQUEST = '01234567-89ab-4cde-8fab-0123456789ad';
 const CATALOGUE = 'a'.repeat(64);
+const TIMESTAMP = '2026-10-07T10:00:00.000Z';
 const token = () => Promise.resolve({ status: 'token', token: 'synthetic-bearer' } as const);
 const account = { accountId: ACCOUNT, email: 'practitioner@example.test' };
 const read = (): DashboardReadResponse => ({
@@ -32,6 +36,60 @@ const write = (): DashboardWriteRequest => ({
   requestId: REQUEST,
   catalogueVersion: CATALOGUE,
   dashboard: { version: 10, state: { dashboardEntries: [] } },
+});
+
+const adoptionYes = (): AdoptionDecisionRequest => {
+  const trainingSet = DEFAULT_TRAINING_SETS[0];
+  if (trainingSet === undefined) throw new Error('Expected curated fixture.');
+  return {
+    transportVersion: 1,
+    decision: 'yes',
+    expectedAccountWorkspaceId: ACCOUNT,
+    copyOpportunityId: REQUEST,
+    requestId: REQUEST,
+    expectedRevision: '0',
+    catalogueVersion: CATALOGUE,
+    dashboard: {
+      version: 10,
+      state: encodeDashboardPersistenceV10({
+        dashboardEntries: [
+          {
+            id: 'entry-1',
+            trainingSetId: trainingSet.id,
+            quantityOverrides: {},
+            activityNotes: {},
+            notes: 'Guest snapshot',
+            createdAt: TIMESTAMP,
+          },
+        ],
+      }),
+    },
+  };
+};
+
+const adoptionNo = (): AdoptionDecisionRequest => ({
+  transportVersion: 1,
+  decision: 'no',
+  expectedAccountWorkspaceId: ACCOUNT,
+  copyOpportunityId: REQUEST,
+  requestId: REQUEST,
+});
+
+const acceptedAdoption = (requestId = REQUEST) => ({
+  status: 'accepted',
+  completion: {
+    decision: 'yes',
+    requestId,
+    acknowledgedRevision: '1',
+    timestamp: TIMESTAMP,
+  },
+  acknowledgement: {
+    transportVersion: 1,
+    accountWorkspaceId: ACCOUNT,
+    requestId,
+    revision: '1',
+    updatedAt: TIMESTAMP,
+  },
 });
 function client(body: unknown, status = 200) {
   const transport = vi.fn<typeof fetch>().mockResolvedValue(Response.json(body, { status }));
@@ -148,6 +206,261 @@ describe('managed bearer account API boundary', () => {
         kind: 'invalid-response',
       });
     }
+  });
+
+  it('sends the exact complete Yes request and accepts its matching acknowledgement', async () => {
+    const request = adoptionYes();
+    const { api, transport } = client(acceptedAdoption());
+
+    const acknowledgement: AdoptionAcknowledgement = await api.postAdoption(ACCOUNT, request);
+    expect(acknowledgement).toEqual({
+      status: 'accepted',
+      completion: {
+        decision: 'yes',
+        requestId: REQUEST,
+        acknowledgedRevision: '1',
+        timestamp: TIMESTAMP,
+      },
+      acknowledgement: {
+        transportVersion: 1,
+        accountWorkspaceId: ACCOUNT,
+        requestId: REQUEST,
+        revision: '1',
+        updatedAt: TIMESTAMP,
+      },
+    });
+    expect(transport).toHaveBeenCalledWith(
+      ADOPTION_ENDPOINT,
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'omit',
+        cache: 'no-store',
+        redirect: 'error',
+        headers: {
+          accept: 'application/json',
+          authorization: 'Bearer synthetic-bearer',
+          'content-type': 'application/json',
+        },
+      }),
+    );
+    const body = transport.mock.calls[0]?.[1]?.body;
+    if (typeof body !== 'string') throw new Error('Expected the serialized adoption envelope.');
+    expect(JSON.parse(body) as unknown).toEqual(request);
+  });
+
+  it('sends only the strict No envelope and requires its matching decline acknowledgement', async () => {
+    const request = adoptionNo();
+    const { api, transport } = client({
+      status: 'declined',
+      completion: { decision: 'no', requestId: REQUEST },
+    });
+
+    const acknowledgement: AdoptionAcknowledgement = await api.postAdoption(ACCOUNT, request);
+    expect(acknowledgement).toEqual({
+      status: 'declined',
+      completion: { decision: 'no', requestId: REQUEST },
+    });
+    const body = transport.mock.calls[0]?.[1]?.body;
+    if (typeof body !== 'string') throw new Error('Expected the serialized adoption envelope.');
+    expect(JSON.parse(body) as unknown).toEqual(request);
+    expect(Object.keys(JSON.parse(body) as object).sort()).toEqual([
+      'copyOpportunityId',
+      'decision',
+      'expectedAccountWorkspaceId',
+      'requestId',
+      'transportVersion',
+    ]);
+  });
+
+  it.each([
+    ['wrong status', { ...acceptedAdoption(), status: 'declined' }],
+    [
+      'wrong completion request id',
+      {
+        ...acceptedAdoption(),
+        completion: { ...acceptedAdoption().completion, requestId: OTHER },
+      },
+    ],
+    [
+      'wrong acknowledgement account',
+      {
+        ...acceptedAdoption(),
+        acknowledgement: { ...acceptedAdoption().acknowledgement, accountWorkspaceId: OTHER },
+      },
+    ],
+    [
+      'wrong acknowledgement request id',
+      {
+        ...acceptedAdoption(),
+        acknowledgement: { ...acceptedAdoption().acknowledgement, requestId: OTHER },
+      },
+    ],
+    [
+      'wrong acknowledged revision',
+      {
+        ...acceptedAdoption(),
+        completion: { ...acceptedAdoption().completion, acknowledgedRevision: '2' },
+      },
+    ],
+    [
+      'wrong acknowledgement revision',
+      {
+        ...acceptedAdoption(),
+        acknowledgement: { ...acceptedAdoption().acknowledgement, revision: '2' },
+      },
+    ],
+    [
+      'mismatched timestamp',
+      {
+        ...acceptedAdoption(),
+        completion: { ...acceptedAdoption().completion, timestamp: '2026-10-07T10:00:01.000Z' },
+      },
+    ],
+    [
+      'invalid completion timestamp',
+      {
+        ...acceptedAdoption(),
+        completion: { ...acceptedAdoption().completion, timestamp: 'yesterday' },
+      },
+    ],
+    [
+      'missing acknowledgement revision',
+      {
+        ...acceptedAdoption(),
+        acknowledgement: {
+          transportVersion: 1,
+          accountWorkspaceId: ACCOUNT,
+          requestId: REQUEST,
+          updatedAt: TIMESTAMP,
+        },
+      },
+    ],
+    [
+      'invalid timestamp',
+      {
+        ...acceptedAdoption(),
+        acknowledgement: { ...acceptedAdoption().acknowledgement, updatedAt: 'yesterday' },
+      },
+    ],
+    [
+      'extra acknowledgement property',
+      {
+        ...acceptedAdoption(),
+        acknowledgement: { ...acceptedAdoption().acknowledgement, replayed: true },
+      },
+    ],
+    [
+      'extra completion property',
+      {
+        ...acceptedAdoption(),
+        completion: { ...acceptedAdoption().completion, replayed: true },
+      },
+    ],
+    ['extra response property', { ...acceptedAdoption(), replayed: true }],
+    [
+      'missing acknowledgement',
+      {
+        status: 'accepted',
+        completion: acceptedAdoption().completion,
+      },
+    ],
+  ])('rejects Yes adoption acknowledgement with %s', async (_case, body) => {
+    await expect(client(body).api.postAdoption(ACCOUNT, adoptionYes())).rejects.toMatchObject({
+      kind: 'invalid-response',
+    });
+  });
+
+  it.each([
+    ['wrong status', { status: 'accepted', completion: { decision: 'no', requestId: REQUEST } }],
+    ['missing completion', { status: 'declined' }],
+    ['wrong decision', { status: 'declined', completion: { decision: 'yes', requestId: REQUEST } }],
+    ['wrong request id', { status: 'declined', completion: { decision: 'no', requestId: OTHER } }],
+    [
+      'extra completion property',
+      {
+        status: 'declined',
+        completion: { decision: 'no', requestId: REQUEST, replayed: true },
+      },
+    ],
+    [
+      'extra response property',
+      {
+        status: 'declined',
+        completion: { decision: 'no', requestId: REQUEST },
+        replayed: true,
+      },
+    ],
+  ])('rejects No adoption acknowledgement with %s', async (_case, body) => {
+    await expect(client(body).api.postAdoption(ACCOUNT, adoptionNo())).rejects.toMatchObject({
+      kind: 'invalid-response',
+    });
+  });
+
+  it('uses the adoption {error} contract for 409 while dashboard PUT keeps currentRevision', async () => {
+    await expect(
+      client({ error: 'REVISION_CONFLICT' }, 409).api.postAdoption(ACCOUNT, adoptionYes()),
+    ).rejects.toMatchObject({ status: 409, code: 'REVISION_CONFLICT' });
+    await expect(
+      client({ error: 'REVISION_CONFLICT', currentRevision: '1' }, 409).api.postAdoption(
+        ACCOUNT,
+        adoptionYes(),
+      ),
+    ).rejects.toMatchObject({ kind: 'invalid-response' });
+    await expect(
+      client({ error: 'REVISION_CONFLICT', currentRevision: '1' }, 409).api.putDashboard(
+        ACCOUNT,
+        write(),
+      ),
+    ).rejects.toMatchObject({ status: 409, code: 'REVISION_CONFLICT' });
+  });
+
+  it('binds the serialized adoption to the submitted snapshot before later mutations', async () => {
+    let releaseResponse: ((response: Response) => void) | undefined;
+    let notifyFetchStarted: (() => void) | undefined;
+    const fetchStarted = new Promise<void>((resolve) => {
+      notifyFetchStarted = resolve;
+    });
+    const transport = vi.fn<typeof fetch>(() => {
+      notifyFetchStarted?.();
+      return new Promise((resolve) => {
+        releaseResponse = resolve;
+      });
+    });
+    const request = adoptionYes();
+    const api = createAccountApiClient({ fetch: transport, getToken: token });
+    const pending = api.postAdoption(ACCOUNT, request);
+    Object.defineProperty(request, 'requestId', { value: OTHER });
+    Object.defineProperty(request, 'dashboard', {
+      value: { version: 10, state: { dashboardEntries: [] } },
+    });
+    await fetchStarted;
+    releaseResponse?.(Response.json(acceptedAdoption()));
+
+    await expect(pending).resolves.toMatchObject({ status: 'accepted' });
+    const body = transport.mock.calls[0]?.[1]?.body;
+    if (typeof body !== 'string') throw new Error('Expected the serialized adoption envelope.');
+    expect(JSON.parse(body) as unknown).toEqual(adoptionYes());
+  });
+
+  it('does not retry a lost adoption response or an adoption timeout', async () => {
+    const lostResponse = vi.fn<typeof fetch>().mockRejectedValue(new TypeError('offline'));
+    await expect(
+      createAccountApiClient({ fetch: lostResponse, getToken: token }).postAdoption(
+        ACCOUNT,
+        adoptionYes(),
+      ),
+    ).rejects.toMatchObject({ kind: 'network' });
+    expect(lostResponse).toHaveBeenCalledTimes(1);
+
+    const timeout = vi.fn<typeof fetch>(() => new Promise(() => undefined));
+    await expect(
+      createAccountApiClient({
+        fetch: timeout,
+        getToken: token,
+        requestTimeoutMs: 5,
+      }).postAdoption(ACCOUNT, adoptionYes()),
+    ).rejects.toMatchObject({ kind: 'network' });
+    expect(timeout).toHaveBeenCalledTimes(1);
   });
 
   it('recognizes B revision conflicts with currentRevision without changing the request', async () => {

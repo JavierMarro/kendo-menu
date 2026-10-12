@@ -4,8 +4,8 @@ Migration B replaces the API's custom OAuth/application-session runtime with Mig
 branch-bound Neon JWT verifier. It preserves generated internal account UUIDs, legacy rows,
 guest LocalStorage and ordinary dashboard Save contracts. [Migration C](MANAGED_ACCOUNT_WEB.md)
 now consumes B with separate guest/account routes, memory-only drafts and explicit Save, retiring
-the browser session/CSRF contract and cache/synchronization modules. Migration D copy UI has not
-begun; C neither calls adoption nor changes this backend contract.
+the browser session/CSRF contract and cache/synchronization modules. [Migration D](MANAGED_GUEST_COPY.md)
+adds the frontend copy setup screen without changing this backend contract.
 No deployment, remote migration or external configuration change is part of this implementation.
 
 ## Authorization and frontend contract

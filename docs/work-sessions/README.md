@@ -26,6 +26,7 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-10-10 — managed guest copy](./2026-10-10-managed-guest-copy.md)
 - [2026-10-07 — managed account web](./2026-10-07-managed-account-web.md)
 - [2026-10-05 — managed dashboard backend](./2026-10-05-managed-dashboard-backend.md)
 - [2026-10-05 — managed auth owner review and gate amendment](./2026-10-05-managed-auth-owner-review.md)

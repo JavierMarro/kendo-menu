@@ -7,7 +7,10 @@ import {
 
 import {
   AccountApiError,
+  normalizeAdoptionRequest,
   serializeDashboardWriteRequest,
+  type AdoptionAcknowledgement,
+  type AdoptionDecisionRequest,
   type AccountApiClient,
   type DashboardWriteRequest,
   type ManagedAccountInitialization,
@@ -35,6 +38,7 @@ export interface AccountDraftController {
   save(): Promise<void>;
   retrySave(): Promise<void>;
   reload(): Promise<void>;
+  loadAuthoritativeDashboard(): Promise<void>;
   checkAvailability(): Promise<void>;
   hideForIdentityUncertainty(): void;
   revealForVerifiedAccount(account: ManagedAccountRecord): boolean;
@@ -43,6 +47,11 @@ export interface AccountDraftController {
   dispose(): void;
   download(): void;
   getCreationHandoff(): ManagedAccountInitialization | null;
+  releaseCreationHandoff(): void;
+  setEditingBlocked(blocked: boolean): void;
+  submitAdoption(
+    request: AdoptionDecisionRequest,
+  ): Promise<'accepted' | 'declined' | 'unconfirmed' | 'abandoned' | 'stale'>;
 }
 
 interface FrozenSave {
@@ -63,6 +72,7 @@ export function createAccountDraftController(options: {
   readonly initialization?: ManagedAccountInitialization;
   readonly onAuthenticationRejected?: () => void;
   readonly onIdentityChanged?: () => void;
+  readonly onCreationHandoffReleased?: () => void;
   readonly createRequestId?: () => string;
 }): AccountDraftController {
   let account = options.account;
@@ -71,6 +81,9 @@ export function createAccountDraftController(options: {
   let baseline: string | null = null;
   let pending: FrozenSave | null = null;
   let handoff = options.initialization ?? null;
+  let editingBlocked = false;
+  let adoptionPending = false;
+  let authoritativeLoadRequired = false;
   let online = typeof navigator === 'undefined' || navigator.onLine;
   let serviceAvailable = online;
   let epoch = 0;
@@ -100,9 +113,15 @@ export function createAccountDraftController(options: {
       ...next,
       accountId: account.accountId,
       email: account.email,
-      store: visible ? store : null,
+      store: visible && !authoritativeLoadRequired ? store : null,
       dirty: store !== null && currentRaw() !== baseline,
-      canEdit: next.status === 'ready' && online && serviceAvailable,
+      canEdit:
+        next.status === 'ready' &&
+        online &&
+        serviceAvailable &&
+        !editingBlocked &&
+        !adoptionPending &&
+        !authoritativeLoadRequired,
     };
     for (const listener of listeners) listener();
   }
@@ -113,8 +132,16 @@ export function createAccountDraftController(options: {
     activeRequest = null;
   }
 
+  function releaseHandoff(): void {
+    if (handoff === null) return;
+    handoff = null;
+    options.onCreationHandoffReleased?.();
+    update();
+  }
+
   function hide(): void {
     if (snapshot.status === 'disposed') return;
+    if (adoptionPending) releaseHandoff();
     cancel();
     update({
       status: 'auth-hidden',
@@ -174,6 +201,7 @@ export function createAccountDraftController(options: {
     unsubscribeStore?.();
     store = next;
     baseline = currentRaw();
+    authoritativeLoadRequired = false;
     unsubscribeStore = next.subscribe(() =>
       update({ saveState: snapshot.saveState === 'saved' ? 'idle' : snapshot.saveState }),
     );
@@ -183,6 +211,7 @@ export function createAccountDraftController(options: {
     const verified = await options.api.getAccount(signal);
     if (epoch !== expectedEpoch || signal.aborted) return false;
     if (verified.accountId !== account.accountId) {
+      releaseHandoff();
       hide();
       options.onIdentityChanged?.();
       return false;
@@ -203,7 +232,7 @@ export function createAccountDraftController(options: {
     return false;
   }
 
-  async function load(): Promise<void> {
+  async function load(requireAuthoritative = false): Promise<void> {
     if (snapshot.status === 'disposed' || activeRequest !== null) return;
     const request = new AbortController();
     activeRequest = request;
@@ -221,7 +250,7 @@ export function createAccountDraftController(options: {
           : JSON.stringify({ state: cloud.dashboard.state, version: 10 });
       installStore(raw);
       pending = null;
-      if (cloud.revision !== '0') handoff = null;
+      if (cloud.revision !== '0') releaseHandoff();
       serviceAvailable = online;
       update({
         status: online ? 'ready' : 'unavailable',
@@ -239,7 +268,10 @@ export function createAccountDraftController(options: {
       } else if (snapshot.status !== 'auth-hidden') {
         serviceAvailable = false;
         update({
-          status: store === null ? 'load-error' : 'unavailable',
+          status:
+            requireAuthoritative || authoritativeLoadRequired || store === null
+              ? 'load-error'
+              : 'unavailable',
           error:
             'The account dashboard could not be loaded. Retry; your current draft has not been replaced.',
         });
@@ -275,7 +307,7 @@ export function createAccountDraftController(options: {
       if (epoch !== expectedEpoch || request.signal.aborted || pending !== operation) return;
       baseline = operation.submittedRaw;
       pending = null;
-      handoff = null;
+      releaseHandoff();
       serviceAvailable = online;
       update({
         status: online ? 'ready' : 'unavailable',
@@ -293,7 +325,7 @@ export function createAccountDraftController(options: {
         });
       } else if (error instanceof AccountApiError && error.code === 'REVISION_CONFLICT') {
         pending = null;
-        handoff = null;
+        releaseHandoff();
         update({
           status: 'ready',
           saveState: 'conflict',
@@ -329,6 +361,10 @@ export function createAccountDraftController(options: {
 
   async function checkAvailability(): Promise<void> {
     if (activeRequest !== null || snapshot.status === 'disposed') return;
+    if (authoritativeLoadRequired) {
+      await load(true);
+      return;
+    }
     const request = new AbortController();
     activeRequest = request;
     const expectedEpoch = epoch;
@@ -374,7 +410,7 @@ export function createAccountDraftController(options: {
     store = null;
     baseline = null;
     pending = null;
-    handoff = null;
+    releaseHandoff();
     update({ status: 'disposed', saveState: 'idle', error: null });
   }
 
@@ -428,6 +464,7 @@ export function createAccountDraftController(options: {
     },
     retrySave: send,
     reload: load,
+    loadAuthoritativeDashboard: () => load(true),
     checkAvailability,
     hideForIdentityUncertainty: hide,
     revealForVerifiedAccount: (verified) => {
@@ -437,13 +474,20 @@ export function createAccountDraftController(options: {
         return false;
       }
       account = verified;
-      if (store !== null)
+      if (authoritativeLoadRequired)
+        update({
+          status: 'load-error',
+          error:
+            'The account dashboard could not be loaded. Retry; your current draft has not been replaced.',
+        });
+      else if (store !== null)
         update({ status: online && serviceAvailable ? 'ready' : 'unavailable', error: null });
       else void load();
-      return store !== null;
+      return store !== null && !authoritativeLoadRequired;
     },
     setOnline: (value) => {
       online = value;
+      if (authoritativeLoadRequired) return;
       if (
         store === null ||
         snapshot.status === 'auth-hidden' ||
@@ -462,7 +506,15 @@ export function createAccountDraftController(options: {
     },
     discard,
     dispose: () => {
-      discard();
+      // React may replay an effect during development; disposal must not consume the parent lease.
+      cancel();
+      unsubscribeStore?.();
+      unsubscribeStore = undefined;
+      store = null;
+      baseline = null;
+      pending = null;
+      handoff = null;
+      update({ status: 'disposed', saveState: 'idle', error: null });
       listeners.clear();
     },
     download: () => {
@@ -471,8 +523,92 @@ export function createAccountDraftController(options: {
       downloadCurrentTrainingBackup(store.getState().dashboardEntries);
     },
     getCreationHandoff: () =>
-      pending === null && snapshot.status !== 'auth-hidden' && snapshot.status !== 'disposed'
+      handoff?.created === true &&
+      handoff.copyOpportunityId !== undefined &&
+      pending === null &&
+      snapshot.status !== 'auth-hidden' &&
+      snapshot.status !== 'disposed'
         ? handoff
         : null,
+    releaseCreationHandoff: releaseHandoff,
+    setEditingBlocked: (blocked) => {
+      editingBlocked = blocked;
+      update();
+    },
+    submitAdoption: async (input) => {
+      const creation = handoff;
+      if (
+        adoptionPending ||
+        activeRequest !== null ||
+        creation?.created !== true ||
+        creation.copyOpportunityId === undefined ||
+        snapshot.status !== 'ready' ||
+        input.expectedAccountWorkspaceId !== account.accountId ||
+        input.copyOpportunityId !== creation.copyOpportunityId
+      ) {
+        return 'stale';
+      }
+      let frozenRequest: AdoptionDecisionRequest;
+      try {
+        frozenRequest = normalizeAdoptionRequest(account.accountId, input);
+      } catch {
+        return 'stale';
+      }
+      freezeSnapshot(frozenRequest);
+      const request = new AbortController();
+      activeRequest = request;
+      const expectedEpoch = epoch;
+      let dispatched = false;
+      adoptionPending = true;
+      update({ saveState: 'saving', error: null });
+      let result: 'accepted' | 'declined' | 'unconfirmed';
+      const current = () => snapshot;
+      const isActive = () => {
+        const latest = current();
+        return (
+          epoch === expectedEpoch &&
+          !request.signal.aborted &&
+          latest.status !== 'auth-hidden' &&
+          latest.status !== 'disposed'
+        );
+      };
+      try {
+        const verified = await verify(request.signal, expectedEpoch);
+        if (!verified || epoch !== expectedEpoch || request.signal.aborted) {
+          releaseHandoff();
+          return 'abandoned';
+        }
+        dispatched = true;
+        authoritativeLoadRequired = true;
+        update({ status: 'loading' });
+        releaseHandoff();
+        const acknowledgement: AdoptionAcknowledgement = await options.api.postAdoption(
+          account.accountId,
+          frozenRequest,
+          request.signal,
+        );
+        if (epoch !== expectedEpoch || request.signal.aborted) return 'stale';
+        result = acknowledgement.status === 'accepted' ? 'accepted' : 'declined';
+      } catch (error) {
+        if (epoch !== expectedEpoch || request.signal.aborted) {
+          if (!dispatched) releaseHandoff();
+          return dispatched ? 'stale' : 'abandoned';
+        }
+        if (authenticationFailure(error)) {
+          if (!dispatched) releaseHandoff();
+          return dispatched ? 'stale' : 'abandoned';
+        }
+        releaseHandoff();
+        result = 'unconfirmed';
+      } finally {
+        if (activeRequest === request) activeRequest = null;
+        adoptionPending = false;
+      }
+      if (!isActive()) return 'stale';
+      await load(true);
+      if (!isActive()) return 'stale';
+      update({ saveState: 'idle', error: null });
+      return result;
+    },
   };
 }

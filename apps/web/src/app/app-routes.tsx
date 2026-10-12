@@ -7,6 +7,7 @@ import { LandingPage } from '../features/landing/LandingPage';
 import { LibraryPage } from '../features/library/LibraryPage';
 import { TrainingSetDetailPage } from '../features/library/TrainingSetDetailPage';
 import { NotFoundPage } from '../features/not-found/NotFoundPage';
+import { AccountSetupPage } from '../features/account/AccountSetupPage';
 import { CookiePolicyPage } from '../features/privacy/CookiePolicyPage';
 import { GlossaryPage } from '../features/glossary/GlossaryPage';
 import { SourcesPage } from '../features/sources/SourcesPage';
@@ -74,6 +75,7 @@ export const appRoutes: RouteObject[] = [
             element: <AccountWorkspaceRoute />,
             children: [
               { index: true, element: <AccountWorkspaceIndex /> },
+              { path: 'setup', element: <AccountSetupPage /> },
               { path: 'dashboard', element: <DashboardPage /> },
               { path: 'library', element: <LibraryPage /> },
               { path: 'library/:trainingSetId', element: <TrainingSetDetailPage /> },

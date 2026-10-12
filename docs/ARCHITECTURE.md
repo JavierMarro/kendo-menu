@@ -13,8 +13,8 @@ reload/JWT-refresh and storage checks have owner-reported passes. [Migration B](
 provides managed bearer authorization, internal account mapping and PostgreSQL dashboards.
 [Migration C](MANAGED_ACCOUNT_WEB.md) consumes that contract with separate guest/account routes and
 memory-only explicit account saves. Legacy browser account cache/synchronization modules are retired;
-legacy SQL/auth/adoption rows stay preserved without linking to managed identities. Migration D's
-copy UI is unfinished. Live B persistence and second-account/return-to-first validation remain
+legacy SQL/auth/adoption rows stay preserved without linking to managed identities.
+[Migration D](MANAGED_GUEST_COPY.md) adds the one-use guest-copy setup screen. Live B persistence and second-account/return-to-first validation remain
 NOT RUN public-release gates. The [transition handoff](MANAGED_AUTH_TRANSITION.md) owns the scope.
 
 ### Managed account API boundary
@@ -262,7 +262,13 @@ No legacy account LocalStorage/IndexedDB cache is read, deleted or uploaded.
 
 Guest Web Locks/read-back and LocalStorage recovery remain. The only auth flow persistence is the
 finite credential-free callback marker; credentials, identities, drafts and copy opportunities stay
-out of JavaScript-readable persistence. C keeps the validated creation response in memory for D,
-without mounting copy UI or calling adoption. A committed ordinary Save releases that handoff.
+out of JavaScript-readable persistence. D uses C's validated in-memory creation handoff for a
+separate guarded setup route. Eligibility also requires the matching verified account, B's eligible
+cloud dashboard and a complete valid non-empty guest snapshot within the full request byte limit.
+Yes rechecks the exact source under the guest lock; changes refresh the offer before dispatch.
+Either dispatch or abandoning/skipping setup releases the handoff without a journal or implicit No.
+Strict adoption acknowledgements precede any success claim; unconfirmed attempts cannot replay.
+A fresh validated cloud load precedes editing after either decision or uncertainty. Stale setup
+visits do not replace existing drafts. A committed ordinary Save also releases the handoff.
 See [Migration C](MANAGED_ACCOUNT_WEB.md) for the state/event table, local startup, retirement and
 verification limits. Historical synchronization ADRs/handoffs retain predecessor evidence.

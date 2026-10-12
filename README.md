@@ -16,8 +16,8 @@ storage; no account or server is required.
 
 Internal account integration uses Neon-managed Google authentication and bearer-authorized
 PostgreSQL dashboards. [Migration C](docs/MANAGED_ACCOUNT_WEB.md) separates offline guest routes
-from online account drafts held in memory with explicit saves. Migration D's guest-copy setup UI
-has not begun. Live B persistence, multi-account and production HTTPS/Vercel validation remain
+from online account drafts held in memory with explicit saves. [Migration D](docs/MANAGED_GUEST_COPY.md)
+adds a separate, one-time guest-copy setup screen for eligible newly created accounts. Live B persistence, multi-account and production HTTPS/Vercel validation remain
 public-release gates; no public account release is claimed.
 
 ## Workspace layout

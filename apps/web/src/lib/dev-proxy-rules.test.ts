@@ -6,12 +6,13 @@ import { createDevelopmentProxyRules } from './dev-proxy-rules';
 
 it('keeps account API proxying exact and preserves the browser Origin header', () => {
   const rules = createDevelopmentProxyRules(() => true);
-  const account = rules['^/api/(?:account|dashboard)(?:\\?.*)?$'];
+  const account = rules['^/api/(?:account|dashboard(?:/adoption)?)(?:\\?.*)?$'];
   expect(account).toMatchObject({ target: 'http://127.0.0.1:3000', changeOrigin: false });
   expect(Object.keys(rules)).toEqual([
-    '^/api/(?:account|dashboard)(?:\\?.*)?$',
+    '^/api/(?:account|dashboard(?:/adoption)?)(?:\\?.*)?$',
     '^/api/dev/managed-identity(?:\\?.*)?$',
   ]);
+  expect(new RegExp(Object.keys(rules)[0] ?? '').test('/api/dashboard/adoption')).toBe(true);
 });
 
 it('keeps the proof identity proxy separate and applies its loopback guard', () => {

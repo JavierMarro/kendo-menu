@@ -14,7 +14,8 @@ API's legacy custom-session runtime with managed identity mapping, protected das
 consumed-once guest-copy opportunity. [Migration C](MANAGED_ACCOUNT_WEB.md) now consumes B with
 separate guest/account routes and memory-only explicit saves; legacy browser account caches and
 synchronization are retired without deleting stored data. Legacy SQL records remain preserved.
-Migration D's separate copy setup UI has not begun; C holds only the creation response in memory.
+[Migration D](MANAGED_GUEST_COPY.md) adds the separate one-use copy setup screen using C's
+in-memory creation handoff and B's unchanged adoption contract.
 No live B dashboard persistence, remote migration or deployment is claimed.
 
 On 5 October 2026 the owner deferred second-account distinction and return-to-first-account

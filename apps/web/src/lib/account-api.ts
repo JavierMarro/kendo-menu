@@ -7,6 +7,7 @@ import {
 
 export const ACCOUNT_ENDPOINT = '/api/account';
 export const DASHBOARD_ENDPOINT = '/api/dashboard';
+export const ADOPTION_ENDPOINT = '/api/dashboard/adoption';
 /** The complete server-side request limit, including the dashboard envelope. */
 export const MAX_DASHBOARD_REQUEST_BYTES = 2_097_152;
 const MAX_REVISION = '9223372036854775807';
@@ -122,6 +123,33 @@ export interface DashboardWriteAcknowledgement {
   readonly updatedAt: string;
 }
 
+export interface AdoptionDecisionRequest {
+  readonly transportVersion: 1;
+  readonly decision: 'yes' | 'no';
+  readonly expectedAccountWorkspaceId: string;
+  readonly copyOpportunityId: string;
+  readonly requestId: string;
+  readonly expectedRevision?: '0';
+  readonly catalogueVersion?: string;
+  readonly dashboard?: DashboardSnapshot;
+}
+
+export type AdoptionAcknowledgement =
+  | {
+      readonly status: 'accepted';
+      readonly completion: {
+        readonly decision: 'yes';
+        readonly requestId: string;
+        readonly acknowledgedRevision: string;
+        readonly timestamp: string;
+      };
+      readonly acknowledgement: DashboardWriteAcknowledgement;
+    }
+  | {
+      readonly status: 'declined';
+      readonly completion: { readonly decision: 'no'; readonly requestId: string };
+    };
+
 export interface ManagedAccountRecord {
   readonly accountId: string;
   readonly email: string | null;
@@ -141,6 +169,11 @@ export interface AccountApiClient {
     request: DashboardWriteRequest,
     signal?: AbortSignal,
   ): Promise<DashboardWriteAcknowledgement>;
+  postAdoption(
+    accountWorkspaceId: string,
+    request: AdoptionDecisionRequest,
+    signal?: AbortSignal,
+  ): Promise<AdoptionAcknowledgement>;
 }
 
 export interface AccountApiDependencies {
@@ -685,6 +718,170 @@ async function readErrorResponse(response: Response, status: number): Promise<Ac
   return errorForStatus(status, value['error']);
 }
 
+async function readAdoptionErrorResponse(
+  response: Response,
+  status: number,
+): Promise<AccountApiError> {
+  if (status === 401) return errorForStatus(status, 'UNAUTHENTICATED');
+  validateJsonContentType(response);
+  const value = await readJsonBody(response, MAX_ERROR_RESPONSE_BYTES);
+  if (
+    !isStrictJsonObject(value) ||
+    !hasExactKeys(value, ['error']) ||
+    typeof value['error'] !== 'string' ||
+    !/^[A-Z][A-Z0-9_]{0,63}$/u.test(value['error'])
+  ) {
+    throw new AccountApiError('invalid-response', 'The adoption error response was invalid.', {
+      status,
+    });
+  }
+  return errorForStatus(status, value['error']);
+}
+
+function parseAdoptionRequest(accountId: string, input: unknown): AdoptionDecisionRequest | null {
+  if (!isStrictJsonObject(input)) return null;
+  const exactBase = [
+    'transportVersion',
+    'decision',
+    'expectedAccountWorkspaceId',
+    'copyOpportunityId',
+    'requestId',
+  ];
+  const expectedKeys =
+    input['decision'] === 'yes'
+      ? [...exactBase, 'expectedRevision', 'catalogueVersion', 'dashboard']
+      : exactBase;
+  if (
+    !hasExactKeys(input, expectedKeys) ||
+    input['transportVersion'] !== 1 ||
+    (input['decision'] !== 'yes' && input['decision'] !== 'no') ||
+    input['expectedAccountWorkspaceId'] !== accountId ||
+    !isAccountWorkspaceId(accountId) ||
+    !isRequestId(input['copyOpportunityId']) ||
+    !isRequestId(input['requestId'])
+  )
+    return null;
+  if (input['decision'] === 'yes') {
+    const dashboard = parseDashboardSnapshot(input['dashboard']);
+    if (
+      input['expectedRevision'] !== '0' ||
+      !isCatalogueVersion(input['catalogueVersion']) ||
+      dashboard === null ||
+      dashboard.state.dashboardEntries.length === 0
+    )
+      return null;
+    return Object.freeze({
+      transportVersion: 1,
+      decision: 'yes',
+      expectedAccountWorkspaceId: accountId,
+      copyOpportunityId: input['copyOpportunityId'],
+      requestId: input['requestId'],
+      expectedRevision: '0',
+      catalogueVersion: input['catalogueVersion'],
+      dashboard,
+    });
+  }
+  return Object.freeze({
+    transportVersion: 1,
+    decision: 'no',
+    expectedAccountWorkspaceId: accountId,
+    copyOpportunityId: input['copyOpportunityId'],
+    requestId: input['requestId'],
+  });
+}
+
+export function normalizeAdoptionRequest(
+  accountId: string,
+  input: AdoptionDecisionRequest,
+): AdoptionDecisionRequest {
+  const normalized = parseAdoptionRequest(accountId, input);
+  if (normalized === null)
+    throw new AccountApiError('request-invalid', 'The adoption request was invalid.');
+  const body = JSON.stringify(normalized);
+  if (utf8ByteLength(body) > MAX_DASHBOARD_REQUEST_BYTES) {
+    throw new AccountApiError('oversized', 'The adoption request exceeded its size limit.');
+  }
+  return normalized;
+}
+
+export function serializeAdoptionRequest(
+  accountId: string,
+  input: AdoptionDecisionRequest,
+): string {
+  return JSON.stringify(normalizeAdoptionRequest(accountId, input));
+}
+
+function parseAdoptionAcknowledgement(
+  value: unknown,
+  accountId: string,
+  request: AdoptionDecisionRequest,
+): AdoptionAcknowledgement | null {
+  if (!isStrictJsonObject(value)) return null;
+  if (request.decision === 'no') {
+    const completion = value['completion'];
+    return hasExactKeys(value, ['status', 'completion']) &&
+      value['status'] === 'declined' &&
+      isStrictJsonObject(completion) &&
+      hasExactKeys(completion, ['decision', 'requestId']) &&
+      completion['decision'] === 'no' &&
+      completion['requestId'] === request.requestId &&
+      isRequestId(completion['requestId'])
+      ? Object.freeze({
+          status: 'declined',
+          completion: Object.freeze({ decision: 'no', requestId: request.requestId }),
+        })
+      : null;
+  }
+
+  const completion = value['completion'];
+  const rawAcknowledgement = value['acknowledgement'];
+  if (
+    !hasExactKeys(value, ['status', 'completion', 'acknowledgement']) ||
+    value['status'] !== 'accepted' ||
+    !isStrictJsonObject(completion) ||
+    !hasExactKeys(completion, ['decision', 'requestId', 'acknowledgedRevision', 'timestamp']) ||
+    completion['decision'] !== 'yes' ||
+    completion['requestId'] !== request.requestId ||
+    !isRequestId(completion['requestId']) ||
+    completion['acknowledgedRevision'] !== '1' ||
+    !isTimestamp(completion['timestamp']) ||
+    !isStrictJsonObject(rawAcknowledgement) ||
+    !hasExactKeys(rawAcknowledgement, [
+      'transportVersion',
+      'accountWorkspaceId',
+      'requestId',
+      'revision',
+      'updatedAt',
+    ]) ||
+    rawAcknowledgement['transportVersion'] !== 1 ||
+    rawAcknowledgement['accountWorkspaceId'] !== accountId ||
+    !isAccountWorkspaceId(rawAcknowledgement['accountWorkspaceId']) ||
+    rawAcknowledgement['requestId'] !== request.requestId ||
+    !isRequestId(rawAcknowledgement['requestId']) ||
+    rawAcknowledgement['revision'] !== '1' ||
+    rawAcknowledgement['updatedAt'] !== completion['timestamp'] ||
+    !isTimestamp(rawAcknowledgement['updatedAt'])
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    status: 'accepted',
+    completion: Object.freeze({
+      decision: 'yes',
+      requestId: request.requestId,
+      acknowledgedRevision: '1',
+      timestamp: rawAcknowledgement['updatedAt'],
+    }),
+    acknowledgement: Object.freeze({
+      transportVersion: 1,
+      accountWorkspaceId: accountId,
+      requestId: request.requestId,
+      revision: '1',
+      updatedAt: rawAcknowledgement['updatedAt'],
+    }),
+  });
+}
+
 export function serializeDashboardWriteRequest(
   accountId: string,
   input: DashboardWriteRequest,
@@ -751,6 +948,7 @@ export function createAccountApiClient(dependencies: AccountApiDependencies): Ac
     signal: AbortSignal,
     token: string,
     body?: string,
+    adoptionErrorContract = false,
   ): Promise<Response> {
     let response: Response;
     try {
@@ -774,7 +972,10 @@ export function createAccountApiClient(dependencies: AccountApiDependencies): Ac
       );
     }
     validateResponseEnvelope(response, endpoint, origin);
-    if (response.status !== 200) throw await readErrorResponse(response, response.status);
+    if (response.status !== 200)
+      throw await (adoptionErrorContract
+        ? readAdoptionErrorResponse(response, response.status)
+        : readErrorResponse(response, response.status));
     validateJsonContentType(response);
     return response;
   }
@@ -825,6 +1026,24 @@ export function createAccountApiClient(dependencies: AccountApiDependencies): Ac
           throw new AccountApiError(
             'invalid-response',
             'The dashboard acknowledgement was invalid.',
+          );
+        return acknowledgement;
+      });
+    },
+    postAdoption: (accountId, input, signal) => {
+      const normalized = normalizeAdoptionRequest(accountId, input);
+      const body = serializeAdoptionRequest(accountId, normalized);
+      return run(signal, async (requestSignal, token) => {
+        const response = await request(ADOPTION_ENDPOINT, 'POST', requestSignal, token, body, true);
+        const acknowledgement = parseAdoptionAcknowledgement(
+          await readJsonBody(response, MAX_ERROR_RESPONSE_BYTES),
+          accountId,
+          normalized,
+        );
+        if (acknowledgement === null)
+          throw new AccountApiError(
+            'invalid-response',
+            'The adoption acknowledgement was invalid.',
           );
         return acknowledgement;
       });

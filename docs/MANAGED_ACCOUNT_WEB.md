@@ -3,7 +3,8 @@
 Migration C consumes the reviewed Migration B contract from
 `629d2b0edb6c1b152d6ee47d45d4b32ad4664eaf` on `codex/managed-auth-online-dashboard`.
 This is internal browser integration, not a public account release. Backend contracts, SQL,
-dependencies and remote configuration are unchanged. Migration D has not begun.
+dependencies and remote configuration are unchanged. [Migration D](MANAGED_GUEST_COPY.md) now
+extends this baseline with the separate one-use guest-copy setup screen.
 
 ## Routes and store lifetimes
 
@@ -98,12 +99,12 @@ application content opens.
 
 ## Migration D handoff
 
-The validated winning B creation response, including `copyOpportunityId` when supplied, is held
-only by the current account draft controller. Its `getCreationHandoff()` seam is available for a
-future separate setup route. C implements no Yes/No UI and makes no adoption request. It does not
-infer eligibility from an empty dashboard, persist an opportunity or block ordinary editing behind
-unfinished D. Reload can lose the opportunity; an ordinary committed Save consumes an unused
-opportunity server-side and releases the browser handoff.
+C supplied the validated winning B creation response, including `copyOpportunityId`, to the
+current memory-only account draft controller. [D](MANAGED_GUEST_COPY.md) consumes that seam for a
+separate guarded setup route. Dispatching either decision, skipping or abandoning setup releases
+the handoff; Back/remount cannot recreate it from the retained initialization response. Eligibility
+is never inferred from an empty dashboard. Reload can lose the opportunity; an ordinary committed
+Save consumes an unused opportunity server-side and releases the browser handoff.
 
 ## Local startup under Node 24
 
@@ -115,7 +116,7 @@ pnpm --filter @kendo-menu/api dev:managed-auth-proof
 pnpm --filter @kendo-menu/web dev --port 5173 --strictPort
 ```
 
-Vite proxies exact `/api/account` and `/api/dashboard` paths to B's Node listener on port 3000;
+Vite proxies exact `/api/account`, `/api/dashboard` and `/api/dashboard/adoption` paths to B's Node listener on port 3000;
 the isolated proof identity endpoint remains on port 3001. `changeOrigin: false` preserves the
 browser's Origin header. B's existing exact `APP_ORIGIN` validation remains authoritative.
 
@@ -152,3 +153,12 @@ Final local verification and independent implementation review are recorded in t
 [C work-session handoff](work-sessions/2026-10-07-managed-account-web.md).
 No staging, commit, push, deployment, remote migration or provider configuration change
 belongs to this work.
+
+### Post-decision dashboard freshness
+
+Migration D's controller keeps a memory-only authoritative-load requirement after a dispatched
+adoption decision. A failed refresh cannot reveal the old store as loaded or editable after
+same-account verification or connectivity changes. Load/availability retries must install a
+validated current-account response, including a valid empty revision-zero result. Ordinary C
+availability probes for an existing dirty draft or uncertain Save still retain that draft,
+expected revision and pending Save request. See [Migration D](MANAGED_GUEST_COPY.md).

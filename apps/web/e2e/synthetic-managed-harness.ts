@@ -6,6 +6,7 @@ export const SYNTHETIC_SESSION_TOKEN = 'synthetic-session-credential';
 export const ACCOUNT_ID = '01234567-89ab-4cde-8fab-0123456789ab';
 export const OTHER_ACCOUNT_ID = '01234567-89ab-4cde-8fab-0123456789ac';
 export const CATALOGUE_VERSION = 'a'.repeat(64);
+export const COPY_OPPORTUNITY_ID = '01234567-89ab-4cde-8fab-0123456789ad';
 
 export interface SyntheticApiCall {
   readonly method: string;
@@ -21,6 +22,8 @@ export interface SyntheticManagedOptions {
   readonly dashboard?: unknown;
   readonly accountId?: string;
   readonly email?: string | null;
+  readonly createdAccount?: boolean;
+  readonly copyOpportunityId?: string | null;
 }
 
 interface HeldSave {
@@ -32,6 +35,17 @@ interface SaveGate {
   readonly observed: (call: SyntheticApiCall) => void;
   readonly response: Promise<{ readonly status: number; readonly body: unknown }>;
   readonly respond: (response: { readonly status: number; readonly body: unknown }) => void;
+}
+
+interface AdoptionGate {
+  readonly observed: (call: SyntheticApiCall) => void;
+  readonly response: Promise<{ readonly status: number; readonly body: unknown }>;
+  readonly respond: (response: { readonly status: number; readonly body: unknown }) => void;
+}
+
+interface HeldAdoption {
+  readonly observed: Promise<SyntheticApiCall>;
+  readonly respond: (response?: { readonly status: number; readonly body: unknown }) => void;
 }
 
 function jsonResponse(status: number, body: unknown): Parameters<Route['fulfill']>[0] {
@@ -66,6 +80,10 @@ export class SyntheticManagedHarness {
   private accountUnavailable = false;
   private unauthorizedNextSave = false;
   private saveGate: SaveGate | null = null;
+  private adoptionGate: AdoptionGate | null = null;
+  private createdAccount: boolean;
+  private copyOpportunityId: string | null;
+  private opportunityAvailable = true;
 
   private constructor(options: SyntheticManagedOptions) {
     this.signedIn = options.initiallySignedIn ?? false;
@@ -73,6 +91,9 @@ export class SyntheticManagedHarness {
     this.email = options.email ?? 'practitioner@example.test';
     this.initialized = !(options.initiallyUninitialized ?? false);
     this.dashboard = options.dashboard ?? null;
+    this.createdAccount = options.createdAccount ?? true;
+    this.copyOpportunityId =
+      options.copyOpportunityId === undefined ? COPY_OPPORTUNITY_ID : options.copyOpportunityId;
   }
 
   static async install(
@@ -99,6 +120,11 @@ export class SyntheticManagedHarness {
     this.dashboard = null;
   }
 
+  setDashboard(dashboard: unknown, revision: string): void {
+    this.dashboard = dashboard;
+    this.revision = revision;
+  }
+
   setSignedIn(value: boolean): void {
     this.signedIn = value;
   }
@@ -113,6 +139,33 @@ export class SyntheticManagedHarness {
 
   conflictOneSave(): void {
     this.conflictNextSave = true;
+  }
+
+  holdNextAdoption(): HeldAdoption {
+    let observeRequest: ((call: SyntheticApiCall) => void) | undefined;
+    let resolveResponse:
+      ((response: { readonly status: number; readonly body: unknown }) => void) | undefined;
+    const observedPromise = new Promise<SyntheticApiCall>((resolve) => {
+      observeRequest = resolve;
+    });
+    const responsePromise = new Promise<{ readonly status: number; readonly body: unknown }>(
+      (resolve) => {
+        resolveResponse = resolve;
+      },
+    );
+    this.adoptionGate = {
+      observed: (call) => observeRequest?.(call),
+      response: responsePromise,
+      respond: (response) => resolveResponse?.(response),
+    };
+    return {
+      observed: observedPromise,
+      respond: (response = { status: 200, body: null }) => resolveResponse?.(response),
+    };
+  }
+
+  setCopyOpportunityAvailable(value: boolean): void {
+    this.opportunityAvailable = value;
   }
 
   holdNextSave(): HeldSave {
@@ -230,10 +283,56 @@ export class SyntheticManagedHarness {
         jsonResponse(200, {
           accountId: this.accountId,
           email: this.email,
-          created: true,
-          copyOpportunityId: '01234567-89ab-4cde-8fab-0123456789ad',
+          created: this.createdAccount,
+          ...(this.createdAccount && this.copyOpportunityId !== null
+            ? { copyOpportunityId: this.copyOpportunityId }
+            : {}),
         }),
       );
+      return;
+    }
+    if (pathname === '/api/dashboard/adoption' && route.request().method() === 'POST') {
+      if (this.adoptionGate !== null) {
+        const gate = this.adoptionGate;
+        this.adoptionGate = null;
+        gate.observed(call);
+        const reply = await gate.response;
+        if (reply.status === 200 || reply.status === 0) this.completeAdoption(call);
+        if (reply.status === 0) {
+          await route.abort('failed').catch(() => undefined);
+          return;
+        }
+        await route.fulfill(jsonResponse(reply.status, reply.body)).catch(() => undefined);
+        return;
+      }
+      if (!this.opportunityAvailable || this.revision !== '0' || this.dashboard !== null) {
+        await route.fulfill(jsonResponse(409, { error: 'COPY_OPPORTUNITY_UNAVAILABLE' }));
+        return;
+      }
+      this.completeAdoption(call);
+      const request = this.adoptionRequest(call);
+      const requestId = request?.['requestId'];
+      if (request?.['decision'] === 'no') {
+        await route.fulfill(
+          jsonResponse(200, {
+            status: 'declined',
+            completion: { decision: 'no', requestId },
+          }),
+        );
+      } else {
+        await route.fulfill(
+          jsonResponse(200, {
+            status: 'accepted',
+            completion: {
+              decision: 'yes',
+              requestId,
+              acknowledgedRevision: this.revision,
+              timestamp: '2026-10-07T10:00:00.000Z',
+            },
+            acknowledgement: this.writeAck(call),
+          }),
+        );
+      }
       return;
     }
     if (pathname === '/api/dashboard' && route.request().method() === 'GET') {
@@ -318,5 +417,27 @@ export class SyntheticManagedHarness {
       revision: this.revision,
       updatedAt: '2026-10-07T10:00:00.000Z',
     };
+  }
+
+  private adoptionRequest(call: SyntheticApiCall): Record<string, unknown> | null {
+    if (typeof call.body !== 'string') return null;
+    const parsed: unknown = JSON.parse(call.body);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  }
+
+  private completeAdoption(call: SyntheticApiCall): void {
+    if (!this.opportunityAvailable || this.revision !== '0' || this.dashboard !== null) return;
+    const request = this.adoptionRequest(call);
+    if (
+      request?.['decision'] === 'yes' &&
+      typeof request['dashboard'] === 'object' &&
+      request['dashboard'] !== null
+    ) {
+      this.dashboard = request['dashboard'];
+      this.revision = '1';
+    }
+    this.opportunityAvailable = false;
   }
 }
