@@ -1,8 +1,9 @@
 /**
- * Drizzle schema for identity, opaque sessions, dashboard snapshots, write receipts, and
- * account-adoption state.
- * Application validation remains the first boundary; database constraints repeat critical
- * invariants so malformed direct SQL or a future adapter cannot persist unsafe state.
+ * Drizzle schema for managed identity mapping, copy opportunities, dashboard snapshots, and
+ * receipts.
+ * Legacy custom-login, application-session, and session-bound adoption tables remain represented
+ * for data preservation but are not used by the managed runtime.
+ * Application validation is the first boundary; database constraints repeat critical invariants.
  */
 import { sql } from 'drizzle-orm';
 import {
@@ -21,8 +22,8 @@ import {
 
 const SHA256_HEX_CHECK = sql`~ '^[0-9a-f]{64}$'`;
 
-// The generated UUID is KendoMenu's internal identity. Managed provider identity
-// is stored separately from preserved legacy Google subjects; email is metadata.
+// The generated UUID is KendoMenu's internal identity. Managed handlers map the provider identity
+// triple and leave legacy Google subjects untouched; email is metadata.
 export const users = pgTable(
   'users',
   {
@@ -90,7 +91,8 @@ export const accountCopyOpportunities = pgTable(
   ],
 );
 
-// Short-lived callback state. The unique state hash locates one login attempt;
+// Preserved legacy custom-login callback state; managed Neon authentication does not use this table.
+// The unique state hash locates one old login attempt;
 // browser binding then proves that the callback returned to its starting browser.
 // Consumption clears PKCE/nonce/browser-binding material while retaining a
 // marker long enough to classify replay attempts.
@@ -149,6 +151,7 @@ export const loginTransactions = pgTable(
   ],
 );
 
+// Preserved legacy application sessions; managed requests use Neon identity and do not consult it.
 // Raw session and CSRF values never enter this table; only SHA-256 hashes do.
 // A database disclosure therefore does not directly reveal the cookie values.
 // Both idle and absolute deadlines must pass for a session to authenticate, and
@@ -204,9 +207,9 @@ export const applicationSessions = pgTable(
   ],
 );
 
-// A new account receives exactly one adoption capability, bound to the session
-// that created it. The terminal receipt lives on this same account-keyed row:
-// there is intentionally no second adoption-history table or dashboard copy.
+// Preserved legacy session-bound adoption state; managed requests use accountCopyOpportunities.
+// The old flow bound one capability to its creating session and kept the terminal receipt here:
+// there is intentionally no second legacy adoption-history table or dashboard copy.
 // Existing users created before this table was introduced have no row and
 // therefore receive no capability during migration.
 export const accountAdoptions = pgTable(

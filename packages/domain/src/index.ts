@@ -1,3 +1,9 @@
+/**
+ * Public platform-neutral domain surface for training data, validation, quantities, and dashboard
+ * contracts.
+ * It exposes curated defaults and the v10 dashboard codec without depending on browser storage,
+ * Zustand, or API persistence.
+ */
 export { DEFAULT_TRAINING_SETS } from './default-training-sets.js';
 export {
   encodeDashboardPersistenceV10,

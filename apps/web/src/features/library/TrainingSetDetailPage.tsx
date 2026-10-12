@@ -1,3 +1,7 @@
+/**
+ * Preserves legacy session-detail URLs by translating them into the library's query-backed dialog
+ * route. Workspace ownership, query parameters, and the URL hash are carried through the redirect.
+ */
 import { Navigate, useLocation, useParams } from 'react-router-dom';
 
 import { getLibraryDrillLocation } from './library-query';

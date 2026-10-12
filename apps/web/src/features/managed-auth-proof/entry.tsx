@@ -1,3 +1,7 @@
+/**
+ * Boots the loopback development proof without loading application providers or routes.
+ * Callback validation stays flow-specific and malformed returns render the sanitized failure state.
+ */
 import { createRoot } from 'react-dom/client';
 
 import {

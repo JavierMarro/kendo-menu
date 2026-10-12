@@ -1,3 +1,9 @@
+/**
+ * Verifies bearer JWTs from one configured Neon Auth branch and returns normalized identity claims.
+ * Signature, issuer, audience, expiry, and provider role are checked before claims leave this
+ * boundary.
+ * Key-service failures stay distinct from invalid credentials without exposing provider errors.
+ */
 import { createRemoteJWKSet, customFetch, errors, jwtVerify } from 'jose';
 
 export interface ManagedIdentity {
@@ -93,6 +99,7 @@ export function createManagedIdentityVerifier(
   let remoteJwks: ReturnType<typeof createRemoteJWKSet> | undefined;
   try {
     remoteJwks = createRemoteJWKSet(new URL(jwksUrl), {
+      // Treat an empty or malformed key set as an unavailable verifier, not as a bad user token.
       [customFetch]: async (input, init) => {
         try {
           const response = await fetch(input, init);
@@ -157,6 +164,7 @@ export function createManagedIdentityVerifier(
         return { status: 'invalid' };
       }
 
+      // Email is display metadata only when the provider explicitly marks it verified.
       const verifiedEmail = payload['emailVerified'] === true ? payload['email'] : null;
       if (
         payload['emailVerified'] === true &&

@@ -1,3 +1,7 @@
+/**
+ * Renders shared navigation, information links, and the install action from route-level contexts.
+ * The provider supplies prompt state and focus restoration to the landing-page and footer actions.
+ */
 import type { MouseEventHandler, ReactElement } from 'react';
 
 import { useInstallExperience } from '../features/install/install-context';

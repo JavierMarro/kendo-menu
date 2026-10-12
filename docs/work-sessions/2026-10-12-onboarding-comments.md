@@ -1,0 +1,8 @@
+- Session: onboarding comments
+- Date/duration: 2026-10-12; not recorded
+- Scope/start: Migration A-D and approved cleanup plus directly connected uncommented runtime; clean codex/managed-auth-online-dashboard at d2dcf5954ca52e5f5368c79a6232e566d7b39d3a.
+- Changes: Reviewed 87 handwritten sources; added or consolidated onboarding overviews and ownership, identity, atomicity, retry, lifecycle, guest-preservation and freshness comments in 82; retained five compliant files unchanged.
+- Decisions: Comments and comment-driven whitespace only; tests, fixtures, generated SQL/metadata, manifests, lockfiles, configuration and unrelated code excluded; no deleted files recreated; handoff and index separate from source scope.
+- Roadblocks: No runtime defect confirmed; independent review corrected legacy identity/receipt wording and qualified history/notification guarantees; eight existing Fast Refresh lint warnings remain.
+- Verification: Node 24.21.0/pnpm 11.22.0; exact TypeScript tokens, comment-stripped AST/JavaScript emit, CSS/HTML structure and tooling directives match baseline across 87 files; pnpm typecheck, scoped ESLint (zero errors), targeted Prettier, independent review/rechecks, pnpm session:check (83 entries) and git diff --check HEAD PASS.
+- Follow-up: No staging, commit, push, private-file access, database or remote action; unit/browser/build/live checks not run for comments-only scope; live persistence, multi-account and deployed HTTPS release gates unchanged.

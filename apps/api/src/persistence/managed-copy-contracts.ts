@@ -1,3 +1,8 @@
+/**
+ * Persistence port for consuming a managed account's one-use guest-copy opportunity.
+ * Acceptance follows commit of the complete snapshot and terminal outcome. A later copy failure
+ * does not reopen the consumed opportunity.
+ */
 import type { AccountAuthorizationProof } from '../auth/account-authorization.js';
 import type { DashboardWriteAcknowledgement } from '../dashboard/contracts.js';
 import type { ValidatedAdoptionRequest } from '../adoption/contracts.js';

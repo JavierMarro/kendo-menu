@@ -1,3 +1,7 @@
+/**
+ * Defines Vite's local API proxy paths while retaining browser Origin for server checks.
+ * The caller decides whether the managed-identity proof path may be proxied for a request.
+ */
 import type { ProxyOptions } from 'vite';
 import type { IncomingMessage } from 'node:http';
 

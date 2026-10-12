@@ -1,3 +1,8 @@
+/**
+ * Stores a short-lived per-tab marker so the callback dispatcher can identify the initiating auth flow.
+ * Root returns need it because both flows share `/`.
+ * Explicit callback paths still select fixed destinations.
+ */
 export type AuthFlow = 'proof' | 'application';
 
 export const AUTH_RETURN_KEY = 'kendomenu:auth-return-v1';
@@ -111,6 +116,7 @@ export function resolveAuthReturn(
   storage?: Pick<Storage, 'getItem'>,
   now = Date.now(),
 ): AuthReturnResolution {
+  // The root path is ambiguous, so it must be bound to the initiating tab's validated flow marker.
   const source = storage ?? browserSessionStorage();
   const params = new URLSearchParams(search);
   const verifierValues = params.getAll(AUTH_VERIFIER_PARAMETER);

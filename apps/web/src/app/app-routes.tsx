@@ -1,3 +1,8 @@
+/**
+ * Declares the public, guest, and account route trees; guest and account routes reuse pages under
+ * different workspace owners. Legacy app paths enter guest routes, while shared document behavior
+ * remains with RouteRoot above the tree.
+ */
 import { Navigate, useLocation, type RouteObject } from 'react-router-dom';
 
 import { RouteErrorRethrow } from '../features/errors/RouteErrorRethrow';

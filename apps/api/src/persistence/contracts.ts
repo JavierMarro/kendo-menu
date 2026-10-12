@@ -1,4 +1,7 @@
-/** Shared errors and clock contract for managed persistence adapters. */
+/**
+ * Shared error and clock primitives for managed persistence adapters.
+ * PersistenceError uses fixed non-sensitive messages so database details stay behind the adapter.
+ */
 
 export type PersistenceErrorCode = 'INVALID_INPUT' | 'CONFLICT' | 'UNAVAILABLE' | 'FAILED';
 

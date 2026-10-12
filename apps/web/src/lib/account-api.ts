@@ -1,4 +1,8 @@
-/** Strict, credential-free browser boundary for Migration B's bearer account contract. */
+/**
+ * Keeps account API access behind a strict browser boundary for the managed bearer contract.
+ * Each request sends a transient bearer with browser cookies omitted; browser IDs and email never
+ * establish authorization.
+ */
 import {
   isDashboardCatalogueCompatible,
   parseDashboardPersistenceV10,
@@ -906,6 +910,7 @@ export function createAccountApiClient(dependencies: AccountApiDependencies): Ac
     caller: AbortSignal | undefined,
     operation: (signal: AbortSignal, token: string) => Promise<T>,
   ): Promise<T> {
+    // Install cancellation before token retrieval so abandoned work cannot later reach the endpoint.
     const controller = new AbortController();
     let rejectCancelled: ((error: AccountApiError) => void) | undefined;
     const cancelled = new Promise<never>((_resolve, reject) => {
@@ -950,6 +955,7 @@ export function createAccountApiClient(dependencies: AccountApiDependencies): Ac
     body?: string,
     adoptionErrorContract = false,
   ): Promise<Response> {
+    // Managed cookies belong to Auth; this API receives the transient bearer explicitly.
     let response: Response;
     try {
       response = await requestFetch(endpoint, {

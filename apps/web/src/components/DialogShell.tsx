@@ -1,3 +1,8 @@
+/**
+ * Portals modal content and manages focus containment, background isolation, and close keys.
+ * The current implementation suppresses the portal when workspace `canEdit` is false and calls
+ * the latest close handler; callers without workspace context remain visible.
+ */
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useOptionalWorkspace } from '../lib/workspace-context';
@@ -68,6 +73,8 @@ export function DialogShell({ children, closeLabel, onClose, titleId }: DialogSh
       onCloseRef.current();
       return undefined;
     }
+    // The dialog is portaled outside the app root, so make the background inert and restore its
+    // prior attributes when this dialog closes or unmounts.
     const applicationRoot =
       document.getElementById('root') ?? document.querySelector('.app-shell')?.parentElement;
     const previousInert = applicationRoot?.getAttribute('inert') ?? null;

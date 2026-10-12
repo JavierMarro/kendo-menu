@@ -1,3 +1,7 @@
+/**
+ * Adapts Neon managed auth to fixed application/proof callbacks and token-only API requests.
+ * The SDK owns browser-managed cookies; callback exchange is separate from transient bearer retrieval.
+ */
 import { createAuthClient, isAuthError } from '@neondatabase/auth';
 import { BetterAuthVanillaAdapter } from '@neondatabase/auth/vanilla';
 
@@ -67,6 +71,7 @@ export function createManagedAuthClient(
       if (!writeAuthReturnMarker(flow)) return false;
       const attempt = ++signInAttempt;
       signInInProgress = true;
+      // Scope listeners to this attempt so late failure cannot clear a newer attempt's marker.
       const removeAttemptListeners = () => {
         window.removeEventListener('pageshow', resetAfterBfCache);
         window.navigation?.removeEventListener('navigateerror', resetAfterCanceledNavigation);
@@ -128,6 +133,7 @@ export function createManagedAuthClient(
 
     async bootstrapCallback(signal) {
       if (signal.aborted) return { status: 'unavailable' };
+      // Only this client's fixed callback path and a single verifier may enter session exchange.
       const resolution = resolveAuthReturn(window.location.pathname, window.location.search);
       if (
         resolution.kind !== 'callback' ||
@@ -163,6 +169,7 @@ export function createManagedAuthClient(
 
     async signOut() {
       try {
+        // Finish any callback exchange before invalidating the managed session.
         await callbackBootstrap;
         const success = (await auth.signOut()).error === null;
         if (success) {

@@ -1,3 +1,7 @@
+/**
+ * Composes the shared header, main outlet, and footer around each app route. Navigation links keep
+ * the active workspace destination, while the mobile menu closes on Escape and route changes.
+ */
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 

@@ -1,3 +1,7 @@
+/**
+ * Adapts the managed client for the isolated development identity proof.
+ * It establishes the callback session before retrieving a transient bearer for the fixed dev endpoint.
+ */
 import { createManagedAuthClient } from './managed-auth';
 import { AUTH_VERIFIER_PARAMETER } from './auth-return';
 
@@ -67,6 +71,7 @@ export function createManagedProofClient(
     signIn: () => client.signIn(),
     async verify(signal) {
       if (new URLSearchParams(window.location.search).has(AUTH_VERIFIER_PARAMETER)) {
+        // Establish the SDK session first; token and API work wait for the clean document reload.
         const result = await client.bootstrapCallback(signal);
         return { status: result.status };
       }

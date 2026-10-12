@@ -1,3 +1,9 @@
+/**
+ * PostgreSQL adapter for verified Neon identity mapping and account bootstrap.
+ * Provider, issuer, and subject select the account; email is nullable metadata, and new-account
+ * initialization inserts its copy opportunity in the same transaction.
+ * Each path rechecks token expiry after database waits; initialization checks again before commit.
+ */
 import { eq, sql } from 'drizzle-orm';
 
 import type { AccountAuthorizationProof } from '../../auth/account-authorization.js';

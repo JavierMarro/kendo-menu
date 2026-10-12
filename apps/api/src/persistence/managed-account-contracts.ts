@@ -1,3 +1,8 @@
+/**
+ * Persistence port for mapping Neon identities to generated KendoMenu accounts.
+ * Initialization returns the copy opportunity created with a new account; reads require an
+ * account proof.
+ */
 import type { ManagedIdentity } from '../auth/managed-identity.js';
 import type { AccountAuthorizationProof } from '../auth/account-authorization.js';
 

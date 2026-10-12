@@ -1,4 +1,9 @@
-/** Bearer identity boundary for managed Neon accounts. */
+/**
+ * Maps verified Neon bearer claims to the internal proof used by protected API handlers.
+ * Writes require the exact configured application Origin; persistence rechecks identity mapping and
+ * token expiry after waits.
+ * Request-provided account or workspace identifiers never establish authority.
+ */
 import type { ManagedIdentity, ManagedIdentityVerifier } from './managed-identity.js';
 
 const proofBrand: unique symbol = Symbol('AccountAuthorizationProof');
@@ -95,7 +100,7 @@ export function createAccountAuthorization(dependencies: {
       if (!isCurrent(verified.identity, now())) return { status: 'unauthenticated' };
       return { status: 'unavailable' };
     }
-    // A verification result is accepted only through its complete async path.
+    // Reject a token that expired while the internal account lookup was waiting on persistence.
     if (!isCurrent(verified.identity, now())) return { status: 'unauthenticated' };
     if (account === null) return { status: 'not-initialized' };
     return { status: 'authorized', proof: createProof(verified.identity, account.accountId) };
@@ -105,6 +110,7 @@ export function createAccountAuthorization(dependencies: {
     const token = bearerToken(request);
     if (token === undefined) return { status: 'unauthenticated' as const };
     if (write) {
+      // Check browser origin before remote token verification on mutation paths.
       const origin = request.headers.get('origin');
       let expected: string;
       try {

@@ -1,3 +1,7 @@
+/**
+ * Owns the verified account route's memory-only draft and connects it to shared workspace UI.
+ * Identity uncertainty hides and fences the draft; only matching server verification can reveal it.
+ */
 import {
   useCallback,
   useEffect,
@@ -289,6 +293,7 @@ function LoadedAccountWorkspaceView({
   }, [controller, location.pathname, snapshot.revision, snapshot.saveState, snapshot.status]);
 
   useLayoutEffect(() => {
+    // Hide before paint on identity changes; only the same account can reveal its retained draft.
     if (identity.status === 'verified' && identity.account.accountId === account.accountId) {
       controller.revealForVerifiedAccount(identity.account);
     } else if (identity.status === 'signed-out') {
@@ -426,6 +431,7 @@ function LoadedAccountWorkspaceView({
   const isLoadState = snapshot.status === 'loading' || snapshot.status === 'load-error';
   const isVisible = !isIdentityHidden && !isLoadState && snapshot.store !== null;
   const workspaceStore = snapshot.store ?? lastVisibleStore;
+  // Setup consumes only the controller's live creation handoff at an authoritative empty revision.
   const currentHandoff =
     isVerifiedAccount && snapshot.revision === '0' ? controller.getCreationHandoff() : null;
   const shouldOpenSetup =

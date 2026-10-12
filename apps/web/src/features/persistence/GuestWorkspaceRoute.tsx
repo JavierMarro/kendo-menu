@@ -1,3 +1,7 @@
+/**
+ * Keeps guest routes on their independent local workspace and coordinates exits to a verified account.
+ * Navigation waits for persistence confirmation; authentication never transfers or replaces guest data.
+ */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -43,6 +47,7 @@ function GuestWorkspaceContent() {
   const confirmationGeneration = useRef(0);
   const wantsAccount = identity.status === 'verified' || identity.status === 'uninitialized';
   const confirmGuestExit = useCallback(async () => {
+    // Verified identity does not authorize discarding guest edits; require a persisted readback first.
     const requestGeneration = ++confirmationGeneration.current;
     setFailedIdentity(null);
     try {
@@ -71,6 +76,7 @@ function GuestWorkspaceContent() {
   ]);
   useEffect(() => {
     let active = true;
+    // Automatic account navigation still passes through the guest-save guard.
     if (wantsAccount && !builderDirty) {
       queueMicrotask(() => {
         if (active) void confirmGuestExit();

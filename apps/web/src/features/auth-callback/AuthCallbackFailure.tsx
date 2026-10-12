@@ -1,3 +1,8 @@
+/**
+ * Renders the isolated callback failure state for the application and development proof flows.
+ * Retry is shown only when the caller still owns a retryable bootstrap.
+ * Provider details stay sanitized.
+ */
 export function AuthCallbackFailure({
   onRetry,
   onHome,

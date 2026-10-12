@@ -1,3 +1,8 @@
+/**
+ * Carries the route owner's workspace kind, path, editability, and transition callbacks to shared
+ * pages. It is UI coordination only: identity proof, persistence, and authorization remain with
+ * the account and guest providers.
+ */
 import { createContext, useContext, type ReactNode } from 'react';
 
 export type WorkspaceKind = 'guest' | 'account';

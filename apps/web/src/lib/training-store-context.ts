@@ -1,3 +1,8 @@
+/**
+ * Exposes the training store instance supplied by the active workspace route.
+ * Required hooks fail loudly outside that provider; the optional API hook supports route-boundary
+ * composition where guest and account owners decide whether a store already exists.
+ */
 import { useContext } from 'react';
 import type { TrainingStore } from '@kendo-menu/store';
 

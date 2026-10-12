@@ -1,3 +1,8 @@
+/**
+ * Provides a development-only UI for managed session bootstrap and backend identity verification.
+ * Each new action cancels and fences older requests.
+ * Proof state stays apart from guest and account stores.
+ */
 import { useEffect, useRef, useState } from 'react';
 
 import type {
@@ -46,6 +51,7 @@ export function ManagedAuthProof({ client }: { readonly client: ManagedProofClie
   const epoch = useRef(0);
   const activeRequest = useRef<AbortController | undefined>(undefined);
   const begin = (message: string) => {
+    // The newest action owns the visible result; older requests cannot overwrite it when they settle.
     activeRequest.current?.abort();
     const request = new AbortController();
     activeRequest.current = request;

@@ -1,3 +1,8 @@
+/**
+ * Resolves managed-auth callback returns before the ordinary application loads.
+ * Fixed destinations and a finite per-tab marker keep callback verifiers out of ordinary routes
+ * until the selected flow owns them.
+ */
 import {
   APPLICATION_CALLBACK_PATH,
   AUTH_VERIFIER_PARAMETER,

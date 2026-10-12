@@ -1,3 +1,8 @@
+/**
+ * Starts the browser SPA after the auth dispatcher has resolved callback-only documents.
+ * Recovery and shared providers surround the router so route-owned guest and account boundaries
+ * can supply their own stores without sharing ownership.
+ */
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';

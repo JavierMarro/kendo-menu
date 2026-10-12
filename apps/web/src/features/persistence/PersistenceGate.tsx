@@ -205,6 +205,7 @@ export function PersistenceGate({
   }, [storeBundle]);
 
   const confirmGuestExit = useCallback(async () => {
+    // Leave only after flush and canonical readback still match the visible store and builder revision.
     const confirmedBuilderRevision = builderRevision.current;
     const bundle = storeBundle;
     if (bundle === null || sessionOnly || !bundle.storage.isEnabled()) {
@@ -323,6 +324,7 @@ export function PersistenceGate({
     setResetPending(true);
     try {
       const storageController = storeBundle?.storage;
+      // Stop queued writes before removal so an older snapshot cannot be restored afterward.
       storageController?.disable();
       await resetBrowserTrainingStorageAsync(TRAINING_STORAGE_KEY, { coordination });
       if (store !== null && storageController !== undefined) {

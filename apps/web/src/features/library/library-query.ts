@@ -1,3 +1,7 @@
+/**
+ * Encodes library dialog selection in the `drill` query parameter while preserving other search
+ * values. Navigation-state checks are deliberately structural because history state is untrusted.
+ */
 export const LIBRARY_PATH = '/app/guest/library';
 export const DRILL_QUERY_PARAMETER = 'drill';
 

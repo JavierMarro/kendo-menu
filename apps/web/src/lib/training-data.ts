@@ -1,3 +1,8 @@
+/**
+ * Adapts canonical domain training data for library and dashboard presentation.
+ * Quantity policy, validation, traversal, and tag derivation stay in the domain package; this module
+ * supplies display formatting and dashboard filters without mutating stored snapshots.
+ */
 import {
   DEFAULT_TRAINING_SETS,
   getDefaultTrainingQuantity,

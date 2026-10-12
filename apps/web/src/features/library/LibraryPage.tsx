@@ -1,3 +1,8 @@
+/**
+ * Lists curated sessions and resolves the selected detail dialog from the library query string.
+ * This keeps deep links and browser history meaningful, and closing returns focus to the opener
+ * when it is still available.
+ */
 import { useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
@@ -52,6 +57,8 @@ export function LibraryPage() {
   const originatingDrillIdRef = useRef<string | null>(null);
   const previousSelectedDrillIdRef = useRef<string | null>(null);
 
+  // A stale drill ID should not leave a broken selection in the shareable URL; preserve the hash
+  // and replace only the invalid selection without adding another history entry.
   useEffect(() => {
     if (selectedDrillId === undefined || selectedTrainingSet !== undefined) {
       return;
@@ -66,6 +73,8 @@ export function LibraryPage() {
     );
   }, [libraryPath, location.hash, location.search, navigate, selectedDrillId, selectedTrainingSet]);
 
+  // Restore focus to the card that opened the dialog; direct links have no opener, so use the main
+  // content landmark as the fallback.
   useEffect(() => {
     const nextSelectedDrillId = selectedTrainingSet?.id ?? null;
     const previousSelectedDrillId = previousSelectedDrillIdRef.current;

@@ -1,3 +1,10 @@
+/**
+ * PostgreSQL adapter for protected canonical dashboard snapshots and idempotent writes.
+ * It revalidates the account proof and stored v10 data, then locks the account before changing
+ * receipts or dashboard state.
+ * Retained receipts are checked before revision and catalogue state so valid retries keep their
+ * original acknowledgement.
+ */
 import { and, eq, isNull, lte, sql } from 'drizzle-orm';
 
 import type { AccountAuthorizationProof } from '../../auth/account-authorization.js';
@@ -287,6 +294,7 @@ export function createPostgresManagedDashboardPersistence(dependencies: {
             verifyAccount(values, account, validateDate(clock()));
             const receipt = receiptRows[0];
             if (receipt !== undefined) {
+              // Resolve a retry before today's catalogue or revision can change its acknowledgement.
               if (receipt.requestDigest === intent.requestDigest) {
                 return {
                   status: 'replayed',
@@ -380,6 +388,7 @@ export function createPostgresManagedDashboardPersistence(dependencies: {
                   isNull(accountCopyOpportunities.consumedAt),
                 ),
               );
+            // Pruning belongs to a new write; replay and failure paths leave receipts untouched.
             const cleanupAt = validateDate(clock());
             const cutoff = new Date(cleanupAt.getTime() - DASHBOARD_RECEIPT_CLEANUP_AGE_MS);
             await transaction

@@ -1,4 +1,8 @@
-/** Serializes guest LocalStorage operations across same-origin tabs. */
+/**
+ * Provides same-origin Web Locks coordination for guest LocalStorage operations.
+ * It only serializes operations; callers receive unavailable coordination to apply their guest
+ * fallback policy.
+ */
 export const GUEST_WORKSPACE_LOCK_NAME = 'kendo-menu:guest';
 
 export interface WorkspaceLockProvider {
@@ -64,6 +68,7 @@ export function createWorkspaceCoordinator(
           throw new WorkspaceCoordinationError('Guest workspace lock was not acquired.');
         return result;
       } catch (error) {
+        // Preserve failures after entry; only a failed acquisition marks coordination unavailable.
         if (entered) throw error;
         usable = false;
         throw new WorkspaceCoordinationError('Guest LocalStorage coordination is unavailable.');

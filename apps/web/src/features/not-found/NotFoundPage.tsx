@@ -1,3 +1,7 @@
+/**
+ * Offers recovery links for an unmatched route using the active workspace when available.
+ * Outside workspace routes it falls back to guest destinations rather than inventing account state.
+ */
 import { Link } from 'react-router-dom';
 import { useOptionalWorkspace, workspacePath } from '../../lib/workspace-context';
 

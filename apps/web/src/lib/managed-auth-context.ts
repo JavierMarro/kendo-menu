@@ -1,3 +1,7 @@
+/**
+ * Shares server-verified managed identity and auth actions with account routes.
+ * Distinct identity states keep uncertainty from granting account authority.
+ */
 import { createContext, useContext } from 'react';
 
 import type { AccountApiClient, ManagedAccountRecord } from './account-api';

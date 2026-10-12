@@ -1,3 +1,8 @@
+/**
+ * Owns browser behavior shared by routed pages: document metadata, main-content focus, scroll
+ * restoration, notice state, and pageview scheduling. Callback notices use fixed route state, and
+ * analytics waits for signed-out verification and cancels when an account transition begins.
+ */
 import { Component, useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import {
   NavigationType,

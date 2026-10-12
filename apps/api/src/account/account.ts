@@ -1,3 +1,8 @@
+/**
+ * HTTP boundary for managed-account initialization and reads.
+ * Initialization uses server-verified Neon identity; reads require a proof bound to that identity.
+ * Persistence maps the identity and creates any new-account copy opportunity with the account row.
+ */
 import {
   accountAuthorizationFailureResponse,
   type AccountAuthorization,
@@ -46,6 +51,7 @@ export function createAccount(dependencies: {
         if (request.body !== null) {
           return Response.json({ error: 'INVALID_ACCOUNT_REQUEST' }, { status: 400 });
         }
+        // No account identifier is accepted; persistence maps only the verified provider subject.
         const verified = await dependencies.authorization.verifyIdentity(request);
         if (verified.status !== 'verified') {
           return accountAuthorizationFailureResponse(verified.status);

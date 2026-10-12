@@ -1,8 +1,8 @@
 /**
  * Renders and edits the current workspace's dashboard entries and per-activity details.
- * Store actions update the active local workspace immediately; save labels reflect the
- * separate browser-persistence result. This page does not decide account identity or cloud
- * synchronization state.
+ * Guest edits are confirmed through browser persistence; account edits remain in an in-memory
+ * draft until explicit save. Unfinished account quantity text stays outside the store and blocks
+ * saving, while identity and cloud authorization remain with the route provider.
  */
 import {
   useEffect,
@@ -157,6 +157,8 @@ export function DashboardPage() {
               ? `${createdName} is being saved to your dashboard.`
               : `${createdName} saved to your dashboard.`;
 
+  // Invalid or unfinished account text is not canonical dashboard data; retain it at page scope
+  // so the workspace can block Save until the editor commits or clears it.
   const updateQuantityDraft = (key: string, value: string | null) => {
     const current = quantityDraftsRef.current;
     const next = { ...current };
@@ -181,6 +183,9 @@ export function DashboardPage() {
     workspace.onEditorDraftDirtyChange?.(Object.keys(next).length > 0);
   };
 
+  // Replacing this saved-menu history payload is best-effort: success removes it while local
+  // `createdName` keeps the current confirmation visible. On failure, the payload remains
+  // available for replay.
   useEffect(() => {
     if (savedMenuNavigationState === null) {
       const pendingNavigationStateClear = pendingNavigationStateClearRef.current;

@@ -1,3 +1,7 @@
+/**
+ * Publishes the product's browser-storage, managed-session, and analytics disclosures as static
+ * route content. Runtime privacy gates live in their owning browser integrations rather than here.
+ */
 export function CookiePolicyPage() {
   return (
     <article className="policy-page" aria-labelledby="cookie-policy-title">

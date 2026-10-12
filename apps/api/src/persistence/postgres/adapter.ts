@@ -1,4 +1,9 @@
-/** PostgreSQL composition for managed accounts, dashboard writes, and guest-copy consumption. */
+/**
+ * Composes the managed PostgreSQL ports around one bounded connection pool.
+ * Writes use an explicit transaction runner; a failed response after COMMIT is ambiguous, so its
+ * client is discarded.
+ * Pool close is repeatable and reports failures through the fixed persistence error surface.
+ */
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 
@@ -60,6 +65,7 @@ export function createPostgresPersistence(
       await client.query('BEGIN');
       await client.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
       if (transactionOptions.dashboardWrite === true) {
+        // Bound lock waits and statements for account mutations without changing read transactions.
         await client.query(`SET LOCAL lock_timeout = '${DASHBOARD_LOCK_TIMEOUT}'`);
         await client.query(`SET LOCAL statement_timeout = '${DASHBOARD_STATEMENT_TIMEOUT}'`);
       }
@@ -71,6 +77,7 @@ export function createPostgresPersistence(
       return result;
     } catch (error) {
       if (commitAttempted) {
+        // A failed COMMIT response is ambiguous, so this client is unsafe to reuse.
         destroyClient = true;
       } else {
         try {

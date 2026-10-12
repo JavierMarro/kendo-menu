@@ -1,10 +1,14 @@
+/**
+ * Adds the Node listener adapter around the shared listener-free Elysia route table.
+ * Standard Response mapping preserves repeated headers; importing this module stays
+ * side-effect free.
+ */
 import { node } from '@elysia/node';
 import { Elysia } from 'elysia';
 import { WebStandardAdapter } from 'elysia/adapter/web-standard';
 
 import { createApp, type AppOptions } from './app.js';
 
-/** Node transport composition is importable without binding a listener. */
 export function createNodeApp(options: AppOptions = {}) {
   // @elysia/node 1.4.6 converts Response headers through Object.fromEntries,
   // which drops repeated Set-Cookie fields. Retain its Node listener while

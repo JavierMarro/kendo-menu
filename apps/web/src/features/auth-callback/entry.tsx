@@ -1,3 +1,8 @@
+/**
+ * Completes the application callback before the ordinary route tree starts.
+ * It exchanges the verifier through the managed SDK, then replaces the document with a fixed,
+ * clean account destination.
+ */
 import { createRoot } from 'react-dom/client';
 import '../../styles.css';
 
@@ -54,6 +59,7 @@ if (root !== null) {
           </section>
         </main>,
       );
+      // Only a failed callback exchange retains a retry; token and API checks start after replacement.
       const bootstrap = async () => {
         const result = await client.bootstrapCallback(controller.signal);
         if (result.status === 'callback-failed') {

@@ -1,4 +1,9 @@
-/** Lazy production composition for managed identity and protected PostgreSQL accounts. */
+/**
+ * Composes managed identity verification, account authorization, and protected API handlers.
+ * Persistence is lazy until an account-mapping or data request needs PostgreSQL; concurrent
+ * initialization is shared by its provider.
+ * The managed verifier and exact application Origin check form the identity boundary for mutations.
+ */
 import { createAccountAuthorization } from './auth/account-authorization.js';
 import {
   createManagedIdentityVerifier,

@@ -1,3 +1,8 @@
+/**
+ * Reads and validates a complete guest snapshot for an explicitly offered copy to a new account.
+ * The raw source is captured under the guest lock for exact rechecks; request construction never
+ * mutates guest storage.
+ */
 import {
   encodeDashboardPersistenceV10,
   isDashboardCatalogueCompatible,
@@ -79,6 +84,7 @@ export function createGuestCopyRequest(options: {
   readonly snapshot: GuestCopySnapshot;
   readonly requestId: string;
 }): AdoptionDecisionRequest | null {
+  // Only a matching server-issued creation handoff authorizes this one-use request.
   const opportunity = options.handoff.copyOpportunityId;
   if (
     !options.handoff.created ||

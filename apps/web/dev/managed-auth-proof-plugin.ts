@@ -1,3 +1,7 @@
+/**
+ * Serves the isolated managed-auth proof document from Vite's development server.
+ * Loopback checks isolate proof access; the dispatcher keeps both callback flows on fixed paths.
+ */
 import { readFile } from 'node:fs/promises';
 import type { IncomingMessage } from 'node:http';
 

@@ -1,4 +1,8 @@
-/** Sends one allow-listed GoatCounter pixel after the current document verifies signed out. */
+/**
+ * Sends one delayed GoatCounter image request for an allow-listed public path after the current
+ * document verifies signed out. The route mapping drops query data and the image omits referrer;
+ * cross-tab account messages are cancellation hints and never establish identity.
+ */
 const GOATCOUNTER_PIXEL_ENDPOINT = 'https://javiermarro.goatcounter.com/count';
 const ACCOUNT_TRANSITION_CHANNEL = 'kendomenu-account-transition-v1';
 const DOCUMENT_TRANSITION_ID = `${Date.now()}:${Math.random()}`;

@@ -1,3 +1,7 @@
+/**
+ * Explains the signed-out page-count behavior and delegates acknowledgement to the route owner.
+ * The notice does not set cookies or make persistence decisions itself.
+ */
 import { Link } from 'react-router-dom';
 
 interface CookieNoticeProps {

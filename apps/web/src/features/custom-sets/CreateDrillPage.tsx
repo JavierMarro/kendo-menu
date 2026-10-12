@@ -1,8 +1,8 @@
 /**
- * Builds a custom training session and adds it to the current local dashboard.
- * Draft edits are guarded against accidental navigation; a successful submit is reported
- * only after the persistence boundary confirms the device write. On write failure the live
- * entry remains available for recovery instead of being silently discarded.
+ * Owns custom-session form state and sends validated input to the active workspace store.
+ * Guest submission waits for the browser persistence flush before showing the saved-menu notice;
+ * account submission adds to the in-memory draft for its separate explicit save flow.
+ * Workspace dirty-state callbacks keep an unfinished builder draft visible to transition guards.
  */
 import {
   useEffect,

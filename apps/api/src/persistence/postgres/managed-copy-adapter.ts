@@ -1,3 +1,8 @@
+/**
+ * PostgreSQL adapter for one-use guest-copy decisions on managed accounts.
+ * Consumption commits before a Yes copy starts, so later failure cannot reopen the opportunity.
+ * The copy transaction rechecks ownership and refuses to overwrite a dashboard created by Save.
+ */
 import { and, eq, isNull } from 'drizzle-orm';
 
 import type { AccountAuthorizationProof } from '../../auth/account-authorization.js';
@@ -102,6 +107,7 @@ export function createPostgresManagedCopyPersistence(dependencies: {
         if (!compatible) return { status: 'catalogue-incompatible' };
       }
 
+      // Consumption is terminal before the separate Yes-copy transaction begins.
       try {
         await runTransaction(
           async (transaction) => {

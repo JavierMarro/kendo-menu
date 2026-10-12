@@ -1,3 +1,7 @@
+/**
+ * Presents the one-time guest-copy choice from the account route's in-memory creation handoff.
+ * Yes revalidates the guest source before dispatch, and every exit leaves guest storage untouched.
+ */
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -59,6 +63,7 @@ export function AccountSetupPage() {
   }, [setup]);
 
   useEffect(() => {
+    // Drop the volatile handoff on departure; do not submit a pending preflight after pagehide.
     const abandonOnPageHide = () => {
       pageHidden.current = true;
       setup.release();
@@ -83,6 +88,7 @@ export function AccountSetupPage() {
   }, []);
 
   useEffect(() => {
+    // Wait for this verified account's eligible, empty cloud dashboard before offering the handoff.
     let active = true;
     const handoff = setup.handoff;
     const catalogueVersion = setup.catalogueVersion;
@@ -170,6 +176,7 @@ export function AccountSetupPage() {
     setMessage('Checking your guest menus…');
     let request: AdoptionDecisionRequest;
     if (decision === 'yes') {
+      // The offer is only a preview: compare exact source bytes again immediately before dispatch.
       const current = await readGuestCopySnapshot();
       if (!mounted.current) return;
       if (pageHidden.current) return;
@@ -236,6 +243,7 @@ export function AccountSetupPage() {
       };
     }
     setAttempted(true);
+    // The controller owns one-use handoff release and never replays an adoption decision.
     const outcome = await setup.submit(request);
     if (!mounted.current) return;
     if (outcome === 'stale') {
@@ -275,6 +283,7 @@ export function AccountSetupPage() {
       </section>
     );
   }
+  // After a decision attempt, retry only the authoritative dashboard load, never the one-use choice.
   if (attempted && !dashboardLoaded) {
     return (
       <section className="account-route-state" role="alert" aria-live="polite">

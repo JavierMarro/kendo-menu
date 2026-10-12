@@ -1,3 +1,8 @@
+/**
+ * Presents the public entry point for guest planning and managed Google sign-in, alongside the
+ * curated-library overview. Scroll reveals are optional presentation behavior and are skipped
+ * when reduced motion is requested or the browser lacks the observer API.
+ */
 import { useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 

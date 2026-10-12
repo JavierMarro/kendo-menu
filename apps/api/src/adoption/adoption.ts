@@ -1,4 +1,8 @@
-/** Protected one-time guest-copy route. */
+/**
+ * HTTP boundary for the one-use guest-copy decision on a managed account.
+ * Authorization binds the request to the server-mapped account before its bounded payload is read.
+ * A Yes acknowledgement is returned only after the copied snapshot commits.
+ */
 import {
   accountAuthorizationFailureResponse,
   type AccountAuthorization,
@@ -65,6 +69,7 @@ export function createAdoption(dependencies: {
         return accountAuthorizationFailureResponse('unavailable');
 
       let body: unknown;
+      // Read the bounded dashboard snapshot only after the bearer maps to an account.
       try {
         body = await readDashboardRequestBody(request);
       } catch (error) {

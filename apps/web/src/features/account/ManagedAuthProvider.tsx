@@ -1,3 +1,8 @@
+/**
+ * Owns managed-auth client access and the account identity verified by the server.
+ * Request generations fence late checks. The SDK remains responsible for browser-managed
+ * session cookies.
+ */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import {
@@ -38,6 +43,7 @@ export function ManagedAuthProvider({ children }: { readonly children: ReactNode
 
   const verifyIdentity = useCallback(async (): Promise<ManagedIdentityState> => {
     if (signOutPending.current || signOutFailed.current) return identityRef.current;
+    // Each check owns a generation so sign-out or a newer transition wins over its late response.
     const requestGeneration = ++generation.current;
     window.dispatchEvent(new Event('kendomenu:session-verification-started'));
     setIdentity({ status: 'checking' });
@@ -92,6 +98,7 @@ export function ManagedAuthProvider({ children }: { readonly children: ReactNode
 
   const signOutProvider = useCallback(async () => {
     if (signOutPending.current) return false;
+    // Hide account state before provider sign-out; failure stays fenced until explicit retry succeeds.
     signOutPending.current = true;
     signOutFailed.current = true;
     const requestGeneration = ++generation.current;

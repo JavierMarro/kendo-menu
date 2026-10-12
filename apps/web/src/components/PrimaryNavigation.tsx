@@ -1,3 +1,7 @@
+/**
+ * Builds the shared primary links from the active workspace path. Account URLs are selected from
+ * the current route; other pages use their workspace context or fall back to guest navigation.
+ */
 import type { MouseEventHandler, ReactElement } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useOptionalWorkspace, workspacePath } from '../lib/workspace-context';

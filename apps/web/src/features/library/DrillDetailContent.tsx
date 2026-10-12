@@ -1,8 +1,7 @@
 /**
- * Displays one library training session and offers a local dashboard action.
- * Adding changes Zustand immediately, while the visible success message waits for the
- * persistence provider to confirm a device write. A failed confirmation is reported without
- * claiming the in-memory addition was lost.
+ * Displays one curated training session and adds it to the active workspace dashboard.
+ * Guest success follows the browser persistence flush, while account success describes only the
+ * in-memory draft and leaves durable account saving to the explicit save action.
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';

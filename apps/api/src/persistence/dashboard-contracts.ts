@@ -34,7 +34,7 @@ export type DashboardWriteOutcome =
 /**
  * Every operation must revalidate the server-established managed identity mapping and JWT expiry.
  * The proof's user is authoritative; the request workspace is only a mismatch guard.
- * Reads, failures and retained retries must not touch activity, cookies or receipts.
+ * Reads, pre-commit failures and retained retries must not mutate activity, cookies or receipts.
  *
  * compareAndWrite must serialize account writes, look up retained request IDs before any
  * revision comparison/cleanup, and invoke isCatalogueCompatible only for new IDs. A retained
@@ -44,7 +44,9 @@ export type DashboardWriteOutcome =
  * New writes use bigint arithmetic, increment even for identical/empty content, and atomically
  * commit dashboard + receipt + cleanup + unused copy-opportunity invalidation. Only successful new writes remove
  * receipts aged >= seven days and then evict oldest revisions to the 1,024/account cap. Expiry,
- * mapping mismatch, revision exhaustion and ambiguous commits fail closed; never retry writes here.
+ * mapping mismatch and revision exhaustion fail without a success acknowledgement.
+ * Ambiguous commits return unavailable even if the write committed; a same-ID retry can recover
+ * a retained receipt's acknowledgement, but adapters never retry writes automatically.
  * Concrete adapters must prove these guarantees with their own locking and failure-injection tests.
  */
 export interface DashboardPersistence {

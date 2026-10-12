@@ -1,3 +1,8 @@
+/**
+ * Contains React rendering failures without retaining exception details and offers reload, optional
+ * data recovery, and diagnostics. Copied diagnostics are produced by a sanitizer and expose only a
+ * fixed code plus whether recovery is available.
+ */
 import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { copyErrorDiagnostics } from '../../lib/error-diagnostics';
@@ -16,7 +21,6 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
   override state: AppErrorBoundaryState = { failed: false };
 
   static getDerivedStateFromError(): AppErrorBoundaryState {
-    // Deliberately retain no exception, message, or component stack.
     return { failed: true };
   }
 

@@ -1,7 +1,8 @@
 /**
  * Listener-free Elysia route table shared by the Vercel and standalone Node adapters.
- * Runtime services are composed lazily by default, while tests can inject service boundaries;
- * every API response is private and dashboard PUT parsing remains owned by its bounded handler.
+ * Runtime services are lazy by default; tests can inject boundaries, and common response handling
+ * keeps results private.
+ * Bounded writes leave parsing to their handlers so authorization and size checks retain order.
  */
 import { Elysia } from 'elysia';
 import { WebStandardAdapter } from 'elysia/adapter/web-standard';

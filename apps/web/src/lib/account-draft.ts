@@ -1,3 +1,7 @@
+/**
+ * Owns one verified account draft and its store for a route lifetime, using memory-only storage.
+ * Frozen pending requests and identity fencing keep stale responses from replacing the draft.
+ */
 import { encodeDashboardPersistenceV10 } from '@kendo-menu/domain/dashboard-persistence';
 import {
   createTrainingStore,
@@ -83,6 +87,7 @@ export function createAccountDraftController(options: {
   let handoff = options.initialization ?? null;
   let editingBlocked = false;
   let adoptionPending = false;
+  // After adoption dispatch, only a fresh validated dashboard may reveal the retained store.
   let authoritativeLoadRequired = false;
   let online = typeof navigator === 'undefined' || navigator.onLine;
   let serviceAvailable = online;
@@ -109,6 +114,7 @@ export function createAccountDraftController(options: {
   function update(patch: Partial<AccountDraftSnapshot> = {}): void {
     const next = { ...snapshot, ...patch };
     const visible = next.status === 'ready' || next.status === 'unavailable';
+    // The authoritative-load gate takes precedence over otherwise visible service states.
     snapshot = {
       ...next,
       accountId: account.accountId,
@@ -141,6 +147,7 @@ export function createAccountDraftController(options: {
 
   function hide(): void {
     if (snapshot.status === 'disposed') return;
+    // Identity uncertainty fences active work before the in-memory draft is hidden.
     if (adoptionPending) releaseHandoff();
     cancel();
     update({
@@ -208,6 +215,7 @@ export function createAccountDraftController(options: {
   }
 
   async function verify(signal: AbortSignal, expectedEpoch: number): Promise<boolean> {
+    // The server check must match this account before dashboard loads or mutations proceed.
     const verified = await options.api.getAccount(signal);
     if (epoch !== expectedEpoch || signal.aborted) return false;
     if (verified.accountId !== account.accountId) {
@@ -452,6 +460,7 @@ export function createAccountDraftController(options: {
         freezeSnapshot(request);
         const submittedRaw = currentRaw();
         if (submittedRaw === null) return;
+        // Keep the full envelope unchanged so an uncertain retry uses the same request ID and snapshot.
         pending = Object.freeze({ request, submittedRaw });
       } catch {
         update({
@@ -579,6 +588,7 @@ export function createAccountDraftController(options: {
           return 'abandoned';
         }
         dispatched = true;
+        // From dispatch on, the client cannot replay this choice or expose the pre-decision store.
         authoritativeLoadRequired = true;
         update({ status: 'loading' });
         releaseHandoff();

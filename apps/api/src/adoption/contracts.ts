@@ -1,9 +1,7 @@
 /**
- * Adoption request transport contracts.
- *
- * Adoption deliberately reuses the complete-dashboard wire payload for a Yes
- * decision. The account/session proof is supplied by the authentication
- * boundary; the expected account identifier remains a mismatch guard only.
+ * Guest-copy transport contracts reuse the complete-dashboard wire payload for a Yes decision.
+ * Authorization supplies a proof bound to verified managed identity; the expected account
+ * identifier remains a mismatch guard only.
  */
 import {
   isAccountWorkspaceId,
