@@ -80,7 +80,7 @@ test('confirmed sign-out fences focus verification, notifies a peer, and keeps g
   await observeIdentityCheckStarts(page);
 
   await page.getByRole('button', { name: 'Sign out' }).click();
-  await page.getByRole('button', { name: /Discard and sign out/i }).click();
+  await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toHaveCount(0);
   await signOutSeen;
   await expect(
     page.getByRole('heading', { name: /hidden until it can be verified/i }),
@@ -100,7 +100,7 @@ test('confirmed sign-out fences focus verification, notifies a peer, and keeps g
     })
     .toBe(true);
 
-  await page.getByRole('link', { name: 'Continue as a guest' }).click();
+  await page.getByRole('link', { name: 'Try without an account' }).click();
   await expect(page).toHaveURL(/\/app\/guest\/dashboard$/u);
   await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
   expect(harness.apiCalls.some((call) => call.method === 'PUT')).toBe(false);
@@ -144,7 +144,7 @@ test('failed sign-out keeps account hidden through lifecycle checks until retry 
   ).length;
 
   await page.getByRole('button', { name: 'Sign out' }).click();
-  await page.getByRole('button', { name: /Discard and sign out/i }).click();
+  await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toHaveCount(0);
   await failureSeen;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect.poll(() => identityCheckStarts(page)).toBe(0);
@@ -168,7 +168,7 @@ test('failed sign-out keeps account hidden through lifecycle checks until retry 
 
   await page.getByRole('button', { name: 'Retry sign-out' }).click();
   await expect(page).toHaveURL(/\/app$/u);
-  await page.getByRole('link', { name: 'Continue as a guest' }).click();
+  await page.getByRole('link', { name: 'Try without an account' }).click();
   await expect(page).toHaveURL(/\/app\/guest\/dashboard$/u);
   await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
   expect(signOutAttempt).toBe(1);

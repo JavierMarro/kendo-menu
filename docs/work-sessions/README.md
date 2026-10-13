@@ -26,6 +26,10 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-10-13 — privacy, license and README](./2026-10-13-privacy-license-readme.md)
+- [2026-10-13 — landing copy and clean sign-out](./2026-10-13-landing-copy-clean-signout.md)
+- [2026-10-13 — managed empty account POST](./2026-10-13-managed-empty-account-post.md)
+- [2026-10-13 — managed pooler startup](./2026-10-13-managed-pooler-startup.md)
 - [2026-10-12 — onboarding comments](./2026-10-12-onboarding-comments.md)
 - [2026-10-12 — optional audit cleanups](./2026-10-12-optional-audit-cleanups.md)
 - [2026-10-10 — managed guest copy](./2026-10-10-managed-guest-copy.md)

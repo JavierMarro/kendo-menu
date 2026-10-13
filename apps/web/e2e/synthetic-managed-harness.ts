@@ -193,7 +193,7 @@ export class SyntheticManagedHarness {
 
   async authenticateFromLanding(page: Page): Promise<void> {
     await page.goto('/app');
-    await page.getByRole('button', { name: 'Continue with Google' }).click();
+    await page.getByRole('button', { name: 'Sign up here' }).click();
     await page.waitForURL(/\/app\/account\/dashboard$/);
   }
 

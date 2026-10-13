@@ -1,5 +1,6 @@
 /**
- * Explains the signed-out page-count behavior and delegates acknowledgement to the route owner.
+ * Discloses optional managed-session cookies and cookie-free analytics, delegating acknowledgement
+ * to the route owner.
  * The notice does not set cookies or make persistence decisions itself.
  */
 import { Link } from 'react-router-dom';
@@ -12,7 +13,8 @@ export function CookieNotice({ onDismiss }: CookieNoticeProps) {
   return (
     <aside className="cookie-notice" aria-label="Cookie notice">
       <p className="cookie-notice-copy">
-        When signed out, KendoMenu sends one cookie-free page count when this page first opens.{' '}
+        If you sign in with Google, essential cookies maintain your session. KendoMenu does not use
+        tracking cookies. We use GoatCounter without cookies to improve the service.{' '}
         <Link to="/cookies">More information</Link>.
       </p>
       <button className="secondary-button cookie-notice-dismiss" type="button" onClick={onDismiss}>

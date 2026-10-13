@@ -150,7 +150,7 @@ test.describe('production metadata and crawl boundaries', () => {
     await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
     await page.locator('.top-bar').getByRole('link', { name: 'KendoMenu home' }).click();
     await expect(
-      page.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+      page.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeVisible();
     await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
   });

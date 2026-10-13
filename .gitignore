@@ -37,6 +37,20 @@ apps/web/playwright-report/
 .impeccable/live/
 .impeccable/review/
 
+# Local hosting metadata, credentials, and database exports
+.vercel/
+*.pem
+*.key
+*.p12
+*.pfx
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.backup
+backups/
+dumps/
+
 .env
 .env.*
 !.env.example

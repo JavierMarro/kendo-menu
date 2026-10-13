@@ -75,6 +75,35 @@ describe('runtime persistence lifecycle', () => {
     await runtime.close();
   });
 
+  it.each([undefined, 'public'])(
+    'omits startup search_path for the public runtime: %s',
+    async (schema) => {
+      const persistence = createPostgresPersistence({
+        connectionString: 'postgresql://127.0.0.1:1/kendomenu_dev',
+        ...(schema === undefined ? {} : { schema }),
+      });
+      try {
+        expect(persistence.pool.options).not.toHaveProperty('options');
+      } finally {
+        await persistence.close();
+      }
+    },
+  );
+
+  it('retains startup search_path for explicitly isolated test schemas', async () => {
+    const persistence = createPostgresPersistence({
+      connectionString: 'postgresql://127.0.0.1:1/kendomenu_test',
+      schema: 'km_test_0123456789abcdef0123456789abcdef',
+    });
+    try {
+      expect(persistence.pool.options.options).toBe(
+        '-c search_path="km_test_0123456789abcdef0123456789abcdef"',
+      );
+    } finally {
+      await persistence.close();
+    }
+  });
+
   it.each([false, true])(
     'closes an unattached pool and retries even if cleanup fails: %s',
     async (cleanupFails) => {

@@ -1,0 +1,8 @@
+- Session: managed pooler startup
+- Date/duration: 2026-10-13; not recorded
+- Scope/start: Bounded runtime connection fix; clean codex/managed-auth-online-dashboard at f2429b2fc80589149fbd55c324272c6e8daeb45d.
+- Changes: Omit adapter startup search_path for default/explicit public; retain custom-schema startup isolation; add three configuration regressions and document the public role-default requirement.
+- Decisions: Keep SQL, migrations, TLS, pool bounds, transactions, auth and guest storage unchanged; no private configuration edits or remote actions.
+- Roadblocks: Owner reports schema-qualified public.users read PASS without startup options versus CONNECT failure with them; unqualified public resolution awaits live retry; guarded local integration could not run without local TEST_DATABASE_URL.
+- Verification: Node 24.21.0/pnpm 11.22.0; both public regressions failed before runtime edits, lifecycle suite 9 PASS afterward; pnpm check:api 150 PASS and pnpm check 610 PASS after local listener approval; db/session/format/diff checks and independent review PASS; existing lint/listener/chunk warnings remain.
+- Follow-up: Private owner retry of runtime read, account verification and guest copying; local PostgreSQL verification and multi-account/HTTPS release gates remain outstanding; no staging or commits.

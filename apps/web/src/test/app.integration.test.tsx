@@ -126,7 +126,7 @@ describe('KendoMenu application flows', () => {
 
     const notice = screen.getByRole('complementary', { name: 'Cookie notice' });
     expect(notice).toHaveTextContent(
-      'When signed out, KendoMenu sends one cookie-free page count when this page first opens.',
+      'If you sign in with Google, essential cookies maintain your session.',
     );
     expect(screen.getByRole('link', { name: 'More information' })).toHaveAttribute(
       'href',
@@ -264,6 +264,54 @@ describe('KendoMenu application flows', () => {
     );
   });
 
+  it('explains guest and online accounts and links to the open-source project', async () => {
+    const user = userEvent.setup();
+    renderApp(createTestStore(), { initialEntries: ['/app'] });
+    expect(screen.getByRole('button', { name: 'Sign up here' })).toBeVisible();
+    expect(
+      screen.getByText('KendoMenu meets you where you are in your kendo journey.'),
+    ).toBeVisible();
+    expect(
+      screen.getByRole('heading', {
+        name: 'A curated library with real training context',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', {
+        name: 'Your next keiko starts with a clear plan',
+      }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Is KendoMenu free?' }));
+    const freeAnswer = screen.getByRole('region', { name: 'Is KendoMenu free?' });
+    expect(freeAnswer).toHaveTextContent('100% free to use');
+    expect(freeAnswer).toHaveTextContent('keeping your dashboard saved locally');
+    expect(freeAnswer).toHaveTextContent('available across devices');
+    expect(freeAnswer).toHaveTextContent('not now nor in the future');
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Can I use KendoMenu on my phone and computer?',
+      }),
+    );
+    const devicesAnswer = screen.getByRole('region', {
+      name: 'Can I use KendoMenu on my phone and computer?',
+    });
+    expect(devicesAnswer).toHaveTextContent('saved on whichever device');
+    expect(devicesAnswer).toHaveTextContent('your menus available across devices');
+    expect(devicesAnswer).toHaveTextContent('PWA (Progressive Web Application)');
+    await user.click(screen.getByRole('button', { name: 'Is KendoMenu open source?' }));
+    const sourceAnswer = screen.getByRole('region', {
+      name: 'Is KendoMenu open source?',
+    });
+    expect(sourceAnswer).toHaveTextContent('AGPL-3.0');
+    expect(within(sourceAnswer).getByRole('link')).toHaveAttribute(
+      'href',
+      'https://github.com/JavierMarro/kendo-menu',
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Are my menus synchronised between devices?' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('renders the landing page at /app and links into the Keiko library', async () => {
     const user = userEvent.setup();
     const store = createTestStore();
@@ -271,7 +319,7 @@ describe('KendoMenu application flows', () => {
     renderApp(store, { initialEntries: ['/app'] });
 
     expect(
-      screen.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+      screen.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeInTheDocument();
     const header = screen.getByRole('banner');
     expect(within(header).getByRole('link', { name: 'KendoMenu home' })).toHaveAttribute(
@@ -286,12 +334,12 @@ describe('KendoMenu application flows', () => {
     ).toBe('/assets/kendo-menu-logo-88.jpeg');
     expect(
       screen.getByText(
-        'Choose from 11 curated menus, shape the workload for your training and keep polishing mind, spirit and character through varied kendo practice.',
+        'Choose from 11 curated menus, shape the workload for your training and keep polishing mind, spirit and character through varied kendo practice',
       ),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('heading', {
-        name: 'A keiko menu for the day in front of you.',
+        name: 'A keiko menu for the day in front of you',
         level: 2,
       }),
     ).toBeInTheDocument();
@@ -305,7 +353,7 @@ describe('KendoMenu application flows', () => {
         /an Osaka police keiko menu, a high school routine, and a Kanoya University training sequence\./,
       ),
     ).toBeInTheDocument();
-    expect(countStandaloneLandingMenuWords()).toBe(4);
+    expect(countStandaloneLandingMenuWords()).toBe(5);
     expect(screen.getByRole('heading', { name: 'How it works', level: 2 })).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -314,7 +362,7 @@ describe('KendoMenu application flows', () => {
     ).toBeInTheDocument();
 
     const introductionHeading = screen.getByRole('heading', {
-      name: 'A keiko menu for the day in front of you.',
+      name: 'A keiko menu for the day in front of you',
       level: 2,
     });
     const introductionLayout = introductionHeading.closest('.landing-introduction-grid');
@@ -374,13 +422,13 @@ describe('KendoMenu application flows', () => {
     expect(recordLink).toHaveAttribute('href', '/app/guest/dashboard');
     expect(recordLink).toHaveClass('landing-primary-action');
 
-    const continueAsGuest = screen.getByRole('link', { name: 'Continue as a guest' });
+    const continueAsGuest = screen.getByRole('link', { name: 'Try without an account' });
     expect(continueAsGuest).toHaveAttribute('href', '/app/guest/dashboard');
     await user.click(continueAsGuest);
     expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
     await user.click(within(header).getByRole('link', { name: 'KendoMenu home' }));
     expect(
-      screen.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+      screen.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeInTheDocument();
 
     await user.click(
@@ -392,7 +440,7 @@ describe('KendoMenu application flows', () => {
 
     await user.click(within(header).getByRole('link', { name: 'KendoMenu home' }));
     expect(
-      screen.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+      screen.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeInTheDocument();
   });
 
@@ -687,7 +735,7 @@ describe('KendoMenu application flows', () => {
     renderApp(store, { initialEntries: ['/'] });
 
     expect(
-      screen.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+      screen.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeInTheDocument();
   });
 

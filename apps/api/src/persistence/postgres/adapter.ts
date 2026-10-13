@@ -50,7 +50,9 @@ export function createPostgresPersistence(
     max: 5,
     idleTimeoutMillis: 5_000,
     connectionTimeoutMillis: 5_000,
-    options: `-c search_path="${schema}"`,
+    // Avoid startup search_path on the pooled public runtime; use the role's default path.
+    // Keep direct local test schemas explicit so their data cannot fall back to public.
+    ...(schema === 'public' ? {} : { options: `-c search_path="${schema}"` }),
   });
   pool.on('error', () => undefined);
   const database: PersistenceDatabase = drizzle({ client: pool, schema: persistenceSchema });

@@ -111,7 +111,7 @@ test.describe('accessibility and responsive layout', () => {
       await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
     }
     await expect(
-      page.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+      page.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeVisible();
     await expectNoBlockingAxeViolations(page);
   });
@@ -661,11 +661,11 @@ test.describe('accessibility and responsive layout', () => {
     const firstQuestion = faqGrid.getByRole('button', { name: 'What is KendoMenu?' });
     await expect(faqGrid).not.toHaveClass(/is-revealed/);
 
-    const heroCta = page.getByRole('link', { name: 'Continue as a guest' });
+    const heroCta = page.getByRole('link', { name: 'Try without an account' });
     await heroCta.focus();
     await expect(heroCta).toBeFocused();
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Sign up here' })).toBeFocused();
     await page.keyboard.press('Tab');
 
     await expect(firstQuestion).toBeFocused();

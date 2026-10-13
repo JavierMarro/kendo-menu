@@ -17,7 +17,7 @@ function isProject(testInfo: TestInfo, projectName: string): boolean {
 }
 
 async function dispatchBeforeInstallPrompt(page: Page): Promise<boolean> {
-  await expect(page.getByRole('heading', { name: 'Plan the keiko you need today.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Plan the keiko you need today' })).toBeVisible();
   return page.evaluate(() => {
     const event = new Event('beforeinstallprompt', { cancelable: true });
     Object.defineProperties(event, {
@@ -114,7 +114,7 @@ test.describe('installation and cookie notice coordination', () => {
     await page.goto('/app');
     await session.requestStarted;
     await expect(
-      page.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+      page.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeVisible();
     await page.locator('.landing-page').evaluate((landing) => {
       landing.setAttribute('data-session-check-marker', 'mounted');
@@ -157,7 +157,7 @@ test.describe('installation and cookie notice coordination', () => {
     await page.goto('/app');
     await session.requestStarted;
     await expect(
-      page.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+      page.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeVisible();
 
     expect(await dispatchBeforeInstallPrompt(page)).toBe(true);

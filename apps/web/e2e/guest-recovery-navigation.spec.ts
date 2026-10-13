@@ -58,7 +58,7 @@ test('quota recovery protects guest dashboard Home and public-page departure unt
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('banner').getByRole('link', { name: 'KendoMenu home' }).click();
   await expect(page).toHaveURL(/\/app$/);
-  await page.getByRole('link', { name: 'Continue as a guest' }).click();
+  await page.getByRole('link', { name: 'Try without an account' }).click();
   await expect(page.locator('.dashboard-card--compact')).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem('kendo-menu'))).toBeNull();
 });

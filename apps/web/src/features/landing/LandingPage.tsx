@@ -27,7 +27,7 @@ const FAQ_ITEMS: readonly FaqItem[] = [
     id: 'is-kendomenu-free',
     question: 'Is KendoMenu free?',
     answer:
-      'Yes. KendoMenu is free to use, with no adverts or premium features. Menus you save stay on this device.',
+      'Yes. KendoMenu is 100% free to use. You decide whether to use this site as a guest, keeping your dashboard saved locally, or to sign up to have your dashboard available across devices. Regardless of your choice, there are no adverts or premium features, not now nor in the future.',
   },
   {
     id: 'all-experience-levels',
@@ -66,13 +66,20 @@ const FAQ_ITEMS: readonly FaqItem[] = [
     id: 'phone-and-computer',
     question: 'Can I use KendoMenu on my phone and computer?',
     answer:
-      'Yes. KendoMenu is designed for desktop and mobile browsers. Depending on your browser, you may also be able to add a shortcut to your phone’s home screen.',
+      'Yes. KendoMenu is designed for desktop and mobile browsers. You can try the website as a guest, and your menus will be saved on whichever device you’re using. Or you can sign up and have your menus available across devices. Furthermore, depending on your browser, you may also be able to add a shortcut to your phone’s home screen, as this web app has been made as a PWA (Progressive Web Application).',
   },
   {
-    id: 'device-sync',
-    question: 'Are my menus synchronised between devices?',
-    answer:
-      'Guest menus stay on this device. Google account menus are loaded online and changes move between devices only when you choose Save to account.',
+    id: 'open-source',
+    question: 'Is KendoMenu open source?',
+    answer: (
+      <>
+        Yes. KendoMenu is open source under the AGPL-3.0 license. The full source code lives at{' '}
+        <a className="landing-faq-source-link" href="https://github.com/JavierMarro/kendo-menu">
+          https://github.com/JavierMarro/kendo-menu
+        </a>
+        . The product is free, with no ads or premium tier, and is built by a solo developer.
+      </>
+    ),
   },
 ];
 
@@ -186,17 +193,17 @@ export function LandingPage(): ReactElement {
         </picture>
         <div className="landing-content">
           <p className="eyebrow">Kendo practice, curated for you</p>
-          <h1 id="landing-page-title">Plan the keiko you need today.</h1>
+          <h1 id="landing-page-title">Plan the keiko you need today</h1>
           <p className="landing-intro">
             Choose from {CURATED_TRAINING_SET_COUNT} curated menus, shape the workload for your
-            training and keep polishing mind, spirit and character through varied kendo practice.
+            training and keep polishing mind, spirit and character through varied kendo practice
           </p>
           <div className="landing-entry-actions">
             <Link
               className="primary-button landing-cta landing-primary-action"
               to="/app/guest/dashboard"
             >
-              Continue as a guest
+              Try without an account
             </Link>
             <button
               className="secondary-button landing-cta"
@@ -206,7 +213,7 @@ export function LandingPage(): ReactElement {
                 void startGoogleSignIn().then((started) => setSignInError(!started));
               }}
             >
-              Continue with Google
+              Sign up here
             </button>
           </div>
           {signInError ? (
@@ -221,14 +228,14 @@ export function LandingPage(): ReactElement {
         <section className="landing-section landing-introduction" aria-labelledby="intro-title">
           <div className="landing-section-inner landing-introduction-grid">
             <div className="landing-section-heading">
-              <h2 id="intro-title">A keiko menu for the day in front of you.</h2>
+              <h2 id="intro-title">A keiko menu for the day in front of you</h2>
             </div>
 
             <div className="landing-section-copy" data-landing-reveal="left">
               <p>
-                <strong>KendoMenu meets you where you are in your keiko.</strong> It is for senpai
-                looking for fresh inspiration, sensei and dojo leaders planning a training session,
-                and practitioners who want to adapt activities by changing repetitions or duration.
+                <strong>KendoMenu meets you where you are in your kendo journey.</strong> It is for
+                senpai looking for fresh inspiration, sensei planning keiko, or practitioners who
+                want to keep a journal of their training sessions.
               </p>
               <p>
                 <strong>Start with a curated practice plan or build from scratch.</strong> Shape it
@@ -304,7 +311,7 @@ export function LandingPage(): ReactElement {
           <div className="landing-section-inner">
             <div className="landing-library-heading" data-landing-reveal="split">
               <div className="landing-section-heading landing-reveal-right">
-                <h2 id="library-story-title">A curated library with real training context.</h2>
+                <h2 id="library-story-title">A curated library with real training context</h2>
               </div>
               <p className="landing-reveal-left">
                 <strong>Carefully sourced and easy to adapt.</strong> These figures reflect the
@@ -422,7 +429,7 @@ export function LandingPage(): ReactElement {
           <div className="landing-section-inner">
             <div className="landing-final-cta-panel" data-landing-reveal="split">
               <div className="landing-final-cta-copy landing-reveal-right">
-                <h2 id="final-cta-title">Your next keiko starts with a clear plan.</h2>
+                <h2 id="final-cta-title">Your next keiko starts with a clear plan</h2>
                 <p>
                   <strong>Make today’s plan real.</strong> Choose a session from the library, adjust
                   it and make the plan yours.

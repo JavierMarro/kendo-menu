@@ -1,89 +1,105 @@
 # KendoMenu
 
-KendoMenu is a deployed, local-first production MVP for planning kendo training sessions.
-Practitioners can browse 11 curated built-in sessions, add sessions to a dashboard, adapt activity
-quantities, attach notes, and create custom sessions. Guest training data remains in browser
-storage; no account or server is required.
+A free, open-source planner for kendo practice. Browse 11 curated keiko menus, adjust repetitions
+and duration, add training notes, or build your own sessions.
 
-## Current stack
+- **Guest:** your dashboard stays in this browser, with offline use and backup export.
+- **Google account:** saved menus live online and are available across devices. Account edits stay
+  in memory until you choose **Save to account**.
+- **Guest copy:** eligible new accounts receive one choice to copy their guest menus. The original
+  stays on the device, and subsequent guest/account edits are independent.
 
-- pnpm workspaces with one root lockfile
-- React, React Router, Vite, and TypeScript in `apps/web`
-- Zustand `persist` with an injected storage adapter in `packages/store`
-- Shared recursive training contracts and curated-data validation in `packages/domain`
-- Elysia local backend in `apps/api`, with separate Node and Vercel adapters (not deployed)
-- An uninitialized `apps/mobile` boundary reserved for explicitly requested future work
+The deployed guest MVP and the managed-account development work have different release boundaries.
+Single-account development persistence has owner-reported passes; multi-account and deployed HTTPS
+validation remain open before a public account release. See the [account contract and live checklist](docs/MANAGED_DASHBOARDS.md).
 
-Internal account integration uses Neon-managed Google authentication and bearer-authorized
-PostgreSQL dashboards. [Migration C](docs/MANAGED_ACCOUNT_WEB.md) separates offline guest routes
-from online account drafts held in memory with explicit saves. [Migration D](docs/MANAGED_GUEST_COPY.md)
-adds a separate, one-time guest-copy setup screen for eligible newly created accounts. Live B persistence, multi-account and production HTTPS/Vercel validation remain
-public-release gates; no public account release is claimed.
+## Run locally
 
-## Workspace layout
+Use Node **24.x** and the pnpm version declared in `package.json`.
 
-```text
-apps/
-  web/       React/Vite production SPA
-  api/       Elysia application and standalone Node entry
-  mobile/    Reserved Expo boundary
-packages/
-  domain/    Training contracts, validation, and curated-data adapter
-  store/     Zustand store factory with injected persistence
-  ui/        Reserved shared UI boundary
-```
-
-## Development
-
-Node 24 LTS is the declared runtime; pnpm is the repository package manager. Common root commands are:
-
-```bash
-pnpm install
+```sh
+corepack enable pnpm
+pnpm install --frozen-lockfile
 pnpm dev
-pnpm dev:api
-pnpm check:api
-pnpm test:domain
-pnpm test:store
-pnpm test:web
-pnpm check:domain
-pnpm check:store
-pnpm check:web
-pnpm test
-pnpm check
-pnpm test:e2e
-pnpm test:e2e:preview
-pnpm test:e2e:pwa
-pnpm test:e2e:chromium
-pnpm test:e2e:mobile
-pnpm test:e2e:a11y
-pnpm verify:full
-pnpm session:new -- --slug <short-slug> --duration "<duration>"
-pnpm session:check
-pnpm format
 ```
 
-Use `pnpm check` as the normal code gate and `pnpm test:e2e` as the fast browser suite backed by the
-Vite development server. `pnpm test:e2e:preview` rebuilds the app and runs the complete non-PWA
-browser suite against Vite's production preview. `pnpm test:e2e:pwa` remains the dedicated PWA
-artifact suite. The release gate, `pnpm verify:full`, runs `pnpm check`, the preview suite, and the
-PWA suite without rerunning the development-server suite.
+Open `http://localhost:5173`. Guest use does not require a database or Google credentials.
 
-The standalone API listens on port 3000. Follow C's [Node 24 local startup](docs/MANAGED_ACCOUNT_WEB.md#local-startup-under-node-24)
-to load the existing private configuration explicitly. Vite proxies account/dashboard requests
-to port 3000 without rewriting browser Origin; the isolated proof identity listener stays on port 3001. No listener runs migrations. API request tests cover application/adapters separately;
-combined Vercel discovery/routing still requires authorized Preview verification. The health
-scaffold needs no credentials.
+For account development, use your own non-production Neon branch. Copy the placeholder templates
+and fill the ignored files privately:
 
-Curated drill content is authored in `packages/domain/data/default-drills.json`, validated against
-`packages/domain/schema/kendo-drills.schema.json`, and adapted by
-`packages/domain/src/default-training-sets.ts` into the recursive `TrainingActivity` runtime model.
-Every activity has a stable ID because dashboard quantities and activity notes are keyed by it.
+```sh
+cp apps/web/.env.example apps/web/.env.local
+cp apps/api/.env.example apps/api/.env.local
+```
 
-See [PRODUCT.md](./PRODUCT.md) for product and UX scope, [CONTEXT.md](./CONTEXT.md) for terminology,
-and [AGENTS.md](./AGENTS.md) for the repository working contract. Development history is recorded in
-[`docs/work-sessions`](./docs/work-sessions/). See the [architecture](./docs/ARCHITECTURE.md) and
-[deployment runbook](./docs/runbooks/DEPLOYMENT.md) for the current production boundaries and
-release procedure.
+The web app needs `VITE_NEON_AUTH_URL`. The API needs `NEON_AUTH_BASE_URL`, `DATABASE_URL`, and
+`APP_ORIGIN=http://localhost:5173`. The two Auth URL variables refer to the same complete Neon Auth
+base URL. Database migrations use a separate `MIGRATION_DATABASE_URL`; applying them is an explicit
+owner action, never part of starting the app. Follow the [database checklist](docs/MANAGED_DASHBOARDS.md#owner-run-non-production-migration)
+before enabling account storage.
 
-Project-owned Codex workflows are natively discoverable and indexed in
-[`.agents/skills`](./.agents/skills/). Load only the skill that matches the current workflow.
+Keep the web terminal running. In a second terminal, start the API from its own directory:
+
+```sh
+cd apps/api
+pnpm exec node --env-file=.env.local --import tsx --watch src/node.ts
+```
+
+The API listens on port 3000; Vite proxies the account requests. See the
+[managed-account guide](docs/MANAGED_ACCOUNT_WEB.md) for the complete development flow.
+
+## Useful commands
+
+```sh
+pnpm check                # Types, lint, formatting, unit tests, build
+pnpm test:e2e             # Desktop/mobile development browser suite
+pnpm test:e2e:preview     # Complete suite against a fresh production preview
+pnpm test:e2e:pwa         # Service worker and offline guest shell
+pnpm verify:full          # Code checks, preview suite, and PWA suite
+```
+
+Real database integration tests require the guarded local `kendomenu_test` database. Never point
+`TEST_DATABASE_URL` at Neon, development, or production data.
+
+## Project layout
+
+- `apps/web`: React, Vite, React Router and the browser UI.
+- `apps/api`: Node 24, Elysia, PostgreSQL and Drizzle.
+- `packages/domain`: training contracts, validation and the curated catalogue.
+- `packages/store`: Zustand state with injected browser or memory storage.
+- `apps/mobile` and `packages/ui`: reserved boundaries, not initialized applications.
+
+Curated content lives in `packages/domain/data/default-drills.json`. Read [PRODUCT.md](PRODUCT.md)
+and [CONTEXT.md](CONTEXT.md) for the product and terminology, or [the architecture](docs/ARCHITECTURE.md)
+for data flow. [AGENTS.md](AGENTS.md) describes repository conventions for coding agents.
+
+## Contributing and security
+
+Small, focused issues and pull requests are welcome. Describe the user-visible change, preserve
+independent guest/account data, and run the relevant checks before proposing a code change.
+
+- Keep database passwords, OAuth secrets, management keys, tokens and personal training data out of
+  commits, issues, screenshots and logs. `VITE_*` values are exposed to browsers; never put secrets
+  in them. The Neon Auth base URL is public configuration, not a credential.
+- `.gitignore` and CI reject common private configuration, key and database-export file names.
+  This is a file guard, not a content-based secret scanner. `.env.example` files must stay empty
+  placeholder templates.
+- Before making a repository public, run a redacted scan of its entire Git history and review
+  third-party content/asset permissions. Ignoring or deleting a file does not remove earlier
+  commits; revoke and rotate any credential that was exposed.
+- Confirm [GitHub secret scanning and push protection](https://docs.github.com/en/code-security/concepts/secret-security/secret-scanning),
+  protect `main` with required CI checks, and enable private vulnerability reporting. Report
+  security issues privately when that channel is enabled; never attach credentials to a public issue.
+
+CI uses read-only repository permissions and runs the existing release checks without deployment
+credentials. Public source code does not grant access to a hosted account or database.
+
+## License
+
+Copyright (C) 2026 JavierMarro.
+
+KendoMenu's original code is licensed under **GNU AGPL version 3 only** (`AGPL-3.0-only`); see
+[LICENSE](LICENSE). Reuse, modification and commercial use are allowed under its terms. If you host
+an applicable modified version, offer users the corresponding source for that version. Third-party
+dependencies and materials retain their own license terms.

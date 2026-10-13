@@ -179,7 +179,7 @@ test('Continue as a guest opens the guest dashboard while account routes stay se
 }) => {
   const harness = await SyntheticManagedHarness.install(page);
   await page.goto('/app');
-  await page.getByRole('link', { name: 'Continue as a guest' }).click();
+  await page.getByRole('link', { name: 'Try without an account' }).click();
   await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
   await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
   await page.goto('/app/guest/library');
@@ -745,7 +745,7 @@ test('an open account library dialog stays hidden through identity uncertainty a
 
   await expect(page).toHaveURL(/\/app$/);
   await expect(
-    page.getByRole('heading', { name: 'Plan the keiko you need today.', exact: true }),
+    page.getByRole('heading', { name: 'Plan the keiko you need today', exact: true }),
   ).toBeVisible();
   await expect(dialog).toBeHidden();
   await expect(page.getByText('Signed in as practitioner@example.test')).toHaveCount(0);
@@ -811,6 +811,10 @@ test('401 hides account content and same-account verification reveals the origin
   await expect(page.getByRole('button', { name: 'Download draft' })).toBeVisible();
   const retry = page.getByRole('button', { name: 'Retry same save' });
   await expect(retry).toBeVisible();
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  const warning = page.getByRole('alertdialog', { name: /Leave this account/i });
+  await expect(warning).toBeVisible();
+  await warning.getByRole('button', { name: 'Keep editing', exact: true }).click();
   await retry.click();
   await expect.poll(() => apiCallsFor(harness, 'PUT').length).toBe(2);
   expect(apiCallsFor(harness, 'PUT')[1]?.body).toBe(apiCallsFor(harness, 'PUT')[0]?.body);
@@ -818,6 +822,41 @@ test('401 hides account content and same-account verification reveals the origin
     expectedAccountWorkspaceId: ACCOUNT_ID,
     expectedRevision: '0',
   });
+});
+
+test('a clean loaded account signs out without a discard dialog', async ({ page }) => {
+  const harness = await SyntheticManagedHarness.install(page, { initiallySignedIn: true });
+  await enterAccount(page, harness);
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/app$/);
+  expect(harness.apiCalls.some((call) => call.method === 'PUT')).toBe(false);
+});
+
+test('acknowledged menu creation and edits sign out directly while later edits still warn', async ({
+  page,
+}) => {
+  const harness = await SyntheticManagedHarness.install(page, { initiallySignedIn: true });
+  await enterAccount(page, harness);
+  await createBuilderMenu(page, 'Saved account menu');
+  await page.getByRole('button', { name: 'Save to account', exact: true }).click();
+  await expect(page.getByText('Saved to account', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'View more', exact: true }).click();
+  await page.getByLabel('Practice notes').fill('Later unsaved edit');
+  await page.getByRole('button', { name: /Close .* details/i }).click();
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  const warning = page.getByRole('alertdialog', { name: /Leave this account/i });
+  await expect(warning).toBeVisible();
+  await warning.getByRole('button', { name: 'Keep editing', exact: true }).click();
+  await expect(warning).toBeHidden();
+  await page.getByRole('button', { name: 'Save to account', exact: true }).click();
+  await expect(page.getByText('Saved to account', { exact: true })).toBeVisible();
+  expect(JSON.stringify(parseJson(apiCallsFor(harness, 'PUT')[1]?.body))).toContain(
+    'Later unsaved edit',
+  );
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(warning).toHaveCount(0);
+  await expect(page).toHaveURL(/\/app$/);
 });
 
 test('sign-out fences a late Save response and returns home', async ({ page }) => {
@@ -888,8 +927,6 @@ test('cross-tab signed-out hints trigger verification and hide the other tab acc
   });
 
   await page.getByRole('button', { name: 'Sign out' }).click();
-  await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toBeVisible();
-  await page.getByRole('button', { name: /Discard and sign out/i }).click();
   await tokenSeen;
   try {
     await expect(
@@ -903,7 +940,7 @@ test('cross-tab signed-out hints trigger verification and hide the other tab acc
 
   await expect(secondPage).toHaveURL(/\/app$/);
   await expect(
-    secondPage.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+    secondPage.getByRole('heading', { name: 'Plan the keiko you need today' }),
   ).toBeVisible();
   expect(secondHarness.apiCalls.some((call) => call.method === 'PUT')).toBe(false);
   expectCredentialFreeAccountTransport(firstHarness);
@@ -968,6 +1005,7 @@ test('account dashboard and sign-out dialog are accessible with keyboard focus r
     [],
   );
 
+  await addCuratedMenu(page);
   const signOut = page.getByRole('button', { name: 'Sign out' });
   await signOut.focus();
   await expect(signOut).toBeFocused();
@@ -1022,5 +1060,10 @@ test('an unfinished account builder draft warns before navigation and stays in m
   });
   await page.getByRole('link', { name: 'Back to keiko library' }).click();
   await expect(page).toHaveURL(/\/app\/account\/drills\/new$/);
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  const warning = page.getByRole('alertdialog', { name: /Leave this account/i });
+  await expect(warning).toBeVisible();
+  await warning.getByRole('button', { name: 'Keep editing', exact: true }).click();
+  await expect(page.getByLabel('Session name')).toHaveValue('Unsubmitted account menu');
   expect(apiCallsFor(harness, 'PUT')).toHaveLength(0);
 });

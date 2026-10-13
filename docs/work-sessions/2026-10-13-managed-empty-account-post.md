@@ -1,0 +1,8 @@
+- Session: managed empty account post
+- Date/duration: 2026-10-13; not recorded
+- Scope/start: Correct Node account initialization at f2429b2 on codex/managed-auth-online-dashboard; preserve the uncommitted pooler correction.
+- Changes: Authorize identity and Origin before probing actual POST body bytes; accept empty streams, reject payloads/read failures before persistence; add unit and real Node HTTP regressions.
+- Decisions: Ignore Content-Length for emptiness; release the reader without canceling the incoming socket; preserve existing transport deadlines, account/copy contracts and guest storage.
+- Roadblocks: Node exposes bodyless POSTs as streams; the former non-null check rejected valid initialization with 400 before authorization.
+- Verification: Node 24.21.0/pnpm 11.22.0; four real Node regressions failed before the runtime fix; focused 23 and check:api 163 PASS; pnpm check 623 tests/types/lint/format/build PASS on complete rerun after an unchanged web editor timeout and following assertion failure; independent review PASS; existing lint/listener/chunk warnings remain.
+- Follow-up: Owner restarts API and retries account opening; live persistence, multi-account and HTTPS remain unverified; prior pooler local PostgreSQL check still lacks TEST_DATABASE_URL; nothing staged or committed.

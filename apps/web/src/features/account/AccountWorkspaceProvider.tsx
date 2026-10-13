@@ -626,7 +626,10 @@ function LoadedAccountWorkspaceView({
                 ref={signOutTriggerRef}
                 className="text-button"
                 type="button"
-                onClick={() => setDiscardPrompt(true)}
+                onClick={() => {
+                  if (warnBeforeLeaving) setDiscardPrompt(true);
+                  else void discardAndSignOut();
+                }}
               >
                 Sign out
               </button>

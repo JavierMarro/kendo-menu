@@ -119,9 +119,9 @@ test('a new account confirms one complete guest copy and keeps later edits separ
   await expectGuestBytesUnchanged(page, guestBytes);
 
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-  await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toBeVisible();
-  await page.getByRole('button', { name: /Discard and sign out/i }).click();
-  await page.getByRole('link', { name: 'Continue as a guest' }).click();
+  await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/app$/);
+  await page.getByRole('link', { name: 'Try without an account' }).click();
   await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
   await expect(page.getByRole('heading', { name: 'Guest copy source', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'View more', exact: true }).click();
@@ -163,9 +163,9 @@ test('No sends the strict decline and preserves the guest dashboard', async ({
   await expect(page.locator('.dashboard-card--compact')).toHaveCount(0);
   await expectGuestBytesUnchanged(page, guestBytes);
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-  await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toBeVisible();
-  await page.getByRole('button', { name: /Discard and sign out/i }).click();
-  await page.getByRole('link', { name: 'Continue as a guest' }).click();
+  await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/app$/);
+  await page.getByRole('link', { name: 'Try without an account' }).click();
   await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
   await expect(page.getByRole('heading', { name: 'Guest copy source', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'View more', exact: true }).click();
@@ -256,7 +256,7 @@ test('sign-out fences a late adoption acknowledgement and restores the guest sou
     },
   });
   await expect(page.getByText('Your guest menus were copied to your account.')).toHaveCount(0);
-  await page.getByRole('link', { name: 'Continue as a guest' }).click();
+  await page.getByRole('link', { name: 'Try without an account' }).click();
   await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
   await expect(page.getByRole('heading', { name: 'Guest copy source', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'View more', exact: true }).click();

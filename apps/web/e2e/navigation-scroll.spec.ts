@@ -92,7 +92,7 @@ test.describe('navigation scroll behavior', () => {
     await page.locator('.top-bar').getByRole('link', { name: 'KendoMenu home' }).click();
     await expect(page).toHaveURL(/\/app$/);
     await expect(
-      page.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+      page.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeVisible();
     await expectTop(page);
   });

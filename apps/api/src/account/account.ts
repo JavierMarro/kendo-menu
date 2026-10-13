@@ -1,6 +1,8 @@
 /**
  * HTTP boundary for managed-account initialization and reads.
  * Initialization uses server-verified Neon identity; reads require a proof bound to that identity.
+ * After authorization, initialization checks actual body bytes because Node may wrap empty POSTs
+ * in a stream.
  * Persistence maps the identity and creates any new-account copy opportunity with the account row.
  */
 import {
@@ -14,6 +16,25 @@ import type {
 
 export interface Account {
   handle(request: Request): Promise<Response>;
+}
+
+async function hasEmptyBody(request: Request): Promise<boolean> {
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  try {
+    const body = request.body;
+    if (body === null) return true;
+    reader = body.getReader();
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) return true;
+      if (!(chunk.value instanceof Uint8Array) || chunk.value.byteLength !== 0) return false;
+    }
+  } catch {
+    return false;
+  } finally {
+    // Canceling the Node request stream can close its socket before the fixed response is sent.
+    reader?.releaseLock();
+  }
 }
 
 export function createAccount(dependencies: {
@@ -48,13 +69,13 @@ export function createAccount(dependencies: {
       }
 
       if (method === 'POST') {
-        if (request.body !== null) {
-          return Response.json({ error: 'INVALID_ACCOUNT_REQUEST' }, { status: 400 });
-        }
         // No account identifier is accepted; persistence maps only the verified provider subject.
         const verified = await dependencies.authorization.verifyIdentity(request);
         if (verified.status !== 'verified') {
           return accountAuthorizationFailureResponse(verified.status);
+        }
+        if (!(await hasEmptyBody(request))) {
+          return Response.json({ error: 'INVALID_ACCOUNT_REQUEST' }, { status: 400 });
         }
         let outcome: AccountInitializationOutcome;
         try {

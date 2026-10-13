@@ -195,7 +195,7 @@ test.describe('production PWA shell', () => {
 
         if (path === '/app') {
           await expect(
-            page.getByRole('heading', { name: 'Plan the keiko you need today.', exact: true }),
+            page.getByRole('heading', { name: 'Plan the keiko you need today', exact: true }),
           ).toBeVisible();
         } else if (path === '/app/guest/dashboard') {
           await expect(

@@ -102,11 +102,11 @@ test.describe('routed training flows', () => {
 
   test('opens the landing page, enters the guest dashboard, and returns home from the logo', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await page.goto('/');
     await expect(page).toHaveURL(/\/app$/);
     await expect(
-      page.getByRole('heading', { name: 'Plan the keiko you need today.', exact: true }),
+      page.getByRole('heading', { name: 'Plan the keiko you need today', exact: true }),
     ).toBeVisible();
     await expect(page.locator('.landing-page')).toBeVisible();
     const viewport = page.viewportSize();
@@ -139,14 +139,20 @@ test.describe('routed training flows', () => {
       await expect(page.locator('.brand-name')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Open navigation' })).toBeHidden();
       await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Sign up here' })).toBeVisible();
     }
 
     await expect(page.locator('.landing-hero img')).toBeVisible();
     await expect(page.locator('.landing-hero img')).toHaveJSProperty('complete', true);
 
-    const browseLibrary = page.getByRole('link', { name: 'Continue as a guest' });
-    await expect(browseLibrary).toHaveText('Continue as a guest');
+    const browseLibrary = page.getByRole('link', { name: 'Try without an account' });
+    await expect(browseLibrary).toHaveText('Try without an account');
+    await expect(page.getByRole('button', { name: 'Sign up here', exact: true })).toBeVisible();
+    await page
+      .getByRole('complementary', { name: 'Cookie notice' })
+      .getByRole('button', { name: 'Got it', exact: true })
+      .click();
+    await page.screenshot({ path: testInfo.outputPath('landing-hero.png') });
     await expect(page.getByText('exercises across all training sessions')).toBeVisible();
     await browseLibrary.click();
     await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
@@ -155,10 +161,37 @@ test.describe('routed training flows', () => {
     await expect(page).toHaveURL(/\/app$/);
   });
 
+  test('account FAQ answers stay readable and the source link is accessible', async ({
+    page,
+  }, testInfo) => {
+    await page.goto('/app');
+    await page
+      .getByRole('complementary', { name: 'Cookie notice' })
+      .getByRole('button', { name: 'Got it', exact: true })
+      .click();
+    for (const question of [
+      'Is KendoMenu free?',
+      'Can I use KendoMenu on my phone and computer?',
+      'Is KendoMenu open source?',
+    ]) {
+      await page.getByRole('button', { name: question, exact: true }).click();
+      const answer = page.getByRole('region', { name: question, exact: true });
+      await expect(answer).toBeVisible();
+      const viewport = page.viewportSize();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        viewport?.width ?? 0,
+      );
+    }
+    await expect(
+      page.getByRole('link', { name: 'https://github.com/JavierMarro/kendo-menu', exact: true }),
+    ).toHaveAttribute('href', 'https://github.com/JavierMarro/kendo-menu');
+    await page.screenshot({ path: testInfo.outputPath('landing-faq.png') });
+  });
+
   test('persists the cookie notice acknowledgement for 21 days', async ({ page }) => {
     const notice = page.getByRole('complementary', { name: 'Cookie notice' });
     await expect(notice).toContainText(
-      'When signed out, KendoMenu sends one cookie-free page count when this page first opens.',
+      'If you sign in with Google, essential cookies maintain your session.',
     );
     await expect(notice.getByRole('link', { name: 'More information' })).toHaveAttribute(
       'href',

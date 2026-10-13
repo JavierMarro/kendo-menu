@@ -22,7 +22,7 @@ export function CookiePolicyPage() {
           <p>
             Cookies are small text files that websites can save in your browser to remember
             information between visits. They can support essential functionality, remember
-            preferences, or used for analytics or advertising.
+            preferences, or be used for analytics or advertising.
           </p>
         </section>
 
@@ -32,10 +32,13 @@ export function CookiePolicyPage() {
             <b>KendoMenu does not use cookies for analytics, advertising, or tracking.</b>
           </p>
           <p>
-            Google account sign-in uses Neon-managed session cookies. KendoMenu retrieves a token in
-            memory to authorize account requests; it does not store credentials in local data.
-            Blocking managed session cookies can prevent account sign-in while guest use remains
-            available.
+            Guest use does not require account cookies. If you choose Google sign-in, Neon Auth uses
+            essential cookies for the sign-in flow and your managed session. These are functional
+            cookies, rather than KendoMenu advertising or tracking cookies. KendoMenu retrieves a
+            temporary token in memory to authorize account requests; it does not store credentials
+            in LocalStorage, SessionStorage or IndexedDB. Google and Neon handle their own sign-in
+            services under their respective privacy policies. Blocking managed session cookies can
+            prevent account sign-in while guest use remains available.
           </p>
         </section>
 
@@ -43,12 +46,23 @@ export function CookiePolicyPage() {
           <h2 id="local-storage-title">Local storage</h2>
           <p>
             Guest dashboard training sessions are stored locally in your browser. Signing in does
-            not upload or change them. Account edits stay in this tab’s memory until you choose Save
-            to account and it is confirmed. Reloading or closing the tab can lose unsaved account
-            changes. Existing legacy account caches are ignored without deleting them. Small
-            device-only preferences, including notice acknowledgements and installation prompt
+            not upload or change them. If a newly created account offers to copy your guest menus,
+            only choosing Copy menus sends an independent copy to the account; the original guest
+            data remains on this device. Later guest and account edits are separate.
+          </p>
+          <p>
+            Saved account menus are stored online in KendoMenu’s PostgreSQL database. Account edits
+            stay in this tab’s memory until you choose Save to account and it is confirmed.
+            Reloading or closing the tab can lose unsaved account changes. Signing out hides account
+            content and releases this tab’s account draft; it does not delete your saved online
+            menus. Existing legacy account caches are ignored without deleting them.
+          </p>
+          <p>
+            Small device-only preferences, including notice acknowledgements and installation prompt
             state, are stored locally. A short-lived sign-in marker in session storage records only
             the fixed login flow and expiry; it contains no credentials, identity or training data.
+            Clearing site storage can remove your guest menus and these preferences, so keep a
+            backup of guest data you want to retain.
           </p>
         </section>
 

@@ -38,6 +38,10 @@ Unsupported methods reject without body consumption. Dashboard/adoption bounded 
 authorization; the complete JSON envelope is limited to 2,097,152 UTF-8 bytes and uses the existing
 strict lexical JSON and domain validation.
 
+Account initialization also authorizes before accessing the body. It accepts an absent body or
+a stream ending without bytes, since the Node adapter exposes empty POSTs as streams. Any actual
+body byte or stream-read failure returns sanitized 400 without initializing an account.
+
 JWT expiry is checked at entry, after database waits and before completing mutations. As in A,
 issued bearer credentials may remain usable until expiry after managed sign-out. Neon documents
 [15-minute JWTs](https://github.com/neondatabase/website/blob/main/content/docs/auth/guides/plugins/jwt.md);
@@ -51,6 +55,11 @@ have no legacy Google subject. Verified email is metadata. Creating the account 
 account-keyed copy opportunity is atomic; concurrent initialization has one creation winner.
 Inspection and returning-account initialization do not disclose that opportunity. A lost creation
 response or reload can therefore lose the browser's only opportunity ID.
+
+Public runtime connections omit the startup `search_path` option for pooled-connection compatibility;
+the database role's default search path must resolve the application tables in `public`. Explicit
+non-public schemas retain their startup path on the guarded local test harness's direct connections.
+Transaction-local mutation timeouts, TLS configuration and migration commands are unchanged.
 
 Before consumption, validate identity, ownership, Origin, opportunity eligibility, the entire
 envelope, catalogue, byte bounds and revision-zero requirements. Rejected requests consume nothing.
@@ -144,7 +153,12 @@ connection strings and raw errors are not evidence artifacts. Report pass/fail/n
    original dashboard. **NOT RUN — owner-deferred**: one dedicated Google test account is available;
    personal accounts are excluded. This permits internal B work but remains a public-release gate.
 
-No live B dashboard read/write or remote migration is claimed. Migration A's earlier callback
+On 2026-10-13, the owner reported applying the development-branch migrations and confirmed a
+single-account application journey: guest copy Yes, account creation/edit with explicit Save,
+reload, sign-out showing only the original guest menu, and sign-in restoring the saved account
+menus. These are owner-reported passes, not agent-observed live checks or completion of every
+checklist item. Exact guest-byte and full-application credential-storage checks, guest copy No,
+second-account isolation and deployed HTTPS remain unverified. Migration A's earlier callback
 failures and later owner-reported single-account passes remain historical evidence. The inherited
 mobile failure also remains unresolved: `account-persistence.spec.ts:273`, View dashboard click at
 line 283, detached-element timeout after 30 seconds, 57/58 passed. B's API/database checks do not

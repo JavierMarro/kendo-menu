@@ -146,8 +146,11 @@ availability without replacing the current draft or its expected revision.
 The inherited mobile `account-persistence.spec.ts:273` View dashboard click at line 283 timed out on
 a detached element (57/58 passed). That historical failure remains unresolved. C replaces that
 changed journey's leave-warning coverage with managed-account desktop/mobile tests; deleting the
-obsolete IndexedDB journey does not establish a historical pass. Live B persistence and
-second-account/return-to-first validation remain **NOT RUN** public-release gates.
+obsolete IndexedDB journey does not establish a historical pass. The owner reported single-account
+development persistence passes on 2026-10-13, including guest copy Yes, explicit Save, reload and
+sign-out/sign-in; see the [live checklist status](MANAGED_DASHBOARDS.md#private-live-readwrite-checklist).
+The remaining full-application storage checks, guest copy No, second-account/return-to-first and
+deployed HTTPS validation remain unverified public-release gates.
 
 Final local verification and independent implementation review are recorded in the
 [C work-session handoff](work-sessions/2026-10-07-managed-account-web.md).

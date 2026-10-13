@@ -31,6 +31,25 @@ async function hideAndRevealAccount(page: Page, context: BrowserContext): Promis
   await expect(dialog).toBeVisible();
 }
 
+test('unfinished quantity input warns on sign-out even with a saved account dashboard', async ({
+  page,
+}) => {
+  const harness = await SyntheticManagedHarness.install(page, { initiallySignedIn: true });
+  await addAccountMenu(page);
+  await page.getByLabel('Repetitions for Kirikaeshi').fill('501');
+  await page
+    .getByRole('dialog', { name: 'International dojo menu' })
+    .getByRole('button', { name: /^Close / })
+    .click();
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  const warning = page.getByRole('alertdialog', { name: /Leave this account/i });
+  await expect(warning).toBeVisible();
+  await warning.getByRole('button', { name: 'Keep editing', exact: true }).click();
+  await page.getByRole('button', { name: 'View more' }).first().click();
+  await expect(page.getByLabel('Repetitions for Kirikaeshi')).toHaveValue('501');
+  expect(harness.apiCalls.filter((call) => call.method === 'PUT')).toHaveLength(1);
+});
+
 test('unblurred account editor values survive offline hiding and same-tab reconnect', async ({
   page,
   context,
