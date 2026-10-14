@@ -39,6 +39,7 @@ apps/web/playwright-report/
 
 # Local hosting metadata, credentials, and database exports
 .vercel/
+.neon
 *.pem
 *.key
 *.p12
