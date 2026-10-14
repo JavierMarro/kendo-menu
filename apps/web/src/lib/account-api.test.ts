@@ -97,14 +97,14 @@ function client(body: unknown, status = 200) {
 }
 
 describe('managed bearer account API boundary', () => {
-  it('uses token-only bearer authorization, omit/no-store/redirect rejection and bodyless creation', async () => {
+  it('uses bearer authorization, same-origin cookies, no-store/redirect rejection and bodyless creation', async () => {
     const { api, transport } = client(account);
     expect(await api.getAccount()).toEqual(account);
     expect(transport).toHaveBeenCalledWith(
       '/api/account',
       expect.objectContaining({
         method: 'GET',
-        credentials: 'omit',
+        credentials: 'same-origin',
         cache: 'no-store',
         redirect: 'error',
         headers: { accept: 'application/json', authorization: 'Bearer synthetic-bearer' },
@@ -119,8 +119,24 @@ describe('managed bearer account API boundary', () => {
       copyOpportunityId: REQUEST,
     });
     expect(transport.mock.calls[1]?.[1]).not.toHaveProperty('body');
+    expect(transport.mock.calls[1]?.[1]?.credentials).toBe('same-origin');
     expect(transport.mock.calls[1]?.[1]?.headers).not.toHaveProperty('x-csrf-token');
   });
+
+  it.each(['signed-out', 'unavailable'] as const)(
+    'requires a managed token before transport when identity is %s',
+    async (status) => {
+      const transport = vi.fn<typeof fetch>();
+      const api = createAccountApiClient({
+        fetch: transport,
+        getToken: () => Promise.resolve({ status }),
+      });
+      await expect(api.getAccount()).rejects.toMatchObject({
+        status: status === 'signed-out' ? 401 : 503,
+      });
+      expect(transport).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     { ...account, accountId: 'browser-subject' },
@@ -194,7 +210,7 @@ describe('managed bearer account API boundary', () => {
     expect(await api.putDashboard(ACCOUNT, write())).toEqual(acknowledgement);
     const init = transport.mock.calls[0]?.[1];
     expect(init?.body).toBe(JSON.stringify(write()));
-    expect(init?.credentials).toBe('omit');
+    expect(init?.credentials).toBe('same-origin');
     for (const patch of [
       { accountWorkspaceId: OTHER },
       { requestId: OTHER },
@@ -233,7 +249,7 @@ describe('managed bearer account API boundary', () => {
       ADOPTION_ENDPOINT,
       expect.objectContaining({
         method: 'POST',
-        credentials: 'omit',
+        credentials: 'same-origin',
         cache: 'no-store',
         redirect: 'error',
         headers: {

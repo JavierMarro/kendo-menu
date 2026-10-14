@@ -54,6 +54,12 @@ on its own. The plain-Node test loads the transpiled Vercel adapter and packaged
 database access or outbound auth requests. This catches source-only package exports; it does not
 replace the owner-run HTTPS health, Google sign-in, account Save and isolation checks on Vercel.
 
+Account API requests include same-origin cookies so protected Previews can recognise Vercel access.
+The API still authorizes only a verified Neon bearer token; a hosting cookie cannot open an account.
+A successful Neon session/token exchange followed by an account 401 with a Vercel SSO challenge
+can indicate hosting protection, not a Google failure. Keep protection enabled and do not embed
+Vercel bypass secrets in browser code. Local synthetic cookie-gate tests do not prove live HTTPS access.
+
 ## Production facts as of 2026-09-02
 
 ### Owner-reported

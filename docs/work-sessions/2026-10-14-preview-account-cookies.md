@@ -1,0 +1,8 @@
+- Session: preview account cookies
+- Date/duration: 2026-10-14; not recorded
+- Scope/start: Clean HEAD 925b10e on codex/managed-auth-online-dashboard; owner authorized same-origin account API cookies after reporting Neon session/token 200 and account 401 with a Vercel SSO challenge.
+- Changes: Shared account transport uses credentials: same-origin; update account/create/Save/copy assertions, require-token guards, a browser cookie-gate regression and current transport/deployment documentation.
+- Decisions: Cookies can satisfy same-origin hosting protection but never authorize KendoMenu accounts; bearer verification, exact-Origin mutations, no-store, redirect rejection, guest/account isolation and copy rules remain unchanged.
+- Roadblocks: The synthetic cookie gate reproduced the signed-out screen with omit and passed after the adjustment; this local reproduction does not establish the outcome of the real protected Preview.
+- Verification: Node 24.21.0: check:web PASS (321 tests and build); managed-account, managed-adoption and application-callback browser checks PASS (92 desktop/mobile cases); scoped independent review and formatting/history/whitespace checks PASS.
+- Follow-up: Nothing staged, committed, pushed or deployed; retest Google sign-in, existing menus, Save/reload and isolation on the stable Vercel Preview after publishing; no database work, remote settings changes or full release/PWA gate run.

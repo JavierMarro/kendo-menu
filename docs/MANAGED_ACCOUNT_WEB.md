@@ -43,8 +43,11 @@ deletion, migration or upload.
 
 Account edits are in memory until **Save to account** is acknowledged. Neither a downloaded backup
 nor an unconfirmed request is a cloud save. API requests use transient bearer credentials,
-`credentials: omit`, no-store and redirect rejection. Email is shown only from B's verified nullable
-metadata. B authorizes ownership from managed identity, never the displayed email or browser UUID.
+`credentials: same-origin`, no-store and redirect rejection. Same-origin cookies can satisfy hosting
+access controls such as Vercel Preview protection, but never establish KendoMenu account identity;
+this transport does not enable cross-origin cookie forwarding. Email is shown only from B's verified
+nullable metadata. B authorizes ownership from managed identity, never cookies, the displayed email
+or browser UUID.
 
 ## Bounded correction acceptance
 

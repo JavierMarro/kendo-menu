@@ -1,7 +1,7 @@
 /**
  * Keeps account API access behind a strict browser boundary for the managed bearer contract.
- * Each request sends a transient bearer with browser cookies omitted; browser IDs and email never
- * establish authorization.
+ * Each request sends a transient bearer; same-origin cookies only support hosting access controls.
+ * Cookies, browser IDs and email never establish account authorization.
  */
 import {
   isDashboardCatalogueCompatible,
@@ -955,7 +955,7 @@ export function createAccountApiClient(dependencies: AccountApiDependencies): Ac
     body?: string,
     adoptionErrorContract = false,
   ): Promise<Response> {
-    // Managed cookies belong to Auth; this API receives the transient bearer explicitly.
+    // Same-origin cookies satisfy Preview access gates; account authorization still requires bearer.
     let response: Response;
     try {
       response = await requestFetch(endpoint, {
@@ -965,7 +965,7 @@ export function createAccountApiClient(dependencies: AccountApiDependencies): Ac
           authorization: `Bearer ${token}`,
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
-        credentials: 'omit',
+        credentials: 'same-origin',
         cache: 'no-store',
         redirect: 'error',
         signal,

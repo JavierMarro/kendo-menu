@@ -205,6 +205,41 @@ test('Continue with Google completes the application callback before loading an 
   expectCredentialFreeAccountTransport(harness);
 });
 
+test('account requests pass a same-origin Preview cookie gate and retain bearer authorization', async ({
+  page,
+  baseURL,
+}) => {
+  if (baseURL === undefined) throw new Error('Expected the configured browser origin.');
+  await page.context().addCookies([
+    {
+      name: 'synthetic-preview-access',
+      value: 'synthetic-access-cookie',
+      url: baseURL,
+      httpOnly: true,
+      sameSite: 'Lax',
+    },
+  ]);
+  const harness = await SyntheticManagedHarness.install(page);
+  await page.route('**/api/**', async (route) => {
+    const headers = await route.request().allHeaders();
+    if (!headers['cookie']?.includes('synthetic-preview-access=synthetic-access-cookie')) {
+      await route.fulfill({ status: 401, json: { error: 'SYNTHETIC_PREVIEW_ACCESS_REQUIRED' } });
+      return;
+    }
+    expect(headers['cookie']).not.toContain('synthetic-managed-session');
+    await route.fallback();
+  });
+
+  await harness.authenticateFromLanding(page);
+  await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+  expect(harness.apiCalls.some((call) => call.path === '/api/account')).toBe(true);
+  expect(harness.apiCalls.some((call) => call.path === '/api/dashboard')).toBe(true);
+  for (const call of harness.apiCalls) {
+    expect(call.authorization).toBe(`Bearer ${SYNTHETIC_TOKEN}`);
+  }
+  await expectNoCredentialOrIdentityPersistence(page);
+});
+
 test('a verified visitor is redirected from guest routes to the matching account route', async ({
   page,
 }) => {
