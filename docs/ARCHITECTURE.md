@@ -165,11 +165,13 @@ separate `/app/guest/*` and `/app/account/*` workspace trees, shared sources, `/
 not-found routes. Workspace trees reuse dashboard, library/details and custom-session creation. `/` redirects to `/app`; direct refreshes rely on the
 hosting fallback.
 
-The root [`vercel.json`](../vercel.json) runs `pnpm build` and serves `apps/web/dist`. The Job 3
-checkout adds API dispatch before the existing SPA fallback to `/index.html`, retaining static
-file precedence. Combined Vercel function discovery and routing remain unverified; this configuration
-change has not been deployed. The existing production observations are recorded in the deployment
-runbook.
+The root [`vercel.json`](../vercel.json) runs `pnpm build` and serves `apps/web/dist`, with API
+dispatch before the SPA fallback to `/index.html` and static-file precedence retained. The build
+first emits `apps/api/dist/index.js` using a separate Vite server config; the API and domain/curated
+JSON are bundled, and third-party server dependencies stay external. The API package resolves source
+for types/development and emitted JavaScript for deployment. No credentials are embedded or database
+connection opened by this build. Native-Node artifact verification is separate from live Vercel
+function and HTTPS validation; the deployment runbook records that boundary and production evidence.
 
 [`vite.config.ts`](../apps/web/vite.config.ts) uses `vite-plugin-pwa` to generate the manifest and
 service worker. The manifest starts at `/app`, has `/` scope, and requests standalone display. The

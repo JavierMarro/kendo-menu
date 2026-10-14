@@ -1,0 +1,8 @@
+- Session: vercel api package
+- Date/duration: 2026-10-14; not recorded
+- Scope/start: At b0c1c34 on codex/managed-auth-online-dashboard, fix the owner-reported Preview health failure importing @kendo-menu/api/src/index.ts; no remote actions authorized.
+- Changes: Reuse Vite to emit API/domain/curated-data JavaScript before the web build; default API export targets dist, types/development retain source; add isolated native-Node adapter regression to check and update architecture/deployment guidance.
+- Decisions: No dependencies, lockfile, API contracts, auth/data rules, UI, private configuration, database or remote settings changed; generated output remains ignored.
+- Roadblocks: Source-only workspace exports do not provide deployable Node artifacts; one full check timed out in an unchanged web editor test with two follow-on failures, while the isolated file and full repeat passed without code changes.
+- Verification: Node 24.21.0: check:api PASS (163 tests); check repeat PASS (624 Vitest tests, build and native artifact regression); independent scoped review PASS; history/format/whitespace checks PASS.
+- Follow-up: Changes remain unstaged/uncommitted/unpushed; fresh Vercel Preview health and HTTPS Google/account Save/isolation checks remain unverified for this correction; no database or browser suites run.

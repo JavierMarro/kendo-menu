@@ -4,12 +4,17 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
   },
   "scripts": {
     "dev": "tsx watch src/node.ts",
     "dev:managed-auth-proof": "node --env-file-if-exists=.env.local --import tsx --watch src/managed-auth-proof.ts",
     "test": "vitest run --config vitest.config.ts",
+    "test:package": "node --test src/vercel-package.node-test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "test:persistence": "vitest run --config vitest.config.ts src/persistence",

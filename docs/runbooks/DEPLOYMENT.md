@@ -8,18 +8,24 @@ production state.
 
 The checked-in settings are the source of truth for the build:
 
-| Setting                  | Declared value                                      | Source                                    |
-| ------------------------ | --------------------------------------------------- | ----------------------------------------- |
-| Package manager          | `pnpm@11.22.0` (`packageManager`)                   | [`package.json`](../../package.json)      |
-| Node requirement         | `24.x` (`engines.node`)                             | [`package.json`](../../package.json)      |
-| Checked-in Vercel config | Repository root: [`vercel.json`](../../vercel.json) | [`vercel.json`](../../vercel.json)        |
-| Build command            | `pnpm build`                                        | [`vercel.json`](../../vercel.json)        |
-| Build implementation     | `pnpm --filter @kendo-menu/web build`               | root [`package.json`](../../package.json) |
-| Output directory         | `apps/web/dist`                                     | [`vercel.json`](../../vercel.json)        |
-| SPA rewrite              | Non-API paths → `/index.html`                       | [`vercel.json`](../../vercel.json)        |
+| Setting                  | Declared value                                              | Source                                    |
+| ------------------------ | ----------------------------------------------------------- | ----------------------------------------- |
+| Package manager          | `pnpm@11.22.0` (`packageManager`)                           | [`package.json`](../../package.json)      |
+| Node requirement         | `24.x` (`engines.node`)                                     | [`package.json`](../../package.json)      |
+| Checked-in Vercel config | Repository root: [`vercel.json`](../../vercel.json)         | [`vercel.json`](../../vercel.json)        |
+| Build command            | `pnpm build`                                                | [`vercel.json`](../../vercel.json)        |
+| Build implementation     | `pnpm build:api` then `pnpm --filter @kendo-menu/web build` | root [`package.json`](../../package.json) |
+| Output directory         | `apps/web/dist`                                             | [`vercel.json`](../../vercel.json)        |
+| SPA rewrite              | Non-API paths → `/index.html`                               | [`vercel.json`](../../vercel.json)        |
 
-The root lockfile is `pnpm-lock.yaml`; no alternate package manager or lockfile is declared. The Job 3 checkout adds a root API function and API dispatch ahead of the SPA fallback; this is
-not a deployed or verified combined Vercel artifact. No `installCommand`, framework override, or
+The root lockfile is `pnpm-lock.yaml`; no alternate package manager or lockfile is declared. The root
+API function dispatches API requests ahead of the SPA fallback. `pnpm build:api` reuses the installed
+web Vite toolchain with `apps/web/vite.api.config.ts` to emit `apps/api/dist/index.js`, bundling the
+API, domain workspace code and curated JSON while leaving third-party server dependencies external.
+This server build does not load private env files; credentials remain runtime configuration. The API
+package uses source exports for types/development and emitted JavaScript by default. Generated output
+is ignored and must not be committed. A Ready build alone does not verify deployed API behavior.
+No `installCommand`, framework override, or
 provider-specific environment value is checked into `vercel.json`. Vercel documents package-manager detection and the `packageManager`
 field in its [Package Managers guide](https://vercel.com/docs/package-managers), build/output and
 root-directory settings in [Configuring a Build](https://vercel.com/docs/builds/configure-a-build),
@@ -35,6 +41,7 @@ pnpm session:check
 pnpm format:check
 pnpm check
 pnpm build
+pnpm test:api:package
 pnpm test:e2e:preview
 pnpm test:e2e:pwa
 pnpm verify:full
@@ -42,6 +49,10 @@ pnpm verify:full
 
 `pnpm verify:full` is the release gate: it runs `pnpm check`, the complete non-PWA suite against a
 fresh Vite preview, and the dedicated PWA suite. It does not rerun the development-server suite.
+`pnpm check` runs the package test after its fresh build; `pnpm test:api:package` also runs that pair
+on its own. The plain-Node test loads the transpiled Vercel adapter and packaged API without workspace TypeScript, private configuration,
+database access or outbound auth requests. This catches source-only package exports; it does not
+replace the owner-run HTTPS health, Google sign-in, account Save and isolation checks on Vercel.
 
 ## Production facts as of 2026-09-02
 

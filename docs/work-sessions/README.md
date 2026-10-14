@@ -26,6 +26,7 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-10-14 — Vercel API package](./2026-10-14-vercel-api-package.md)
 - [2026-10-13 — privacy, license and README](./2026-10-13-privacy-license-readme.md)
 - [2026-10-13 — landing copy and clean sign-out](./2026-10-13-landing-copy-clean-signout.md)
 - [2026-10-13 — managed empty account POST](./2026-10-13-managed-empty-account-post.md)
