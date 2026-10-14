@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { test } from './guest-test';
 
 async function dismissCookieNotice(page: Page): Promise<void> {
   const notice = page.getByRole('complementary', { name: 'Cookie notice' });
@@ -122,7 +123,7 @@ async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): P
 test.describe('responsive site footer', () => {
   test('uses a three-column layout at 1440px without horizontal overflow', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/app/dashboard');
+    await page.goto('/app/guest/dashboard');
     await dismissCookieNotice(page);
 
     const footer = page.getByRole('contentinfo', { name: 'Site footer' });
@@ -162,7 +163,7 @@ test.describe('responsive site footer', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.goto('/app/dashboard');
+    await page.goto('/app/guest/dashboard');
     await dismissCookieNotice(page);
 
     const footer = page.getByRole('contentinfo', { name: 'Site footer' });

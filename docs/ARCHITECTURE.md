@@ -4,6 +4,44 @@ KendoMenu is a React/Vite single-page web app with a platform-neutral domain pac
 Zustand store. Its core workflow is local-first: a practitioner can plan, adapt, and save a
 session in the browser without an account, server, or network dependency.
 
+## Managed-auth transition status
+
+[ADR 0007](adr/0007-managed-auth-online-account-drafts.md) records the approved managed-auth and
+online-account replacement. [Migration A](MANAGED_AUTH_PROOF.md) provides isolated callback-only
+session bootstrap, a fresh document and subsequent token-only retrieval. Single-account identity,
+reload/JWT-refresh and storage checks have owner-reported passes. [Migration B](MANAGED_DASHBOARDS.md)
+provides managed bearer authorization, internal account mapping and PostgreSQL dashboards.
+[Migration C](MANAGED_ACCOUNT_WEB.md) consumes that contract with separate guest/account routes and
+memory-only explicit account saves. Legacy browser account cache/synchronization modules are retired;
+legacy SQL/auth/adoption rows stay preserved without linking to managed identities.
+[Migration D](MANAGED_GUEST_COPY.md) adds the one-use guest-copy setup screen. Live B persistence and second-account/return-to-first validation remain
+NOT RUN public-release gates. The [transition handoff](MANAGED_AUTH_TRANSITION.md) owns the scope.
+
+### Managed account API boundary
+
+The Node and Vercel adapters share listener-free Elysia composition and one lazy PostgreSQL pool.
+Health/import/build do not connect to the database. The dedicated managed verifier binds EdDSA
+JWT signature, issuer, audience and expiry to the configured Neon branch. Explicit bearer
+credentials establish managed identity; cookies and browser identity fields never authorize it.
+Account initialization maps provider/issuer/subject uniquely to a generated internal UUID and
+creates its one-time random copy opportunity in the same transaction. Email is nullable verified
+metadata. Inspection creates nothing and never reissues an opportunity.
+
+Protected dashboard and adoption operations carry an internally branded account proof. Missing
+mapping returns `409 ACCOUNT_NOT_INITIALIZED`. Mutation authorization checks exact configured
+Origin before reading a body. Complete bounded v10 validation, workspace mismatch guards,
+optimistic revisions and ordinary Save receipts remain. SQL mutations serialize on the account
+first and recheck JWT expiry after waits and before completion; no custom session locks, activity
+updates, CSRF cookies or application-token issuance remain in runtime composition.
+
+The copy opportunity contains only ID, consumption and outcome metadata. Valid Yes/No consumption
+commits before a Yes copy starts its second transaction. That transaction reacquires the account
+lock and requires no existing dashboard and revision zero, so an intervening ordinary Save cannot
+be overwritten. Success acknowledges a committed whole snapshot/outcome. Failure or uncertain
+copying leaves consumption final and ordinary account access available; there is no copy replay
+or recovery journal. Guest LocalStorage remains independent. See the
+[B contract and owner-run checklist](MANAGED_DASHBOARDS.md) for frontend integration and gates.
+
 ## Boundaries and flow
 
 These are different relationships:
@@ -107,29 +145,33 @@ old shape to v10:
 The exact legacy IDs and conflict rules remain in the migration source of truth above; future
 shape changes must add a new ordered migration rather than rewriting historical steps.
 
-The web [`training-persistence.ts`](../apps/web/src/lib/training-persistence.ts) adapter wraps
+The guest [`training-persistence.ts`](../apps/web/src/lib/training-persistence.ts) adapter wraps
 `window.localStorage` under the `kendo-menu` key, catches browser read/write/remove failures, and
 maps store inspection into UI states. [`PersistenceGate.tsx`](../apps/web/src/features/persistence/PersistenceGate.tsx)
 chooses local storage, exposes recovery/reset/backup actions, or explicitly falls back to an
-in-memory session. Local data is origin-specific and is not a server backup or cross-device sync.
+in-memory session. Guest data is origin-specific and is not a server backup or cross-device sync.
 
-[`ApplicationRecovery.tsx`](../apps/web/src/features/errors/ApplicationRecovery.tsx) keeps an error
-boundary outside the router and inside the persistence gate, preserving the live store when the
-application fails. A second boundary protects the gate itself. The fallback offers reload and,
+[`ApplicationRecovery.tsx`](../apps/web/src/features/errors/ApplicationRecovery.tsx) keeps a global error boundary outside the router. Its guest-specific wrapper owns the guest
+persistence gate and an inner boundary, preserving the live guest store when an editor fails. A
+second guest boundary protects recovery itself; public/account routes mount no guest store. The fallback offers reload and,
 when the gate remains available, access to the existing recovery screen. Explicitly copied
 diagnostics contain only the fixed `KENDOMENU_UNEXPECTED_UI_ERROR` code and a boolean recovery
 availability flag; they never consume exceptions, storage, URLs, or training state.
 
 ## Web, hosting, and external boundaries
 
-[`app-routes.tsx`](../apps/web/src/app/app-routes.tsx) uses React Router for `/app` (landing,
-dashboard, library, library details, custom-session creation, sources, and an app not-found route),
-`/cookies`, and a top-level not-found route. `/` redirects to `/app`; direct refreshes rely on the
+[`app-routes.tsx`](../apps/web/src/app/app-routes.tsx) uses React Router for `/app` (landing),
+separate `/app/guest/*` and `/app/account/*` workspace trees, shared sources, `/cookies`, and
+not-found routes. Workspace trees reuse dashboard, library/details and custom-session creation. `/` redirects to `/app`; direct refreshes rely on the
 hosting fallback.
 
-The root [`vercel.json`](../vercel.json) runs `pnpm build`, serves `apps/web/dist`, and rewrites
-`/(.*)` to `/index.html`. Static files take precedence, so generated PWA assets remain addressable
-while client-side routes receive the SPA entry point.
+The root [`vercel.json`](../vercel.json) runs `pnpm build` and serves `apps/web/dist`, with API
+dispatch before the SPA fallback to `/index.html` and static-file precedence retained. The build
+first emits `apps/api/dist/index.js` using a separate Vite server config; the API and domain/curated
+JSON are bundled, and third-party server dependencies stay external. The API package resolves source
+for types/development and emitted JavaScript for deployment. No credentials are embedded or database
+connection opened by this build. Native-Node artifact verification is separate from live Vercel
+function and HTTPS validation; the deployment runbook records that boundary and production evidence.
 
 [`vite.config.ts`](../apps/web/vite.config.ts) uses `vite-plugin-pwa` to generate the manifest and
 service worker. The manifest starts at `/app`, has `/` scope, and requests standalone display. The
@@ -137,16 +179,98 @@ Workbox navigation fallback is limited to the app's supported document paths and
 independent of LocalStorage. Installation is prompt-based; the service worker is an asset/navigation
 boundary, not a data-sync or backup system.
 
-[`index.html`](../apps/web/index.html) is the only analytics integration boundary: it loads the
-external GoatCounter document script for cookie-free aggregate document-load statistics. There is
-no SPA route or custom-event analytics pipeline, and training plans, notes, and menu names are not
-intentionally sent to GoatCounter. Analytics availability is therefore separate from the local
-planning workflow.
+The browser analytics gate sends one GoatCounter image request per document only after managed
+identity checking confirms signed out. Verified accounts, unresolved identity and offline state
+send no analytics. Its `/count?p=...` request uses a static route allow-list, drops query strings
+and referrer data with `no-referrer`, and carries no account or training content. It loads no
+GoatCounter JavaScript. Ordinary request metadata such as IP address and user-agent still reaches
+GoatCounter. It does not attempt continuing guest-only tracking across tabs.
 
-## Current non-goals
+## Current production exclusions
 
-There is no server, account system, remote sync, database, paid tier, API, or initialized mobile
-app. `apps/mobile` remains a reserved boundary and `packages/ui` remains reserved for genuinely
+The browser now has a local account workspace integration backed by the separate API scaffold, but
+there is no deployed production account service or production remote sync. The database, paid tier,
+and initialized mobile app remain unavailable. `apps/mobile` remains a reserved boundary and
+`packages/ui` remains reserved for genuinely
 shared platform-neutral UI.
 
 For the original recursive-model decision, see [ADR 0001](./adr/0001-recursive-training-activities.md).
+
+## Local API and managed persistence
+
+The local API has no deployed production account service. Migration B implements the server
+replacement approved by [ADR 0007](adr/0007-managed-auth-online-account-drafts.md), preserving
+independent dashboards and whole-dashboard atomic writes while retiring application sessions and
+copy recovery. The older auth/synchronization ADRs describe superseded decisions.
+
+Elysia application behavior lives in `apps/api`, with a standalone Node listener and a minimal
+root Vercel adapter. `createApp({ account, dashboard, adoption })` handles standard Requests without
+starting a listener. `createRuntimeServices()` composes managed authorization and all three
+services around a single lazy PostgreSQL provider. Only root Vercel composition attaches the pool
+through its lifecycle helper. PostgreSQL clients and transactions remain behind persistence ports.
+Explicit migration commands live under `apps/api/src/database`, and reviewed SQL, snapshots and
+journal live under `apps/api/drizzle`. Runtime requests never migrate the database. Unit tests and
+guarded schema-isolated local PostgreSQL tests remain separate commands. Node 24 is the target.
+
+### Dashboard transport and storage
+
+The platform-neutral [domain codec](../packages/domain/src/dashboard-persistence.ts) owns strict
+v10 dashboard wire DTOs. Store aliases preserve existing imports, local migrations and serialization.
+Node-compatible relative imports and JSON import attributes support both API NodeNext and web
+bundler configurations. Neither React nor Zustand enters the API.
+
+The [dashboard handler](../apps/api/src/dashboard/dashboard.ts) applies method/header rejection,
+managed authorization, bounded strict JSON parsing, lossless domain validation and canonical hashing
+before calling the [persistence port](../apps/api/src/persistence/dashboard-contracts.ts).
+GET/PUT and adoption POST are registered; mutations disable Elysia automatic parsing so authorization
+precedes body acquisition. Stored snapshots and acknowledgements are validated before serialization.
+
+The [managed dashboard adapter](../apps/api/src/persistence/postgres/managed-dashboard-adapter.ts)
+stores canonical complete snapshot text in `cloud_dashboards` and bounded ordinary Save
+acknowledgements in `dashboard_write_receipts`. The account-first lock serializes revisions and
+receipts with copy consumption. Retained identical request IDs return their original acknowledgement
+before current catalogue/revision checks. New writes commit snapshot, receipt, receipt cleanup and
+unused-opportunity invalidation together. Uncertain COMMIT outcomes return unavailable; the identical
+ordinary Save request recovers its retained receipt. Copying has a separate consume-then-copy flow,
+without replay/recovery, described in the [managed account contract](MANAGED_DASHBOARDS.md).
+
+The historical [Job 5A foundation](DASHBOARD_FOUNDATION.md),
+[Job 5B persistence evidence](DASHBOARD_PERSISTENCE.md) and [Job 6A adoption handoff](ADOPTION.md)
+retain predecessor evidence. Their session locks, activity touches, CSRF and pending-copy recovery
+are superseded server behavior; applied migration history and legacy records remain preserved.
+
+### Browser workspace boundary — Migration C
+
+The dispatcher resolves proof/application root returns before ordinary app imports. A bounded,
+credential-free per-tab flow marker chooses only fixed callback destinations. The proof remains
+isolated; application bootstrap uses the proven fresh-document exchange before entering account
+routes. The managed auth provider performs bounded token-only identity verification and fences
+superseded requests. No `/api/session`, custom OAuth or application CSRF cookie remains in browser
+runtime. Vite's local exact-path proxies preserve browser Origin and B's validation.
+
+The browser [API client](../apps/web/src/lib/account-api.ts) validates strict bounded UTF-8 account
+and complete dashboard responses, account/revision/receipt binding and catalogue compatibility.
+The [account draft controller](../apps/web/src/lib/account-draft.ts) injects memory storage into the
+existing Zustand factory only after validated loading. Each account route lifetime owns its store;
+guest routes own an independent persistence provider. Shared UI reads the selected workspace.
+
+A Save freezes the complete envelope and records the submitted baseline. Matching acknowledgement
+advances only that baseline/revision, preserving later edits as dirty. Ambiguous requests remain
+immutable for identical retry. Conflicts retain the draft for download or explicit reload.
+Unavailable service disables editing without a durable offline queue. Authentication uncertainty
+hides content and fences late operations; only explicit same-account verification can reveal the
+current tab's original retained draft. Sign-out, identity change and confirmed exit dispose it.
+No legacy account LocalStorage/IndexedDB cache is read, deleted or uploaded.
+
+Guest Web Locks/read-back and LocalStorage recovery remain. The only auth flow persistence is the
+finite credential-free callback marker; credentials, identities, drafts and copy opportunities stay
+out of JavaScript-readable persistence. D uses C's validated in-memory creation handoff for a
+separate guarded setup route. Eligibility also requires the matching verified account, B's eligible
+cloud dashboard and a complete valid non-empty guest snapshot within the full request byte limit.
+Yes rechecks the exact source under the guest lock; changes refresh the offer before dispatch.
+Either dispatch or abandoning/skipping setup releases the handoff without a journal or implicit No.
+Strict adoption acknowledgements precede any success claim; unconfirmed attempts cannot replay.
+A fresh validated cloud load precedes editing after either decision or uncertainty. Stale setup
+visits do not replace existing drafts. A committed ordinary Save also releases the handoff.
+See [Migration C](MANAGED_ACCOUNT_WEB.md) for the state/event table, local startup, retirement and
+verification limits. Historical synchronization ADRs/handoffs retain predecessor evidence.

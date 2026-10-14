@@ -1,0 +1,8 @@
+- Session: account sync review fixes
+- Date/duration: 2026-09-24; ~3 hours
+- Scope/start: Closed review blockers in uncommitted 6C-A/B: stale use-cloud snapshot and lost offline access after a local replacement.
+- Changes: Use-cloud reads current cloud before atomic recovery/cache/ack commit; replacement rehydrates under the already-verified session, preserving dashboard 401 re-verification.
+- Decisions: Fresh account verification can switch accounts before local resume; hide/logout supersede rehydration; ordinary bootstrap cannot cancel it while offline.
+- Roadblocks: Browser races exposed gate settlement before rehydration and a delayed account-switch verification; both now have focused tests.
+- Verification: Node 24 pnpm check PASS; full dev and built-preview E2E each 243 passed/3 skipped; focused races PASS; independent semantic review PASS.
+- Follow-up: Job 6D owns adoption choice and conflict UI; no commit or deployment from this session.

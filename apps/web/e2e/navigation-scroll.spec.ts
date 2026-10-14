@@ -1,8 +1,10 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { test } from './guest-test';
 
 const SCROLL_TOLERANCE = 4;
 
 async function dismissCookieNotice(page: Page): Promise<void> {
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   const notice = page.getByRole('complementary', { name: 'Cookie notice' });
   if (await notice.isVisible()) {
     await notice.getByRole('button', { name: 'Got it' }).click();
@@ -83,14 +85,14 @@ test.describe('navigation scroll behavior', () => {
   test('returns a scrolled internal route to the top when the header logo goes home', async ({
     page,
   }) => {
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     await dismissCookieNotice(page);
     await scrollDown(page);
 
     await page.locator('.top-bar').getByRole('link', { name: 'KendoMenu home' }).click();
     await expect(page).toHaveURL(/\/app$/);
     await expect(
-      page.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+      page.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeVisible();
     await expectTop(page);
   });
@@ -104,7 +106,7 @@ test.describe('navigation scroll behavior', () => {
 
     const libraryLink = await getPrimaryNavigationLink(page, /Keiko library/);
     await libraryLink.click();
-    await expect(page).toHaveURL(/\/app\/library$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library$/);
     await expect(page.getByRole('heading', { name: 'Keiko library' })).toBeVisible();
     await expectTop(page);
 
@@ -114,7 +116,7 @@ test.describe('navigation scroll behavior', () => {
     const keyboardLibraryLink = await getPrimaryNavigationLink(page, /Keiko library/);
     await keyboardLibraryLink.focus();
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/\/app\/library$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library$/);
     await expectTop(page);
   });
 
@@ -131,7 +133,7 @@ test.describe('navigation scroll behavior', () => {
       .getByRole('navigation', { name: 'Primary navigation' })
       .getByRole('link', { name: /Keiko library/ });
     await clickVisibleLinkWithPointer(page, libraryLink);
-    await expect(page).toHaveURL(/\/app\/library$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library$/);
     await expectTop(page);
 
     const libraryTop = await recordScrollY(page, 800);
@@ -140,14 +142,14 @@ test.describe('navigation scroll behavior', () => {
     await expectScrollY(page, landingTop);
 
     await page.goForward();
-    await expect(page).toHaveURL(/\/app\/library$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library$/);
     await expectScrollY(page, libraryTop);
   });
 
   test('preserves a scrolled library position while opening and closing a drill dialog', async ({
     page,
   }) => {
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     await dismissCookieNotice(page);
     const libraryTop = await recordScrollY(page, 320);
 
@@ -155,7 +157,7 @@ test.describe('navigation scroll behavior', () => {
       .getByRole('heading', { name: 'International dojo menu' })
       .locator('xpath=ancestor::article');
     await card.getByRole('link', { name: 'View session' }).click();
-    await expect(page).toHaveURL(/\/app\/library\?drill=international-dojo-2-hour-session$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library\?drill=international-dojo-2-hour-session$/);
     await expect(page.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
     await expectScrollY(page, libraryTop);
 
@@ -163,7 +165,7 @@ test.describe('navigation scroll behavior', () => {
       .getByRole('dialog', { name: 'International dojo menu' })
       .getByRole('button', { name: 'Close International dojo menu details.' })
       .click();
-    await expect(page).toHaveURL(/\/app\/library$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library$/);
     await expectScrollY(page, libraryTop);
   });
 

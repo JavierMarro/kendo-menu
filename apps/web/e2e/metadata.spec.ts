@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from './guest-test';
 
 const CANONICAL_ORIGIN = 'https://www.kendomenu.com';
 const SOCIAL_IMAGE_URL = `${CANONICAL_ORIGIN}/assets/kendo-menu-social.jpg`;
@@ -50,18 +51,21 @@ test.describe('production metadata and crawl boundaries', () => {
       SOCIAL_IMAGE_URL,
     );
 
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
       'href',
-      `${CANONICAL_ORIGIN}/app/library`,
+      `${CANONICAL_ORIGIN}/app`,
     );
     await expect(page.locator('meta[property="og:url"]')).toHaveAttribute(
       'content',
-      `${CANONICAL_ORIGIN}/app/library`,
+      `${CANONICAL_ORIGIN}/app`,
     );
-    await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+      'content',
+      'noindex, nofollow',
+    );
 
-    await page.goto('/app/dashboard');
+    await page.goto('/app/guest/dashboard');
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
       'href',
       `${CANONICAL_ORIGIN}/app`,
@@ -71,8 +75,8 @@ test.describe('production metadata and crawl boundaries', () => {
       'noindex, nofollow',
     );
 
-    await page.goto('/app/library?drill=international-dojo-2-hour-session');
-    await expect(page).toHaveURL(/\/app\/library\?drill=/);
+    await page.goto('/app/guest/library?drill=international-dojo-2-hour-session');
+    await expect(page).toHaveURL(/\/app\/guest\/library\?drill=/);
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
       'href',
       `${CANONICAL_ORIGIN}/app`,
@@ -129,11 +133,11 @@ test.describe('production metadata and crawl boundaries', () => {
     expect(locations.every((location) => !location.includes('#'))).toBe(true);
   });
 
-  test('noindexes persistence recovery and restores landing metadata after recovery', async ({
+  test('noindexes guest persistence recovery and restores metadata on returning home', async ({
     page,
   }) => {
     await page.addInitScript(() => localStorage.setItem('kendo-menu', '{invalid'));
-    await page.goto('/app');
+    await page.goto('/app/guest/dashboard');
     await expect(
       page.getByRole('heading', { name: 'We couldn’t read your local KendoMenu data.' }),
     ).toBeVisible();
@@ -143,8 +147,10 @@ test.describe('production metadata and crawl boundaries', () => {
     );
     await page.evaluate(() => localStorage.removeItem('kendo-menu'));
     await page.getByRole('button', { name: 'Try again', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+    await page.locator('.top-bar').getByRole('link', { name: 'KendoMenu home' }).click();
     await expect(
-      page.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+      page.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeVisible();
     await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
   });

@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { DashboardTrainingSet } from '../src/features/dashboard/DashboardPage';
 import { PersistenceContext } from '../src/features/persistence/PersistenceGate';
+import { WorkspaceContextProvider } from '../src/lib/workspace-context';
 import { DrillDetailContent } from '../src/features/library/DrillDetailContent';
 import {
   TrainingStoreProvider,
@@ -51,23 +52,29 @@ export function RecursiveFixtureApp({
   readonly view: 'library' | 'dashboard';
 }) {
   return (
-    <PersistenceContext.Provider value={{ mode: 'local', writeFailed: false }}>
-      <TrainingStoreProvider store={store}>
-        {view === 'library' ? (
-          <MemoryRouter>
+    <PersistenceContext.Provider
+      value={{ mode: 'local', writeFailed: false, pending: false, flush: () => Promise.resolve() }}
+    >
+      <WorkspaceContextProvider
+        value={{ kind: 'guest', basePath: '/app/guest', canEdit: true, accountEmail: null }}
+      >
+        <TrainingStoreProvider store={store}>
+          {view === 'library' ? (
+            <MemoryRouter>
+              <main id="main-content" tabIndex={-1}>
+                <DrillDetailContent
+                  titleId="recursive-fixture-title"
+                  trainingSet={RECURSIVE_TRAINING_SET}
+                />
+              </main>
+            </MemoryRouter>
+          ) : (
             <main id="main-content" tabIndex={-1}>
-              <DrillDetailContent
-                titleId="recursive-fixture-title"
-                trainingSet={RECURSIVE_TRAINING_SET}
-              />
+              <RecursiveDashboardFixture />
             </main>
-          </MemoryRouter>
-        ) : (
-          <main id="main-content" tabIndex={-1}>
-            <RecursiveDashboardFixture />
-          </main>
-        )}
-      </TrainingStoreProvider>
+          )}
+        </TrainingStoreProvider>
+      </WorkspaceContextProvider>
     </PersistenceContext.Provider>
   );
 }

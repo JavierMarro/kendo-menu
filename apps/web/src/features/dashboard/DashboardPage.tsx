@@ -1,3 +1,9 @@
+/**
+ * Renders and edits the current workspace's dashboard entries and per-activity details.
+ * Guest edits are confirmed through browser persistence; account edits remain in an in-memory
+ * draft until explicit save. Unfinished account quantity text stays outside the store and blocks
+ * saving, while identity and cloud authorization remain with the route provider.
+ */
 import {
   useEffect,
   useMemo,
@@ -53,6 +59,7 @@ import {
   getPersistenceUpdateLabel,
   usePersistenceStatus,
 } from '../persistence/persistence-context';
+import { useWorkspace, workspacePath } from '../../lib/workspace-context';
 
 function getQuantityDraftValue(
   entry: DashboardEntry,
@@ -61,6 +68,18 @@ function getQuantityDraftValue(
 ): string {
   const value = getEffectiveTrainingQuantity(entry, activity, unit);
   return value === undefined || isTrainingQuantityRange(value) ? '' : String(value);
+}
+
+function getQuantityEditorKey(
+  entry: DashboardEntry,
+  activity: TrainingActivity,
+  unit: TrainingQuantityUnit,
+): string {
+  return JSON.stringify([entry.id, activity.id, unit]);
+}
+
+function getQuantityEditorEntryPrefix(entryId: string): string {
+  return `${JSON.stringify([entryId]).slice(0, -1)},`;
 }
 
 const MAX_QUANTITY_DIGITS = 3;
@@ -100,9 +119,12 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const navigationType = useNavigationType();
   const persistenceStatus = usePersistenceStatus();
+  const workspace = useWorkspace();
   const [statusMessage, setStatusMessage] = useState('');
   const [dashboardFilter, setDashboardFilter] = useState<DashboardFilter>('all');
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const [quantityDrafts, setQuantityDrafts] = useState<Readonly<Record<string, string>>>({});
+  const quantityDraftsRef = useRef<Readonly<Record<string, string>>>({});
   const savedMenuNavigationState = getSavedMenuNavigationState(location.state);
   const [createdName, setCreatedName] = useState<string | null>(
     () => savedMenuNavigationState?.menuName ?? null,
@@ -125,12 +147,45 @@ export function DashboardPage() {
   const createdStatusMessage =
     createdName === null
       ? ''
-      : persistenceStatus.writeFailed
-        ? `${createdName} was added, but changes are not being saved to this device.`
-        : persistenceStatus.mode === 'session'
-          ? `${createdName} was added for this session only.`
-          : `${createdName} saved to your dashboard.`;
+      : workspace.kind === 'account'
+        ? `${createdName} added to your account draft. Save to account to keep this change.`
+        : persistenceStatus.writeFailed
+          ? `${createdName} was added, but changes are not being saved to this device.`
+          : persistenceStatus.mode === 'session'
+            ? `${createdName} was added for this session only.`
+            : persistenceStatus.pending
+              ? `${createdName} is being saved to your dashboard.`
+              : `${createdName} saved to your dashboard.`;
 
+  // Invalid or unfinished account text is not canonical dashboard data; retain it at page scope
+  // so the workspace can block Save until the editor commits or clears it.
+  const updateQuantityDraft = (key: string, value: string | null) => {
+    const current = quantityDraftsRef.current;
+    const next = { ...current };
+    if (value === null) {
+      delete next[key];
+    } else {
+      next[key] = value;
+    }
+    quantityDraftsRef.current = next;
+    setQuantityDrafts(next);
+    workspace.onEditorDraftDirtyChange?.(Object.keys(next).length > 0);
+  };
+
+  const clearEntryQuantityDrafts = (entryId: string) => {
+    const prefix = getQuantityEditorEntryPrefix(entryId);
+    const next = Object.fromEntries(
+      Object.entries(quantityDraftsRef.current).filter(([key]) => !key.startsWith(prefix)),
+    );
+    if (Object.keys(next).length === Object.keys(quantityDraftsRef.current).length) return;
+    quantityDraftsRef.current = next;
+    setQuantityDrafts(next);
+    workspace.onEditorDraftDirtyChange?.(Object.keys(next).length > 0);
+  };
+
+  // Replacing this saved-menu history payload is best-effort: success removes it while local
+  // `createdName` keeps the current confirmation visible. On failure, the payload remains
+  // available for replay.
   useEffect(() => {
     if (savedMenuNavigationState === null) {
       const pendingNavigationStateClear = pendingNavigationStateClearRef.current;
@@ -232,17 +287,19 @@ export function DashboardPage() {
   };
 
   const removeEntry = (entry: DashboardEntry, label = 'Training session') => {
+    if (!workspace.canEdit) return;
     const removed = removeFromDashboard(entry.id);
     if (removed === null) {
       return;
     }
 
+    clearEntryQuantityDrafts(entry.id);
     setRemovedEntry(removed);
     setStatusMessage(`${label} was removed from your dashboard.`);
   };
 
   const undoRemove = () => {
-    if (removedEntry === null) {
+    if (removedEntry === null || !workspace.canEdit) {
       return;
     }
 
@@ -259,9 +316,85 @@ export function DashboardPage() {
           <h1>Your dashboard</h1>
           <p className="page-intro">Shape today’s keiko to fit the practice ahead.</p>
         </div>
+        {workspace.kind === 'account' ? (
+          <div className="dashboard-save-actions">
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => void persistenceStatus.save?.()}
+              disabled={
+                !workspace.canEdit ||
+                workspace.hasUncommittedEditorDraft === true ||
+                !workspace.isDirty ||
+                persistenceStatus.pending ||
+                persistenceStatus.saveState === 'conflict' ||
+                persistenceStatus.saveState === 'blocked'
+              }
+              aria-busy={persistenceStatus.pending}
+            >
+              {persistenceStatus.pending ? 'Saving…' : 'Save to account'}
+            </button>
+            <span className="field-status" role="status" aria-live="polite">
+              {persistenceStatus.saveState === 'uncertain'
+                ? 'Save status is uncertain.'
+                : workspace.hasUncommittedEditorDraft
+                  ? 'An unfinished quantity field is held in this tab. Complete or clear it before saving.'
+                  : workspace.isDirty
+                    ? 'Unsaved account draft'
+                    : persistenceStatus.saveState === 'saved'
+                      ? 'Saved to account'
+                      : ''}
+            </span>
+            {persistenceStatus.saveState === 'conflict' ||
+            persistenceStatus.saveState === 'blocked' ? (
+              <div className="account-save-recovery">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => persistenceStatus.download?.()}
+                  disabled={
+                    persistenceStatus.downloadAllowed === false ||
+                    workspace.hasUncommittedEditorDraft === true
+                  }
+                >
+                  Download draft
+                </button>
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={() => void persistenceStatus.reload?.()}
+                >
+                  Reload account
+                </button>
+              </div>
+            ) : null}
+            {(persistenceStatus.saveState === 'conflict' ||
+              persistenceStatus.saveState === 'blocked') &&
+            workspace.hasUncommittedEditorDraft ? (
+              <p>
+                Complete or clear the unfinished quantity field before downloading the account
+                draft.
+              </p>
+            ) : null}
+            {persistenceStatus.saveState === 'uncertain' ? (
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void persistenceStatus.retry?.()}
+              >
+                Retry same save
+              </button>
+            ) : null}
+            {persistenceStatus.error ? (
+              <span className="form-error" role="alert">
+                {persistenceStatus.error}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         {dashboardEntries.length > 0 ? (
           <div className="dashboard-header-actions">
-            <Link className="secondary-button" to="/app/drills/new">
+            <Link className="secondary-button" to={workspacePath(workspace.basePath, 'drills/new')}>
               Create new menu
             </Link>
             <div className="dashboard-filter-control">
@@ -282,117 +415,130 @@ export function DashboardPage() {
         ) : null}
       </header>
 
-      <p className="sr-only" role="status" aria-live="polite">
-        {statusMessage || createdStatusMessage}
-      </p>
-      {removedEntry !== null ? (
-        <div className="undo-banner" role="status">
-          <span>Training session removed.</span>
-          <button className="text-button" type="button" onClick={undoRemove}>
-            Undo
-          </button>
-        </div>
-      ) : null}
-
-      {dashboardEntries.length === 0 ? (
-        <section
-          className="empty-state empty-state--dashboard"
-          aria-labelledby="empty-dashboard-title"
-        >
-          <p className="eyebrow">A clean starting line</p>
-          <h2 id="empty-dashboard-title">Your dashboard is ready.</h2>
-          <p>
-            Add a session from the Keiko library and shape it for today&apos;s practice. Quantities
-            and notes stay on this device as you refine the session.
-          </p>
-          <div className="empty-actions">
-            <Link className="primary-button" to="/app/library">
-              Browse Keiko library
-            </Link>
-            <Link className="secondary-button" to="/app/drills/new">
-              Create a training session
-            </Link>
+      <div inert={workspace.kind === 'account' && !workspace.canEdit}>
+        <p className="sr-only" role="status" aria-live="polite">
+          {statusMessage || createdStatusMessage}
+        </p>
+        {removedEntry !== null ? (
+          <div className="undo-banner" role="status">
+            <span>Training session removed.</span>
+            <button className="text-button" type="button" onClick={undoRemove}>
+              Undo
+            </button>
           </div>
-        </section>
-      ) : filteredEntries.length === 0 ? (
-        <section
-          className="empty-state dashboard-filter-empty"
-          aria-labelledby="filter-empty-title"
-        >
-          <p className="eyebrow">No matching sessions</p>
-          <h2 id="filter-empty-title">Nothing matches this filter.</h2>
-          <p>Choose another session tag to see the training on your dashboard.</p>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => setDashboardFilter('all')}
+        ) : null}
+
+        {dashboardEntries.length === 0 ? (
+          <section
+            className="empty-state empty-state--dashboard"
+            aria-labelledby="empty-dashboard-title"
           >
-            Show all sessions
-          </button>
-        </section>
-      ) : (
-        <section className="dashboard-list" aria-labelledby="dashboard-list-title">
-          <h2 id="dashboard-list-title" className="sr-only">
-            Selected training sessions
-          </h2>
-          {filteredEntries.map((entry) => {
-            const trainingSet = getDashboardTrainingSet(entry);
-            return trainingSet === undefined ? (
-              <UnknownDashboardEntry
-                key={entry.id}
-                entry={entry}
-                onRemove={() => removeEntry(entry)}
-              />
-            ) : (
-              <DashboardTrainingSetCard
-                key={entry.id}
-                entry={entry}
-                trainingSet={trainingSet}
-                onRemove={() => removeEntry(entry, trainingSet.name)}
-                onViewMore={() => setSelectedEntryId(entry.id)}
-                viewMoreButtonRef={(element) => {
-                  if (element === null) {
-                    viewMoreButtonsRef.current.delete(entry.id);
-                    return;
-                  }
+            <p className="eyebrow">A clean starting line</p>
+            <h2 id="empty-dashboard-title">Your dashboard is ready.</h2>
+            <p>
+              Add a session from the Keiko library and shape it for today&apos;s practice.{' '}
+              {workspace.kind === 'account'
+                ? 'Account changes stay in this tab until you choose Save to account.'
+                : 'Quantities and notes save on this device as you refine the session.'}
+            </p>
+            <div className="empty-actions">
+              <Link className="primary-button" to={workspacePath(workspace.basePath, 'library')}>
+                Browse Keiko library
+              </Link>
+              <Link
+                className="secondary-button"
+                to={workspacePath(workspace.basePath, 'drills/new')}
+              >
+                Create a training session
+              </Link>
+            </div>
+          </section>
+        ) : filteredEntries.length === 0 ? (
+          <section
+            className="empty-state dashboard-filter-empty"
+            aria-labelledby="filter-empty-title"
+          >
+            <p className="eyebrow">No matching sessions</p>
+            <h2 id="filter-empty-title">Nothing matches this filter.</h2>
+            <p>Choose another session tag to see the training on your dashboard.</p>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => setDashboardFilter('all')}
+            >
+              Show all sessions
+            </button>
+          </section>
+        ) : (
+          <section className="dashboard-list" aria-labelledby="dashboard-list-title">
+            <h2 id="dashboard-list-title" className="sr-only">
+              Selected training sessions
+            </h2>
+            {filteredEntries.map((entry) => {
+              const trainingSet = getDashboardTrainingSet(entry);
+              return trainingSet === undefined ? (
+                <UnknownDashboardEntry
+                  key={entry.id}
+                  entry={entry}
+                  onRemove={() => removeEntry(entry)}
+                />
+              ) : (
+                <DashboardTrainingSetCard
+                  key={entry.id}
+                  entry={entry}
+                  trainingSet={trainingSet}
+                  onRemove={() => removeEntry(entry, trainingSet.name)}
+                  onViewMore={() => setSelectedEntryId(entry.id)}
+                  viewMoreButtonRef={(element) => {
+                    if (element === null) {
+                      viewMoreButtonsRef.current.delete(entry.id);
+                      return;
+                    }
 
-                  viewMoreButtonsRef.current.set(entry.id, element);
-                }}
-              />
-            );
-          })}
-        </section>
-      )}
+                    viewMoreButtonsRef.current.set(entry.id, element);
+                  }}
+                />
+              );
+            })}
+          </section>
+        )}
 
-      {selectedEntry !== undefined && selectedTrainingSet !== undefined ? (
-        <DialogShell
-          key={selectedEntry.id}
-          titleId={`dashboard-dialog-title-${selectedEntry.id}`}
-          closeLabel={`Close ${selectedTrainingSet.name} details.`}
-          onClose={() => setSelectedEntryId(null)}
-        >
-          <DashboardTrainingSet
-            entry={selectedEntry}
-            index={dashboardEntries.findIndex((entry) => entry.id === selectedEntry.id)}
+        {selectedEntry !== undefined && selectedTrainingSet !== undefined ? (
+          <DialogShell
+            key={selectedEntry.id}
             titleId={`dashboard-dialog-title-${selectedEntry.id}`}
-            trainingSet={selectedTrainingSet}
-            onRemove={() => {
-              setSelectedEntryId(null);
-              removeEntry(selectedEntry, selectedTrainingSet.name);
-            }}
-            onUpdate={(patch) => updateDashboardEntry(selectedEntry.id, patch)}
-            onSetQuantity={(activityId, unit, value) =>
-              setQuantityOverride(selectedEntry.id, activityId, unit, value)
-            }
-            onClearQuantity={(activityId, unit) =>
-              clearQuantityOverride(selectedEntry.id, activityId, unit)
-            }
-            onSetActivityNote={(activityId, note) =>
-              setActivityNote(selectedEntry.id, activityId, note)
-            }
-          />
-        </DialogShell>
-      ) : null}
+            closeLabel={`Close ${selectedTrainingSet.name} details.`}
+            onClose={() => setSelectedEntryId(null)}
+          >
+            <DashboardTrainingSet
+              entry={selectedEntry}
+              index={dashboardEntries.findIndex((entry) => entry.id === selectedEntry.id)}
+              titleId={`dashboard-dialog-title-${selectedEntry.id}`}
+              trainingSet={selectedTrainingSet}
+              onRemove={() => {
+                setSelectedEntryId(null);
+                removeEntry(selectedEntry, selectedTrainingSet.name);
+              }}
+              onUpdate={(patch) => {
+                if (workspace.canEdit) updateDashboardEntry(selectedEntry.id, patch);
+              }}
+              onSetQuantity={(activityId, unit, value) => {
+                if (workspace.canEdit)
+                  setQuantityOverride(selectedEntry.id, activityId, unit, value);
+              }}
+              onClearQuantity={(activityId, unit) => {
+                if (workspace.canEdit) clearQuantityOverride(selectedEntry.id, activityId, unit);
+              }}
+              onSetActivityNote={(activityId, note) => {
+                if (workspace.canEdit) setActivityNote(selectedEntry.id, activityId, note);
+              }}
+              {...(workspace.kind === 'account'
+                ? { quantityDrafts, onQuantityDraftChange: updateQuantityDraft }
+                : {})}
+            />
+          </DialogShell>
+        ) : null}
+      </div>
     </>
   );
 }
@@ -431,6 +577,8 @@ interface DashboardTrainingSetProps {
   readonly onSetQuantity: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
   readonly onClearQuantity: (activityId: string, unit: TrainingQuantityUnit) => void;
   readonly onSetActivityNote: (activityId: string, note: string) => void;
+  readonly quantityDrafts?: Readonly<Record<string, string>>;
+  readonly onQuantityDraftChange?: (key: string, value: string | null) => void;
 }
 
 export function DashboardTrainingSet({
@@ -443,11 +591,16 @@ export function DashboardTrainingSet({
   onSetQuantity,
   onClearQuantity,
   onSetActivityNote,
+  quantityDrafts = {},
+  onQuantityDraftChange,
 }: DashboardTrainingSetProps) {
   const [notesDraft, setNotesDraft] = useState(entry.notes);
   const [notesStatus, setNotesStatus] = useState<'idle' | 'updated'>('idle');
   const [saveConfirmationVersion, setSaveConfirmationVersion] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
   const persistenceStatus = usePersistenceStatus();
+  const workspace = useWorkspace();
+  const { flush: flushPersistence } = persistenceStatus;
   const activities = trainingSet.activities;
   const activityCount = getTrainingSetActivityCount(trainingSet);
   const description = getTrainingSetDescription(trainingSet);
@@ -458,24 +611,43 @@ export function DashboardTrainingSet({
   const handleNotesChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setNotesDraft(event.target.value);
     setNotesStatus('idle');
-  };
-
-  const handleNotesBlur = () => {
-    if (notesDraft !== entry.notes) {
-      onUpdate({ notes: notesDraft });
+    if (workspace.kind === 'account' && workspace.canEdit) {
+      onUpdate({ notes: event.target.value });
       setNotesStatus('updated');
     }
   };
 
-  const handleExplicitSave = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleNotesBlur = (event: FocusEvent<HTMLTextAreaElement>) => {
+    const nextNotes = event.currentTarget.value;
+    if (nextNotes !== entry.notes) {
+      setNotesDraft(nextNotes);
+      onUpdate({ notes: nextNotes });
+      setNotesStatus('updated');
+    }
+  };
 
+  const handleExplicitSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isSaving) {
+      return;
+    }
+
+    // Blur commits any focused notes or quantity draft before flushing, so the confirmation
+    // corresponds to the value the person was editing rather than the prior store snapshot.
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLElement && event.currentTarget.contains(activeElement)) {
       activeElement.blur();
     }
 
-    setSaveConfirmationVersion((version) => version + 1);
+    setIsSaving(true);
+    try {
+      await flushPersistence();
+    } catch {
+      // The persistence context exposes the typed failure state and the feedback label reflects it.
+    } finally {
+      setSaveConfirmationVersion((version) => version + 1);
+      setIsSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -489,7 +661,7 @@ export function DashboardTrainingSet({
 
   return (
     <article className="dashboard-card dashboard-card--expanded" data-entry-index={index + 1}>
-      <form className="dashboard-card-form" onSubmit={handleExplicitSave}>
+      <form className="dashboard-card-form" onSubmit={(event) => void handleExplicitSave(event)}>
         <div className="dashboard-card-heading">
           <div className="card-index" aria-hidden="true">
             {String(index + 1).padStart(2, '0')}
@@ -520,6 +692,8 @@ export function DashboardTrainingSet({
                 onSetQuantity,
                 onClearQuantity,
                 onSetActivityNote,
+                quantityDrafts,
+                ...(onQuantityDraftChange === undefined ? {} : { onQuantityDraftChange }),
               })
             }
           />
@@ -541,29 +715,33 @@ export function DashboardTrainingSet({
           </span>
         </div>
 
-        <div className="dashboard-save-actions">
-          <button
-            className="primary-button"
-            type="submit"
-            aria-describedby={
-              saveConfirmationVersion === 0 ? saveHintId : `${saveHintId} ${saveStatusId}`
-            }
-          >
-            Save your changes
-          </button>
-          <div className="dashboard-save-feedback">
-            <p id={saveHintId} className="dashboard-save-hint">
-              Changes also save automatically when you leave a field.
-            </p>
-            <span id={saveStatusId} className="field-status" role="status" aria-live="polite">
-              {saveConfirmationVersion > 0 ? (
-                <span key={saveConfirmationVersion}>
-                  {getExplicitPersistenceUpdateLabel(persistenceStatus)}
-                </span>
-              ) : null}
-            </span>
+        {workspace.kind === 'guest' ? (
+          <div className="dashboard-save-actions">
+            <button
+              className="primary-button"
+              type="submit"
+              disabled={isSaving}
+              aria-busy={isSaving}
+              aria-describedby={
+                saveConfirmationVersion === 0 ? saveHintId : `${saveHintId} ${saveStatusId}`
+              }
+            >
+              Save your changes
+            </button>
+            <div className="dashboard-save-feedback">
+              <p id={saveHintId} className="dashboard-save-hint">
+                Changes also save automatically when you leave a field.
+              </p>
+              <span id={saveStatusId} className="field-status" role="status" aria-live="polite">
+                {saveConfirmationVersion > 0 ? (
+                  <span key={saveConfirmationVersion}>
+                    {getExplicitPersistenceUpdateLabel(persistenceStatus)}
+                  </span>
+                ) : null}
+              </span>
+            </div>
           </div>
-        </div>
+        ) : null}
       </form>
     </article>
   );
@@ -620,6 +798,8 @@ interface DashboardActivityRenderOptions {
   readonly onSetQuantity: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
   readonly onClearQuantity: (activityId: string, unit: TrainingQuantityUnit) => void;
   readonly onSetActivityNote: (activityId: string, note: string) => void;
+  readonly quantityDrafts: Readonly<Record<string, string>>;
+  readonly onQuantityDraftChange?: (key: string, value: string | null) => void;
 }
 
 function renderDashboardActivity(
@@ -627,7 +807,14 @@ function renderDashboardActivity(
   options: DashboardActivityRenderOptions,
 ) {
   const { activity, parentActivity } = context;
-  const { entry, onSetQuantity, onClearQuantity, onSetActivityNote } = options;
+  const {
+    entry,
+    onSetQuantity,
+    onClearQuantity,
+    onSetActivityNote,
+    quantityDrafts,
+    onQuantityDraftChange,
+  } = options;
   const activityUnits = getEditableTrainingQuantityUnits(entry, activity, parentActivity);
   const activityNoteEditor =
     activity.allowsSessionNotes === true ? (
@@ -641,6 +828,8 @@ function renderDashboardActivity(
         {...(parentActivity === undefined ? {} : { parentActivity })}
         onSet={onSetQuantity}
         onClear={onClearQuantity}
+        quantityDrafts={quantityDrafts}
+        {...(onQuantityDraftChange === undefined ? {} : { onQuantityDraftChange })}
       />
     );
   return editors === null && activityNoteEditor === null ? null : (
@@ -663,6 +852,7 @@ function ActivityNotesEditor({ entry, activity, onSet }: ActivityNotesEditorProp
   const [isOpen, setIsOpen] = useState(savedNote.trim().length > 0);
   const [noteStatus, setNoteStatus] = useState<'idle' | 'updated'>('idle');
   const persistenceStatus = usePersistenceStatus();
+  const workspace = useWorkspace();
   const baseId = `activity-notes-${entry.id}-${activity.id}`;
   const panelId = `${baseId}-panel`;
   const textareaId = `${baseId}-input`;
@@ -717,6 +907,10 @@ function ActivityNotesEditor({ entry, activity, onSet }: ActivityNotesEditorProp
           onChange={(event) => {
             setDraft(event.target.value);
             setNoteStatus('idle');
+            if (workspace.kind === 'account' && workspace.canEdit) {
+              onSet(activity.id, event.target.value);
+              setNoteStatus('updated');
+            }
           }}
           onBlur={commit}
         />
@@ -734,6 +928,8 @@ interface QuantityEditorsProps {
   readonly parentActivity?: TrainingActivity;
   readonly onSet: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
   readonly onClear: (activityId: string, unit: TrainingQuantityUnit) => void;
+  readonly quantityDrafts: Readonly<Record<string, string>>;
+  readonly onQuantityDraftChange?: (key: string, value: string | null) => void;
 }
 
 function QuantityEditors({
@@ -742,6 +938,8 @@ function QuantityEditors({
   parentActivity,
   onSet,
   onClear,
+  quantityDrafts,
+  onQuantityDraftChange,
 }: QuantityEditorsProps) {
   const units = getEditableTrainingQuantityUnits(entry, activity, parentActivity);
 
@@ -759,6 +957,8 @@ function QuantityEditors({
           unit={unit}
           onSet={onSet}
           onClear={onClear}
+          quantityDrafts={quantityDrafts}
+          {...(onQuantityDraftChange === undefined ? {} : { onQuantityDraftChange })}
         />
       ))}
     </div>
@@ -769,10 +969,29 @@ interface QuantityEditorProps extends QuantityEditorsProps {
   readonly unit: TrainingQuantityUnit;
 }
 
-function QuantityEditor({ entry, activity, unit, onSet, onClear }: QuantityEditorProps) {
-  const [draft, setDraft] = useState(() => getQuantityDraftValue(entry, activity, unit));
-  const [feedback, setFeedback] = useState<'idle' | 'updated' | 'invalid'>('idle');
+function QuantityEditor({
+  entry,
+  activity,
+  unit,
+  onSet,
+  onClear,
+  quantityDrafts,
+  onQuantityDraftChange,
+}: QuantityEditorProps) {
+  const draftKey = getQuantityEditorKey(entry, activity, unit);
+  const preservedDraft = quantityDrafts[draftKey];
+  const [draft, setDraft] = useState(
+    () => preservedDraft ?? getQuantityDraftValue(entry, activity, unit),
+  );
+  const [feedback, setFeedback] = useState<'idle' | 'updated' | 'invalid'>(() =>
+    preservedDraft !== undefined &&
+    preservedDraft.length > 0 &&
+    !isValidQuantityValue(unit, Number(preservedDraft))
+      ? 'invalid'
+      : 'idle',
+  );
   const persistenceStatus = usePersistenceStatus();
+  const workspace = useWorkspace();
   const inputId = `quantity-${unit}-${entry.id}-${activity.id}`;
   const messageId = `${inputId}-message`;
   const limitHintId = `${inputId}-limit`;
@@ -802,10 +1021,12 @@ function QuantityEditor({ entry, activity, unit, onSet, onClear }: QuantityEdito
     if (rawValue === '') {
       const defaultValue = getTrainingQuantityValue(activity, unit);
       if (!hasOverride && defaultValue === undefined) {
+        onQuantityDraftChange?.(draftKey, null);
         setFeedback('idle');
         return;
       }
       onClear(activity.id, unit);
+      onQuantityDraftChange?.(draftKey, null);
       setDraft(
         defaultValue === undefined || isTrainingQuantityRange(defaultValue)
           ? ''
@@ -818,17 +1039,20 @@ function QuantityEditor({ entry, activity, unit, onSet, onClear }: QuantityEdito
     const value = Number(rawValue);
     if (!isValidQuantityValue(unit, value)) {
       setFeedback('invalid');
+      onQuantityDraftChange?.(draftKey, rawValue);
       return;
     }
 
     const effectiveValue = getEffectiveTrainingQuantity(entry, activity, unit);
     if (typeof effectiveValue === 'number' && value === effectiveValue) {
+      onQuantityDraftChange?.(draftKey, null);
       setDraft(String(value));
       setFeedback('idle');
       return;
     }
 
     onSet(activity.id, unit, value);
+    onQuantityDraftChange?.(draftKey, null);
     setDraft(String(value));
     setFeedback('updated');
   };
@@ -860,6 +1084,19 @@ function QuantityEditor({ entry, activity, unit, onSet, onClear }: QuantityEdito
 
             setDraft(nextDraft);
             setFeedback('idle');
+            if (workspace.kind === 'account' && workspace.canEdit) {
+              if (nextDraft.length === 0) {
+                onQuantityDraftChange?.(draftKey, nextDraft);
+              } else {
+                const value = Number(nextDraft);
+                if (isValidQuantityValue(unit, value)) {
+                  onSet(activity.id, unit, value);
+                  onQuantityDraftChange?.(draftKey, null);
+                } else {
+                  onQuantityDraftChange?.(draftKey, nextDraft);
+                }
+              }
+            }
           }}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {

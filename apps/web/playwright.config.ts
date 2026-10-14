@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: '**/pwa.spec.ts',
+  testIgnore: ['**/pwa.spec.ts', '**/managed-auth-proof.spec.ts'],
   fullyParallel: true,
   forbidOnly: Boolean(process.env['CI']),
   retries: process.env['CI'] === undefined ? 0 : 2,
@@ -24,7 +24,8 @@ export default defineConfig({
   webServer: {
     command: 'pnpm exec vite --host 127.0.0.1 --port 4173',
     url: 'http://127.0.0.1:4173',
-    reuseExistingServer: process.env['CI'] === undefined,
+    reuseExistingServer: false,
+    env: { VITE_NEON_AUTH_URL: 'https://synthetic-auth.example.invalid/neon/auth' },
     timeout: 120_000,
   },
 });

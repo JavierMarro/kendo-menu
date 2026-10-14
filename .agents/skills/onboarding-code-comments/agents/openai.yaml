@@ -1,0 +1,6 @@
+interface:
+  display_name: 'Onboarding Code Comments'
+  short_description: 'Explain important code for onboarding engineers'
+  default_prompt: 'Use $onboarding-code-comments to add concise educational comments to the requested implementation files without changing behavior.'
+policy:
+  allow_implicit_invocation: false

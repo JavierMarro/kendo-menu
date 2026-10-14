@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { test } from './guest-test';
 
 import {
   COOKIE_NOTICE_ACKNOWLEDGEMENT_DURATION_MS,
@@ -25,7 +26,7 @@ async function addCuratedSessionToDashboard(
   drillId: string,
   name: string,
 ): Promise<void> {
-  await page.goto(`/app/library?drill=${drillId}`);
+  await page.goto(`/app/guest/library?drill=${drillId}`);
   const dialog = page.getByRole('dialog', { name });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Add to dashboard' }).click();
@@ -82,7 +83,7 @@ function getContrastRatio(first: string, second: string): number {
 }
 
 async function startFresh(page: Page): Promise<void> {
-  await page.goto('/app/dashboard');
+  await page.goto('/app/guest/dashboard');
   await page.evaluate((key) => window.localStorage.removeItem(key), STORAGE_KEY);
   await page.reload();
 }
@@ -99,13 +100,13 @@ test.describe('routed training flows', () => {
     await startFresh(page);
   });
 
-  test('opens the landing page, starts with the drill library, and returns home from the logo', async ({
+  test('opens the landing page, enters the guest dashboard, and returns home from the logo', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await page.goto('/');
     await expect(page).toHaveURL(/\/app$/);
     await expect(
-      page.getByRole('heading', { name: 'Plan the keiko you need today.', exact: true }),
+      page.getByRole('heading', { name: 'Plan the keiko you need today', exact: true }),
     ).toBeVisible();
     await expect(page.locator('.landing-page')).toBeVisible();
     const viewport = page.viewportSize();
@@ -131,33 +132,66 @@ test.describe('routed training flows', () => {
 
       await menuToggle.click();
       await primaryNavigation.getByRole('link', { name: 'Dashboard', exact: true }).click();
-      await expect(page).toHaveURL(/\/app\/dashboard$/);
+      await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
       await expect(page.getByRole('button', { name: 'Open navigation' })).toBeVisible();
       await page.goto('/app');
     } else {
       await expect(page.locator('.brand-name')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Open navigation' })).toBeHidden();
       await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
-      await expect(page.locator('.session-status-label')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Sign up here' })).toBeVisible();
     }
 
     await expect(page.locator('.landing-hero img')).toBeVisible();
     await expect(page.locator('.landing-hero img')).toHaveJSProperty('complete', true);
 
-    const browseLibrary = page.getByRole('link', { name: 'Browse Keiko library' });
-    await expect(browseLibrary).toHaveText('BROWSE KEIKO LIBRARY HERE →');
+    const browseLibrary = page.getByRole('link', { name: 'Try without an account' });
+    await expect(browseLibrary).toHaveText('Try without an account');
+    await expect(page.getByRole('button', { name: 'Sign up here', exact: true })).toBeVisible();
+    await page
+      .getByRole('complementary', { name: 'Cookie notice' })
+      .getByRole('button', { name: 'Got it', exact: true })
+      .click();
+    await page.screenshot({ path: testInfo.outputPath('landing-hero.png') });
     await expect(page.getByText('exercises across all training sessions')).toBeVisible();
     await browseLibrary.click();
-    await expect(page).toHaveURL(/\/app\/library$/);
-    await expect(page.getByRole('heading', { name: 'Keiko library' })).toBeVisible();
+    await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
+    await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
     await page.locator('.top-bar').getByRole('link', { name: 'KendoMenu home' }).click();
     await expect(page).toHaveURL(/\/app$/);
+  });
+
+  test('account FAQ answers stay readable and the source link is accessible', async ({
+    page,
+  }, testInfo) => {
+    await page.goto('/app');
+    await page
+      .getByRole('complementary', { name: 'Cookie notice' })
+      .getByRole('button', { name: 'Got it', exact: true })
+      .click();
+    for (const question of [
+      'Is KendoMenu free?',
+      'Can I use KendoMenu on my phone and computer?',
+      'Is KendoMenu open source?',
+    ]) {
+      await page.getByRole('button', { name: question, exact: true }).click();
+      const answer = page.getByRole('region', { name: question, exact: true });
+      await expect(answer).toBeVisible();
+      const viewport = page.viewportSize();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        viewport?.width ?? 0,
+      );
+    }
+    await expect(
+      page.getByRole('link', { name: 'https://github.com/JavierMarro/kendo-menu', exact: true }),
+    ).toHaveAttribute('href', 'https://github.com/JavierMarro/kendo-menu');
+    await page.screenshot({ path: testInfo.outputPath('landing-faq.png') });
   });
 
   test('persists the cookie notice acknowledgement for 21 days', async ({ page }) => {
     const notice = page.getByRole('complementary', { name: 'Cookie notice' });
     await expect(notice).toContainText(
-      'This site does not use tracking cookies. We use GoatCounter Analytics (no cookies) to improve the service.',
+      'If you sign in with Google, essential cookies maintain your session.',
     );
     await expect(notice.getByRole('link', { name: 'More information' })).toHaveAttribute(
       'href',
@@ -168,9 +202,9 @@ test.describe('routed training flows', () => {
     await expect(page).toHaveURL(/\/cookies$/);
     await expect(page.getByRole('heading', { name: 'Cookie Policy', exact: true })).toBeVisible();
     await expect(
-      page.getByText(/This training data .* is not sent to a remote service/),
+      page.getByText(/Guest dashboard training sessions are stored locally/),
     ).toBeVisible();
-    const goatCounterLink = page.getByRole('link', { name: 'GoatCounter Analytics' });
+    const goatCounterLink = page.getByRole('link', { name: 'GoatCounter' });
     await expect(goatCounterLink).toHaveAttribute(
       'href',
       'https://www.goatcounter.com/help/privacy',
@@ -178,8 +212,7 @@ test.describe('routed training flows', () => {
     await expect(goatCounterLink).toHaveAttribute('target', '_blank');
     await expect(
       page.getByText(
-        'KendoMenu uses GoatCounter for cookie-free, aggregate usage statistics such as page paths, browser and operating-system categories, screen size, country, and short-lived session deduplication. Individual pageviews and referrer collection are disabled. Training plans, notes, and menu names are not intentionally sent to GoatCounter.',
-        { exact: true },
+        /KendoMenu sends one page count after the browser verifies that the visitor is signed out\./,
       ),
     ).toBeVisible();
     await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toBeVisible();
@@ -192,7 +225,7 @@ test.describe('routed training flows', () => {
       .getByRole('navigation', { name: 'Primary navigation' })
       .getByRole('link', { name: 'Dashboard', exact: true })
       .click();
-    await expect(page).toHaveURL(/\/app\/dashboard$/);
+    await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
     await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toHaveCount(0);
     const acknowledgement = await page.evaluate(
       (key) => window.localStorage.getItem(key),
@@ -208,7 +241,7 @@ test.describe('routed training flows', () => {
   });
 
   test('supports direct URLs, navigation, browser history, and reload', async ({ page }) => {
-    await expect(page).toHaveURL(/\/app\/dashboard$/);
+    await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
     const dashboardHeading = page.getByRole('heading', { name: 'Your dashboard', exact: true });
     await expect(dashboardHeading).toBeVisible();
     await expect(page.getByText('Shape today’s keiko to fit the practice ahead.')).toBeVisible();
@@ -224,25 +257,25 @@ test.describe('routed training flows', () => {
       .getByRole('navigation', { name: 'Primary navigation' })
       .getByRole('link', { name: /Keiko library/ })
       .click();
-    await expect(page).toHaveURL(/\/app\/library$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library$/);
     await expect(page.getByRole('heading', { name: 'Keiko library' })).toBeVisible();
 
     await page.goBack();
-    await expect(page).toHaveURL(/\/app\/dashboard$/);
+    await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
     await page.goForward();
-    await expect(page).toHaveURL(/\/app\/library$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library$/);
 
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Keiko library' })).toBeVisible();
 
-    await page.goto('/app/drills/new');
+    await page.goto('/app/guest/drills/new');
     await expect(page.getByRole('heading', { name: 'Create a training session' })).toBeVisible();
   });
 
   test('opens a compact drill card and operates collapsed sections by keyboard', async ({
     page,
   }) => {
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     const cards = page.locator('.library-card');
     await expect(cards).toHaveCount(11);
     await expect(page.locator('.category-pill', { hasText: 'High intensity session' })).toHaveCount(
@@ -299,7 +332,7 @@ test.describe('routed training flows', () => {
     const viewDrill = card.getByRole('link', { name: 'View session' });
     await expect(viewDrill).toHaveAttribute(
       'href',
-      '/app/library?drill=international-dojo-2-hour-session',
+      '/app/guest/library?drill=international-dojo-2-hour-session',
     );
 
     await viewDrill.focus();
@@ -307,7 +340,7 @@ test.describe('routed training flows', () => {
     await expect(viewDrill).toHaveCSS('outline-style', 'solid');
     await expect(viewDrill).toHaveCSS('outline-width', '3px');
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/\/app\/library\?drill=international-dojo-2-hour-session$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library\?drill=international-dojo-2-hour-session$/);
 
     const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
     await expect(dialog).toBeVisible();
@@ -398,7 +431,7 @@ test.describe('routed training flows', () => {
   });
 
   test('uses distinct accessible intensity badge colours', async ({ page }) => {
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     const intenseBadge = page.locator('.category-pill[data-category-variant="intense"]').first();
     const highIntensityBadge = page
       .locator('.category-pill[data-category-variant="high-intensity"]')
@@ -435,7 +468,7 @@ test.describe('routed training flows', () => {
       background: getComputedStyle(element).backgroundColor,
       foreground: getComputedStyle(element).color,
     }));
-    await page.goto('/app/library?drill=international-dojo-2-hour-session');
+    await page.goto('/app/guest/library?drill=international-dojo-2-hour-session');
     const intenseDetailTags = page.getByRole('dialog').locator('.drill-detail-category');
     await expect(intenseDetailTags).toHaveClass(/training-set-tags/);
     await expect(intenseDetailTags).toHaveCSS('display', 'flex');
@@ -445,7 +478,7 @@ test.describe('routed training flows', () => {
     await expect(intenseDetailBadge).toHaveCSS('background-color', intenseCardColours.background);
     await expect(intenseDetailBadge).toHaveCSS('color', intenseCardColours.foreground);
 
-    await page.goto('/app/library?drill=senior-high-school-kendo-club');
+    await page.goto('/app/guest/library?drill=senior-high-school-kendo-club');
     const highDetailTags = page.getByRole('dialog').locator('.drill-detail-category');
     await expect(highDetailTags).toHaveClass(/training-set-tags/);
     await expect(highDetailTags).toHaveCSS('display', 'flex');
@@ -464,7 +497,7 @@ test.describe('routed training flows', () => {
   test('uses the drill query as history state and redirects legacy detail URLs with replace', async ({
     page,
   }) => {
-    await page.goto('/app/library?source=curated');
+    await page.goto('/app/guest/library?source=curated');
     const card = page
       .getByRole('heading', { name: 'International dojo menu' })
       .locator('xpath=ancestor::article');
@@ -472,12 +505,12 @@ test.describe('routed training flows', () => {
 
     await viewDrill.click();
     await expect(page).toHaveURL(
-      /\/app\/library\?source=curated&drill=international-dojo-2-hour-session$/,
+      /\/app\/guest\/library\?source=curated&drill=international-dojo-2-hour-session$/,
     );
     await expect(page.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
 
     await page.goBack();
-    await expect(page).toHaveURL(/\/app\/library\?source=curated$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library\?source=curated$/);
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(viewDrill).toBeFocused();
 
@@ -485,49 +518,49 @@ test.describe('routed training flows', () => {
     await expect(page.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
     await page.reload();
     await expect(page).toHaveURL(
-      /\/app\/library\?source=curated&drill=international-dojo-2-hour-session$/,
+      /\/app\/guest\/library\?source=curated&drill=international-dojo-2-hour-session$/,
     );
     await expect(page.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Close International dojo menu details.' }).click();
-    await expect(page).toHaveURL(/\/app\/library\?source=curated$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library\?source=curated$/);
     await page.goBack();
-    await expect(page).toHaveURL(/\/app\/dashboard$/);
+    await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
 
-    await page.goto('/app/library/official-znkr-ajkf?source=legacy');
-    await expect(page).toHaveURL(/\/app\/library\?source=legacy&drill=official-znkr-ajkf$/);
+    await page.goto('/app/guest/library/official-znkr-ajkf?source=legacy');
+    await expect(page).toHaveURL(/\/app\/guest\/library\?source=legacy&drill=official-znkr-ajkf$/);
     const directDialog = page.getByRole('dialog', { name: 'Official ZNKR/AJKF menu' });
     await expect(directDialog).toBeVisible();
     await expect(
       directDialog.getByRole('button', { name: 'Close Official ZNKR/AJKF menu details.' }),
     ).toBeFocused();
     await page.goBack();
-    await expect(page).toHaveURL(/\/app\/dashboard$/);
+    await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
 
-    await page.goto('/app/library?source=curated&drill=not-a-real-drill');
-    await expect(page).toHaveURL(/\/app\/library\?source=curated$/);
+    await page.goto('/app/guest/library?source=curated&drill=not-a-real-drill');
+    await expect(page).toHaveURL(/\/app\/guest\/library\?source=curated$/);
     await expect(page.getByRole('heading', { name: 'Keiko library' })).toBeVisible();
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
   test('preserves URL hashes when direct drill queries close or normalize', async ({ page }) => {
     await page.goto(
-      '/app/library?source=direct&drill=international-dojo-2-hour-session#source-note',
+      '/app/guest/library?source=direct&drill=international-dojo-2-hour-session#source-note',
     );
     const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Close International dojo menu details.' }).click();
-    await expect(page).toHaveURL(/\/app\/library\?source=direct#source-note$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library\?source=direct#source-note$/);
 
-    await page.goto('/app/library?source=direct&drill=unavailable-drill#source-note');
+    await page.goto('/app/guest/library?source=direct&drill=unavailable-drill#source-note');
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(page).toHaveURL(/\/app\/library\?source=direct#source-note$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library\?source=direct#source-note$/);
   });
 
   test('traps modal focus, blocks the background, and uses responsive internal scrolling', async ({
     page,
   }) => {
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     const card = page
       .getByRole('heading', { name: 'International dojo menu' })
       .locator('xpath=ancestor::article');
@@ -539,11 +572,8 @@ test.describe('routed training flows', () => {
       name: 'Close International dojo menu details.',
     });
     await expect(closeButton).toBeFocused();
-    await expect(page.locator('.app-shell').locator('xpath=..')).toHaveAttribute('inert', '');
-    await expect(page.locator('.app-shell').locator('xpath=..')).toHaveAttribute(
-      'aria-hidden',
-      'true',
-    );
+    await expect(page.locator('#root')).toHaveAttribute('inert', '');
+    await expect(page.locator('#root')).toHaveAttribute('aria-hidden', 'true');
     await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
 
     await page
@@ -627,7 +657,7 @@ test.describe('routed training flows', () => {
       'international-dojo-2-hour-session',
       'International dojo menu',
     );
-    await page.goto('/app/dashboard');
+    await page.goto('/app/guest/dashboard');
 
     const card = dashboardCard(page, 'International dojo menu');
     const viewMore = card.getByRole('button', { name: 'View more' });
@@ -645,7 +675,7 @@ test.describe('routed training flows', () => {
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto('/app/library?drill=international-dojo-2-hour-session');
+    await page.goto('/app/guest/library?drill=international-dojo-2-hour-session');
 
     await expect(page.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
     await expect(page.locator('.drill-dialog-panel')).toHaveCSS('animation-name', 'none');
@@ -657,7 +687,7 @@ test.describe('routed training flows', () => {
   }) => {
     const description =
       'Weekly rotation: Monday is self-directed practice; Tuesday centers on "Ken-tore" circuit (muscle training); Wednesday running/stair sprints plus suburi and suri-ashi; Thursday is kihon plus ji-geiko; Friday is kihon plus shiaigeiko; weekends are tournaments or shiaigeiko (defaulting to normal kihon/Ken-tore when there are none).';
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
 
     const card = page
       .getByRole('heading', { name: 'University High School dojo menu' })
@@ -674,7 +704,7 @@ test.describe('routed training flows', () => {
   });
 
   test('labels missing read-only quantities from the shared activity context', async ({ page }) => {
-    await page.goto('/app/library?drill=japanese-school-club');
+    await page.goto('/app/guest/library?drill=japanese-school-club');
     const dialog = page.getByRole('dialog', { name: 'Japanese school dojo menu' });
 
     const getStandaloneActivities = (name: string) =>
@@ -700,7 +730,7 @@ test.describe('routed training flows', () => {
     await expect(suburiSection.getByText('Reps not set')).toHaveCount(4);
     await expect(dialog.getByText(/^Not set$/)).toHaveCount(0);
 
-    await page.goto('/app/library?drill=university-version-2');
+    await page.goto('/app/guest/library?drill=university-version-2');
     const universityDialog = page.getByRole('dialog', { name: 'University dojo menu' });
     const standaloneSuburi = universityDialog
       .getByRole('heading', { name: 'Suburi', level: 2, exact: true })
@@ -712,7 +742,7 @@ test.describe('routed training flows', () => {
   test('persists multi-unit quantities, notes, and an Undo restoration across reload', async ({
     page,
   }) => {
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     const card = page
       .getByRole('heading', { name: 'Junior-high school dojo menu' })
       .locator('xpath=ancestor::article');
@@ -738,6 +768,10 @@ test.describe('routed training flows', () => {
     const notes = dashboardDialog.getByLabel('Practice notes');
     await notes.fill('Keep the shoulders relaxed.');
     await notes.blur();
+    await expect(page.locator('.session-status')).toHaveAttribute(
+      'aria-label',
+      'Saved on this device',
+    );
 
     await page.reload();
     const reloadedDashboardDialog = await openDashboardMenu(page, 'Junior-high school dojo menu');
@@ -772,7 +806,7 @@ test.describe('routed training flows', () => {
       'junior-high-kendo-club',
       'Junior-high school dojo menu',
     );
-    await page.goto('/app/dashboard');
+    await page.goto('/app/guest/dashboard');
 
     let dashboardDialog = await openDashboardMenu(page, 'Junior-high school dojo menu');
     await openNestedDetails(
@@ -821,7 +855,7 @@ test.describe('routed training flows', () => {
   test('persists standalone minute and second overrides without changing their units', async ({
     page,
   }) => {
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     const card = page
       .getByRole('heading', { name: 'International dojo menu' })
       .locator('xpath=ancestor::article');
@@ -869,7 +903,7 @@ test.describe('routed training flows', () => {
     page,
   }) => {
     await page.getByRole('link', { name: 'Create a training session' }).click();
-    await expect(page).toHaveURL(/\/app\/drills\/new$/);
+    await expect(page).toHaveURL(/\/app\/guest\/drills\/new$/);
     const name = page.getByLabel('Session name');
     await name.fill('Unfinished draft');
 
@@ -885,7 +919,7 @@ test.describe('routed training flows', () => {
     ]);
     await dismissedDialog.dismiss();
     await dismissedNavigationPromise;
-    await expect(page).toHaveURL(/\/app\/drills\/new$/);
+    await expect(page).toHaveURL(/\/app\/guest\/drills\/new$/);
     await expect(page.getByLabel('Session name')).toHaveValue('Unfinished draft');
 
     const acceptedMessages: string[] = [];
@@ -898,7 +932,7 @@ test.describe('routed training flows', () => {
     ]);
     await acceptedDialog.accept();
     await acceptedNavigationPromise;
-    await expect(page).toHaveURL(/\/app\/dashboard$/);
+    await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
   });
 
   test('creates both measurement types atomically and keeps them on the dashboard after reload', async ({
@@ -909,7 +943,7 @@ test.describe('routed training flows', () => {
       unexpectedDialogMessage = dialog.message();
       await dialog.dismiss();
     });
-    await page.goto('/app/drills/new');
+    await page.goto('/app/guest/drills/new');
     await page.getByLabel('Session name').fill('Monday footwork');
     await page.getByLabel('Description (optional)').fill('A short solo session.');
     await page.getByLabel('Intensity (optional)').selectOption('high-intensity-drill');
@@ -924,9 +958,9 @@ test.describe('routed training flows', () => {
     await exercises.getByLabel('Duration', { exact: true }).fill('12.5');
     await page.getByRole('button', { name: 'Save session to dashboard' }).click();
 
-    await expect(page).toHaveURL(/\/app\/dashboard$/);
+    await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
     const savedMenuUrl = new URL(page.url());
-    expect(savedMenuUrl.pathname).toBe('/app/dashboard');
+    expect(savedMenuUrl.pathname).toBe('/app/guest/dashboard');
     expect(savedMenuUrl.search).toBe('');
     expect(savedMenuUrl.hash).toBe('');
     expect(unexpectedDialogMessage).toBeNull();
@@ -953,17 +987,17 @@ test.describe('routed training flows', () => {
       })
       .click();
 
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     await page.goBack();
-    await expect(page).toHaveURL(/\/app\/dashboard$/);
+    await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
     await expect(page.locator('p[role="status"]')).toHaveText('');
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     await expect(page.locator('.library-card')).toHaveCount(11);
     await expect(page.getByRole('heading', { name: 'Monday footwork', exact: true })).toHaveCount(
       0,
     );
 
-    await page.goto('/app/dashboard');
+    await page.goto('/app/guest/dashboard');
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Monday footwork' })).toBeVisible();
     customCard = dashboardCard(page, 'Monday footwork');
@@ -998,11 +1032,11 @@ test.describe('routed training flows', () => {
       'Senior High School dojo menu',
     );
 
-    await page.goto('/app/dashboard');
+    await page.goto('/app/guest/dashboard');
     const createNewMenu = page.getByRole('link', { name: 'Create new menu' });
-    await expect(createNewMenu).toHaveAttribute('href', '/app/drills/new');
+    await expect(createNewMenu).toHaveAttribute('href', '/app/guest/drills/new');
     await createNewMenu.click();
-    await expect(page).toHaveURL(/\/app\/drills\/new$/);
+    await expect(page).toHaveURL(/\/app\/guest\/drills\/new$/);
     await page.getByLabel('Session name').fill('High intensity custom menu');
     await page.getByLabel('Intensity (optional)').selectOption('high-intensity-drill');
     const customActivity = page.getByRole('group', { name: 'Activity 1' });
@@ -1012,9 +1046,9 @@ test.describe('routed training flows', () => {
     await customExercises.getByLabel('Repetitions', { exact: true }).fill('24');
     await page.getByRole('button', { name: 'Save session to dashboard' }).click();
 
-    await expect(page).toHaveURL(/\/app\/dashboard$/);
+    await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
     const customMenuUrl = new URL(page.url());
-    expect(customMenuUrl.pathname).toBe('/app/dashboard');
+    expect(customMenuUrl.pathname).toBe('/app/guest/dashboard');
     expect(customMenuUrl.search).toBe('');
     expect(customMenuUrl.hash).toBe('');
     await expect(page.locator('p[role="status"]')).toHaveText(

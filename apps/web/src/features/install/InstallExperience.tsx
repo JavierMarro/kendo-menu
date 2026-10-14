@@ -1,3 +1,8 @@
+/**
+ * Owns the browser install prompt, landing promotion, and install-instructions dialog exposed to
+ * shared chrome. Eligibility and dismissal use device-local preferences; the prompt event is held
+ * until an explicit action, and dialog close returns focus to its trigger when possible.
+ */
 import {
   useCallback,
   useEffect,
@@ -129,6 +134,8 @@ export function InstallExperienceProvider({
         return;
       }
 
+      // Browsers dispatch this event before user intent; defer its one-shot prompt until an action
+      // invokes it so the app never opens the native install UI automatically.
       event.preventDefault();
       setDeferredPrompt((currentPrompt) => currentPrompt ?? event);
     };

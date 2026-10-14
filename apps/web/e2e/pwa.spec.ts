@@ -1,7 +1,9 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+
+import { test } from './guest-test';
 
 const STORAGE_KEY = 'kendo-menu';
-const OFFLINE_PATHS = ['/app', '/app/dashboard', '/app/library'] as const;
+const OFFLINE_PATHS = ['/app', '/app/guest/dashboard', '/app/guest/library'] as const;
 const OFFLINE_STORAGE_RAW = JSON.stringify({
   state: {
     dashboardEntries: [
@@ -164,13 +166,13 @@ test.describe('production PWA shell', () => {
     page,
     context,
   }) => {
-    const blockedGoatCounterRequests: string[] = [];
+    const analyticsRequests: string[] = [];
     await page.route('**://gc.zgo.at/**', async (route) => {
-      blockedGoatCounterRequests.push(route.request().url());
+      analyticsRequests.push(route.request().url());
       await route.abort();
     });
     await page.route('**://javiermarro.goatcounter.com/**', async (route) => {
-      blockedGoatCounterRequests.push(route.request().url());
+      analyticsRequests.push(route.request().url());
       await route.abort();
     });
 
@@ -183,7 +185,7 @@ test.describe('production PWA shell', () => {
     await expect(
       page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY),
     ).resolves.toBe(OFFLINE_STORAGE_RAW);
-    await expect.poll(() => blockedGoatCounterRequests.length).toBeGreaterThan(0);
+    await expect(page.locator('script[src*="count.js"]')).toHaveCount(0);
 
     await context.setOffline(true);
     try {
@@ -193,9 +195,9 @@ test.describe('production PWA shell', () => {
 
         if (path === '/app') {
           await expect(
-            page.getByRole('heading', { name: 'Plan the keiko you need today.', exact: true }),
+            page.getByRole('heading', { name: 'Plan the keiko you need today', exact: true }),
           ).toBeVisible();
-        } else if (path === '/app/dashboard') {
+        } else if (path === '/app/guest/dashboard') {
           await expect(
             page.getByRole('heading', { name: 'Your dashboard', exact: true }),
           ).toBeVisible();
@@ -213,6 +215,7 @@ test.describe('production PWA shell', () => {
           page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY),
         ).resolves.toBe(OFFLINE_STORAGE_RAW);
       }
+      expect(analyticsRequests).toEqual([]);
     } finally {
       await context.setOffline(false);
     }

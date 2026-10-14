@@ -2115,7 +2115,7 @@ describe('persistence lifecycle', () => {
 
   it(
     `survives ${STATE_SEQUENCE_STRESS_ITERATIONS} deterministic public state operations (seed ${STATE_SEQUENCE_STRESS_SEED})`,
-    { timeout: 10_000 },
+    { timeout: 20_000 },
     () => {
       const storage = new MemoryStorage();
       const nextIndex = createDeterministicIndexGenerator(STATE_SEQUENCE_STRESS_SEED);

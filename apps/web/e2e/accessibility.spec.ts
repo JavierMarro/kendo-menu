@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { test } from './guest-test';
 
 const STORAGE_KEY = 'kendo-menu';
 
@@ -87,7 +88,7 @@ test.describe('accessibility and responsive layout', () => {
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
 
     await expectNoBlockingAxeViolations(page);
 
@@ -110,19 +111,19 @@ test.describe('accessibility and responsive layout', () => {
       await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
     }
     await expect(
-      page.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+      page.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeVisible();
     await expectNoBlockingAxeViolations(page);
   });
 
   test('has no critical or serious axe violations on the dashboard route', async ({ page }) => {
-    await page.goto('/app/dashboard');
+    await page.goto('/app/guest/dashboard');
     await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
     await expectNoBlockingAxeViolations(page);
   });
 
   test('has no critical or serious axe violations on the library route', async ({ page }) => {
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     await expect(page.getByRole('heading', { name: 'Keiko library', exact: true })).toBeVisible();
     await expectNoBlockingAxeViolations(page);
   });
@@ -130,7 +131,7 @@ test.describe('accessibility and responsive layout', () => {
   test('has no critical or serious axe violations on the library detail route', async ({
     page,
   }) => {
-    await page.goto('/app/library?drill=international-dojo-2-hour-session');
+    await page.goto('/app/guest/library?drill=international-dojo-2-hour-session');
     const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
     await expect(dialog).toBeVisible();
     const firstSection = page.locator('details.detail-section').first();
@@ -140,7 +141,7 @@ test.describe('accessibility and responsive layout', () => {
   });
 
   test('has no critical or serious axe violations on the drill builder route', async ({ page }) => {
-    await page.goto('/app/drills/new');
+    await page.goto('/app/guest/drills/new');
     await expect(
       page.getByRole('heading', { name: 'Create a training session', exact: true }),
     ).toBeVisible();
@@ -149,7 +150,7 @@ test.describe('accessibility and responsive layout', () => {
 
     const backLink = page.getByRole('link', { name: 'Back to keiko library' });
     await expect(backLink).toHaveText('← Back to keiko library');
-    await expect(backLink).toHaveAttribute('href', '/app/library');
+    await expect(backLink).toHaveAttribute('href', '/app/guest/library');
     await expect(backLink).toHaveCSS('text-decoration-line', 'underline');
     await backLink.focus();
     await expect(backLink).toBeFocused();
@@ -187,7 +188,7 @@ test.describe('accessibility and responsive layout', () => {
   });
 
   test('keeps the builder keyboard order and layout usable at 200% text size', async ({ page }) => {
-    await page.goto('/app/drills/new');
+    await page.goto('/app/guest/drills/new');
     const backLink = page.getByRole('link', { name: 'Back to keiko library' });
     await backLink.focus();
     await page.keyboard.press('Tab');
@@ -337,7 +338,7 @@ test.describe('accessibility and responsive layout', () => {
   test('aligns Library activity quantities responsively with long titles', async ({ page }) => {
     for (const width of [320, 375, 393, 1440]) {
       await page.setViewportSize({ width, height: 900 });
-      await page.goto('/app/library?drill=international-dojo-2-hour-session');
+      await page.goto('/app/guest/library?drill=international-dojo-2-hour-session');
       const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
       await expect(dialog).toBeVisible();
 
@@ -400,15 +401,16 @@ test.describe('accessibility and responsive layout', () => {
       const height = width <= 393 ? 812 : 900;
       await page.setViewportSize({ width, height });
 
-      await page.goto('/app/dashboard');
+      await page.goto('/app/guest/dashboard');
       await page.evaluate((key) => window.localStorage.removeItem(key), STORAGE_KEY);
       await page.reload();
       const dashboardScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
-      expect(dashboardScrollWidth, `/app/dashboard overflow at ${width}px`).toBeLessThanOrEqual(
-        width,
-      );
+      expect(
+        dashboardScrollWidth,
+        `/app/guest/dashboard overflow at ${width}px`,
+      ).toBeLessThanOrEqual(width);
 
-      await page.goto('/app/drills/new');
+      await page.goto('/app/guest/drills/new');
       await page
         .getByLabel('Session name')
         .fill('A deliberately long session name for responsive builder verification');
@@ -436,13 +438,14 @@ test.describe('accessibility and responsive layout', () => {
       ).toBeFocused();
 
       const builderScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
-      expect(builderScrollWidth, `/app/drills/new overflow at ${width}px`).toBeLessThanOrEqual(
-        width,
-      );
+      expect(
+        builderScrollWidth,
+        `/app/guest/drills/new overflow at ${width}px`,
+      ).toBeLessThanOrEqual(width);
 
       await firstExercises.getByLabel('Repetitions', { exact: true }).fill('50');
       await page.getByRole('button', { name: 'Save session to dashboard' }).click();
-      await expect(page).toHaveURL(/\/app\/dashboard/);
+      await expect(page).toHaveURL(/\/app\/guest\/dashboard/);
     }
   });
 
@@ -658,9 +661,11 @@ test.describe('accessibility and responsive layout', () => {
     const firstQuestion = faqGrid.getByRole('button', { name: 'What is KendoMenu?' });
     await expect(faqGrid).not.toHaveClass(/is-revealed/);
 
-    const heroCta = page.getByRole('link', { name: 'Browse Keiko library' });
+    const heroCta = page.getByRole('link', { name: 'Try without an account' });
     await heroCta.focus();
     await expect(heroCta).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'Sign up here' })).toBeFocused();
     await page.keyboard.press('Tab');
 
     await expect(firstQuestion).toBeFocused();

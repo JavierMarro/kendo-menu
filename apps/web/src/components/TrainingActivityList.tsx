@@ -1,3 +1,8 @@
+/**
+ * Recursively renders the domain activity tree while allowing feature-owned content beside each
+ * node. Traversal preserves authored order and passes parent context for inherited quantity policy
+ * and feature-specific note rendering.
+ */
 import type { KeyboardEvent, ReactNode } from 'react';
 
 import type { TrainingActivity } from '@kendo-menu/domain';

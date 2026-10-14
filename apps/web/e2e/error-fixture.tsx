@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { ApplicationRecovery } from '../src/features/errors/ApplicationRecovery';
+import { GuestApplicationRecovery } from '../src/features/errors/ApplicationRecovery';
 import '../src/styles.css';
 
 export function ErrorFixture() {
@@ -13,7 +13,7 @@ export function ErrorFixture() {
 const root = document.getElementById('root');
 if (root === null) throw new Error('Missing fixture root.');
 createRoot(root).render(
-  <ApplicationRecovery>
+  <GuestApplicationRecovery>
     <ErrorFixture />
-  </ApplicationRecovery>,
+  </GuestApplicationRecovery>,
 );

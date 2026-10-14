@@ -1,3 +1,8 @@
+/**
+ * Links the shared logo and name to the public app entry.
+ * On a clean `/app` URL (no query or hash), an unmodified click scrolls to the top without adding
+ * history; URLs with query/hash and modified clicks keep normal link behavior.
+ */
 import type { MouseEventHandler, ReactElement } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 

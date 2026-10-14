@@ -1,3 +1,7 @@
+/**
+ * Displays tags derived from the domain training-set category and optional custom intensity.
+ * Labels and visual variants come from the same presentation adapter used by dashboard filters.
+ */
 import { getTrainingSetTags, type TrainingSet } from '@kendo-menu/domain';
 
 import { formatTrainingSetTag, getTrainingSetTagVariant } from '../lib/training-data';

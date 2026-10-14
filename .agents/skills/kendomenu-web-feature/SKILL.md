@@ -1,12 +1,12 @@
 ---
 name: kendomenu-web-feature
-description: Implement or review KendoMenu React and Vite web features across domain, Zustand persistence, browser integration, and accessible UI boundaries. Use for vertical slices, store changes, persisted-state changes, or web feature work in this repository.
+description: Implement or review KendoMenu React/Vite features, Zustand guest persistence, account UI, or browser integration. Not backend-only work.
 ---
 
 # KendoMenu Web Feature
 
-Build the smallest coherent web slice that serves the deployed local-first production MVP. Treat this
-workflow as project-specific coordination for existing skills, not as permission to broaden scope.
+Build the smallest coherent web slice for the approved journey. Guests remain local-first; the
+managed-auth replacement uses online-only account drafts. This skill does not expand task scope.
 
 ## Establish the slice
 
@@ -27,19 +27,17 @@ platform-neutral actions and persistence in `packages/store`; browser APIs in `a
 feature composition and rendering in `apps/web/src/features` and reusable web layout in
 `apps/web/src/components`.
 
-Extend the existing React Router configuration for route work. Do not create alternate routing,
-mobile, server, account, synchronization, query, IndexedDB, or shared-UI infrastructure for a
-hypothetical need.
+Extend the existing React Router configuration. For account work, read the transition handoff and
+keep separate guest/account store lifetimes while reusing dashboard/library/builder UI. Do not
+persist replacement account drafts in LocalStorage/IndexedDB or rebuild background synchronization.
+Use the API feature skill only when the assigned slice also changes backend contracts or behavior.
 
 ## Implement safely
 
 - Keep training concepts and calculations outside JSX. Components render selected state and invoke
   typed actions; transient presentation state stays local to React unless multiple features truly
   share it.
-- Author curated content in `packages/domain/data/default-drills.json`, keep its schema in
-  `packages/domain/schema/kendo-drills.schema.json`, and adapt it through
-  `packages/domain/src/default-training-sets.ts`. Runtime sessions use recursive `TrainingActivity`
-  values and stable activity IDs; preserve the activity tree.
+- Preserve the curated-content and recursive-activity invariants from `AGENTS.md`.
 - Keep storage injection platform-neutral. Treat rehydrated JSON as `unknown`, copy only recognized
   state into the live store, and preserve action functions.
 - When a persisted shape changes, bump its version, implement only supported migrations, and add
@@ -50,6 +48,8 @@ hypothetical need.
   preference does not authorize Tailwind, shadcn/ui, an alternate router, or another dependency.
 - Preserve KendoMenu's calm interface and deliberate existing patterns. Categorical style advice is
   advisory when it conflicts with the product brief or established UI.
+- Guest-copy failure may consume the one-time opportunity, but never alter the guest source or block
+  ordinary account use indefinitely. Do not restore durable copy retries or creating-session gates.
 
 ## Verify and hand off
 
@@ -63,5 +63,5 @@ hypothetical need.
   Preserve independent review for the changes specified in `AGENTS.md`.
 - Reuse current verification evidence; repeat or broaden checks only for changed code, stale
   evidence, failures, or unresolved concerns. Additional skills do not replace required gates.
-- Finish with `$work-session-history`, recording material verification evidence, exclusions,
-  and follow-up according to its evidence rules.
+- Record completed implementation with `$work-session-history`; a read-only review should not
+  modify the history or files unless the user also asks for changes.
