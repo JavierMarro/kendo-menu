@@ -60,6 +60,15 @@ A successful Neon session/token exchange followed by an account 401 with a Verce
 can indicate hosting protection, not a Google failure. Keep protection enabled and do not embed
 Vercel bypass secrets in browser code. Local synthetic cookie-gate tests do not prove live HTTPS access.
 
+The API rewrite uses the anonymous `/api/(.*)` capture, not `/api/:path*`. Vercel forwards unused
+named rewrite parameters as query parameters; an injected `path` selector would correctly trigger
+the account API's `INVALID_ACCOUNT_REQUEST` guard. Keep query validation intact and correct routing
+instead. The configuration regression checks API-before-SPA ordering and anonymous captures; the
+native adapter check confirms query-free account requests reach authorization while genuine query
+selectors remain rejected. Neither check executes Vercel's live routing pipeline. After publishing
+this correction, the owner must retest sign-in on the stable HTTPS Preview; a Ready build is not
+evidence of a verified account. See [Vercel's rewrite parameter behavior](https://vercel.com/docs/routing/rewrites).
+
 ## Production facts as of 2026-09-02
 
 ### Owner-reported

@@ -15,6 +15,21 @@ import ts from 'typescript';
 const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const apiPackageRoot = join(repositoryRoot, 'apps/api');
 
+await test('Vercel API rewrites use anonymous captures before the SPA fallback', async () => {
+  const configuration: unknown = JSON.parse(
+    await readFile(join(repositoryRoot, 'vercel.json'), 'utf8'),
+  );
+  assert.ok(
+    typeof configuration === 'object' && configuration !== null && 'rewrites' in configuration,
+  );
+  // Vercel forwards unused named captures as query parameters; the API rejects query selectors.
+  assert.deepEqual(configuration.rewrites, [
+    { source: '/api', destination: '/api/[...path]' },
+    { source: '/api/(.*)', destination: '/api/[...path]' },
+    { source: '/(.*)', destination: '/index.html' },
+  ]);
+});
+
 await test('native Node loads the packaged Vercel adapter without workspace TypeScript', async () => {
   const fixture = await mkdtemp(join(tmpdir(), 'kendomenu-vercel-package-'));
   try {
@@ -71,6 +86,12 @@ await test('native Node loads the packaged Vercel adapter without workspace Type
           assert.equal(health.status, 200);
           assert.deepEqual(await health.json(), { status: 'ok' });
           assert.equal(health.headers.get('cache-control'), 'private, no-store');
+          const account = await handler.fetch(new Request('https://preview.example/api/account'));
+          assert.equal(account.status, 401);
+          assert.deepEqual(await account.json(), { error: 'UNAUTHENTICATED' });
+          const queriedAccount = await handler.fetch(new Request('https://preview.example/api/account?path=account'));
+          assert.equal(queriedAccount.status, 400);
+          assert.deepEqual(await queriedAccount.json(), { error: 'INVALID_ACCOUNT_REQUEST' });
           const protectedResponse = await handler.fetch(new Request('https://preview.example/api/dashboard'));
           assert.equal(protectedResponse.status, 401);
           const proof = await handler.fetch(new Request('https://preview.example/api/dev/managed-identity'));
