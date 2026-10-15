@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTrainingStore } from '@kendo-menu/store';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DialogShell } from '../../components/DialogShell';
@@ -72,6 +72,7 @@ function app(
                     element={
                       <>
                         <p>Guest dashboard</p>
+                        <Link to="/app/guest/library">Open guest library</Link>
                         {onDialogClose === undefined ? null : (
                           <DialogShell
                             titleId="guest-dialog-title"
@@ -85,6 +86,15 @@ function app(
                     }
                   />
                 </Route>
+                <Route path="/app/guest/library" element={<p>Guest library opened</p>} />
+                <Route
+                  path="/app/sign-in"
+                  element={
+                    <button type="button" onClick={() => void value.startGoogleSignIn()}>
+                      Continue with Google
+                    </button>
+                  }
+                />
                 <Route path="/app/account/dashboard" element={<p>Account dashboard opened</p>} />
               </Routes>
             </MemoryRouter>
@@ -96,14 +106,12 @@ function app(
 }
 
 describe('GuestWorkspaceRoute guest-exit confirmation', () => {
-  it('does not initiate authentication after a rejected guest flush and allows retry', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const flush = vi
+  it('does not open sign-in after a rejected guest save check and allows retry', async () => {
+    const confirmExit = vi
       .fn<() => Promise<void>>()
       .mockRejectedValueOnce(new Error('Synthetic failed flush'))
       .mockResolvedValue(undefined);
     const startGoogleSignIn = vi.fn().mockResolvedValue(true);
-    const setExitConfirmed = vi.fn();
     render(
       app(
         { ...authValue({ status: 'signed-out' }), startGoogleSignIn },
@@ -112,30 +120,30 @@ describe('GuestWorkspaceRoute guest-exit confirmation', () => {
           writeFailed: false,
           pending: false,
           builderDirty: true,
-          flush,
-          confirmExit: flush,
-          setExitConfirmed,
+          flush: confirmExit,
+          confirmExit,
         },
       ),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }));
+    fireEvent.click(screen.getByRole('button', { name: 'User' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Sign up' }));
     await screen.findByRole('alert');
     expect(startGoogleSignIn).not.toHaveBeenCalled();
-    expect(setExitConfirmed).toHaveBeenLastCalledWith(false);
+    expect(screen.getByText('Guest dashboard')).toBeInTheDocument();
+    expect(confirmExit).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Sign up' }));
+    await screen.findByRole('button', { name: 'Continue with Google' });
+    expect(confirmExit).toHaveBeenCalledTimes(2);
+    expect(startGoogleSignIn).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }));
     await waitFor(() => expect(startGoogleSignIn).toHaveBeenCalledOnce());
-    expect(setExitConfirmed).toHaveBeenLastCalledWith(true);
   });
 
-  it('restores protection on BFCache return without letting an older failure undo a newer departure', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const first = deferred<boolean>();
-    const second = deferred<boolean>();
-    const startGoogleSignIn = vi
-      .fn<() => Promise<boolean>>()
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
-    const setExitConfirmed = vi.fn();
+  it('does not navigate late when the guest route changes during a save check', async () => {
+    const saveCheck = deferred<void>();
+    const confirmExit = vi.fn<() => Promise<void>>(() => saveCheck.promise);
+    const startGoogleSignIn = vi.fn().mockResolvedValue(true);
     render(
       app(
         { ...authValue({ status: 'signed-out' }), startGoogleSignIn },
@@ -143,33 +151,25 @@ describe('GuestWorkspaceRoute guest-exit confirmation', () => {
           mode: 'local',
           writeFailed: false,
           pending: false,
-          builderDirty: true,
-          flush: () => Promise.resolve(),
-          setExitConfirmed,
+          flush: confirmExit,
+          confirmExit,
         },
       ),
     );
-    const button = screen.getByRole('button', { name: 'Continue with Google' });
-    fireEvent.click(button);
-    await waitFor(() => expect(startGoogleSignIn).toHaveBeenCalledOnce());
-    fireEvent.click(button);
-    expect(startGoogleSignIn).toHaveBeenCalledOnce();
-    act(() => {
-      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
-    });
-    expect(setExitConfirmed).toHaveBeenLastCalledWith(false);
-    fireEvent.click(button);
-    await waitFor(() => expect(startGoogleSignIn).toHaveBeenCalledTimes(2));
+
+    fireEvent.click(screen.getByRole('button', { name: 'User' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Sign up' }));
+    await waitFor(() => expect(confirmExit).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('link', { name: 'Open guest library' }));
+    expect(screen.getByText('Guest library opened')).toBeInTheDocument();
+
     await act(async () => {
-      first.resolve(false);
-      await first.promise;
+      saveCheck.resolve();
+      await saveCheck.promise;
     });
-    expect(setExitConfirmed).toHaveBeenLastCalledWith(true);
-    await act(async () => {
-      second.resolve(true);
-      await second.promise;
-    });
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    expect(screen.queryByRole('button', { name: 'Continue with Google' })).not.toBeInTheDocument();
+    expect(startGoogleSignIn).not.toHaveBeenCalled();
   });
 
   it('removes guest portals and restores root access while verified-account exit is blocked', async () => {

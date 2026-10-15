@@ -76,7 +76,8 @@ export function DialogShell({ children, closeLabel, onClose, titleId }: DialogSh
     // The dialog is portaled outside the app root, so make the background inert and restore its
     // prior attributes when this dialog closes or unmounts.
     const applicationRoot =
-      document.getElementById('root') ?? document.querySelector('.app-shell')?.parentElement;
+      document.getElementById('root') ??
+      document.querySelector('.app-shell, .workspace-shell, .auth-page')?.parentElement;
     const previousInert = applicationRoot?.getAttribute('inert') ?? null;
     const previousAriaHidden = applicationRoot?.getAttribute('aria-hidden') ?? null;
 

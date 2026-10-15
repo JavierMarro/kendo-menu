@@ -2,6 +2,7 @@ import { expect, type Dialog, type Page } from '@playwright/test';
 
 import { test } from './guest-test';
 import { SyntheticManagedHarness } from './synthetic-managed-harness';
+import { clickGuestSignUp, startGuestGoogleSignUp, workspaceLink } from './workspace-test-helpers';
 
 async function addGuestMenu(page: Page): Promise<void> {
   await page.goto('/app/guest/library');
@@ -14,6 +15,14 @@ async function addGuestMenu(page: Page): Promise<void> {
   await expect(page.locator('.dashboard-card--compact')).toHaveCount(1);
 }
 
+async function addPendingPracticeNote(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'View more' }).first().click();
+  const notes = page.getByLabel('Practice notes');
+  await notes.fill('Pending write for the guest transition fence.');
+  await notes.press('Tab');
+  await page.getByRole('button', { name: /Close .* details/i }).click();
+}
+
 async function openBuilder(page: Page): Promise<void> {
   await page
     .getByRole('main')
@@ -23,13 +32,7 @@ async function openBuilder(page: Page): Promise<void> {
 }
 
 async function openDashboardNavigation(page: Page): Promise<void> {
-  const dashboardLink = page
-    .getByRole('banner')
-    .getByRole('link', { name: 'Dashboard', exact: true });
-  if (!(await dashboardLink.isVisible())) {
-    await page.getByRole('button', { name: 'Open navigation' }).click();
-  }
-  await dashboardLink.click();
+  await workspaceLink(page, 'Dashboard').click();
 }
 
 for (const completion of ['Try again', 'Continue without saving', 'Reset local data'] as const) {
@@ -173,7 +176,7 @@ test('canceling Google entry keeps the guest builder and does not start authenti
     confirmations.push(dialog.message());
     await dialog.dismiss();
   });
-  await page.getByRole('button', { name: 'Continue with Google' }).click();
+  await clickGuestSignUp(page);
   await expect.poll(() => confirmations.length).toBe(1);
   await expect(page.getByLabel('Session name')).toHaveValue('Guest draft before Google');
   await expect(page).toHaveURL(/\/app\/guest\/drills\/new$/);
@@ -193,7 +196,7 @@ test('confirmed Google departure does not ask again at beforeunload', async ({ p
     if (dialog.type() === 'confirm') await dialog.accept();
     else await dialog.dismiss();
   });
-  await page.getByRole('button', { name: 'Continue with Google' }).click();
+  await startGuestGoogleSignUp(page);
   await expect(page).toHaveURL(/\/app\/account\/dashboard$/);
   expect(dialogs).toEqual(['confirm']);
   expect(harness.authCalls.filter((url) => url.includes('/sign-in/social'))).toHaveLength(1);
@@ -201,13 +204,14 @@ test('confirmed Google departure does not ask again at beforeunload', async ({ p
 });
 
 for (const failure of ['provider', 'readback'] as const) {
-  test(`failed Google ${failure} preserves input and leave protection, then permits retry`, async ({
+  test(`failed Google ${failure} handling preserves the guest source and permits retry`, async ({
     page,
   }) => {
-    await SyntheticManagedHarness.install(page);
+    const harness = await SyntheticManagedHarness.install(page);
     await addGuestMenu(page);
     await openBuilder(page);
     await page.getByLabel('Session name').fill('Retry keeps this draft');
+    const guestData = await page.evaluate(() => localStorage.getItem('kendo-menu'));
     if (failure === 'provider') {
       await page.route('**/sign-in/social', (route) =>
         route.fulfill({ status: 503, json: { message: 'Synthetic provider failure' } }),
@@ -229,22 +233,30 @@ for (const failure of ['provider', 'readback'] as const) {
       });
     }
     page.on('dialog', (dialog) => void dialog.accept());
-    await page.getByRole('button', { name: 'Continue with Google' }).click();
-    await expect(page.getByRole('alert')).toContainText(
-      'could not confirm the guest dashboard or start sign-in',
-    );
-    await expect(page.getByLabel('Session name')).toHaveValue('Retry keeps this draft');
-    expect(
-      await page.evaluate(() => {
-        const event = new Event('beforeunload', { cancelable: true });
-        window.dispatchEvent(event);
-        return event.defaultPrevented;
-      }),
-    ).toBe(true);
-    if (failure === 'provider') await page.unroute('**/sign-in/social');
-    else await page.evaluate(() => window.dispatchEvent(new Event('restore-test-readback')));
-    await page.getByRole('button', { name: 'Continue with Google' }).click();
+    await clickGuestSignUp(page);
+    if (failure === 'provider') {
+      await expect(page).toHaveURL(/\/app\/sign-in$/);
+      await page.getByRole('button', { name: 'Continue with Google' }).click();
+      await expect(page.getByRole('alert')).toContainText('Google sign-in could not be started');
+      expect(await page.evaluate(() => localStorage.getItem('kendo-menu'))).toBe(guestData);
+      await page.unroute('**/sign-in/social');
+      await startGuestGoogleSignUp(page);
+    } else {
+      await expect(page.getByRole('alert')).toContainText('could not confirm your guest dashboard');
+      await expect(page.getByLabel('Session name')).toHaveValue('Retry keeps this draft');
+      expect(
+        await page.evaluate(() => {
+          const event = new Event('beforeunload', { cancelable: true });
+          window.dispatchEvent(event);
+          return event.defaultPrevented;
+        }),
+      ).toBe(true);
+      await page.evaluate(() => window.dispatchEvent(new Event('restore-test-readback')));
+      await startGuestGoogleSignUp(page);
+    }
     await expect(page).toHaveURL(/\/app\/account\/dashboard$/);
+    expect(harness.authCalls.some((url) => url.includes('/sign-in/social'))).toBe(true);
+    expect(await page.evaluate(() => localStorage.getItem('kendo-menu'))).toBe(guestData);
   });
 }
 
@@ -288,12 +300,8 @@ for (const workspace of ['dashboard', 'library'] as const) {
     await expect(
       page.locator(workspace === 'dashboard' ? '.dashboard-card--compact' : '.library-grid'),
     ).not.toBeVisible();
-    const retry = page.getByRole('button', { name: 'Retry guest save check' });
-    await retry.focus();
-    await expect(retry).toBeFocused();
+    await expect.poll(() => new URL(page.url()).pathname).toBe(`/app/guest/${workspace}`);
     await page.evaluate(() => window.dispatchEvent(new Event('restore-test-readback')));
-    await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(new RegExp(`/app/account/${workspace}$`));
     expect(await page.evaluate(() => localStorage.getItem('kendo-menu'))).toBe(guestData);
     expect(harness.apiCalls.some((call) => call.method === 'POST' || call.method === 'PUT')).toBe(
       false,
@@ -317,9 +325,11 @@ test('a dismissed remaining browser warning permits another Google attempt', asy
     if (dialog.type() === 'beforeunload' && ++warnings === 1) await dialog.dismiss();
     else await dialog.accept();
   });
+  await clickGuestSignUp(page);
+  await expect(page).toHaveURL(/\/app\/sign-in$/);
   await page.getByRole('button', { name: 'Continue with Google' }).click();
   await expect.poll(() => warnings).toBe(1);
-  await expect(page.getByLabel('Session name')).toHaveValue('Canceled navigation retains me');
+  await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeEnabled();
   await page.getByRole('button', { name: 'Continue with Google' }).click();
   await expect(page).toHaveURL(/\/app\/account\/dashboard$/);
   expect(harness.authCalls.filter((url) => url.includes('/sign-in/social'))).toHaveLength(2);
@@ -331,6 +341,9 @@ test('an accepted Google navigation keeps duplicate initiation coalesced while i
   await SyntheticManagedHarness.install(page);
   await page.goto('/app/guest/drills/new');
   await page.getByLabel('Session name').fill('Accepted departure');
+  page.on('dialog', (dialog) => void dialog.accept());
+  await clickGuestSignUp(page);
+  await expect(page).toHaveURL(/\/app\/sign-in$/);
   let calls = 0;
   await page.route('**/sign-in/social', async (route) => {
     calls += 1;
@@ -372,7 +385,6 @@ test('an accepted Google navigation keeps duplicate initiation coalesced while i
       { once: true },
     );
   });
-  page.on('dialog', (dialog) => void dialog.accept());
   const departing = page.waitForRequest('**/synthetic-slow-oauth');
   await page.getByRole('button', { name: 'Continue with Google' }).click({ noWaitAfter: true });
   await departing;
@@ -415,15 +427,13 @@ test('a guest library portal closes while a verified transition waits for the gu
   await expect(page.locator('#root')).not.toHaveAttribute('inert');
   await expect(page.locator('#root')).not.toHaveAttribute('aria-hidden', 'true');
   const continueButton = page.getByRole('button', { name: 'Continue to account' });
-  await continueButton.focus();
-  await expect(continueButton).toBeFocused();
-  await page.keyboard.press('Enter');
+  await continueButton.press('Enter');
   await expect(page.locator('.library-grid')).not.toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('kendo-menu'))).toBeNull();
   await lockOwner.evaluate(() => window.dispatchEvent(new Event('release-test-guest-lock')));
   await expect.poll(() => page.evaluate(() => localStorage.getItem('kendo-menu'))).not.toBeNull();
   await continueButton.click();
-  await expect(page).toHaveURL(/\/app\/account\/library$/);
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/app/account/library');
   expect(await page.evaluate(() => localStorage.getItem('kendo-menu'))).not.toBeNull();
   expect(harness.apiCalls.some((call) => call.method === 'POST' || call.method === 'PUT')).toBe(
     false,
@@ -437,6 +447,7 @@ test('duplicate Google entry stays coalesced and restores protection when the pe
   const harness = await SyntheticManagedHarness.install(page);
   await page.goto('/app/guest/drills/new');
   await page.getByLabel('Session name').fill('Keep after pending failure');
+  const guestData = await page.evaluate(() => localStorage.getItem('kendo-menu'));
   let release: (() => void) | undefined;
   const held = new Promise<void>((resolve) => {
     release = resolve;
@@ -452,26 +463,23 @@ test('duplicate Google entry stays coalesced and restores protection when the pe
     confirmations += 1;
     await dialog.accept();
   });
-  await page.getByRole('button', { name: 'Continue with Google' }).click();
+  await clickGuestSignUp(page);
+  await expect(page).toHaveURL(/\/app\/sign-in$/);
+  const googleButton = page
+    .getByRole('region', { name: 'KendoMenu', exact: true })
+    .getByRole('button');
+  await googleButton.click();
   await expect.poll(() => calls).toBe(1);
-  await page.getByRole('button', { name: 'Continue with Google' }).click();
+  await expect(googleButton).toBeDisabled();
   expect(confirmations).toBe(1);
   release?.();
-  await expect(page.getByRole('alert')).toContainText(
-    'could not confirm the guest dashboard or start sign-in',
-  );
+  await expect(page.getByRole('alert')).toContainText('Google sign-in could not be started');
   expect(calls).toBe(1);
-  await expect(page.getByLabel('Session name')).toHaveValue('Keep after pending failure');
-  expect(
-    await page.evaluate(() => {
-      const event = new Event('beforeunload', { cancelable: true });
-      window.dispatchEvent(event);
-      return event.defaultPrevented;
-    }),
-  ).toBe(true);
+  expect(await page.evaluate(() => localStorage.getItem('kendo-menu'))).toBe(guestData);
   await page.unroute('**/sign-in/social');
   await page.getByRole('button', { name: 'Continue with Google' }).click();
   await expect(page).toHaveURL(/\/app\/account\/dashboard$/);
+  expect(calls).toBe(1);
   expect(harness.authCalls.filter((url) => url.includes('/sign-in/social'))).toHaveLength(1);
 });
 
@@ -506,12 +514,12 @@ test('edits during the Google guest flush retain protection and require a fresh 
   await openBuilder(page);
   await page.getByLabel('Session name').fill('Confirmed input');
   page.on('dialog', (dialog) => void dialog.accept());
-  await page.getByRole('button', { name: 'Continue with Google' }).click();
+  await clickGuestSignUp(page);
+  const signUpLink = page.getByRole('region', { name: 'User options' }).getByRole('link');
+  await expect(signUpLink).toHaveText('Checking guest save…');
   await page.getByLabel('Session name').fill('New input after confirmation');
   await lockOwner.evaluate(() => window.dispatchEvent(new Event('release-test-guest-lock')));
-  await expect(page.getByRole('alert')).toContainText(
-    'could not confirm the guest dashboard or start sign-in',
-  );
+  await expect(page.getByRole('alert')).toContainText('could not confirm your guest dashboard');
   await expect(page.getByLabel('Session name')).toHaveValue('New input after confirmation');
   expect(harness.authCalls.some((url) => url.includes('/sign-in/social'))).toBe(false);
   expect(
@@ -521,7 +529,63 @@ test('edits during the Google guest flush retain protection and require a fresh 
       return event.defaultPrevented;
     }),
   ).toBe(true);
-  await page.getByRole('button', { name: 'Continue with Google' }).click();
+  await startGuestGoogleSignUp(page);
   await expect(page).toHaveURL(/\/app\/account\/dashboard$/);
   await lockOwner.close();
 });
+
+for (const invalidation of ['route', 'identity'] as const) {
+  test(`a pending guest sign-up cannot navigate late after its ${invalidation} changes`, async ({
+    page,
+    context,
+  }) => {
+    const harness = await SyntheticManagedHarness.install(page);
+    await addGuestMenu(page);
+    const lockOwner = await context.newPage();
+    await lockOwner.goto('/app/guest/dashboard');
+    await lockOwner.evaluate(
+      () =>
+        new Promise<void>((acquired) => {
+          void navigator.locks.request(
+            'kendo-menu:guest',
+            () =>
+              new Promise<void>((release) => {
+                window.addEventListener('release-test-guest-lock', () => release(), {
+                  once: true,
+                });
+                acquired();
+              }),
+          );
+        }),
+    );
+
+    await page.goto('/app/guest/dashboard');
+    await addPendingPracticeNote(page);
+    await clickGuestSignUp(page);
+    const signUpLink = page.getByRole('region', { name: 'User options' }).getByRole('link');
+    await expect(signUpLink).toHaveText('Checking guest save…');
+    if (invalidation === 'route') {
+      await workspaceLink(page, 'Library').click();
+      await expect(page).toHaveURL(/\/app\/guest\/library$/);
+    } else {
+      harness.setSignedIn(true);
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      await expect(
+        page.getByRole('heading', { name: 'Confirming your guest dashboard…' }),
+      ).toBeVisible();
+    }
+
+    await lockOwner.evaluate(() => window.dispatchEvent(new Event('release-test-guest-lock')));
+    if (invalidation === 'route') {
+      await expect(page).toHaveURL(/\/app\/guest\/library$/);
+    } else {
+      await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
+      await expect(page.getByRole('button', { name: 'Continue to account' })).toBeVisible();
+      expect(harness.authCalls.some((url) => url.includes('/sign-in/social'))).toBe(false);
+      await page.getByRole('button', { name: 'Continue to account' }).click();
+      await expect(page).toHaveURL(/\/app\/account\/dashboard$/);
+    }
+    expect(harness.authCalls.some((url) => url.includes('/sign-in/social'))).toBe(false);
+    await lockOwner.close();
+  });
+}

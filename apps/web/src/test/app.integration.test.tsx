@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   DEFAULT_TRAINING_SETS,
@@ -66,6 +66,13 @@ const IN_SCOPE_SESSION_SMOKE_CASES = [
   { id: 'university-high-school', name: 'University High School dojo menu', activityCount: 31 },
   { id: 'top-university', name: 'Top university dojo menu', activityCount: 17 },
 ] as const;
+
+let restoreScrollIntoView: (() => void) | undefined;
+
+afterEach(() => {
+  restoreScrollIntoView?.();
+  restoreScrollIntoView = undefined;
+});
 
 async function openDashboardMenu(
   user: ReturnType<typeof userEvent.setup>,
@@ -149,9 +156,10 @@ describe('KendoMenu application flows', () => {
     const view = renderApp(createTestStore(), { initialEntries: ['/app'] });
 
     await user.click(screen.getByRole('button', { name: 'Got it' }));
+    await user.click(screen.getByRole('link', { name: 'Try without an account' }));
     await user.click(
-      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
-        name: /Keiko library/,
+      within(screen.getByRole('navigation', { name: 'Workspace navigation' })).getByRole('link', {
+        name: 'Library',
       }),
     );
 
@@ -198,7 +206,7 @@ describe('KendoMenu application flows', () => {
     expect(screen.getByRole('heading', { name: 'Analytics' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'How to disable cookies?' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Contact' })).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Landing navigation' })).toBeInTheDocument();
 
     const localStorageSection = screen
       .getByRole('heading', { name: 'Local storage' })
@@ -241,17 +249,12 @@ describe('KendoMenu application flows', () => {
     expect(within(footer).getByRole('heading', { name: 'Navigation', level: 2 })).toBeVisible();
 
     const footerNavigation = within(footer).getByRole('navigation', { name: 'Navigation' });
-    expect(within(footerNavigation).getByRole('link', { name: /Keiko library/ })).toBeVisible();
+    expect(within(footerNavigation).getByRole('link', { name: 'Keiko menus' })).toBeVisible();
     expect(
       within(footerNavigation)
         .getAllByRole('link')
         .map((link) => link.getAttribute('href')),
-    ).toEqual([
-      '/app#how-it-works-title',
-      '/app/guest/library',
-      '/app/guest/dashboard',
-      '/app#faq-title',
-    ]);
+    ).toEqual(['/app#how-it-works-title', '/app#library-story-title', '/app#faq-title']);
 
     const informationNavigation = within(footer).getByRole('navigation', { name: 'Information' });
     expect(within(informationNavigation).getByRole('link', { name: 'Sources' })).toHaveAttribute(
@@ -267,7 +270,7 @@ describe('KendoMenu application flows', () => {
   it('explains guest and online accounts and links to the open-source project', async () => {
     const user = userEvent.setup();
     renderApp(createTestStore(), { initialEntries: ['/app'] });
-    expect(screen.getByRole('button', { name: 'Sign up here' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Sign up here' })).toBeVisible();
     expect(
       screen.getByText('KendoMenu meets you where you are in your kendo journey.'),
     ).toBeVisible();
@@ -314,6 +317,22 @@ describe('KendoMenu application flows', () => {
 
   it('renders the landing page at /app and links into the Keiko library', async () => {
     const user = userEvent.setup();
+    const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'scrollIntoView',
+    );
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    restoreScrollIntoView = () => {
+      if (originalScrollIntoView === undefined) {
+        Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+      } else {
+        Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', originalScrollIntoView);
+      }
+    };
     const store = createTestStore();
 
     renderApp(store, { initialEntries: ['/app'] });
@@ -426,19 +445,46 @@ describe('KendoMenu application flows', () => {
     expect(continueAsGuest).toHaveAttribute('href', '/app/guest/dashboard');
     await user.click(continueAsGuest);
     expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
-    await user.click(within(header).getByRole('link', { name: 'KendoMenu home' }));
+    const workspaceBrand = document.querySelector('.workspace-desktop-brand');
+    if (!(workspaceBrand instanceof HTMLElement)) {
+      throw new Error('Expected the desktop workspace brand.');
+    }
+    await user.click(within(workspaceBrand).getByRole('link', { name: 'KendoMenu home' }));
     expect(
       screen.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeInTheDocument();
 
+    const landingLinks = within(
+      screen.getByRole('navigation', { name: 'Landing navigation' }),
+    ).getAllByRole('link');
+    expect(landingLinks.map((link) => link.getAttribute('href'))).toEqual([
+      '/app#how-it-works-title',
+      '/app#library-story-title',
+      '/app#faq-title',
+    ]);
+    const keikoMenusLink = landingLinks[1];
+    if (keikoMenusLink === undefined) {
+      throw new Error('Expected the informational Keiko menus anchor.');
+    }
+    await user.click(keikoMenusLink);
+    expect(
+      screen.getByRole('heading', { name: 'A curated library with real training context' }),
+    ).toBeInTheDocument();
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+
+    await user.click(screen.getByRole('link', { name: 'Try without an account' }));
     await user.click(
-      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
-        name: /Keiko library/,
+      within(screen.getByRole('navigation', { name: 'Workspace navigation' })).getByRole('link', {
+        name: 'Library',
       }),
     );
     expect(screen.getByRole('heading', { name: 'Keiko library' })).toBeInTheDocument();
 
-    await user.click(within(header).getByRole('link', { name: 'KendoMenu home' }));
+    const workspaceHeader = document.querySelector('.workspace-desktop-brand');
+    if (!(workspaceHeader instanceof HTMLElement)) {
+      throw new Error('Expected the desktop workspace brand.');
+    }
+    await user.click(within(workspaceHeader).getByRole('link', { name: 'KendoMenu home' }));
     expect(
       screen.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeInTheDocument();
@@ -500,25 +546,24 @@ describe('KendoMenu application flows', () => {
     }
   });
 
-  it('keeps the current primary navigation order', () => {
+  it('keeps the landing navigation limited to the three informational anchors', () => {
     renderApp(createTestStore(), { initialEntries: ['/app'] });
 
     const navigationLinks = within(
-      screen.getByRole('navigation', { name: 'Primary navigation' }),
+      screen.getByRole('navigation', { name: 'Landing navigation' }),
     ).getAllByRole('link');
     expect(navigationLinks.map((link) => link.getAttribute('href'))).toEqual([
       '/app#how-it-works-title',
-      '/app/guest/library',
-      '/app/guest/dashboard',
+      '/app#library-story-title',
       '/app#faq-title',
     ]);
     expect(
-      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
-        name: /Keiko library/,
+      within(screen.getByRole('navigation', { name: 'Landing navigation' })).getByRole('link', {
+        name: 'Keiko menus',
       }),
     ).toBeVisible();
     expect(document.querySelector('.nav-count')).toBeNull();
-    expect(document.querySelectorAll('.nav-label--wrappable .nav-label-word')).toHaveLength(4);
+    expect(document.querySelectorAll('.nav-label--wrappable .nav-label-word')).toHaveLength(0);
   });
 
   it('opens and closes the responsive navigation accessibly', async () => {
@@ -544,11 +589,10 @@ describe('KendoMenu application flows', () => {
     expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveFocus();
 
     await user.click(screen.getByRole('button', { name: 'Open navigation' }));
-    const dashboardLink = within(
-      screen.getByRole('navigation', { name: 'Primary navigation' }),
-    ).getByRole('link', { name: 'Dashboard' });
-    expect(dashboardLink).toHaveAttribute('href', '/app/guest/dashboard');
-    await user.click(dashboardLink);
+    const landingNavigation = screen.getByRole('navigation', { name: 'Landing navigation' });
+    expect(within(landingNavigation).getAllByRole('link')).toHaveLength(3);
+    expect(within(landingNavigation).queryByRole('link', { name: 'Dashboard' })).toBeNull();
+    await user.click(screen.getByRole('link', { name: 'Try without an account' }));
 
     expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
     expect(screen.getByRole('status', { name: 'Saved on this device' })).toBeInTheDocument();
@@ -557,9 +601,10 @@ describe('KendoMenu application flows', () => {
     expect(screen.getByRole('link', { name: 'Browse Keiko library' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Create a training session' })).toBeVisible();
     expect(screen.getByText(/Add a session from the Keiko library/)).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
+    expect(screen.getByRole('navigation', { name: 'Workspace navigation' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute(
+      'href',
+      '/app/guest/dashboard',
     );
   });
 
@@ -769,8 +814,8 @@ describe('KendoMenu application flows', () => {
     expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
 
     await user.click(
-      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
-        name: /Keiko library/,
+      within(screen.getByRole('navigation', { name: 'Workspace navigation' })).getByRole('link', {
+        name: 'Library',
       }),
     );
     expect(screen.getByRole('heading', { name: 'Keiko library' })).toBeInTheDocument();
@@ -831,7 +876,7 @@ describe('KendoMenu application flows', () => {
     expect(screen.getByText(announcement, { selector: 'p[role="status"]' })).toBeInTheDocument();
 
     await user.click(
-      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
+      within(screen.getByRole('navigation', { name: 'Workspace navigation' })).getByRole('link', {
         name: 'Dashboard',
       }),
     );
@@ -840,8 +885,8 @@ describe('KendoMenu application flows', () => {
     ).not.toBeInTheDocument();
 
     await user.click(
-      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
-        name: /Keiko library/,
+      within(screen.getByRole('navigation', { name: 'Workspace navigation' })).getByRole('link', {
+        name: 'Library',
       }),
     );
     expect(
@@ -849,7 +894,7 @@ describe('KendoMenu application flows', () => {
     ).not.toBeInTheDocument();
 
     await user.click(
-      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
+      within(screen.getByRole('navigation', { name: 'Workspace navigation' })).getByRole('link', {
         name: 'Dashboard',
       }),
     );

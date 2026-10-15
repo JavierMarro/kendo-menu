@@ -51,12 +51,14 @@ interface TrainingStoreBundle {
 
 interface PersistenceGateProps {
   readonly children: ReactNode;
+  readonly recoveryLayout?: (recoveryView: ReactNode) => ReactNode;
   readonly recoveryRequested?: boolean;
   readonly onRecoveryComplete?: () => void;
 }
 
 export function PersistenceGate({
   children,
+  recoveryLayout,
   recoveryRequested = false,
   onRecoveryComplete,
 }: PersistenceGateProps) {
@@ -413,6 +415,7 @@ export function PersistenceGate({
       onContinueWithoutSaving={continueWithoutSaving}
     />
   );
+  const displayedRecoveryView = recoveryLayout?.(recoveryView) ?? recoveryView;
 
   if (store !== null && storeBundle !== null) {
     const showRecovery =
@@ -445,7 +448,7 @@ export function PersistenceGate({
         <div hidden={showRecovery} inert={showRecovery} aria-hidden={showRecovery}>
           <TrainingStoreProvider store={store}>{children}</TrainingStoreProvider>
         </div>
-        {showRecovery ? recoveryView : null}
+        {showRecovery ? displayedRecoveryView : null}
       </PersistenceContext.Provider>
     );
   }
@@ -464,7 +467,7 @@ export function PersistenceGate({
       }}
     >
       {navigationGuard}
-      {recoveryView}
+      {displayedRecoveryView}
     </PersistenceContext.Provider>
   );
 }

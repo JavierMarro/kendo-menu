@@ -54,7 +54,7 @@ export function AppShell() {
         <nav
           id="primary-navigation"
           className={isMenuOpen ? 'primary-nav is-open' : 'primary-nav'}
-          aria-label="Primary navigation"
+          aria-label="Landing navigation"
         >
           <PrimaryNavigationLinks linkClassName="nav-item" onNavigate={closeMenu} />
         </nav>

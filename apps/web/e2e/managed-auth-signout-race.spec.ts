@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { SYNTHETIC_AUTH_URL, SyntheticManagedHarness } from './synthetic-managed-harness';
+import { clickWorkspaceSignOut } from './workspace-test-helpers';
 
 type ProbeWindow = Window & { __identityChecksStarted?: number };
 
@@ -79,7 +80,7 @@ test('confirmed sign-out fences focus verification, notifies a peer, and keeps g
   await enterAccount(page);
   await observeIdentityCheckStarts(page);
 
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await clickWorkspaceSignOut(page);
   await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toHaveCount(0);
   await signOutSeen;
   await expect(
@@ -143,7 +144,7 @@ test('failed sign-out keeps account hidden through lifecycle checks until retry 
       call.method === 'GET' && new URL(call.path, 'http://localhost').pathname === '/api/account',
   ).length;
 
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await clickWorkspaceSignOut(page);
   await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toHaveCount(0);
   await failureSeen;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));

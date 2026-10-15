@@ -8,11 +8,14 @@ extends this baseline with the separate one-use guest-copy setup screen.
 
 ## Routes and store lifetimes
 
-`/app` offers Continue as a guest and Continue with Google. Each enters its dashboard. Separate
+`/app` offers guest entry and sign-up through `/app/sign-in`. The public sign-in page uses the
+existing full-page Google flow; verified visitors proceed to their account workspace. Separate
 `/app/guest/*` and `/app/account/*` trees contain dashboard, library, library detail, drills and
 custom-menu creation. Legacy unscoped app links redirect to guest destinations; a verified
 signed-in visitor is redirected to the equivalent account destination. The shell provides the
-selected workspace's dashboard shortcut. Shared dashboard/library/builder components receive the
+selected workspace's Dashboard, Library and User navigation, fixed left on desktop and at the
+bottom on mobile. The brand link returns home; User holds guest sign-up or the existing guarded
+account sign-out action. Delete account is unavailable (“Coming soon”). Shared dashboard/library/builder components receive the
 workspace provider; an open editor never has its store swapped to another workspace.
 
 Guest routes use the existing injected Zustand/LocalStorage store, `kendo-menu` key, validation,

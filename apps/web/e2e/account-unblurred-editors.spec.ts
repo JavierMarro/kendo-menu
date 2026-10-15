@@ -1,6 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 import { SyntheticManagedHarness } from './synthetic-managed-harness';
+import { clickWorkspaceSignOut } from './workspace-test-helpers';
 
 async function addAccountMenu(page: Page): Promise<void> {
   await page.goto('/app/account/dashboard');
@@ -41,7 +42,7 @@ test('unfinished quantity input warns on sign-out even with a saved account dash
     .getByRole('dialog', { name: 'International dojo menu' })
     .getByRole('button', { name: /^Close / })
     .click();
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await clickWorkspaceSignOut(page);
   const warning = page.getByRole('alertdialog', { name: /Leave this account/i });
   await expect(warning).toBeVisible();
   await warning.getByRole('button', { name: 'Keep editing', exact: true }).click();

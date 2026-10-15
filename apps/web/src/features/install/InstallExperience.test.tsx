@@ -231,17 +231,18 @@ describe('install experience', () => {
       screen.queryByRole('dialog', { name: 'Keep KendoMenu close for practice.' }),
     ).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole('link', { name: 'Try without an account' }));
     await user.click(
-      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
-        name: /Keiko library/,
+      within(screen.getByRole('navigation', { name: 'Workspace navigation' })).getByRole('link', {
+        name: 'Library',
       }),
     );
     expect(screen.getByRole('heading', { name: 'Keiko library' })).toBeVisible();
-    const topBar = document.querySelector('.top-bar');
-    if (!(topBar instanceof HTMLElement)) {
-      throw new Error('Expected the application top bar.');
+    const workspaceBrand = document.querySelector('.workspace-desktop-brand');
+    if (!(workspaceBrand instanceof HTMLElement)) {
+      throw new Error('Expected the desktop workspace brand.');
     }
-    await user.click(within(topBar).getByRole('link', { name: 'KendoMenu home' }));
+    await user.click(within(workspaceBrand).getByRole('link', { name: 'KendoMenu home' }));
 
     expect(
       await screen.findByRole('dialog', { name: 'Keep KendoMenu close for practice.' }),
@@ -331,9 +332,10 @@ describe('install experience', () => {
     await user.click(footerAction);
     await waitFor(() => expect(prompt).toHaveBeenCalledTimes(1));
 
+    await user.click(screen.getByRole('link', { name: 'Try without an account' }));
     await user.click(
-      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
-        name: /Keiko library/,
+      within(screen.getByRole('navigation', { name: 'Workspace navigation' })).getByRole('link', {
+        name: 'Library',
       }),
     );
     expect(

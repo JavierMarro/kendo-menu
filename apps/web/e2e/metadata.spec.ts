@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import { test } from './guest-test';
+import { visibleWorkspaceBrandLink } from './workspace-test-helpers';
 
 const CANONICAL_ORIGIN = 'https://www.kendomenu.com';
 const SOCIAL_IMAGE_URL = `${CANONICAL_ORIGIN}/assets/kendo-menu-social.jpg`;
@@ -148,7 +149,7 @@ test.describe('production metadata and crawl boundaries', () => {
     await page.evaluate(() => localStorage.removeItem('kendo-menu'));
     await page.getByRole('button', { name: 'Try again', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
-    await page.locator('.top-bar').getByRole('link', { name: 'KendoMenu home' }).click();
+    await (await visibleWorkspaceBrandLink(page)).click();
     await expect(
       page.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeVisible();

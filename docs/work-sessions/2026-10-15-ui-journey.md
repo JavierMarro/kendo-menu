@@ -1,0 +1,8 @@
+- Session: ui journey
+- Date/duration: 2026-10-15; multi-session implementation and verification
+- Scope/start: Separate public information from the guest/account workspace on codex/ui-journey, based on the owner-validated managed-auth flow.
+- Changes: Landing anchors, Google-only Enter the dojo page, desktop sidebar/mobile bottom navigation, User actions and responsive navy/gold layouts; route tests and product guidance updated.
+- Decisions: Keep existing Google redirect, account saves, guest persistence and guest-copy semantics; deletion remains unavailable; no dependencies, API, database or remote configuration changes.
+- Roadblocks: Resolved modal-root fallback, mobile cookie clearance and route/focus timing assertions in browser tests.
+- Verification: Node 24 check:web passed (326 unit tests, types, lint, build); test:e2e passed (317, 3 skipped); format:check, session:check and diff --check passed; desktop/mobile captures and design review clean.
+- Follow-up: Leave changes uncommitted; owner validates the UI branch on controlled HTTPS Preview with live Google/Neon before release.

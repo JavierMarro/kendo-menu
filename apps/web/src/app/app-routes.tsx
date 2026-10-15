@@ -13,6 +13,7 @@ import { LibraryPage } from '../features/library/LibraryPage';
 import { TrainingSetDetailPage } from '../features/library/TrainingSetDetailPage';
 import { NotFoundPage } from '../features/not-found/NotFoundPage';
 import { AccountSetupPage } from '../features/account/AccountSetupPage';
+import { SignInPage } from '../features/account/SignInPage';
 import { CookiePolicyPage } from '../features/privacy/CookiePolicyPage';
 import { GlossaryPage } from '../features/glossary/GlossaryPage';
 import { SourcesPage } from '../features/sources/SourcesPage';
@@ -56,6 +57,7 @@ export const appRoutes: RouteObject[] = [
         element: <AppLayout />,
         children: [
           { index: true, element: <LandingPage /> },
+          { path: 'sign-in', element: <SignInPage /> },
           { path: 'dashboard', element: <LegacyWorkspaceRedirect page="dashboard" /> },
           { path: 'library', element: <LegacyWorkspaceRedirect page="library" /> },
           {

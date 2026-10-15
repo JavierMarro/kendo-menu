@@ -27,6 +27,7 @@ import { useManagedAuth } from '../lib/managed-auth-context';
 
 const routeTitles: Readonly<Record<string, string>> = {
   '/app': 'Plan your keiko',
+  '/app/sign-in': 'Sign in to KendoMenu',
   '/app/guest/dashboard': 'Dashboard',
   '/app/guest/library': 'Keiko library',
   '/app/guest/drills/new': 'Create session',
@@ -121,6 +122,9 @@ function hasLocationChanged(previous: Location, next: Location): boolean {
 }
 
 export function AppLayout() {
+  const location = useLocation();
+  const isWorkspaceRoute = /^\/app\/(guest|account)(?:\/|$)/u.test(location.pathname);
+  if (isWorkspaceRoute || location.pathname === '/app/sign-in') return <Outlet />;
   return <AppShell />;
 }
 

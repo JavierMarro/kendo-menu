@@ -26,6 +26,7 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-10-15 — UI journey](./2026-10-15-ui-journey.md)
 - [2026-10-14 — Vercel API routing](./2026-10-14-vercel-api-routing.md)
 - [2026-10-14 — Preview account cookies](./2026-10-14-preview-account-cookies.md)
 - [2026-10-14 — Vercel API package](./2026-10-14-vercel-api-package.md)

@@ -67,8 +67,8 @@ function expectAaTextContrast(state: Awaited<ReturnType<typeof getInstallActionV
 async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): Promise<void> {
   await expect(footer.getByRole('link', { name: 'KendoMenu home' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'How it works' })).toBeVisible();
-  await expect(footer.getByRole('link', { name: /Keiko library/ })).toBeVisible();
-  await expect(footer.getByRole('link', { name: 'Dashboard' })).toBeVisible();
+  await expect(footer.getByRole('link', { name: 'Keiko menus' })).toBeVisible();
+  await expect(footer.getByRole('link', { name: 'Dashboard' })).toHaveCount(0);
   await expect(footer.getByRole('link', { name: 'FAQ' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'Sources' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'Cookies' })).toBeVisible();

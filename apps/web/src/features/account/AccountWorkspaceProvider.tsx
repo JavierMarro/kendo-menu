@@ -15,6 +15,7 @@ import {
 import { Link, Navigate, Outlet, useBlocker, useLocation, useNavigate } from 'react-router-dom';
 
 import { PersistenceContext } from '../persistence/persistence-context';
+import { WorkspaceShell } from '../../components/WorkspaceShell';
 import { useManagedAuth } from '../../lib/managed-auth-context';
 import { TrainingStoreProvider } from '../../lib/training-store-provider';
 import { createAccountDraftController } from '../../lib/account-draft';
@@ -35,8 +36,7 @@ function LoadingStatus({ children }: { readonly children: ReactNode }) {
 }
 
 export function AccountWorkspaceRoute() {
-  const { api, identity, verifyIdentity, setVerifiedAccount, startGoogleSignIn, signOutProvider } =
-    useManagedAuth();
+  const { api, identity, verifyIdentity, setVerifiedAccount, signOutProvider } = useManagedAuth();
   const [account, setAccount] = useState<ManagedAccountRecord | null>(null);
   const [initialization, setInitialization] = useState<ManagedAccountInitialization | undefined>();
   const [loadErrorIdentity, setLoadErrorIdentity] = useState<typeof identity | null>(null);
@@ -109,25 +109,15 @@ export function AccountWorkspaceRoute() {
         />
       );
     }
-    return <LoadingStatus>Checking your KendoMenu account…</LoadingStatus>;
+    return (
+      <AccountWorkspaceFrame userContent={<p>Checking your account access…</p>}>
+        <LoadingStatus>Checking your KendoMenu account…</LoadingStatus>
+      </AccountWorkspaceFrame>
+    );
   }
   if (identity.status === 'signed-out') {
     if (account !== null) return <Navigate replace to="/app" />;
-    return (
-      <section className="account-route-state">
-        <p className="eyebrow">Account sign in</p>
-        <h1>Continue with Google to open your account.</h1>
-        <p>Guest menus remain available on this device.</p>
-        <div className="empty-actions">
-          <button className="primary-button" type="button" onClick={() => void startGoogleSignIn()}>
-            Continue with Google
-          </button>
-          <Link className="secondary-button" to="/app/guest/dashboard">
-            Continue as a guest
-          </Link>
-        </div>
-      </section>
-    );
+    return <Navigate replace to="/app/sign-in" />;
   }
   if (identity.status === 'unavailable') {
     if (routeAccount !== null) {
@@ -143,33 +133,41 @@ export function AccountWorkspaceRoute() {
       );
     }
     return (
-      <section className="account-route-state" role="status">
-        <p className="eyebrow">Account connection</p>
-        <h1>Your account could not be verified.</h1>
-        <p>
-          Account content stays hidden until verification succeeds. Guest use remains available.
-        </p>
-        <div className="empty-actions">
-          <button className="primary-button" type="button" onClick={() => void verifyIdentity()}>
-            Retry account check
-          </button>
-          <Link className="secondary-button" to="/app/guest/dashboard">
-            Continue as a guest
-          </Link>
-        </div>
-      </section>
+      <AccountWorkspaceFrame
+        userContent={<p>Account details are hidden until verification succeeds.</p>}
+      >
+        <section className="account-route-state" role="status">
+          <p className="eyebrow">Account connection</p>
+          <h1>Your account could not be verified.</h1>
+          <p>
+            Account content stays hidden until verification succeeds. Guest use remains available.
+          </p>
+          <div className="empty-actions">
+            <button className="primary-button" type="button" onClick={() => void verifyIdentity()}>
+              Retry account check
+            </button>
+            <Link className="secondary-button" to="/app/guest/dashboard">
+              Continue as a guest
+            </Link>
+          </div>
+        </section>
+      </AccountWorkspaceFrame>
     );
   }
   if (loadError || identity.status === 'uninitialized' || identity.status !== 'verified') {
     return (
-      <section className="account-route-state" role="alert">
-        <p className="eyebrow">Account connection</p>
-        <h1>KendoMenu could not open your account.</h1>
-        <p>No account dashboard was loaded. Retry to verify the account again.</p>
-        <button className="primary-button" type="button" onClick={() => void verifyIdentity()}>
-          Retry
-        </button>
-      </section>
+      <AccountWorkspaceFrame
+        userContent={<p>Account details are hidden until verification succeeds.</p>}
+      >
+        <section className="account-route-state" role="alert">
+          <p className="eyebrow">Account connection</p>
+          <h1>KendoMenu could not open your account.</h1>
+          <p>No account dashboard was loaded. Retry to verify the account again.</p>
+          <button className="primary-button" type="button" onClick={() => void verifyIdentity()}>
+            Retry
+          </button>
+        </section>
+      </AccountWorkspaceFrame>
     );
   }
 
@@ -182,6 +180,20 @@ export function AccountWorkspaceRoute() {
       signOutProvider={signOutProvider}
       releaseCreationHandoff={releaseCreationHandoff}
     />
+  );
+}
+
+function AccountWorkspaceFrame({
+  children,
+  userContent,
+}: {
+  readonly children: ReactNode;
+  readonly userContent: ReactNode;
+}) {
+  return (
+    <WorkspaceShell basePath="/app/account" userContent={userContent}>
+      {children}
+    </WorkspaceShell>
   );
 }
 
@@ -232,7 +244,13 @@ function LoadedAccountWorkspace({
     verifyIdentity,
   ]);
 
-  if (controller === null) return <LoadingStatus>Preparing your account dashboard…</LoadingStatus>;
+  if (controller === null) {
+    return (
+      <AccountWorkspaceFrame userContent={<p>Preparing your account dashboard…</p>}>
+        <LoadingStatus>Preparing your account dashboard…</LoadingStatus>
+      </AccountWorkspaceFrame>
+    );
+  }
   return (
     <LoadedAccountWorkspaceView
       account={account}
@@ -438,6 +456,36 @@ function LoadedAccountWorkspaceView({
     currentHandoff !== null &&
     snapshot.status === 'ready' &&
     location.pathname !== '/app/account/setup';
+  const userContent = isIdentityHidden ? (
+    <p>Account details are hidden until verification succeeds.</p>
+  ) : (
+    <div className="workspace-user-content account-session-controls" aria-label="Account session">
+      <p className="workspace-user-eyebrow">Account</p>
+      <p>{account.email ? `Signed in as ${account.email}` : 'Signed in'}</p>
+      <button
+        ref={signOutTriggerRef}
+        className="text-button"
+        type="button"
+        onClick={() => {
+          if (warnBeforeLeaving) setDiscardPrompt(true);
+          else void discardAndSignOut();
+        }}
+      >
+        Sign out
+      </button>
+      {signOutError ? (
+        <span role="alert">
+          KendoMenu could not confirm sign-out. Retry after checking the connection.
+        </span>
+      ) : null}
+      <div className="workspace-delete-account">
+        <button type="button" disabled aria-describedby="account-delete-status">
+          Delete account
+        </button>
+        <span id="account-delete-status">Coming soon</span>
+      </div>
+    </div>
+  );
 
   useEffect(() => {
     const leftSetup =
@@ -484,7 +532,9 @@ function LoadedAccountWorkspaceView({
   );
 
   return shouldOpenSetup ? (
-    <LoadingStatus>Preparing your account setup…</LoadingStatus>
+    <AccountWorkspaceFrame userContent={<p>Preparing your account dashboard…</p>}>
+      <LoadingStatus>Preparing your account setup…</LoadingStatus>
+    </AccountWorkspaceFrame>
   ) : (
     <WorkspaceContextProvider value={value}>
       <AccountSetupContext.Provider value={setupValue}>
@@ -505,186 +555,167 @@ function LoadedAccountWorkspaceView({
             error: snapshot.error,
           }}
         >
-          {navigationGuard}
-          {isLoadState ? (
-            <section
-              className="account-route-state"
-              role={snapshot.status === 'load-error' ? 'alert' : 'status'}
-            >
-              <p className="eyebrow">Your account</p>
-              <h1>
-                {snapshot.status === 'loading'
-                  ? 'Loading your dashboard…'
-                  : 'Your dashboard could not be loaded.'}
-              </h1>
-              {snapshot.status === 'load-error' ? (
-                <>
-                  <p>
-                    {snapshot.error ??
-                      'The account service is unavailable. Your account was not changed.'}
-                  </p>
+          <WorkspaceShell basePath="/app/account" userContent={userContent}>
+            {navigationGuard}
+            {isLoadState ? (
+              <section
+                className="account-route-state"
+                role={snapshot.status === 'load-error' ? 'alert' : 'status'}
+              >
+                <p className="eyebrow">Your account</p>
+                <h1>
+                  {snapshot.status === 'loading'
+                    ? 'Loading your dashboard…'
+                    : 'Your dashboard could not be loaded.'}
+                </h1>
+                {snapshot.status === 'load-error' ? (
+                  <>
+                    <p>
+                      {snapshot.error ??
+                        'The account service is unavailable. Your account was not changed.'}
+                    </p>
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() => void reloadAccount()}
+                    >
+                      Retry
+                    </button>
+                  </>
+                ) : null}
+              </section>
+            ) : null}
+            {isIdentityHidden ? (
+              <section className="account-route-state" role="status">
+                <p className="eyebrow">Account verification</p>
+                <h1>Your account is hidden until it can be verified.</h1>
+                <p>
+                  {signOutError
+                    ? 'KendoMenu could not confirm sign-out. Your account remains hidden until you retry sign-out.'
+                    : 'Your current-tab draft is retained in memory. Verify the same account to reveal it.'}
+                </p>
+                {signOutError ? (
                   <button
                     className="primary-button"
                     type="button"
-                    onClick={() => void reloadAccount()}
+                    onClick={() =>
+                      void signOutProvider().then((signedOut) => {
+                        if (signedOut) navigateHome();
+                      })
+                    }
                   >
-                    Retry
+                    Retry sign-out
                   </button>
-                </>
-              ) : null}
-            </section>
-          ) : null}
-          {isIdentityHidden ? (
-            <section className="account-route-state" role="status">
-              <p className="eyebrow">Account verification</p>
-              <h1>Your account is hidden until it can be verified.</h1>
-              <p>
-                {signOutError
-                  ? 'KendoMenu could not confirm sign-out. Your account remains hidden until you retry sign-out.'
-                  : 'Your current-tab draft is retained in memory. Verify the same account to reveal it.'}
-              </p>
-              {signOutError ? (
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() =>
-                    void signOutProvider().then((signedOut) => {
-                      if (signedOut) navigateHome();
-                    })
-                  }
-                >
-                  Retry sign-out
-                </button>
-              ) : (
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() => void verifyIdentity()}
-                >
-                  Retry verification
-                </button>
-              )}
-            </section>
-          ) : null}
-          {!isIdentityHidden && snapshot.status === 'unavailable' ? (
-            <aside className="persistence-warning" role="status">
-              <h2>Account service unavailable</h2>
-              <p>
-                Your draft stays in this tab’s memory and is read-only until the service returns.
-                Reloading or closing this tab can lose it.
-              </p>
-              {snapshot.error ? <p>{snapshot.error}</p> : null}
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() => void controller.checkAvailability()}
-              >
-                Retry connection
-              </button>
-              <button
-                className="text-button"
-                type="button"
-                onClick={downloadAccountDraft}
-                disabled={editorDraftDirty}
-              >
-                Download draft
-              </button>
-              {editorDraftDirty ? (
+                ) : (
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => void verifyIdentity()}
+                  >
+                    Retry verification
+                  </button>
+                )}
+              </section>
+            ) : null}
+            {!isIdentityHidden && snapshot.status === 'unavailable' ? (
+              <aside className="persistence-warning" role="status">
+                <h2>Account service unavailable</h2>
                 <p>
-                  Complete or clear the unfinished quantity field before downloading the account
-                  draft.
+                  Your draft stays in this tab’s memory and is read-only until the service returns.
+                  Reloading or closing this tab can lose it.
                 </p>
-              ) : null}
-            </aside>
-          ) : null}
-          {!isIdentityHidden &&
-          (snapshot.dirty || editorDraftDirty || snapshot.saveState === 'uncertain') ? (
-            <aside className="persistence-warning" role="status">
-              <p>
-                {snapshot.saveState === 'uncertain'
-                  ? 'Save status is uncertain. Retry the same save to confirm it.'
-                  : editorDraftDirty
-                    ? 'An unfinished quantity field is held in this tab and is not part of the account save yet. Complete or clear it before leaving; reloading or closing this tab can lose it.'
-                    : 'Account changes are held in memory until you save. Reloading or closing this tab can lose unsaved changes.'}
-              </p>
-              {!editorDraftDirty ? (
+                {snapshot.error ? <p>{snapshot.error}</p> : null}
                 <button
                   className="secondary-button"
+                  type="button"
+                  onClick={() => void controller.checkAvailability()}
+                >
+                  Retry connection
+                </button>
+                <button
+                  className="text-button"
                   type="button"
                   onClick={downloadAccountDraft}
                   disabled={editorDraftDirty}
                 >
                   Download draft
                 </button>
-              ) : null}
-            </aside>
-          ) : null}
-          {!isIdentityHidden ? (
-            <div className="account-session-controls" aria-label="Account session">
-              <span>{account.email ? `Signed in as ${account.email}` : 'Signed in'}</span>
-              <button
-                ref={signOutTriggerRef}
-                className="text-button"
-                type="button"
-                onClick={() => {
-                  if (warnBeforeLeaving) setDiscardPrompt(true);
-                  else void discardAndSignOut();
-                }}
-              >
-                Sign out
-              </button>
-              {signOutError ? (
-                <span role="alert">
-                  KendoMenu could not confirm sign-out. Retry after checking the connection.
-                </span>
-              ) : null}
+                {editorDraftDirty ? (
+                  <p>
+                    Complete or clear the unfinished quantity field before downloading the account
+                    draft.
+                  </p>
+                ) : null}
+              </aside>
+            ) : null}
+            {!isIdentityHidden &&
+            (snapshot.dirty || editorDraftDirty || snapshot.saveState === 'uncertain') ? (
+              <aside className="persistence-warning" role="status">
+                <p>
+                  {snapshot.saveState === 'uncertain'
+                    ? 'Save status is uncertain. Retry the same save to confirm it.'
+                    : editorDraftDirty
+                      ? 'An unfinished quantity field is held in this tab and is not part of the account save yet. Complete or clear it before leaving; reloading or closing this tab can lose it.'
+                      : 'Account changes are held in memory until you save. Reloading or closing this tab can lose unsaved changes.'}
+                </p>
+                {!editorDraftDirty ? (
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={downloadAccountDraft}
+                    disabled={editorDraftDirty}
+                  >
+                    Download draft
+                  </button>
+                ) : null}
+              </aside>
+            ) : null}
+            <div key={workspaceStoreGeneration} hidden={!isVisible} inert={!isVisible}>
+              {workspaceStore === null ? null : (
+                <TrainingStoreProvider store={workspaceStore}>
+                  <Outlet />
+                </TrainingStoreProvider>
+              )}
             </div>
-          ) : null}
-          <div key={workspaceStoreGeneration} hidden={!isVisible} inert={!isVisible}>
-            {workspaceStore === null ? null : (
-              <TrainingStoreProvider store={workspaceStore}>
-                <Outlet />
-              </TrainingStoreProvider>
-            )}
-          </div>
-          {discardPrompt ? (
-            <dialog
-              ref={discardDialogRef}
-              className="confirmation-dialog"
-              role="alertdialog"
-              aria-modal="true"
-              aria-labelledby="account-exit-title"
-              onCancel={(event) => {
-                event.preventDefault();
-                setDiscardPrompt(false);
-              }}
-              onClose={() => setDiscardPrompt(false)}
-            >
-              <h2 id="account-exit-title">Leave this account?</h2>
-              <p>
-                Unsaved account changes, including any unfinished quantity field, exist only in this
-                tab’s memory. Sign-out discards them. Reloading or closing this tab can also lose
-                them.
-              </p>
-              <div className="dialog-actions">
-                <button
-                  ref={keepEditingRef}
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => setDiscardPrompt(false)}
-                >
-                  Keep editing
-                </button>
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() => void discardAndSignOut()}
-                >
-                  Discard and sign out
-                </button>
-              </div>
-            </dialog>
-          ) : null}
+            {discardPrompt ? (
+              <dialog
+                ref={discardDialogRef}
+                className="confirmation-dialog"
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="account-exit-title"
+                onCancel={(event) => {
+                  event.preventDefault();
+                  setDiscardPrompt(false);
+                }}
+                onClose={() => setDiscardPrompt(false)}
+              >
+                <h2 id="account-exit-title">Leave this account?</h2>
+                <p>
+                  Unsaved account changes, including any unfinished quantity field, exist only in
+                  this tab’s memory. Sign-out discards them. Reloading or closing this tab can also
+                  lose them.
+                </p>
+                <div className="dialog-actions">
+                  <button
+                    ref={keepEditingRef}
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => setDiscardPrompt(false)}
+                  >
+                    Keep editing
+                  </button>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => void discardAndSignOut()}
+                  >
+                    Discard and sign out
+                  </button>
+                </div>
+              </dialog>
+            ) : null}
+          </WorkspaceShell>
         </PersistenceContext.Provider>
       </AccountSetupContext.Provider>
     </WorkspaceContextProvider>

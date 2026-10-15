@@ -108,7 +108,7 @@ test.describe('accessibility and responsive layout', () => {
     const viewport = page.viewportSize();
     if (viewport !== null && viewport.width <= 760) {
       await page.getByRole('button', { name: 'Open navigation' }).click();
-      await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
+      await expect(page.getByRole('navigation', { name: 'Landing navigation' })).toBeVisible();
     }
     await expect(
       page.getByRole('heading', { name: 'Plan the keiko you need today' }),
@@ -239,35 +239,29 @@ test.describe('accessibility and responsive layout', () => {
     await expectNoBlockingAxeViolations(page);
   });
 
-  test('keeps all primary navigation links in one row with intact labels', async ({ page }) => {
+  test('keeps all landing navigation links in one row with intact labels', async ({ page }) => {
     for (const width of [320, 375, 393, 800, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/app');
       if (width <= 960) {
         await page.getByRole('button', { name: 'Open navigation' }).click();
-        await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
+        await expect(page.getByRole('navigation', { name: 'Landing navigation' })).toBeVisible();
       } else {
         await expect(page.locator('.brand-name')).toBeVisible();
       }
 
-      const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
+      const navigation = page.getByRole('navigation', { name: 'Landing navigation' });
       const links = navigation.getByRole('link');
-      await expect(links).toHaveCount(4);
+      await expect(links).toHaveCount(3);
       await expect(page.locator('.nav-count')).toHaveCount(0);
 
       const navMetrics = await navigation.evaluate((element) => {
         const navigationRect = element.getBoundingClientRect();
         const linkElements = [...element.querySelectorAll<HTMLElement>(':scope > .nav-item')];
         const linkRects = linkElements.map((link) => link.getBoundingClientRect());
-        const libraryLabel = element.querySelector<HTMLElement>('.nav-label--wrappable');
-        const libraryWords = [
-          ...element.querySelectorAll<HTMLElement>('.nav-label--wrappable .nav-label-word'),
-        ];
-        const fixedLabels = [
-          ...element.querySelectorAll<HTMLElement>('.nav-label:not(.nav-label--wrappable)'),
-        ];
-        if (libraryLabel === null || libraryWords.length !== 2 || linkRects.length !== 4) {
-          throw new Error('The primary navigation label structure is incomplete.');
+        const labels = [...element.querySelectorAll<HTMLElement>('.nav-label')];
+        if (labels.length !== 3 || linkRects.length !== 3) {
+          throw new Error('The landing navigation label structure is incomplete.');
         }
 
         const textLineCount = (target: HTMLElement) => {
@@ -276,10 +270,8 @@ test.describe('accessibility and responsive layout', () => {
           return [...range.getClientRects()].filter(({ width, height }) => width > 0 && height > 0)
             .length;
         };
-        const wordRects = libraryWords.map((word) => word.getBoundingClientRect());
-        const libraryLineTops = new Set(wordRects.map(({ top }) => Math.round(top)));
-
         return {
+          labels: labels.map((label) => label.textContent?.trim() ?? ''),
           navigationClientWidth: element.clientWidth,
           navigationScrollWidth: element.scrollWidth,
           overflowingLink: linkElements
@@ -304,11 +296,8 @@ test.describe('accessibility and responsive layout', () => {
           touchTargetsAreUsable: linkRects.every(
             ({ width, height }) => width >= 24 && height >= 44,
           ),
-          fixedLabelLineCounts: fixedLabels.map(textLineCount),
-          libraryLineCount: libraryLineTops.size,
-          libraryWordLineCounts: libraryWords.map(textLineCount),
-          libraryWordWhiteSpace: libraryWords.map((word) => getComputedStyle(word).whiteSpace),
-          libraryOverflowWrap: getComputedStyle(libraryLabel).overflowWrap,
+          labelLineCounts: labels.map(textLineCount),
+          labelWhiteSpace: labels.map((label) => getComputedStyle(label).whiteSpace),
         };
       });
       expect(
@@ -320,11 +309,9 @@ test.describe('accessibility and responsive layout', () => {
       expect(navMetrics.linksShareRow, `navigation row at ${width}px`).toBe(true);
       expect(navMetrics.linksDoNotOverlap, `navigation link overlap at ${width}px`).toBe(true);
       expect(navMetrics.touchTargetsAreUsable, `navigation touch targets at ${width}px`).toBe(true);
-      expect(navMetrics.fixedLabelLineCounts).toEqual([1, 1, 1]);
-      expect(navMetrics.libraryLineCount).toBeLessThanOrEqual(2);
-      expect(navMetrics.libraryWordLineCounts).toEqual([1, 1]);
-      expect(navMetrics.libraryWordWhiteSpace).toEqual(['nowrap', 'nowrap']);
-      expect(navMetrics.libraryOverflowWrap).toBe('normal');
+      expect(navMetrics.labels).toEqual(['How it works', 'Keiko menus', 'FAQ']);
+      expect(navMetrics.labelLineCounts).toEqual([1, 1, 1]);
+      expect(navMetrics.labelWhiteSpace).toEqual(['nowrap', 'nowrap', 'nowrap']);
 
       const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(scrollWidth, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(width);
@@ -665,7 +652,7 @@ test.describe('accessibility and responsive layout', () => {
     await heroCta.focus();
     await expect(heroCta).toBeFocused();
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('button', { name: 'Sign up here' })).toBeFocused();
+    await expect(page.getByRole('link', { name: 'Sign up here' })).toBeFocused();
     await page.keyboard.press('Tab');
 
     await expect(firstQuestion).toBeFocused();

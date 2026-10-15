@@ -50,16 +50,32 @@ activity quantities and notes can be adapted without mutating the built-in libra
 - The guest dashboard uses Zustand with browser LocalStorage and retains its offline/recovery behavior.
   Internal Migration C account routes use the same store factory with memory-only drafts and an
   explicit Save to account. Persisted guest JSON remains untrusted, validated, versioned and migrated.
-- Migration A has owner-reported single-account Google/Neon identity and storage passes. Live B
-  persistence, second-account/return-to-first and production HTTPS/Vercel checks remain unverified
-  public-release gates. No deployment or provisioning is authorized. Paid tiers and initialization
-  of `apps/mobile` remain out of scope.
+- The owner reported successful Google sign-in, existing menus, Save/reload, sign-out and
+  second-account/return-to-first checks on the development-branch HTTPS Vercel Preview on
+  2026-10-14. These are owner-reported Preview results, not production-release verification.
+  No deployment or provisioning is authorized. Paid tiers and initialization of `apps/mobile`
+  remain out of scope.
+
+## Information and workspace navigation
+
+The public landing page explains KendoMenu; its primary navigation links to How it works,
+Keiko menus (the curated-library overview), and FAQ sections. Try without an account opens the
+guest dashboard. Sign up opens a dedicated Google-only authentication page headed “Enter the dojo”.
+Email/password authentication is an informational future option, not an available form.
+
+Guest and account workspaces share navigation for Dashboard, Library and User: a fixed left
+sidebar on desktop and a fixed bottom bar on mobile. The KendoMenu brand returns to the landing
+page. User offers guests sign-up and verified account users their existing sign-out action;
+account deletion is visibly unavailable with “Coming soon”. Existing draft-exit warnings apply.
+The new layouts retain KendoMenu’s navy/gold palette, typography and existing dashboard content.
+Google continues through the validated full-page redirect; navigation changes do not alter
+authentication, account saves, guest persistence or one-time guest-copy decisions.
 
 ## Account journey — internal Migrations C and D
 
 [Migration C](docs/MANAGED_ACCOUNT_WEB.md) separates `/app/guest/*` and `/app/account/*` routes,
-reusing the dashboard, library and custom-session builder. The landing offers Continue as a guest
-and Continue with Google; each workspace has a dashboard shortcut. Guest use stays local and works
+reusing the dashboard, library and custom-session builder. The landing offers guest entry and a
+link to the authentication page; each workspace has a dashboard shortcut. Guest use stays local and works
 without authentication availability. Verified signed-in visitors entering guest routes go to the
 matching account route. Account routes require verified identity; unresolved identity hides account
 content and does not authorize analytics. Verified email is shown when supplied.

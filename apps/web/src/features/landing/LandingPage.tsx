@@ -8,7 +8,6 @@ import { Link } from 'react-router-dom';
 
 import { useInstallLandingEntry } from '../install/install-context';
 import { CURATED_EXERCISE_COUNT, CURATED_TRAINING_SET_COUNT } from '../../lib/training-data';
-import { useManagedAuth } from '../../lib/managed-auth-context';
 
 interface FaqItem {
   readonly id: string;
@@ -161,9 +160,7 @@ function useLandingScrollReveal() {
 
 export function LandingPage(): ReactElement {
   useInstallLandingEntry();
-  const { startGoogleSignIn } = useManagedAuth();
   const [openFaqId, setOpenFaqId] = useState<string | null>(null);
-  const [signInError, setSignInError] = useState(false);
   const sectionsRef = useLandingScrollReveal();
 
   return (
@@ -205,22 +202,10 @@ export function LandingPage(): ReactElement {
             >
               Try without an account
             </Link>
-            <button
-              className="secondary-button landing-cta"
-              type="button"
-              onClick={() => {
-                setSignInError(false);
-                void startGoogleSignIn().then((started) => setSignInError(!started));
-              }}
-            >
+            <Link className="secondary-button landing-cta" to="/app/sign-in">
               Sign up here
-            </button>
+            </Link>
           </div>
-          {signInError ? (
-            <p className="form-error" role="alert">
-              Google sign-in could not be started. You can continue as a guest.
-            </p>
-          ) : null}
         </div>
       </section>
 

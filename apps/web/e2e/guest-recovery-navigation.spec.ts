@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { expect, type Dialog, type Page } from '@playwright/test';
 
 import { test } from './guest-test';
+import { visibleWorkspaceBrandLink, workspaceLink } from './workspace-test-helpers';
 
 async function addGuestMenu(page: Page) {
   await page.goto('/app/guest/library');
@@ -36,7 +37,7 @@ test('quota recovery protects guest dashboard Home and public-page departure unt
     await dialog.dismiss();
   };
   page.on('dialog', dismiss);
-  await page.getByRole('banner').getByRole('link', { name: 'KendoMenu home' }).click();
+  await (await visibleWorkspaceBrandLink(page)).click();
   await expect.poll(() => confirmations.length).toBe(1);
   await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
   await expect(page.locator('.dashboard-card--compact')).toHaveCount(1);
@@ -56,7 +57,7 @@ test('quota recovery protects guest dashboard Home and public-page departure unt
   }
   page.off('dialog', dismiss);
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('banner').getByRole('link', { name: 'KendoMenu home' }).click();
+  await (await visibleWorkspaceBrandLink(page)).click();
   await expect(page).toHaveURL(/\/app$/);
   await page.getByRole('link', { name: 'Try without an account' }).click();
   await expect(page.locator('.dashboard-card--compact')).toHaveCount(0);
@@ -148,13 +149,7 @@ test('session-only guest recovery still protects public exit from a clean builde
   page.off('dialog', dismiss);
 
   page.once('dialog', (dialog) => dialog.accept());
-  const dashboardLink = page
-    .getByRole('banner')
-    .getByRole('link', { name: 'Dashboard', exact: true });
-  if (!(await dashboardLink.isVisible())) {
-    await page.getByRole('button', { name: 'Open navigation' }).click();
-  }
-  await dashboardLink.click();
+  await workspaceLink(page, 'Dashboard').click();
   await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
   await expect(page.locator('.dashboard-card--compact')).toHaveCount(1);
 });

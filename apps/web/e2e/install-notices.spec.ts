@@ -1,5 +1,6 @@
 import { expect, type Page, type TestInfo } from '@playwright/test';
 import { test } from './guest-test';
+import { visibleWorkspaceBrandLink, workspaceLink } from './workspace-test-helpers';
 
 import {
   COOKIE_NOTICE_ACKNOWLEDGEMENT_DURATION_MS,
@@ -172,14 +173,11 @@ test.describe('installation and cookie notice coordination', () => {
     await expect(cookieNotice).toHaveCount(0);
     await expect(page.getByRole('dialog', { name: INSTALL_PROMO_NAME })).toHaveCount(0);
 
-    const menuToggle = page.getByRole('button', { name: 'Open navigation' });
-    await menuToggle.click();
-    await page
-      .getByRole('navigation', { name: 'Primary navigation' })
-      .getByRole('link', { name: /Keiko library/ })
-      .click();
+    await page.getByRole('link', { name: 'Try without an account', exact: true }).click();
+    await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
+    await workspaceLink(page, 'Library').click();
     await expect(page).toHaveURL(/\/app\/guest\/library$/);
-    await page.locator('.top-bar').getByRole('link', { name: 'KendoMenu home' }).click();
+    await (await visibleWorkspaceBrandLink(page)).click();
 
     await expect(page).toHaveURL(/\/app$/);
     await expect(page.getByRole('dialog', { name: INSTALL_PROMO_NAME })).toBeVisible();

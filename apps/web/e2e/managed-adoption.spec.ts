@@ -7,6 +7,11 @@ import {
   SyntheticManagedHarness,
   type SyntheticApiCall,
 } from './synthetic-managed-harness';
+import {
+  clickWorkspaceSignOut,
+  startGuestGoogleSignUp,
+  workspaceLink,
+} from './workspace-test-helpers';
 
 const GUEST_KEY = 'kendo-menu';
 
@@ -31,7 +36,7 @@ async function createGuestAndStartAccount(
   await page.getByLabel('Practice notes').blur();
   await page.getByRole('button', { name: /Close .* details/i }).click();
   const guestBytes = await page.evaluate((key) => localStorage.getItem(key) ?? '', GUEST_KEY);
-  await page.getByRole('button', { name: 'Continue with Google', exact: true }).click();
+  await startGuestGoogleSignUp(page);
   await expect(page).toHaveURL(/\/app\/account\/setup$/);
   await expect(
     page.getByRole('heading', { name: 'Copy your guest menus to your account?', exact: true }),
@@ -118,7 +123,7 @@ test('a new account confirms one complete guest copy and keeps later edits separ
   await expect(page.getByText('Saved to account', { exact: true })).toBeVisible();
   await expectGuestBytesUnchanged(page, guestBytes);
 
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await clickWorkspaceSignOut(page);
   await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toHaveCount(0);
   await expect(page).toHaveURL(/\/app$/);
   await page.getByRole('link', { name: 'Try without an account' }).click();
@@ -162,7 +167,7 @@ test('No sends the strict decline and preserves the guest dashboard', async ({
   await continueToAccount(page);
   await expect(page.locator('.dashboard-card--compact')).toHaveCount(0);
   await expectGuestBytesUnchanged(page, guestBytes);
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await clickWorkspaceSignOut(page);
   await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toHaveCount(0);
   await expect(page).toHaveURL(/\/app$/);
   await page.getByRole('link', { name: 'Try without an account' }).click();
@@ -193,12 +198,7 @@ test('a lost adoption acknowledgement stays unconfirmed after duplicate click an
   await expect(page.getByRole('button', { name: 'Continue to account' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Copy menus', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'No, thanks', exact: true })).toHaveCount(0);
-  const openNavigation = page.getByRole('button', { name: 'Open navigation', exact: true });
-  if (await openNavigation.isVisible()) await openNavigation.click();
-  await page
-    .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('link', { name: 'Dashboard', exact: true })
-    .click();
+  await workspaceLink(page, 'Dashboard').click();
   await expect(page).toHaveURL(/\/app\/account\/dashboard$/);
   await page.getByRole('button', { name: 'View more', exact: true }).click();
   await page.getByLabel('Practice notes').fill('Unsaved account draft survives stale setup');
@@ -232,7 +232,7 @@ test('sign-out fences a late adoption acknowledgement and restores the guest sou
   const requestId = bodyOf(call)['requestId'];
   if (typeof requestId !== 'string') throw new Error('Expected a request id.');
 
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await clickWorkspaceSignOut(page);
   await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toBeVisible();
   await page.getByRole('button', { name: /Discard and sign out/i }).click();
   await expect(page).toHaveURL(/\/app$/);

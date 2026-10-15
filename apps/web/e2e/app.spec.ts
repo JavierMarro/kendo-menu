@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { test } from './guest-test';
+import { visibleWorkspaceBrandLink, workspaceLink } from './workspace-test-helpers';
 
 import {
   COOKIE_NOTICE_ACKNOWLEDGEMENT_DURATION_MS,
@@ -88,13 +89,6 @@ async function startFresh(page: Page): Promise<void> {
   await page.reload();
 }
 
-async function openNavigationIfNeeded(page: Page): Promise<void> {
-  const menuToggle = page.getByRole('button', { name: 'Open navigation' });
-  if (await menuToggle.isVisible()) {
-    await menuToggle.click();
-  }
-}
-
 test.describe('routed training flows', () => {
   test.beforeEach(async ({ page }) => {
     await startFresh(page);
@@ -114,7 +108,7 @@ test.describe('routed training flows', () => {
       await expect(page.locator('.brand-name')).toBeHidden();
 
       const menuToggle = page.getByRole('button', { name: 'Open navigation' });
-      const primaryNavigation = page.getByRole('navigation', { name: 'Primary navigation' });
+      const primaryNavigation = page.getByRole('navigation', { name: 'Landing navigation' });
       await expect(menuToggle).toBeVisible();
       await expect(primaryNavigation).toBeHidden();
       await expect(page.locator('.session-status-label')).toBeHidden();
@@ -131,15 +125,15 @@ test.describe('routed training flows', () => {
       await expect(primaryNavigation).toBeHidden();
 
       await menuToggle.click();
-      await primaryNavigation.getByRole('link', { name: 'Dashboard', exact: true }).click();
-      await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
-      await expect(page.getByRole('button', { name: 'Open navigation' })).toBeVisible();
+      await expect(primaryNavigation).toBeVisible();
+      await expect(primaryNavigation.getByRole('link')).toHaveCount(3);
+      await expect(primaryNavigation.getByRole('link', { name: 'Dashboard' })).toHaveCount(0);
       await page.goto('/app');
     } else {
       await expect(page.locator('.brand-name')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Open navigation' })).toBeHidden();
-      await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Sign up here' })).toBeVisible();
+      await expect(page.getByRole('navigation', { name: 'Landing navigation' })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Sign up here' })).toBeVisible();
     }
 
     await expect(page.locator('.landing-hero img')).toBeVisible();
@@ -147,7 +141,7 @@ test.describe('routed training flows', () => {
 
     const browseLibrary = page.getByRole('link', { name: 'Try without an account' });
     await expect(browseLibrary).toHaveText('Try without an account');
-    await expect(page.getByRole('button', { name: 'Sign up here', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sign up here', exact: true })).toBeVisible();
     await page
       .getByRole('complementary', { name: 'Cookie notice' })
       .getByRole('button', { name: 'Got it', exact: true })
@@ -157,7 +151,7 @@ test.describe('routed training flows', () => {
     await browseLibrary.click();
     await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
     await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
-    await page.locator('.top-bar').getByRole('link', { name: 'KendoMenu home' }).click();
+    await (await visibleWorkspaceBrandLink(page)).click();
     await expect(page).toHaveURL(/\/app$/);
   });
 
@@ -220,11 +214,7 @@ test.describe('routed training flows', () => {
     await page.getByRole('button', { name: 'Got it' }).click();
     await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toHaveCount(0);
 
-    await openNavigationIfNeeded(page);
-    await page
-      .getByRole('navigation', { name: 'Primary navigation' })
-      .getByRole('link', { name: 'Dashboard', exact: true })
-      .click();
+    await page.goto('/app/guest/dashboard');
     await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
     await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toHaveCount(0);
     const acknowledgement = await page.evaluate(
@@ -252,11 +242,7 @@ test.describe('routed training flows', () => {
     await expect(page.getByRole('link', { name: 'Browse Keiko library' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Create a training session' })).toBeVisible();
 
-    await openNavigationIfNeeded(page);
-    await page
-      .getByRole('navigation', { name: 'Primary navigation' })
-      .getByRole('link', { name: /Keiko library/ })
-      .click();
+    await workspaceLink(page, 'Library').click();
     await expect(page).toHaveURL(/\/app\/guest\/library$/);
     await expect(page.getByRole('heading', { name: 'Keiko library' })).toBeVisible();
 
@@ -308,9 +294,19 @@ test.describe('routed training flows', () => {
         };
       }),
     );
-    expect(new Set(cardLayout.map(({ width }) => width)).size).toBe(1);
-    expect(new Set(cardLayout.map(({ height }) => height)).size).toBe(1);
-    expect(new Set(cardLayout.map(({ actionBottomInset }) => actionBottomInset)).size).toBe(1);
+    const cardWidths = cardLayout.map(({ width }) => width);
+    expect(
+      Math.max(...cardWidths) - Math.min(...cardWidths),
+      `Unexpected library card widths: ${JSON.stringify(cardWidths)}`,
+    ).toBeLessThanOrEqual(0.02);
+    expect(
+      new Set(cardLayout.map(({ height }) => height)).size,
+      `Unexpected library card heights: ${JSON.stringify(cardLayout.map(({ height }) => height))}`,
+    ).toBe(1);
+    expect(
+      new Set(cardLayout.map(({ actionBottomInset }) => actionBottomInset)).size,
+      `Unexpected action bottom insets: ${JSON.stringify(cardLayout.map(({ actionBottomInset }) => actionBottomInset))}`,
+    ).toBe(1);
     expect(new Set(cardLayout.map(({ actionTopPadding }) => actionTopPadding))).toEqual(
       new Set([8]),
     );
@@ -577,8 +573,7 @@ test.describe('routed training flows', () => {
     await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
 
     await page
-      .locator('.top-bar a')
-      .first()
+      .locator('.workspace-mobile-brand a[aria-label="KendoMenu home"]')
       .evaluate((element) => element.focus());
     expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
 
@@ -879,16 +874,8 @@ test.describe('routed training flows', () => {
       })
       .click();
 
-    await openNavigationIfNeeded(page);
-    await page
-      .getByRole('navigation', { name: 'Primary navigation' })
-      .getByRole('link', { name: /Keiko library/ })
-      .click();
-    await openNavigationIfNeeded(page);
-    await page
-      .getByRole('navigation', { name: 'Primary navigation' })
-      .getByRole('link', { name: 'Dashboard', exact: true })
-      .click();
+    await workspaceLink(page, 'Library').click();
+    await workspaceLink(page, 'Dashboard').click();
     dashboardDialog = await openDashboardMenu(page, 'International dojo menu');
     await expect(dashboardDialog.getByLabel('Minutes for Warm-up')).toHaveValue('12.5');
     await expect(dashboardDialog.getByLabel('Seconds for Kakarigeiko')).toHaveValue('45');

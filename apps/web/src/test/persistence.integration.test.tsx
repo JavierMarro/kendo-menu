@@ -215,9 +215,10 @@ describe('browser persistence recovery', () => {
       </ManagedAuthProvider>,
     );
 
+    await user.click(screen.getByRole('link', { name: 'Try without an account' }));
     await user.click(
-      within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', {
-        name: /Keiko library/,
+      within(screen.getByRole('navigation', { name: 'Workspace navigation' })).getByRole('link', {
+        name: 'Library',
       }),
     );
     const policeDojoCard = screen
