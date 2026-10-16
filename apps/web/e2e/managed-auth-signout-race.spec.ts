@@ -81,7 +81,9 @@ test('confirmed sign-out fences focus verification, notifies a peer, and keeps g
   await observeIdentityCheckStarts(page);
 
   await clickWorkspaceSignOut(page);
-  await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toHaveCount(0);
+  await expect(
+    page.getByRole('alertdialog', { name: /Are you sure you want to sign out/i }),
+  ).toHaveCount(0);
   await signOutSeen;
   await expect(
     page.getByRole('heading', { name: /hidden until it can be verified/i }),
@@ -145,7 +147,9 @@ test('failed sign-out keeps account hidden through lifecycle checks until retry 
   ).length;
 
   await clickWorkspaceSignOut(page);
-  await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toHaveCount(0);
+  await expect(
+    page.getByRole('alertdialog', { name: /Are you sure you want to sign out/i }),
+  ).toHaveCount(0);
   await failureSeen;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect.poll(() => identityCheckStarts(page)).toBe(0);

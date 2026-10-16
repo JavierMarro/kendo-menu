@@ -32,51 +32,48 @@ export function CookiePolicyPage() {
             <b>KendoMenu does not use cookies for analytics, advertising, or tracking.</b>
           </p>
           <p>
-            Guest use does not require account cookies. If you choose Google sign-in, Neon Auth uses
-            essential cookies for the sign-in flow and your managed session. These are functional
-            cookies, rather than KendoMenu advertising or tracking cookies. KendoMenu retrieves a
-            temporary token in memory to authorize account requests; it does not store credentials
-            in LocalStorage, SessionStorage or IndexedDB. Google and Neon handle their own sign-in
-            services under their respective privacy policies. Blocking managed session cookies can
-            prevent account sign-in while guest use remains available.
+            Guest use needs no account cookies. Google sign-in uses essential cookies through Neon
+            Auth to keep you signed in. Blocking them may prevent sign-in, but guest use remains
+            available. KendoMenu does not store sign-in credentials in your browser’s local storage.
           </p>
         </section>
 
         <section className="policy-section" aria-labelledby="local-storage-title">
           <h2 id="local-storage-title">Local storage</h2>
           <p>
-            Guest dashboard training sessions are stored locally in your browser. Signing in does
-            not upload or change them. If a newly created account offers to copy your guest menus,
-            only choosing Copy menus sends an independent copy to the account; the original guest
-            data remains on this device. Later guest and account edits are separate.
+            Guest menus, including exercises, quantities and notes, stay in your browser’s
+            localStorage and work offline. Signing in does not upload them. If a new account offers
+            to copy guest menus, only choosing “Copy menus” uploads an independent copy; the
+            originals stay on your device.
           </p>
           <p>
-            Saved account menus are stored online in KendoMenu’s PostgreSQL database. Account edits
-            stay in this tab’s memory until you choose Save to account and it is confirmed.
-            Reloading or closing the tab can lose unsaved account changes. Signing out hides account
-            content and releases this tab’s account draft; it does not delete your saved online
-            menus. Existing legacy account caches are ignored without deleting them.
+            An optional account stores your email address and saved menus in a PostgreSQL database
+            so you can access them across devices. Account changes need an internet connection and
+            are saved only when you choose “Save to account” and receive confirmation. Unsaved
+            changes can be lost if you reload, close the tab or sign out.
           </p>
           <p>
-            Small device-only preferences, including notice acknowledgements and installation prompt
-            state, are stored locally. A short-lived sign-in marker in session storage records only
-            the fixed login flow and expiry; it contains no credentials, identity or training data.
-            Clearing site storage can remove your guest menus and these preferences, so keep a
-            backup of guest data you want to retain.
+            Notice and installation preferences are also stored on this device. A temporary
+            session-storage marker helps complete sign-in; it contains no credentials or menu data.
+          </p>
+        </section>
+
+        <section className="policy-section" aria-labelledby="google-sign-in-title">
+          <h2 id="google-sign-in-title">Google sign-in</h2>
+          <p>
+            We receive your email address and profile name from Google, not access to your contacts,
+            calendar or other Google data. Google and Neon process sign-in information under their
+            own privacy terms.
           </p>
         </section>
 
         <section className="policy-section" aria-labelledby="analytics-title">
           <h2 id="analytics-title">Analytics</h2>
           <p>
-            KendoMenu sends one page count after the browser verifies that the visitor is signed
-            out. The request uses GoatCounter’s image endpoint; its only query parameter is a
-            static, allow-listed page path. It omits query strings, referrer information, account
-            state, email, menu content, notes, and other page parameters. As with ordinary web
-            requests, the service receives network metadata such as the browser’s IP address and
-            user-agent. No analytics request is sent while session verification is unresolved,
-            offline, or authenticated. KendoMenu does not load GoatCounter JavaScript. The request
-            uses an explicit no-referrer policy and a cookie-free image GET.
+            GoatCounter receives a cookie-free page count only after you are confirmed signed out
+            and online. We send a fixed page path, not your email, menus, notes, query strings or
+            referrer. Like any web request, it includes network information such as your IP address
+            and browser type. No count is sent while sign-in is being checked or you are signed in.
           </p>
           <p>
             Learn about the service from{' '}
@@ -93,6 +90,15 @@ export function CookiePolicyPage() {
           </p>
         </section>
 
+        <section className="policy-section" aria-labelledby="delete-data-title">
+          <h2 id="delete-data-title">Deleting your data</h2>
+          <p>
+            Delete guest menus individually on your dashboard, or clear this site’s browser storage
+            to remove all local menus and preferences. Keep a backup first if needed. To delete your
+            account and its saved online data, contact the maintainer.
+          </p>
+        </section>
+
         <section className="policy-section" aria-labelledby="your-choices-title">
           <h2 id="your-choices-title">How to disable cookies?</h2>
           <p>
@@ -104,8 +110,10 @@ export function CookiePolicyPage() {
         <section className="policy-section" aria-labelledby="contact-title">
           <h2 id="contact-title">Contact</h2>
           <p>
-            If you have questions, please contact the KendoMenu maintainers through the project
-            repository.
+            For privacy questions or data deletion requests, contact the maintainer through the{' '}
+            <a href="https://github.com/JavierMarro/kendo-menu">project repository</a>. Issues are
+            public: do not include private information; ask for a private contact method when
+            needed.
           </p>
         </section>
       </div>

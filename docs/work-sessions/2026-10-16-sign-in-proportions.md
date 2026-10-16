@@ -1,0 +1,8 @@
+- Session: Sign-in proportions correction
+- Date/duration: 2026-10-16; focused visual correction
+- Scope/start: Sign-in layout only on the existing dirty UI branch; preserved all other owner work.
+- Changes: Restored desktop artwork to its previous 115% crop; slightly reduced desktop options padding; mobile uses 2:3 panel rows, a larger heading and its own 130% thigh-up crop.
+- Decisions: Reused the existing optimized artwork with responsive CSS; shorter screens may scroll rather than compress controls; no authentication or data changes.
+- Roadblocks: None.
+- Verification: Browser appearance inspected at 412x915 and 1440x900; mobile panel heights measured exactly 40/60; regression assertions updated; tests intentionally not run at the owner's request.
+- Follow-up: Owner can review the revised sign-in page; no commit, deployment or remote settings changed.

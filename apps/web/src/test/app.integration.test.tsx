@@ -2,16 +2,13 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  DEFAULT_TRAINING_SETS,
-  asTrainingSetId,
-  getTrainingSetLeafExerciseCount,
-} from '@kendo-menu/domain';
+import { asTrainingSetId, getTrainingSetLeafExerciseCount } from '@kendo-menu/domain';
 
 import {
   CURATED_EXERCISE_COUNT,
   CURATED_TRAINING_SET_COUNT,
   formatTrainingQuantity,
+  getBrowsableTrainingSets,
 } from '../lib/training-data';
 import {
   COOKIE_NOTICE_ACKNOWLEDGEMENT_DURATION_MS,
@@ -215,10 +212,21 @@ describe('KendoMenu application flows', () => {
       throw new Error('Expected the local storage policy section.');
     }
     expect(localStorageSection).toHaveTextContent(
-      'Guest dashboard training sessions are stored locally in your browser. Signing in does not upload or change them.',
+      'Guest menus, including exercises, quantities and notes, stay in your browser’s localStorage and work offline. Signing in does not upload them.',
     );
     expect(localStorageSection).toHaveTextContent(
-      'Account edits stay in this tab’s memory until you choose Save to account and it is confirmed. Reloading or closing the tab can lose unsaved account changes.',
+      'only choosing “Copy menus” uploads an independent copy; the originals stay on your device.',
+    );
+    expect(localStorageSection).toHaveTextContent(
+      'are saved only when you choose “Save to account” and receive confirmation.',
+    );
+    expect(
+      screen.getByRole('heading', { name: 'Google sign-in' }).closest('section'),
+    ).toHaveTextContent('not access to your contacts, calendar or other Google data');
+    expect(
+      screen.getByRole('heading', { name: 'Deleting your data' }).closest('section'),
+    ).toHaveTextContent(
+      'To delete your account and its saved online data, contact the maintainer.',
     );
 
     const analyticsSection = screen.getByRole('heading', { name: 'Analytics' }).closest('section');
@@ -226,7 +234,10 @@ describe('KendoMenu application flows', () => {
       throw new Error('Expected the analytics policy section.');
     }
     expect(analyticsSection).toHaveTextContent(
-      'KendoMenu sends one page count after the browser verifies that the visitor is signed out. The request uses GoatCounter’s image endpoint; its only query parameter is a static, allow-listed page path. It omits query strings, referrer information, account state, email, menu content, notes, and other page parameters. As with ordinary web requests, the service receives network metadata such as the browser’s IP address and user-agent. No analytics request is sent while session verification is unresolved, offline, or authenticated. KendoMenu does not load GoatCounter JavaScript. The request uses an explicit no-referrer policy and a cookie-free image GET.',
+      'GoatCounter receives a cookie-free page count only after you are confirmed signed out and online.',
+    );
+    expect(analyticsSection).toHaveTextContent(
+      'No count is sent while sign-in is being checked or you are signed in.',
     );
     const goatCounterLink = within(analyticsSection).getByRole('link', {
       name: 'GoatCounter',
@@ -249,7 +260,7 @@ describe('KendoMenu application flows', () => {
     expect(within(footer).getByRole('heading', { name: 'Navigation', level: 2 })).toBeVisible();
 
     const footerNavigation = within(footer).getByRole('navigation', { name: 'Navigation' });
-    expect(within(footerNavigation).getByRole('link', { name: 'Keiko menus' })).toBeVisible();
+    expect(within(footerNavigation).getByRole('link', { name: 'Library info' })).toBeVisible();
     expect(
       within(footerNavigation)
         .getAllByRole('link')
@@ -286,10 +297,9 @@ describe('KendoMenu application flows', () => {
     ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Is KendoMenu free?' }));
     const freeAnswer = screen.getByRole('region', { name: 'Is KendoMenu free?' });
-    expect(freeAnswer).toHaveTextContent('100% free to use');
-    expect(freeAnswer).toHaveTextContent('keeping your dashboard saved locally');
-    expect(freeAnswer).toHaveTextContent('available across devices');
-    expect(freeAnswer).toHaveTextContent('not now nor in the future');
+    expect(freeAnswer).toHaveTextContent(
+      'Yes. KendoMenu is 100% free to use as a guest or with an account. There are no adverts or premium features, not now nor in the future.',
+    );
     await user.click(
       screen.getByRole('button', {
         name: 'Can I use KendoMenu on my phone and computer?',
@@ -298,9 +308,9 @@ describe('KendoMenu application flows', () => {
     const devicesAnswer = screen.getByRole('region', {
       name: 'Can I use KendoMenu on my phone and computer?',
     });
-    expect(devicesAnswer).toHaveTextContent('saved on whichever device');
-    expect(devicesAnswer).toHaveTextContent('your menus available across devices');
-    expect(devicesAnswer).toHaveTextContent('PWA (Progressive Web Application)');
+    expect(devicesAnswer).toHaveTextContent('Guest dashboards are saved on the device');
+    expect(devicesAnswer).toHaveTextContent('after you select Save to account');
+    expect(devicesAnswer).toHaveTextContent('PWA (Progressive Web App)');
     await user.click(screen.getByRole('button', { name: 'Is KendoMenu open source?' }));
     const sourceAnswer = screen.getByRole('region', {
       name: 'Is KendoMenu open source?',
@@ -353,7 +363,7 @@ describe('KendoMenu application flows', () => {
     ).toBe('/assets/kendo-menu-logo-88.jpeg');
     expect(
       screen.getByText(
-        'Choose from 11 curated menus, shape the workload for your training and keep polishing mind, spirit and character through varied kendo practice',
+        'Choose from 10 curated menus, shape the workload for your training and keep polishing mind, spirit and character through varied kendo practice',
       ),
     ).toBeInTheDocument();
     expect(
@@ -380,6 +390,39 @@ describe('KendoMenu application flows', () => {
       ),
     ).toBeInTheDocument();
 
+    const menuTeasers = document.querySelectorAll('.landing-menu-teaser');
+    expect(Array.from(menuTeasers, (teaser) => teaser.querySelector('h4')?.textContent)).toEqual([
+      'International dojo menu',
+      'University High School dojo menu',
+      'University dojo menu',
+    ]);
+    const internationalTeaser = screen.getByRole('link', {
+      name: /International dojo menu/,
+    });
+    expect(internationalTeaser).toHaveAttribute(
+      'href',
+      '/app/guest/library?drill=international-dojo-2-hour-session',
+    );
+    expect(internationalTeaser).toHaveTextContent('Intense session');
+    expect(internationalTeaser).toHaveTextContent('25 activities');
+    expect(internationalTeaser).toHaveTextContent('Set for a 2 hours long session.');
+    const universityTitle = screen.getByRole('heading', {
+      name: 'University dojo menu',
+      level: 4,
+    });
+    const universityTeaser = universityTitle.closest('a');
+    if (universityTeaser === null) {
+      throw new Error('Expected the University dojo heading inside a teaser link.');
+    }
+    expect(universityTeaser).toHaveTextContent(
+      'Warm-up · Suburi · Ashi sabaki · Dojo-length drills',
+    );
+    expect(universityTeaser).toHaveTextContent('29 activities');
+    expect(screen.getByRole('link', { name: 'See all 10 menus →' })).toHaveAttribute(
+      'href',
+      '/app/guest/library',
+    );
+
     const introductionHeading = screen.getByRole('heading', {
       name: 'A keiko menu for the day in front of you',
       level: 2,
@@ -399,19 +442,20 @@ describe('KendoMenu application flows', () => {
     expect(within(steps).getAllByRole('listitem')).toHaveLength(3);
     expect(steps).toHaveAttribute('data-landing-reveal', 'steps');
 
-    const canonicalExerciseCount = DEFAULT_TRAINING_SETS.reduce(
+    const visibleTrainingSets = getBrowsableTrainingSets();
+    const visibleExerciseCount = visibleTrainingSets.reduce(
       (trainingSetTotal, trainingSet) =>
         trainingSetTotal + getTrainingSetLeafExerciseCount(trainingSet),
       0,
     );
-    expect(CURATED_TRAINING_SET_COUNT).toBe(DEFAULT_TRAINING_SETS.length);
-    expect(CURATED_EXERCISE_COUNT).toBe(canonicalExerciseCount);
-    const exerciseCount = screen.getByText(String(canonicalExerciseCount), {
+    expect(CURATED_TRAINING_SET_COUNT).toBe(visibleTrainingSets.length);
+    expect(CURATED_EXERCISE_COUNT).toBe(visibleExerciseCount);
+    const exerciseCount = screen.getByText(String(visibleExerciseCount), {
       selector: '.landing-stat-value',
     });
     expect(exerciseCount.closest('dd')).toHaveAttribute(
       'aria-label',
-      `${canonicalExerciseCount} leaf activities across all training sessions`,
+      `${visibleExerciseCount} leaf activities across all training sessions`,
     );
     expect(screen.queryByText('~150')).not.toBeInTheDocument();
 
@@ -427,6 +471,15 @@ describe('KendoMenu application flows', () => {
     await user.click(faqButton);
     expect(faqButton).toHaveAttribute('aria-expanded', 'true');
     expect(document.getElementById('what-is-kendomenu-answer')).not.toHaveAttribute('hidden');
+    expect(screen.getByRole('region', { name: 'What is KendoMenu?' })).toHaveTextContent(
+      'free web app for choosing, adapting, creating and organising keiko menus',
+    );
+    expect(screen.getByRole('region', { name: 'What is KendoMenu?' })).toHaveTextContent(
+      'Keep a journal of sessions you have practised',
+    );
+    expect(screen.getByRole('region', { name: 'What is KendoMenu?' })).toHaveTextContent(
+      'visiting sensei or at a seminar',
+    );
 
     expect(
       screen.getByText('exercises across all training sessions', { exact: true }),
@@ -559,7 +612,7 @@ describe('KendoMenu application flows', () => {
     ]);
     expect(
       within(screen.getByRole('navigation', { name: 'Landing navigation' })).getByRole('link', {
-        name: 'Keiko menus',
+        name: 'Library info',
       }),
     ).toBeVisible();
     expect(document.querySelector('.nav-count')).toBeNull();
@@ -595,7 +648,12 @@ describe('KendoMenu application flows', () => {
     await user.click(screen.getByRole('link', { name: 'Try without an account' }));
 
     expect(screen.getByRole('heading', { name: 'Your dashboard' })).toBeInTheDocument();
-    expect(screen.getByRole('status', { name: 'Saved on this device' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'User' }));
+    expect(
+      within(screen.getByRole('region', { name: 'User options' })).getByRole('status', {
+        name: 'Saved on this device',
+      }),
+    ).toBeVisible();
     expect(screen.getByText('Shape today’s keiko to fit the practice ahead.')).toBeVisible();
     expect(screen.queryByRole('link', { name: /^Create session$/ })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Browse Keiko library' })).toBeVisible();
@@ -904,14 +962,17 @@ describe('KendoMenu application flows', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('renders exactly 11 compact drill cards with semantic badge variants and query links', () => {
+  it('renders exactly 10 compact drill cards with semantic badge variants and query links', () => {
     renderApp(createTestStore(), { initialEntries: ['/app/library'] });
 
     const library = screen.getByRole('region', { name: 'Available training sessions' });
     const cards = within(library).getAllByRole('article');
-    expect(cards).toHaveLength(11);
+    expect(cards).toHaveLength(10);
     expect(within(library).getAllByText('High intensity session')).toHaveLength(4);
-    expect(within(library).getAllByText('Intense session')).toHaveLength(7);
+    expect(within(library).getAllByText('Intense session')).toHaveLength(6);
+    expect(
+      within(library).queryByRole('heading', { name: 'Official ZNKR/AJKF menu' }),
+    ).not.toBeInTheDocument();
     expect(within(library).queryByText('Category not specified')).not.toBeInTheDocument();
     for (const badge of within(library).getAllByText('Intense session')) {
       expect(badge).toHaveAttribute('data-category-variant', 'intense');
@@ -1027,7 +1088,7 @@ describe('KendoMenu application flows', () => {
       within(screen.getByRole('region', { name: 'Available training sessions' })).getAllByRole(
         'article',
       ),
-    ).toHaveLength(11);
+    ).toHaveLength(10);
     expect(
       screen.queryByRole('heading', { name: 'Blank description drill' }),
     ).not.toBeInTheDocument();
@@ -1182,10 +1243,12 @@ describe('KendoMenu application flows', () => {
       name: 'International dojo menu',
       level: 1,
     });
-    expect(detailTags).toHaveClass('training-set-tags', 'drill-detail-category');
+    expect(detailTags).toHaveClass('training-set-tags');
+    expect(detailTags).toHaveClass('drill-detail-category');
     expect(detailBadge).toHaveClass('category-pill');
     expect(detailBadge).toHaveAttribute('data-category-variant', 'intense');
     expect(detailTags.nextElementSibling).toBe(detailTitle);
+    expect(within(dialog).getByText('25 activities in this session.')).toHaveClass('detail-meta');
     const sections = dialog.querySelectorAll<HTMLDetailsElement>('details.detail-section');
     const standaloneActivities = dialog.querySelectorAll<HTMLElement>(
       '.detail-standalone-activity',

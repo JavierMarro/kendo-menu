@@ -94,7 +94,7 @@ test.describe('navigation scroll behavior', () => {
     await dismissCookieNotice(page);
     await scrollDown(page);
 
-    const libraryLink = await getPrimaryNavigationLink(page, 'Keiko menus');
+    const libraryLink = await getPrimaryNavigationLink(page, 'Library info');
     await libraryLink.click();
     await expect(page).toHaveURL(/\/app#library-story-title$/);
     await expectHashTarget(page, 'library-story-title');
@@ -102,7 +102,7 @@ test.describe('navigation scroll behavior', () => {
     await page.goto('/app');
     await dismissCookieNotice(page);
     await scrollDown(page);
-    const keyboardLibraryLink = await getPrimaryNavigationLink(page, 'Keiko menus');
+    const keyboardLibraryLink = await getPrimaryNavigationLink(page, 'Library info');
     await keyboardLibraryLink.focus();
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/app#library-story-title$/);
@@ -114,7 +114,7 @@ test.describe('navigation scroll behavior', () => {
   }) => {
     await page.goto('/app');
     await dismissCookieNotice(page);
-    await expect(await getPrimaryNavigationLink(page, 'Keiko menus')).toHaveAttribute(
+    await expect(await getPrimaryNavigationLink(page, 'Library info')).toHaveAttribute(
       'href',
       '/app#library-story-title',
     );
@@ -128,7 +128,7 @@ test.describe('navigation scroll behavior', () => {
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
     await expect(page.locator('body')).not.toHaveClass(/drill-dialog-open/);
-    const dashboardTop = await recordScrollY(page, 160);
+    const dashboardTop = await page.evaluate(() => window.scrollY);
 
     const libraryLink = workspaceLink(page, 'Library');
     await libraryLink.click();
@@ -136,7 +136,7 @@ test.describe('navigation scroll behavior', () => {
     await expect(page.getByRole('heading', { name: 'Keiko library', exact: true })).toBeVisible();
     await expectTop(page, 'Navigating from Dashboard to Library should reset scroll to the top');
 
-    const libraryTop = await recordScrollY(page, 800);
+    const libraryTop = await recordScrollY(page, 200);
     await page.goBack();
     await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
     await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
@@ -153,7 +153,7 @@ test.describe('navigation scroll behavior', () => {
   }) => {
     await page.goto('/app/guest/library');
     await dismissCookieNotice(page);
-    const libraryTop = await recordScrollY(page, 320);
+    const libraryTop = await recordScrollY(page, 200);
 
     const card = page
       .getByRole('heading', { name: 'International dojo menu' })

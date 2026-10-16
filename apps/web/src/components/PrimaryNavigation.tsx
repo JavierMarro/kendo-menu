@@ -13,7 +13,7 @@ export function PrimaryNavigationLinks({
 }: PrimaryNavigationLinksProps): ReactElement {
   const primaryNavigationItems = [
     { id: 'how-it-works', label: 'How it works', to: '/app#how-it-works-title' },
-    { id: 'library', label: 'Keiko menus', to: '/app#library-story-title' },
+    { id: 'library', label: 'Library info', to: '/app#library-story-title' },
     { id: 'faq', label: 'FAQ', to: '/app#faq-title' },
   ] as const;
   return (

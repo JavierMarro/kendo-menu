@@ -112,6 +112,9 @@ test.describe('Job 5 complex curated sessions', () => {
     await page.goto(`/app/guest/library?drill=${UNIVERSITY_HIGH_SCHOOL}`);
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
+    await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+    const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+    if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
 
     const universityDialog = await openDashboardMenu(page, 'University High School dojo menu');
     const kenTore = activity(universityDialog, UNIVERSITY_KEN_TORE);

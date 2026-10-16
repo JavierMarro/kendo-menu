@@ -18,18 +18,24 @@ const KIRIKAESHI_ID = 'international-dojo-2-hour-session-kirikaeshi-kirikaeshi';
 
 interface AccountDashboardHarnessProps {
   readonly editable: boolean;
+  readonly dirty?: boolean;
   readonly store: ReturnType<typeof createTestStore>;
   readonly onEditorDraftDirtyChange: (dirty: boolean) => void;
   readonly saveState?: string;
   readonly download?: () => void;
+  readonly saveToAccount?: () => Promise<void>;
+  readonly flush?: () => Promise<void>;
 }
 
 function AccountDashboardHarness({
   editable,
+  dirty = false,
   store,
   onEditorDraftDirtyChange,
   saveState,
   download,
+  saveToAccount,
+  flush = () => Promise.resolve(),
 }: AccountDashboardHarnessProps) {
   const [editorDraftDirty, setEditorDraftDirty] = useState(false);
 
@@ -41,8 +47,9 @@ function AccountDashboardHarness({
           basePath: '/app/account',
           canEdit: editable,
           accountEmail: 'practitioner@example.test',
-          isDirty: false,
+          isDirty: dirty,
           hasUncommittedEditorDraft: editorDraftDirty,
+          ...(saveToAccount === undefined ? {} : { saveToAccount }),
           onEditorDraftDirtyChange: (dirty) => {
             setEditorDraftDirty(dirty);
             onEditorDraftDirtyChange(dirty);
@@ -54,7 +61,7 @@ function AccountDashboardHarness({
             mode: 'account',
             writeFailed: false,
             pending: false,
-            flush: () => Promise.resolve(),
+            flush,
             save: () => Promise.resolve(),
             downloadAllowed: !editorDraftDirty,
             ...(saveState === undefined ? {} : { saveState }),
@@ -76,6 +83,9 @@ function renderAccountDashboard(
   options: {
     readonly saveState?: string;
     readonly download?: () => void;
+    readonly dirty?: boolean;
+    readonly saveToAccount?: () => Promise<void>;
+    readonly flush?: () => Promise<void>;
   } = {},
 ) {
   const store = createTestStore();
@@ -110,6 +120,78 @@ function getActivity(activityId: string): HTMLElement {
 }
 
 describe('account dashboard editor drafts', () => {
+  it('matches the Library detail hierarchy and keeps Remove in the bottom action row', async () => {
+    const user = userEvent.setup();
+    renderAccountDashboard();
+    const dialog = await openDashboardMenu(user);
+    const title = within(dialog).getByRole('heading', {
+      name: 'International dojo menu',
+      level: 2,
+    });
+    const header = title.closest('header');
+    if (header === null) throw new Error('Expected the dashboard detail header.');
+
+    const tags = within(header).getByLabelText('Session tags');
+    expect(tags.nextElementSibling).toBe(title);
+    expect(header.querySelector('.page-intro')?.previousElementSibling).toBe(title);
+    expect(header.nextElementSibling).toHaveClass('detail-meta');
+    expect(header.nextElementSibling).toHaveTextContent('25 activities');
+    expect(dialog.querySelector('.card-index')).toBeNull();
+
+    const remove = within(dialog).getByRole('button', { name: 'Remove' });
+    expect(remove).toHaveClass('dashboard-card-remove');
+    expect(remove.parentElement).toHaveClass('dashboard-card-actions');
+    expect(remove.parentElement?.lastElementChild).toBe(remove);
+  });
+
+  it('saves expanded account details through the existing whole-dashboard action', async () => {
+    const user = userEvent.setup();
+    const saveToAccount = vi.fn(() => Promise.resolve());
+    const flush = vi.fn(() => Promise.resolve());
+    const { store } = renderAccountDashboard(true, vi.fn(), {
+      dirty: true,
+      saveToAccount,
+      flush,
+    });
+    const dialog = await openDashboardMenu(user);
+    const saveButton = within(dialog).getByRole('button', { name: 'Save your changes' });
+    const remove = within(dialog).getByRole('button', { name: 'Remove' });
+
+    expect(saveButton).toBeEnabled();
+    expect(remove.parentElement?.firstElementChild).toHaveClass('dashboard-card-save-group');
+    expect(remove.parentElement?.lastElementChild).toBe(remove);
+
+    const sessionNotes = within(dialog).getByLabelText('Practice notes');
+    await user.type(sessionNotes, 'Saved from the expanded account menu.');
+    await user.click(saveButton);
+
+    expect(store.getState().dashboardEntries[0]?.notes).toBe(
+      'Saved from the expanded account menu.',
+    );
+    expect(saveToAccount).toHaveBeenCalledOnce();
+    expect(flush).not.toHaveBeenCalled();
+  });
+
+  it('keeps an invalid quantity draft out of an account save submitted from the menu', async () => {
+    const user = userEvent.setup();
+    const saveToAccount = vi.fn(() => Promise.resolve());
+    renderAccountDashboard(true, vi.fn(), { dirty: true, saveToAccount });
+    const dialog = await openDashboardMenu(user);
+    const quantity = within(getActivity(KIRIKAESHI_ID)).getByLabelText(
+      'Repetitions for Kirikaeshi',
+    );
+    await user.clear(quantity);
+    await user.type(quantity, '501');
+    const saveButton = within(dialog).getByRole('button', { name: 'Save your changes' });
+    const form = saveButton.closest('form');
+    if (!(form instanceof HTMLFormElement)) throw new Error('Expected the dashboard detail form.');
+
+    fireEvent.submit(form);
+
+    expect(quantity).toHaveAttribute('aria-invalid', 'true');
+    expect(saveToAccount).not.toHaveBeenCalled();
+  });
+
   it('commits whole-session notes before blur', async () => {
     const user = userEvent.setup();
     const { store } = renderAccountDashboard();

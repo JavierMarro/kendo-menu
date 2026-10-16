@@ -11,8 +11,9 @@ import type { TrainingSet } from '@kendo-menu/domain';
 import {
   findTrainingSet,
   getAllTrainingSets,
-  getTrainingSetDescription,
+  getBrowsableTrainingSets,
   getTrainingSetActivityCount,
+  getTrainingSetDescription,
 } from '../../lib/training-data';
 import { DialogShell } from '../../components/DialogShell';
 import { TrainingSetTags } from '../../components/TrainingSetTags';
@@ -46,13 +47,13 @@ function LibraryDetailDialog({ onClose, trainingSet }: LibraryDetailDialogProps)
 }
 
 export function LibraryPage() {
-  const trainingSets = getAllTrainingSets();
+  const trainingSets = getBrowsableTrainingSets();
   const workspace = useWorkspace();
   const libraryPath = workspacePath(workspace.basePath, 'library');
   const location = useLocation();
   const navigate = useNavigate();
   const selectedDrillId = getSelectedDrillId(location.search);
-  const selectedTrainingSet = findTrainingSet(trainingSets, selectedDrillId ?? '');
+  const selectedTrainingSet = findTrainingSet(getAllTrainingSets(), selectedDrillId ?? '');
   const openerLinksRef = useRef(new Map<string, HTMLAnchorElement>());
   const originatingDrillIdRef = useRef<string | null>(null);
   const previousSelectedDrillIdRef = useRef<string | null>(null);

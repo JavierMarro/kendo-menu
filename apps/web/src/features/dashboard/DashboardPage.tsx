@@ -54,6 +54,7 @@ import {
 } from '../../components/TrainingActivityList';
 import { TrainingSetTags } from '../../components/TrainingSetTags';
 import { getSavedMenuNavigationState } from '../../lib/navigation-state';
+import { AccountUnsavedWarning } from '../account/AccountUnsavedWarning';
 import {
   getExplicitPersistenceUpdateLabel,
   getPersistenceUpdateLabel,
@@ -308,6 +309,22 @@ export function DashboardPage() {
     setStatusMessage('Training session restored to its previous position.');
   };
 
+  const saveAccountDashboard = async (): Promise<boolean> => {
+    if (
+      !workspace.canEdit ||
+      Object.keys(quantityDraftsRef.current).length > 0 ||
+      persistenceStatus.pending ||
+      persistenceStatus.saveState === 'conflict' ||
+      persistenceStatus.saveState === 'blocked' ||
+      workspace.saveToAccount === undefined
+    ) {
+      return false;
+    }
+
+    await workspace.saveToAccount();
+    return true;
+  };
+
   return (
     <>
       <header className="page-header dashboard-page-header">
@@ -414,6 +431,16 @@ export function DashboardPage() {
           </div>
         ) : null}
       </header>
+
+      {workspace.kind === 'account' ? (
+        <AccountUnsavedWarning
+          className="dashboard-draft-warning"
+          isDirty={workspace.isDirty === true}
+          hasUncommittedEditorDraft={workspace.hasUncommittedEditorDraft === true}
+          saveState={persistenceStatus.saveState ?? ''}
+          onDownload={persistenceStatus.download}
+        />
+      ) : null}
 
       <div inert={workspace.kind === 'account' && !workspace.canEdit}>
         <p className="sr-only" role="status" aria-live="polite">
@@ -532,6 +559,7 @@ export function DashboardPage() {
               onSetActivityNote={(activityId, note) => {
                 if (workspace.canEdit) setActivityNote(selectedEntry.id, activityId, note);
               }}
+              {...(workspace.kind === 'account' ? { onAccountSave: saveAccountDashboard } : {})}
               {...(workspace.kind === 'account'
                 ? { quantityDrafts, onQuantityDraftChange: updateQuantityDraft }
                 : {})}
@@ -577,6 +605,7 @@ interface DashboardTrainingSetProps {
   readonly onSetQuantity: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
   readonly onClearQuantity: (activityId: string, unit: TrainingQuantityUnit) => void;
   readonly onSetActivityNote: (activityId: string, note: string) => void;
+  readonly onAccountSave?: () => Promise<boolean>;
   readonly quantityDrafts?: Readonly<Record<string, string>>;
   readonly onQuantityDraftChange?: (key: string, value: string | null) => void;
 }
@@ -591,6 +620,7 @@ export function DashboardTrainingSet({
   onSetQuantity,
   onClearQuantity,
   onSetActivityNote,
+  onAccountSave,
   quantityDrafts = {},
   onQuantityDraftChange,
 }: DashboardTrainingSetProps) {
@@ -605,7 +635,6 @@ export function DashboardTrainingSet({
   const activityCount = getTrainingSetActivityCount(trainingSet);
   const description = getTrainingSetDescription(trainingSet);
   const headingId = titleId ?? `dashboard-entry-title-${entry.id}`;
-  const saveHintId = `save-hint-${entry.id}`;
   const saveStatusId = `save-status-${entry.id}`;
 
   const handleNotesChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -639,16 +668,32 @@ export function DashboardTrainingSet({
       activeElement.blur();
     }
 
+    let saveWasStarted = false;
     setIsSaving(true);
     try {
-      await flushPersistence();
+      if (workspace.kind === 'account') {
+        saveWasStarted = (await onAccountSave?.()) ?? false;
+      } else {
+        saveWasStarted = true;
+        await flushPersistence();
+      }
     } catch {
       // The persistence context exposes the typed failure state and the feedback label reflects it.
     } finally {
-      setSaveConfirmationVersion((version) => version + 1);
+      if (saveWasStarted) setSaveConfirmationVersion((version) => version + 1);
       setIsSaving(false);
     }
   };
+
+  const accountSaveDisabled =
+    workspace.kind === 'account' &&
+    (!workspace.canEdit ||
+      workspace.hasUncommittedEditorDraft === true ||
+      !workspace.isDirty ||
+      workspace.saveToAccount === undefined ||
+      persistenceStatus.pending ||
+      persistenceStatus.saveState === 'conflict' ||
+      persistenceStatus.saveState === 'blocked');
 
   useEffect(() => {
     if (saveConfirmationVersion === 0) {
@@ -662,25 +707,14 @@ export function DashboardTrainingSet({
   return (
     <article className="dashboard-card dashboard-card--expanded" data-entry-index={index + 1}>
       <form className="dashboard-card-form" onSubmit={(event) => void handleExplicitSave(event)}>
-        <div className="dashboard-card-heading">
-          <div className="card-index" aria-hidden="true">
-            {String(index + 1).padStart(2, '0')}
-          </div>
-          <div className="card-content">
-            <div className="library-card-topline">
-              <TrainingSetTags trainingSet={trainingSet} />
-              <span className="step-count">{activityCount} activities</span>
-            </div>
+        <header className="page-header detail-header drill-detail-header dashboard-detail-header">
+          <div>
+            <TrainingSetTags trainingSet={trainingSet} className="drill-detail-category" />
             <h2 id={headingId}>{trainingSet.name}</h2>
-            {description === undefined ? null : <p>{description}</p>}
-            <div className="card-meta">
-              <span>{entry.notes.length > 0 ? 'Has notes' : 'No notes yet'}</span>
-            </div>
+            {description === undefined ? null : <p className="page-intro">{description}</p>}
           </div>
-          <button className="text-button destructive-button" type="button" onClick={onRemove}>
-            Remove
-          </button>
-        </div>
+        </header>
+        <p className="detail-meta">{activityCount} activities in this session.</p>
 
         <div className="dashboard-sections detail-sections">
           <TrainingActivityList
@@ -715,33 +749,41 @@ export function DashboardTrainingSet({
           </span>
         </div>
 
-        {workspace.kind === 'guest' ? (
-          <div className="dashboard-save-actions">
+        <div className="dashboard-card-actions">
+          <div className="dashboard-card-save-group">
             <button
               className="primary-button"
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || accountSaveDisabled}
               aria-busy={isSaving}
-              aria-describedby={
-                saveConfirmationVersion === 0 ? saveHintId : `${saveHintId} ${saveStatusId}`
-              }
+              aria-describedby={saveStatusId}
             >
               Save your changes
             </button>
             <div className="dashboard-save-feedback">
-              <p id={saveHintId} className="dashboard-save-hint">
-                Changes also save automatically when you leave a field.
-              </p>
               <span id={saveStatusId} className="field-status" role="status" aria-live="polite">
                 {saveConfirmationVersion > 0 ? (
                   <span key={saveConfirmationVersion}>
-                    {getExplicitPersistenceUpdateLabel(persistenceStatus)}
+                    {workspace.kind === 'account'
+                      ? persistenceStatus.saveState === 'saved'
+                        ? workspace.isDirty
+                          ? 'Submitted changes saved to your account. Newer edits remain unsaved.'
+                          : 'Changes saved to your account.'
+                        : (persistenceStatus.error ?? '')
+                      : getExplicitPersistenceUpdateLabel(persistenceStatus)}
                   </span>
                 ) : null}
               </span>
             </div>
           </div>
-        ) : null}
+          <button
+            className="text-button destructive-button dashboard-card-remove"
+            type="button"
+            onClick={onRemove}
+          >
+            Remove
+          </button>
+        </div>
       </form>
     </article>
   );

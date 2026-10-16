@@ -5,7 +5,6 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { BrandLockup } from './BrandLockup';
-import { SiteFooter } from './SiteFooter';
 
 interface WorkspaceShellProps {
   readonly basePath: '/app/guest' | '/app/account';
@@ -151,7 +150,6 @@ export function WorkspaceShell({
           {children}
         </div>
       )}
-      <SiteFooter />
     </div>
   );
 }

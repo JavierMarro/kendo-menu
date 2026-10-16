@@ -9,12 +9,9 @@ export function workspaceLink(page: Page, name: string): Locator {
 }
 
 export async function visibleWorkspaceBrandLink(page: Page): Promise<Locator> {
-  const desktop = page
-    .locator('.workspace-desktop-brand')
-    .getByRole('link', { name: 'KendoMenu home', exact: true });
-  if (await desktop.isVisible()) return desktop;
+  const isMobile = await page.evaluate(() => matchMedia('(max-width: 960px)').matches);
   return page
-    .locator('.workspace-mobile-brand')
+    .locator(isMobile ? '.workspace-mobile-brand' : '.workspace-desktop-brand')
     .getByRole('link', { name: 'KendoMenu home', exact: true });
 }
 

@@ -105,7 +105,7 @@ test.describe('routed training flows', () => {
     await expect(page.locator('.landing-page')).toBeVisible();
     const viewport = page.viewportSize();
     if (viewport !== null && viewport.width <= 760) {
-      await expect(page.locator('.brand-name')).toBeHidden();
+      await expect(page.locator('.top-bar .brand-name')).toBeVisible();
 
       const menuToggle = page.getByRole('button', { name: 'Open navigation' });
       const primaryNavigation = page.getByRole('navigation', { name: 'Landing navigation' });
@@ -196,7 +196,9 @@ test.describe('routed training flows', () => {
     await expect(page).toHaveURL(/\/cookies$/);
     await expect(page.getByRole('heading', { name: 'Cookie Policy', exact: true })).toBeVisible();
     await expect(
-      page.getByText(/Guest dashboard training sessions are stored locally/),
+      page.getByText(
+        /Guest menus, including exercises, quantities and notes, stay in your browser/,
+      ),
     ).toBeVisible();
     const goatCounterLink = page.getByRole('link', { name: 'GoatCounter' });
     await expect(goatCounterLink).toHaveAttribute(
@@ -206,7 +208,7 @@ test.describe('routed training flows', () => {
     await expect(goatCounterLink).toHaveAttribute('target', '_blank');
     await expect(
       page.getByText(
-        /KendoMenu sends one page count after the browser verifies that the visitor is signed out\./,
+        /GoatCounter receives a cookie-free page count only after you are confirmed signed out and online\./,
       ),
     ).toBeVisible();
     await expect(page.getByRole('complementary', { name: 'Cookie notice' })).toBeVisible();
@@ -263,15 +265,15 @@ test.describe('routed training flows', () => {
   }) => {
     await page.goto('/app/guest/library');
     const cards = page.locator('.library-card');
-    await expect(cards).toHaveCount(11);
+    await expect(cards).toHaveCount(10);
     await expect(page.locator('.category-pill', { hasText: 'High intensity session' })).toHaveCount(
       4,
     );
-    await expect(page.locator('.category-pill', { hasText: 'Intense session' })).toHaveCount(7);
+    await expect(page.locator('.category-pill', { hasText: 'Intense session' })).toHaveCount(6);
     await expect(
       page.locator('.category-pill[data-category-variant="high-intensity"]'),
     ).toHaveCount(4);
-    await expect(page.locator('.category-pill[data-category-variant="intense"]')).toHaveCount(7);
+    await expect(page.locator('.category-pill[data-category-variant="intense"]')).toHaveCount(6);
     await expect(page.getByText('Category not specified')).toHaveCount(0);
     await expect(page.getByText('Description not provided.')).toHaveCount(0);
     await expect(page.locator('.library-card > p:empty')).toHaveCount(0);
@@ -349,11 +351,17 @@ test.describe('routed training flows', () => {
     const detailBadge = detailTags.locator('.category-pill');
     await expect(detailBadge).toHaveText('Intense session');
     await expect(detailBadge).toHaveAttribute('data-category-variant', 'intense');
-    expect(
-      await detailTags.evaluate(
-        (tags) => tags.nextElementSibling?.textContent === 'International dojo menu',
-      ),
-    ).toBe(true);
+    await expect(dialog.locator('.drill-detail-header h1')).toHaveText('International dojo menu');
+    await expect(dialog.locator('.drill-detail-header h1')).toHaveCSS(
+      'font-size',
+      test.info().project.name === 'mobile-chrome' ? '28px' : '32px',
+    );
+    const countGap = await dialog.locator('.detail-meta').evaluate((element) => {
+      const header = element.previousElementSibling;
+      if (header === null) throw new Error('Expected the menu detail header.');
+      return element.getBoundingClientRect().top - header.getBoundingClientRect().bottom;
+    });
+    expect(countGap).toBeGreaterThanOrEqual(16);
 
     const warmUpActivity = dialog
       .getByRole('heading', { name: 'Warm-up', level: 2 })
@@ -695,7 +703,7 @@ test.describe('routed training flows', () => {
 
     await card.getByRole('link', { name: 'View session' }).click();
 
-    await expect(page.locator('.detail-header .page-intro')).toHaveText(description);
+    await expect(page.locator('.drill-detail-header .page-intro')).toHaveText(description);
   });
 
   test('labels missing read-only quantities from the shared activity context', async ({ page }) => {
@@ -931,6 +939,7 @@ test.describe('routed training flows', () => {
       await dialog.dismiss();
     });
     await page.goto('/app/guest/drills/new');
+    await page.getByRole('button', { name: 'Got it', exact: true }).click();
     await page.getByLabel('Session name').fill('Monday footwork');
     await page.getByLabel('Description (optional)').fill('A short solo session.');
     await page.getByLabel('Intensity (optional)').selectOption('high-intensity-drill');
@@ -979,7 +988,7 @@ test.describe('routed training flows', () => {
     await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
     await expect(page.locator('p[role="status"]')).toHaveText('');
     await page.goto('/app/guest/library');
-    await expect(page.locator('.library-card')).toHaveCount(11);
+    await expect(page.locator('.library-card')).toHaveCount(10);
     await expect(page.getByRole('heading', { name: 'Monday footwork', exact: true })).toHaveCount(
       0,
     );
@@ -1020,6 +1029,7 @@ test.describe('routed training flows', () => {
     );
 
     await page.goto('/app/guest/dashboard');
+    await page.getByRole('button', { name: 'Got it', exact: true }).click();
     const createNewMenu = page.getByRole('link', { name: 'Create new menu' });
     await expect(createNewMenu).toHaveAttribute('href', '/app/guest/drills/new');
     await createNewMenu.click();

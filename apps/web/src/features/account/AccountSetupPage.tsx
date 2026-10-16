@@ -334,11 +334,10 @@ export function AccountSetupPage() {
         {entryCount} menu {entryCount === 1 ? 'entry' : 'entries'} are ready to copy.
       </p>
       <ul>
-        <li>Yes creates an independent online copy.</li>
+        <li>“Yes” creates an independent online copy.</li>
         <li>Your guest menus remain on this device.</li>
         <li>Later guest and account edits are separate.</li>
-        <li>No permanently declines this one-time opportunity.</li>
-        <li>An interruption may lose the opportunity.</li>
+        <li>“No” permanently declines this one-time opportunity.</li>
       </ul>
       {message !== null ? (
         <p role="status" aria-live="polite">

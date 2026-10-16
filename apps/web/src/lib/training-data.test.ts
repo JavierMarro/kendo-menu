@@ -4,6 +4,7 @@ import {
   DEFAULT_TRAINING_SETS,
   asTrainingSetId,
   getDefaultTrainingQuantityUnits,
+  getTrainingSetLeafExerciseCount,
 } from '@kendo-menu/domain';
 import type {
   DashboardEntry,
@@ -13,12 +14,15 @@ import type {
 } from '@kendo-menu/domain';
 
 import {
+  CURATED_EXERCISE_COUNT,
+  CURATED_TRAINING_SET_COUNT,
+  filterDashboardEntries,
   formatCategory,
   getCategoryBadgeVariant,
+  getBrowsableTrainingSets,
   getEditableTrainingQuantityUnits,
   getMissingTrainingQuantityLabel,
   getSpecifiedTrainingQuantities,
-  filterDashboardEntries,
   getTrainingSetTagLabels,
 } from './training-data';
 
@@ -102,6 +106,21 @@ function formatQuantityPolicyCharacterization(
 }
 
 describe('training-data presentation helpers', () => {
+  it('hides the official curriculum from library counts without removing canonical compatibility', () => {
+    const browsableTrainingSets = getBrowsableTrainingSets();
+    const browsableExerciseCount = browsableTrainingSets.reduce(
+      (trainingSetTotal, trainingSet) =>
+        trainingSetTotal + getTrainingSetLeafExerciseCount(trainingSet),
+      0,
+    );
+
+    expect(browsableTrainingSets).toHaveLength(10);
+    expect(browsableTrainingSets.map(({ id }) => id)).not.toContain('official-znkr-ajkf');
+    expect(DEFAULT_TRAINING_SETS.some(({ id }) => id === 'official-znkr-ajkf')).toBe(true);
+    expect(CURATED_TRAINING_SET_COUNT).toBe(browsableTrainingSets.length);
+    expect(CURATED_EXERCISE_COUNT).toBe(browsableExerciseCount);
+  });
+
   it('characterizes editable quantity units for every curated activity', () => {
     const characterization = getCuratedQuantityPolicyCharacterization();
 

@@ -29,6 +29,10 @@ export interface DisplayTrainingQuantity {
 
 export type CategoryBadgeVariant = 'custom' | 'high-intensity' | 'intense' | 'legacy';
 
+const BROWSABLE_TRAINING_SETS = DEFAULT_TRAINING_SETS.filter(
+  (trainingSet) => trainingSet.id !== 'official-znkr-ajkf',
+);
+
 const CATEGORY_BADGE_VARIANTS = {
   custom: 'custom',
   'high-intensity-drill': 'high-intensity',
@@ -42,9 +46,9 @@ const CATEGORY_BADGE_VARIANTS = {
   unspecified: 'legacy',
 } as const satisfies Readonly<Record<TrainingSet['category'], CategoryBadgeVariant>>;
 
-export const CURATED_TRAINING_SET_COUNT = DEFAULT_TRAINING_SETS.length;
+export const CURATED_TRAINING_SET_COUNT = BROWSABLE_TRAINING_SETS.length;
 
-export const CURATED_EXERCISE_COUNT = DEFAULT_TRAINING_SETS.reduce(
+export const CURATED_EXERCISE_COUNT = BROWSABLE_TRAINING_SETS.reduce(
   (trainingSetTotal, trainingSet) =>
     trainingSetTotal + getDomainTrainingSetLeafExerciseCount(trainingSet),
   0,
@@ -68,6 +72,10 @@ export function getSectionActivityCount(activity: TrainingActivity): number {
 
 export function getAllTrainingSets(): readonly TrainingSet[] {
   return DEFAULT_TRAINING_SETS;
+}
+
+export function getBrowsableTrainingSets(): readonly TrainingSet[] {
+  return BROWSABLE_TRAINING_SETS;
 }
 
 export function getDashboardTrainingSet(entry: DashboardEntry): TrainingSet | undefined {

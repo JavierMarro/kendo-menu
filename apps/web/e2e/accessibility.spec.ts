@@ -145,6 +145,8 @@ test.describe('accessibility and responsive layout', () => {
     await expect(
       page.getByRole('heading', { name: 'Create a training session', exact: true }),
     ).toBeVisible();
+    const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+    if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
     await expect(page.getByRole('heading', { name: 'Session details' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Activities' })).toBeVisible();
 
@@ -152,6 +154,7 @@ test.describe('accessibility and responsive layout', () => {
     await expect(backLink).toHaveText('← Back to keiko library');
     await expect(backLink).toHaveAttribute('href', '/app/guest/library');
     await expect(backLink).toHaveCSS('text-decoration-line', 'underline');
+    await page.keyboard.press('Tab');
     await backLink.focus();
     await expect(backLink).toBeFocused();
     await expect(backLink).toHaveCSS('outline-style', 'solid');
@@ -309,7 +312,7 @@ test.describe('accessibility and responsive layout', () => {
       expect(navMetrics.linksShareRow, `navigation row at ${width}px`).toBe(true);
       expect(navMetrics.linksDoNotOverlap, `navigation link overlap at ${width}px`).toBe(true);
       expect(navMetrics.touchTargetsAreUsable, `navigation touch targets at ${width}px`).toBe(true);
-      expect(navMetrics.labels).toEqual(['How it works', 'Keiko menus', 'FAQ']);
+      expect(navMetrics.labels).toEqual(['How it works', 'Library info', 'FAQ']);
       expect(navMetrics.labelLineCounts).toEqual([1, 1, 1]);
       expect(navMetrics.labelWhiteSpace).toEqual(['nowrap', 'nowrap', 'nowrap']);
 
@@ -389,6 +392,9 @@ test.describe('accessibility and responsive layout', () => {
       await page.setViewportSize({ width, height });
 
       await page.goto('/app/guest/dashboard');
+      if (width === 320) {
+        await page.getByRole('button', { name: 'Got it' }).click();
+      }
       await page.evaluate((key) => window.localStorage.removeItem(key), STORAGE_KEY);
       await page.reload();
       const dashboardScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
@@ -654,6 +660,14 @@ test.describe('accessibility and responsive layout', () => {
     await page.keyboard.press('Tab');
     await expect(page.getByRole('link', { name: 'Sign up here' })).toBeFocused();
     await page.keyboard.press('Tab');
+
+    const firstMenuTeaser = page.getByRole('link', { name: /International dojo menu/ });
+    const menuPreview = page.locator('.landing-menu-preview[data-landing-reveal]');
+    await expect(firstMenuTeaser).toBeFocused();
+    await expect(menuPreview).toHaveClass(/is-revealed/);
+    for (let index = 0; index < 4; index += 1) {
+      await page.keyboard.press('Tab');
+    }
 
     await expect(firstQuestion).toBeFocused();
     await expect(faqGrid).toHaveClass(/is-revealed/);

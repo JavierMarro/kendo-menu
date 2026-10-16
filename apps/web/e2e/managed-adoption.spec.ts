@@ -21,6 +21,8 @@ async function createGuestAndStartAccount(
 ): Promise<string> {
   await page.goto('/app/guest/dashboard');
   await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+  const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+  if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
   await page
     .getByRole('main')
     .getByRole('link', { name: /Create (new menu|a training session)/i })
@@ -124,7 +126,9 @@ test('a new account confirms one complete guest copy and keeps later edits separ
   await expectGuestBytesUnchanged(page, guestBytes);
 
   await clickWorkspaceSignOut(page);
-  await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toHaveCount(0);
+  await expect(
+    page.getByRole('alertdialog', { name: /Are you sure you want to sign out/i }),
+  ).toHaveCount(0);
   await expect(page).toHaveURL(/\/app$/);
   await page.getByRole('link', { name: 'Try without an account' }).click();
   await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
@@ -168,7 +172,9 @@ test('No sends the strict decline and preserves the guest dashboard', async ({
   await expect(page.locator('.dashboard-card--compact')).toHaveCount(0);
   await expectGuestBytesUnchanged(page, guestBytes);
   await clickWorkspaceSignOut(page);
-  await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toHaveCount(0);
+  await expect(
+    page.getByRole('alertdialog', { name: /Are you sure you want to sign out/i }),
+  ).toHaveCount(0);
   await expect(page).toHaveURL(/\/app$/);
   await page.getByRole('link', { name: 'Try without an account' }).click();
   await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
@@ -233,7 +239,9 @@ test('sign-out fences a late adoption acknowledgement and restores the guest sou
   if (typeof requestId !== 'string') throw new Error('Expected a request id.');
 
   await clickWorkspaceSignOut(page);
-  await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toBeVisible();
+  await expect(
+    page.getByRole('alertdialog', { name: /Are you sure you want to sign out/i }),
+  ).toBeVisible();
   await page.getByRole('button', { name: /Discard and sign out/i }).click();
   await expect(page).toHaveURL(/\/app$/);
   held.respond({

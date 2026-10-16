@@ -231,8 +231,13 @@ describe('browser persistence recovery', () => {
     await user.click(screen.getByRole('button', { name: 'Add to dashboard' }));
     const detailDialog = screen.getByRole('dialog', { name: 'Police dojo asageiko menu' });
     await user.click(within(detailDialog).getByRole('link', { name: 'View dashboard' }));
+    await user.click(screen.getByRole('button', { name: 'User' }));
     await waitFor(() => {
-      expect(screen.getByRole('status', { name: 'Changes are not being saved' })).toBeVisible();
+      expect(
+        within(screen.getByRole('region', { name: 'User options' })).getByRole('status', {
+          name: 'Changes are not being saved',
+        }),
+      ).toBeVisible();
     });
 
     const dashboardCard = screen
@@ -256,7 +261,7 @@ describe('browser persistence recovery', () => {
       name: 'Changes are not being saved',
       hidden: true,
     });
-    expect(persistenceStatus).toBeVisible();
+    expect(persistenceStatus).not.toBeVisible();
     expect(persistenceStatus).toHaveClass('is-error');
     const notes = within(dashboardDialog).getByLabelText('Practice notes');
     await user.type(notes, 'Quota test note.');

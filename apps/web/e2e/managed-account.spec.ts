@@ -26,6 +26,8 @@ const GUEST_VALUE = JSON.stringify({ state: { dashboardEntries: [] }, version: 1
 async function enterAccount(page: Page, harness: SyntheticManagedHarness): Promise<void> {
   await page.goto('/app/account/dashboard');
   await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+  const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+  if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
   expect(harness.apiCalls.some((call) => call.path === '/api/dashboard')).toBe(true);
 }
 
@@ -475,6 +477,29 @@ test('empty account stays empty; library and builder changes require an explicit
   });
 });
 
+test('expanded account menu Save submits the whole dashboard to the account API', async ({
+  page,
+}) => {
+  const harness = await SyntheticManagedHarness.install(page, { initiallySignedIn: true });
+  await seedGuestAndLegacyStorage(page);
+  await enterAccount(page, harness);
+  await addCuratedMenu(page);
+
+  await page.getByRole('button', { name: 'View more' }).first().click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Practice notes').fill('Saved from expanded account details.');
+  await dialog.getByRole('button', { name: 'Save your changes', exact: true }).click();
+
+  await expect.poll(() => apiCallsFor(harness, 'PUT').length).toBe(1);
+  expect(JSON.stringify(parseJson(apiCallsFor(harness, 'PUT')[0]?.body))).toContain(
+    'Saved from expanded account details.',
+  );
+  await expect(dialog.getByText('Changes saved to your account.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Saved to account', { exact: true })).toBeVisible();
+  expect(await page.evaluate((key) => localStorage.getItem(key), GUEST_KEY)).toBe(GUEST_VALUE);
+  expectCredentialFreeAccountTransport(harness);
+});
+
 test('account creation opens an empty dashboard and ordinary Save keeps the copy opportunity memory-only', async ({
   page,
 }) => {
@@ -515,7 +540,9 @@ test('edits made during Save remain dirty after only the submitted snapshot is a
   await notes.press('Tab');
   heldSave.respond();
   await page.getByRole('button', { name: /Close .* details/i }).click();
-  await expect(page.getByText(/changes are held in memory|not yet saved/i)).toBeVisible();
+  await expect(page.locator('.account-unsaved-warning')).toContainText(
+    'Unsaved account changes exist only in this tab',
+  );
 
   await page.getByRole('button', { name: 'Save to account' }).click();
   await expect.poll(() => apiCallsFor(harness, 'PUT').length).toBe(2);
@@ -812,6 +839,8 @@ test('the guest builder remains usable and locally saved while offline', async (
   const harness = await SyntheticManagedHarness.install(page);
   await page.goto('/app/guest/drills/new');
   await expect(page.getByRole('heading', { name: 'Create a training session' })).toBeVisible();
+  const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+  if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
   await context.setOffline(true);
   await page.getByLabel('Session name').fill('Offline guest session');
   await page.getByLabel('Activity name').fill('Guest footwork');
@@ -847,8 +876,9 @@ test('401 hides account content and same-account verification reveals the origin
   const retry = page.getByRole('button', { name: 'Retry same save' });
   await expect(retry).toBeVisible();
   await clickWorkspaceSignOut(page);
-  const warning = page.getByRole('alertdialog', { name: /Leave this account/i });
+  const warning = page.getByRole('alertdialog', { name: /Are you sure you want to sign out/i });
   await expect(warning).toBeVisible();
+  await expect(warning).toContainText('Signing out will lose those changes.');
   await warning.getByRole('button', { name: 'Keep editing', exact: true }).click();
   await retry.click();
   await expect.poll(() => apiCallsFor(harness, 'PUT').length).toBe(2);
@@ -863,7 +893,9 @@ test('a clean loaded account signs out without a discard dialog', async ({ page 
   const harness = await SyntheticManagedHarness.install(page, { initiallySignedIn: true });
   await enterAccount(page, harness);
   await clickWorkspaceSignOut(page);
-  await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toHaveCount(0);
+  await expect(
+    page.getByRole('alertdialog', { name: /Are you sure you want to sign out/i }),
+  ).toHaveCount(0);
   await expect(page).toHaveURL(/\/app$/);
   expect(harness.apiCalls.some((call) => call.method === 'PUT')).toBe(false);
 });
@@ -880,7 +912,7 @@ test('acknowledged menu creation and edits sign out directly while later edits s
   await page.getByLabel('Practice notes').fill('Later unsaved edit');
   await page.getByRole('button', { name: /Close .* details/i }).click();
   await clickWorkspaceSignOut(page);
-  const warning = page.getByRole('alertdialog', { name: /Leave this account/i });
+  const warning = page.getByRole('alertdialog', { name: /Are you sure you want to sign out/i });
   await expect(warning).toBeVisible();
   await warning.getByRole('button', { name: 'Keep editing', exact: true }).click();
   await expect(warning).toBeHidden();
@@ -902,7 +934,9 @@ test('sign-out fences a late Save response and returns home', async ({ page }) =
   await page.getByRole('button', { name: 'Save to account' }).click();
   await heldSave.observed;
   await clickWorkspaceSignOut(page);
-  await expect(page.getByRole('alertdialog', { name: /Leave this account/i })).toBeVisible();
+  await expect(
+    page.getByRole('alertdialog', { name: /Are you sure you want to sign out/i }),
+  ).toBeVisible();
   await page.getByRole('button', { name: /Discard and sign out/i }).click();
   heldSave.respond();
   await expect(page).toHaveURL(/\/app$/);
@@ -1049,7 +1083,7 @@ test('account dashboard and sign-out dialog are accessible with keyboard focus r
   await signOut.focus();
   await expect(signOut).toBeFocused();
   await page.keyboard.press('Enter');
-  const dialog = page.getByRole('alertdialog', { name: /Leave this account/i });
+  const dialog = page.getByRole('alertdialog', { name: /Are you sure you want to sign out/i });
   await expect(dialog).toBeVisible();
   const keepEditing = dialog.getByRole('button', { name: 'Keep editing' });
   await expect(keepEditing).toBeFocused();
@@ -1107,7 +1141,7 @@ test('an unfinished account builder draft warns before navigation and stays in m
   await page.getByRole('link', { name: 'Back to keiko library' }).click();
   await expect(page).toHaveURL(/\/app\/account\/drills\/new$/);
   await clickWorkspaceSignOut(page);
-  const warning = page.getByRole('alertdialog', { name: /Leave this account/i });
+  const warning = page.getByRole('alertdialog', { name: /Are you sure you want to sign out/i });
   await expect(warning).toBeVisible();
   await warning.getByRole('button', { name: 'Keep editing', exact: true }).click();
   await expect(page.getByLabel('Session name')).toHaveValue('Unsubmitted account menu');

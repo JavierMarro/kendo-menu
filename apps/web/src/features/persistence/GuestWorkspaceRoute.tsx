@@ -197,6 +197,14 @@ function GuestWorkspaceContent() {
         userContent={
           <div className="workspace-user-content">
             <p className="workspace-user-eyebrow">Guest mode</p>
+            <div
+              className={persistence.writeFailed ? 'session-status is-error' : 'session-status'}
+              role="status"
+              aria-label={getPersistenceStatusLabel(persistence)}
+            >
+              <span className="status-pulse" aria-hidden="true" />
+              <span className="session-status-label">{getPersistenceStatusLabel(persistence)}</span>
+            </div>
             <p>Your menus stay on this device.</p>
             <Link
               className="primary-button"
@@ -261,14 +269,6 @@ function GuestWorkspaceContent() {
           ) : null}
         </section>
         <div hidden={wantsAccount} inert={wantsAccount} aria-hidden={wantsAccount}>
-          <div
-            className={persistence.writeFailed ? 'session-status is-error' : 'session-status'}
-            role="status"
-            aria-label={getPersistenceStatusLabel(persistence)}
-          >
-            <span className="status-pulse" aria-hidden="true" />
-            <span className="session-status-label">{getPersistenceStatusLabel(persistence)}</span>
-          </div>
           <Outlet />
         </div>
       </WorkspaceShell>

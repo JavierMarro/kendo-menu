@@ -193,9 +193,11 @@ describe('dashboard activity notes', () => {
       const dialog = await openDashboardMenu(user, 'International dojo menu');
       const saveButton = within(dialog).getByRole('button', { name: 'Save your changes' });
       expect(saveButton).toHaveAttribute('type', 'submit');
-      expect(saveButton).toHaveAccessibleDescription(
-        'Changes also save automatically when you leave a field.',
-      );
+      const removeButton = within(dialog).getByRole('button', { name: 'Remove' });
+      expect(removeButton).toHaveClass('dashboard-card-remove');
+      expect(removeButton.parentElement).toHaveClass('dashboard-card-actions');
+      expect(removeButton.parentElement?.firstElementChild).toContainElement(saveButton);
+      expect(removeButton.parentElement?.lastElementChild).toBe(removeButton);
 
       const warmUp = getActivity(WARM_UP_ID);
       const quantity = within(warmUp).getByLabelText('Minutes for Warm-up');
@@ -206,6 +208,7 @@ describe('dashboard activity notes', () => {
         [WARM_UP_ID]: { minutes: 14 },
       });
       expect(within(dialog).getByText('Changes saved on this device.')).toBeVisible();
+      expect(saveButton).toHaveAccessibleDescription('Changes saved on this device.');
 
       await user.click(
         within(warmUp).getByRole('button', {

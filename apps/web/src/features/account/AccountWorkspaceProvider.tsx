@@ -20,6 +20,7 @@ import { useManagedAuth } from '../../lib/managed-auth-context';
 import { TrainingStoreProvider } from '../../lib/training-store-provider';
 import { createAccountDraftController } from '../../lib/account-draft';
 import { AccountSetupContext } from './AccountSetupPage';
+import { AccountSaveStatus, AccountUnsavedWarning } from './AccountUnsavedWarning';
 import { WorkspaceContextProvider, type WorkspaceContextValue } from '../../lib/workspace-context';
 import type { ManagedAccountInitialization, ManagedAccountRecord } from '../../lib/account-api';
 
@@ -462,9 +463,16 @@ function LoadedAccountWorkspaceView({
     <div className="workspace-user-content account-session-controls" aria-label="Account session">
       <p className="workspace-user-eyebrow">Account</p>
       <p>{account.email ? `Signed in as ${account.email}` : 'Signed in'}</p>
+      <AccountSaveStatus
+        isAuthoritative={snapshot.status === 'ready' && snapshot.store !== null}
+        isDirty={snapshot.dirty}
+        hasUncommittedEditorDraft={editorDraftDirty}
+        hasUncommittedBuilderDraft={builderDirty}
+        saveState={snapshot.saveState}
+      />
       <button
         ref={signOutTriggerRef}
-        className="text-button"
+        className="primary-button"
         type="button"
         onClick={() => {
           if (warnBeforeLeaving) setDiscardPrompt(true);
@@ -478,12 +486,6 @@ function LoadedAccountWorkspaceView({
           KendoMenu could not confirm sign-out. Retry after checking the connection.
         </span>
       ) : null}
-      <div className="workspace-delete-account">
-        <button type="button" disabled aria-describedby="account-delete-status">
-          Delete account
-        </button>
-        <span id="account-delete-status">Coming soon</span>
-      </div>
     </div>
   );
 
@@ -649,26 +651,13 @@ function LoadedAccountWorkspaceView({
               </aside>
             ) : null}
             {!isIdentityHidden &&
-            (snapshot.dirty || editorDraftDirty || snapshot.saveState === 'uncertain') ? (
-              <aside className="persistence-warning" role="status">
-                <p>
-                  {snapshot.saveState === 'uncertain'
-                    ? 'Save status is uncertain. Retry the same save to confirm it.'
-                    : editorDraftDirty
-                      ? 'An unfinished quantity field is held in this tab and is not part of the account save yet. Complete or clear it before leaving; reloading or closing this tab can lose it.'
-                      : 'Account changes are held in memory until you save. Reloading or closing this tab can lose unsaved changes.'}
-                </p>
-                {!editorDraftDirty ? (
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    onClick={downloadAccountDraft}
-                    disabled={editorDraftDirty}
-                  >
-                    Download draft
-                  </button>
-                ) : null}
-              </aside>
+            location.pathname.replace(/\/+$/, '') !== '/app/account/dashboard' ? (
+              <AccountUnsavedWarning
+                isDirty={snapshot.dirty}
+                hasUncommittedEditorDraft={editorDraftDirty}
+                saveState={snapshot.saveState}
+                onDownload={downloadAccountDraft}
+              />
             ) : null}
             <div key={workspaceStoreGeneration} hidden={!isVisible} inert={!isVisible}>
               {workspaceStore === null ? null : (
@@ -690,11 +679,10 @@ function LoadedAccountWorkspaceView({
                 }}
                 onClose={() => setDiscardPrompt(false)}
               >
-                <h2 id="account-exit-title">Leave this account?</h2>
+                <h2 id="account-exit-title">Are you sure you want to sign out?</h2>
                 <p>
-                  Unsaved account changes, including any unfinished quantity field, exist only in
-                  this tab’s memory. Sign-out discards them. Reloading or closing this tab can also
-                  lose them.
+                  You have changes you haven’t saved to your account. Signing out will lose those
+                  changes. Save them before signing out if you want to keep them.
                 </p>
                 <div className="dialog-actions">
                   <button

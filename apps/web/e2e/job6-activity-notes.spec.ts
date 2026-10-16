@@ -35,6 +35,9 @@ async function addInternationalDojoToDashboard(page: Page): Promise<void> {
   await dialog.getByRole('button', { name: 'Add to dashboard' }).click();
   await dialog.getByRole('link', { name: 'View dashboard' }).click();
   await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
+  await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+  const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+  if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
 }
 
 function firstDashboardCard(page: Page): Locator {
@@ -146,6 +149,13 @@ test.describe('Job 6 dashboard activity notes', () => {
     const explicitSave = dashboardDialog.getByRole('button', { name: 'Save your changes' });
     await explicitSave.click();
     await expect(dashboardDialog.getByText('Changes saved on this device.')).toBeVisible();
+    const [saveBox, removeBox] = await Promise.all([
+      explicitSave.boundingBox(),
+      dashboardDialog.getByRole('button', { name: 'Remove', exact: true }).boundingBox(),
+    ]);
+    if (saveBox === null || removeBox === null) throw new Error('Expected menu action buttons.');
+    expect(Math.abs(saveBox.y - removeBox.y)).toBeLessThanOrEqual(1);
+    expect(saveBox.x + saveBox.width).toBeLessThan(removeBox.x);
 
     await quantity.fill('14');
     await explicitSave.click();

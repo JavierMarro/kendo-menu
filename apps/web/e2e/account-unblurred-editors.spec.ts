@@ -6,6 +6,8 @@ import { clickWorkspaceSignOut } from './workspace-test-helpers';
 async function addAccountMenu(page: Page): Promise<void> {
   await page.goto('/app/account/dashboard');
   await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+  const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+  if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
   await page
     .getByRole('main')
     .getByRole('link', { name: /Browse Keiko library/i })
@@ -43,9 +45,10 @@ test('unfinished quantity input warns on sign-out even with a saved account dash
     .getByRole('button', { name: /^Close / })
     .click();
   await clickWorkspaceSignOut(page);
-  const warning = page.getByRole('alertdialog', { name: /Leave this account/i });
+  const warning = page.getByRole('alertdialog', { name: /Are you sure you want to sign out/i });
   await expect(warning).toBeVisible();
   await warning.getByRole('button', { name: 'Keep editing', exact: true }).click();
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'View more' }).first().click();
   await expect(page.getByLabel('Repetitions for Kirikaeshi')).toHaveValue('501');
   expect(harness.apiCalls.filter((call) => call.method === 'PUT')).toHaveLength(1);

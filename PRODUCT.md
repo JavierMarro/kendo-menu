@@ -33,7 +33,8 @@ activity quantities and notes can be adapted without mutating the built-in libra
 
 ## Capabilities and Constraints
 
-- The library contains exactly 11 curated built-in training sessions. Custom training sessions
+- The library displays 10 curated built-in training sessions. The canonical catalogue retains the
+  hidden Official ZNKR/AJKF menu so existing saved sessions still resolve. Custom training sessions
   appear on the dashboard only.
 - Practitioners can add sessions to the dashboard, adjust per-activity quantities, attach dashboard
   and activity notes, and remove dashboard entries.
@@ -59,14 +60,16 @@ activity quantities and notes can be adapted without mutating the built-in libra
 ## Information and workspace navigation
 
 The public landing page explains KendoMenu; its primary navigation links to How it works,
-Keiko menus (the curated-library overview), and FAQ sections. Try without an account opens the
+Library info (the curated-library overview), and FAQ sections. Try without an account opens the
 guest dashboard. Sign up opens a dedicated Google-only authentication page headed “Enter the dojo”.
 Email/password authentication is an informational future option, not an available form.
+The landing and information pages retain the site footer; sign-in and workspace pages omit it.
 
 Guest and account workspaces share navigation for Dashboard, Library and User: a fixed left
 sidebar on desktop and a fixed bottom bar on mobile. The KendoMenu brand returns to the landing
-page. User offers guests sign-up and verified account users their existing sign-out action;
-account deletion is visibly unavailable with “Coming soon”. Existing draft-exit warnings apply.
+page. User shows guests their device-save status and sign-up, and verified account users their
+cloud-save status and sign-out action. Cloud status distinguishes confirmed saves from unsaved or
+uncertain changes with text and colour. Account deletion is not offered in the UI. Existing draft-exit warnings apply.
 The new layouts retain KendoMenu’s navy/gold palette, typography and existing dashboard content.
 Google continues through the validated full-page redirect; navigation changes do not alter
 authentication, account saves, guest persistence or one-time guest-copy decisions.
@@ -75,7 +78,8 @@ authentication, account saves, guest persistence or one-time guest-copy decision
 
 [Migration C](docs/MANAGED_ACCOUNT_WEB.md) separates `/app/guest/*` and `/app/account/*` routes,
 reusing the dashboard, library and custom-session builder. The landing offers guest entry and a
-link to the authentication page; each workspace has a dashboard shortcut. Guest use stays local and works
+link to the authentication page when signed out, or a dashboard link for verified account users;
+each workspace has a dashboard shortcut. Guest use stays local and works
 without authentication availability. Verified signed-in visitors entering guest routes go to the
 matching account route. Account routes require verified identity; unresolved identity hides account
 content and does not authorize analytics. Verified email is shown when supplied.
@@ -83,7 +87,8 @@ content and does not authorize analytics. Verified email is shown when supplied.
 Account loading validates B's bearer-authenticated complete response before creating a memory-only
 store. An empty account stays empty. Editing requires an online available service. **Save to
 account** submits a frozen whole dashboard with the expected account, revision, catalogue and stable
-request ID. Edits made during Save remain dirty after acknowledgement. An uncertain Save retries
+request ID. “Save your changes” in expanded account menu details uses this same whole-dashboard save;
+guest menu saves remain local. Edits made during Save remain dirty after acknowledgement. An uncertain Save retries
 its identical request; a revision conflict preserves the draft and offers download or explicit
 reload. Failures retain this tab's draft without claiming local durability. Reloading or closing
 can lose unsaved work; intentional discard is warned and browser leave warnings are best effort.

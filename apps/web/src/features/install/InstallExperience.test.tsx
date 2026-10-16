@@ -343,7 +343,7 @@ describe('install experience', () => {
     ).not.toBeInTheDocument();
 
     view.unmount();
-    renderApp(createTestStore(), { initialEntries: ['/app/dashboard'] });
+    renderApp(createTestStore(), { initialEntries: ['/app'] });
     window.dispatchEvent(createBeforeInstallPromptEvent());
 
     await waitFor(() =>

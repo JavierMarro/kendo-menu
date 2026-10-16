@@ -97,7 +97,12 @@ test.describe('local persistence recovery', () => {
     ).toBeVisible();
     await page.getByRole('button', { name: 'Continue without saving' }).click();
     await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
-    await expect(page.getByRole('status', { name: 'Session only' })).toBeVisible();
+    await page.getByRole('button', { name: 'User', exact: true }).click();
+    await expect(
+      page
+        .getByRole('region', { name: 'User options' })
+        .getByRole('status', { name: 'Session only' }),
+    ).toBeVisible();
   });
 
   test('shows a warning when a local write fails', async ({ page }) => {
@@ -121,7 +126,13 @@ test.describe('local persistence recovery', () => {
     await seniorHighSchoolCard.getByRole('link', { name: 'View session' }).click();
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
-    await expect(page.getByRole('status', { name: 'Changes are not being saved' })).toBeVisible();
+    await page.getByRole('button', { name: 'User', exact: true }).click();
+    await expect(
+      page
+        .getByRole('region', { name: 'User options' })
+        .getByRole('status', { name: 'Changes are not being saved' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
 
     const dashboardCard = page
       .locator('.dashboard-card--compact')
@@ -142,7 +153,7 @@ test.describe('local persistence recovery', () => {
     await expect(page.getByText('Not saved to this device.')).toBeVisible();
     await expect(
       page.getByRole('status', { name: 'Changes are not being saved', includeHidden: true }),
-    ).toBeVisible();
+    ).toHaveCount(1);
     const notes = dashboardDialog.getByLabel('Practice notes');
     await notes.fill('Quota test note.');
     await notes.blur();

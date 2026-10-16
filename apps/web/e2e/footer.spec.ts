@@ -67,7 +67,7 @@ function expectAaTextContrast(state: Awaited<ReturnType<typeof getInstallActionV
 async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): Promise<void> {
   await expect(footer.getByRole('link', { name: 'KendoMenu home' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'How it works' })).toBeVisible();
-  await expect(footer.getByRole('link', { name: 'Keiko menus' })).toBeVisible();
+  await expect(footer.getByRole('link', { name: 'Library info' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'Dashboard' })).toHaveCount(0);
   await expect(footer.getByRole('link', { name: 'FAQ' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'Sources' })).toBeVisible();
@@ -123,7 +123,7 @@ async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): P
 test.describe('responsive site footer', () => {
   test('uses a three-column layout at 1440px without horizontal overflow', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/app/guest/dashboard');
+    await page.goto('/app');
     await dismissCookieNotice(page);
 
     const footer = page.getByRole('contentinfo', { name: 'Site footer' });
@@ -163,7 +163,7 @@ test.describe('responsive site footer', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.goto('/app/guest/dashboard');
+    await page.goto('/app');
     await dismissCookieNotice(page);
 
     const footer = page.getByRole('contentinfo', { name: 'Site footer' });

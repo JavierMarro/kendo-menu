@@ -208,7 +208,7 @@ test.describe('production PWA shell', () => {
           await expect(
             page.getByRole('heading', { name: 'Keiko library', exact: true }),
           ).toBeVisible();
-          await expect(page.locator('.library-card')).toHaveCount(11);
+          await expect(page.locator('.library-card')).toHaveCount(10);
         }
 
         await expect(

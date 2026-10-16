@@ -26,6 +26,11 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-10-16 — Edge-to-edge sign-in artwork](./2026-10-16-edge-to-edge-sign-in.md)
+- [2026-10-16 — Sign-in proportions correction](./2026-10-16-sign-in-proportions.md)
+- [2026-10-16 — Final responsive polish](./2026-10-16-final-responsive-polish.md)
+- [2026-10-16 — Signed-in UI polish](./2026-10-16-signed-in-ui-polish.md)
+- [2026-10-16 — UI refinements](./2026-10-16-ui-refinements.md)
 - [2026-10-15 — UI journey](./2026-10-15-ui-journey.md)
 - [2026-10-14 — Vercel API routing](./2026-10-14-vercel-api-routing.md)
 - [2026-10-14 — Preview account cookies](./2026-10-14-preview-account-cookies.md)
