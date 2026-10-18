@@ -17,6 +17,7 @@ import { useManagedAuth } from '../../lib/managed-auth-context';
 import { getPersistenceStatusLabel, usePersistenceStatus } from './persistence-context';
 
 function AccountDestination(pathname: string): string {
+  if (/^\/app\/guest\/mitori-room\/?$/u.test(pathname)) return '/app/account/mitori-room';
   if (pathname.endsWith('/drills/new')) return '/app/account/drills/new';
   const detail = pathname.match(/^\/app\/guest\/library\/([^/]+)$/u);
   if (detail !== null) return `/app/account/library/${encodeURIComponent(detail[1] ?? '')}`;

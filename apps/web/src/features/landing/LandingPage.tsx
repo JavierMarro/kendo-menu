@@ -35,7 +35,7 @@ const FAQ_ITEMS: readonly FaqItem[] = [
     id: 'is-kendomenu-free',
     question: 'Is KendoMenu free?',
     answer:
-      'Yes. KendoMenu is 100% free to use as a guest or with an account. There are no adverts or premium features, not now nor in the future.',
+      'Yes. KendoMenu is 100% free to use as a guest or with an account, with no premium features now or in the future. We do not place adverts on the site, but embedded YouTube videos may show adverts.',
   },
   {
     id: 'all-experience-levels',

@@ -52,8 +52,8 @@ test('sign-in artwork keeps the brand top-left and the heading middle-left', asy
   expect(layout.background).toContain('/assets/kendomenu-sign-in-1600.jpeg');
   expect(layout.fits).toBe(true);
   if (testInfo.project.name === 'mobile-chrome') {
-    expect(layout.titleFontSize).toBeGreaterThanOrEqual(40);
-    expect(layout.titleFontSize).toBeLessThanOrEqual(56);
+    expect(layout.titleFontSize).toBeGreaterThanOrEqual(46);
+    expect(layout.titleFontSize).toBeLessThanOrEqual(64);
     expect(layout.storyProportion).toBeCloseTo(0.5, 1);
     expect(layout.bottomSpace).toBeLessThanOrEqual(17);
   }
@@ -102,7 +102,7 @@ async function openLandingNavigation(page: Page) {
   return page.getByRole('navigation', { name: 'Landing navigation' });
 }
 
-test('landing navigation stays informational and the sign-in page is Google-only', async ({
+test('landing navigation offers Get started and the sign-in page is Google-only', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -110,13 +110,15 @@ test('landing navigation stays informational and the sign-in page is Google-only
 
   const landingNavigation = await openLandingNavigation(page);
   const links = landingNavigation.getByRole('link');
-  await expect(links).toHaveCount(3);
+  await expect(links).toHaveCount(4);
   await expect(links.nth(0)).toHaveText('How it works');
   await expect(links.nth(0)).toHaveAttribute('href', '/app#how-it-works-title');
   await expect(links.nth(1)).toHaveText('Library info');
   await expect(links.nth(1)).toHaveAttribute('href', '/app#library-story-title');
   await expect(links.nth(2)).toHaveText('FAQ');
   await expect(links.nth(2)).toHaveAttribute('href', '/app#faq-title');
+  await expect(links.nth(3)).toHaveText('Get started');
+  await expect(links.nth(3)).toHaveAttribute('href', '/app/sign-in');
   await expect(page.getByRole('navigation', { name: 'Workspace navigation' })).toHaveCount(0);
   await expect(page.getByRole('contentinfo', { name: 'Site footer' })).toBeVisible();
 
@@ -124,9 +126,9 @@ test('landing navigation stays informational and the sign-in page is Google-only
   await expect(page).toHaveURL(/\/app#library-story-title$/);
   await expect(page.locator('#library-story-title')).toBeInViewport();
 
-  await page.getByRole('link', { name: 'Sign up here', exact: true }).click();
+  await links.nth(3).click();
   await expect(page).toHaveURL(/\/app\/sign-in$/);
-  await expect(page.getByRole('heading', { name: 'Enter the dojo', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Prepare for keiko', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'KendoMenu', exact: true })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Sign-in options', exact: true })).toBeVisible();
   await expect(page.getByText(ALTERNATIVE_SIGN_IN_MESSAGE, { exact: true })).toBeVisible();
@@ -148,7 +150,7 @@ test('landing navigation stays informational and the sign-in page is Google-only
 
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto('/app/sign-in');
-  await expect(page.getByRole('heading', { name: 'Enter the dojo', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Prepare for keiko', exact: true })).toBeVisible();
   await expect(page.locator('.auth-story .brand-name')).toHaveText('KendoMenu');
   await expect(page.locator('.auth-story .brand-name')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
@@ -198,7 +200,7 @@ for (const cancellationEvent of ['pageshow', 'kendomenu:sign-in-cancelled'] as c
     });
     await page.goto('/app/sign-in');
     const continueButton = page
-      .getByRole('region', { name: 'KendoMenu', exact: true })
+      .getByRole('region', { name: 'Sign-in options', exact: true })
       .getByRole('button');
     await continueButton.click();
     await observed;
@@ -298,7 +300,7 @@ test('guest workspace navigation works on desktop and mobile and preserves conte
   expect(mobileMetrics.bottom).toBeLessThanOrEqual(812);
   expect(mobileMetrics.top).toBeGreaterThan(812 - 140);
   expect(mobileMetrics.scrollWidth).toBeLessThanOrEqual(375);
-  expect(mobileMetrics.labels).toHaveLength(3);
+  expect(mobileMetrics.labels).toHaveLength(4);
   expect(mobileMetrics.labels[0]?.left).toBeLessThan(mobileMetrics.labels[1]?.left ?? 0);
   expect(mobileMetrics.labels[1]?.left).toBeLessThan(mobileMetrics.labels[2]?.left ?? 0);
 

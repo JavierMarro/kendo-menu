@@ -3,7 +3,7 @@
  * the active workspace destination, while the mobile menu closes on Escape and route changes.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 
 import { BrandLockup } from './BrandLockup';
 import { PrimaryNavigationLinks } from './PrimaryNavigation';
@@ -12,6 +12,7 @@ import { SiteFooter } from './SiteFooter';
 export function AppShell() {
   const location = useLocation();
   const [openLocationKey, setOpenLocationKey] = useState<string | null>(null);
+  const headerRef = useRef<HTMLElement>(null);
   const menuToggleRef = useRef<HTMLButtonElement>(null);
   const isMenuOpen = openLocationKey === location.key;
   const isLandingPage = location.pathname === '/app';
@@ -23,8 +24,19 @@ export function AppShell() {
       setOpenLocationKey(null);
       menuToggleRef.current?.focus();
     };
+    const handleOutsideInteraction = (event: Event) => {
+      if (event.target instanceof Node && !headerRef.current?.contains(event.target)) {
+        setOpenLocationKey(null);
+      }
+    };
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('pointerdown', handleOutsideInteraction);
+    document.addEventListener('focusin', handleOutsideInteraction);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('pointerdown', handleOutsideInteraction);
+      document.removeEventListener('focusin', handleOutsideInteraction);
+    };
   }, [isMenuOpen]);
 
   const closeMenu = () => setOpenLocationKey(null);
@@ -34,7 +46,7 @@ export function AppShell() {
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
-      <header className="top-bar">
+      <header ref={headerRef} className="top-bar">
         <BrandLockup onClick={closeMenu} />
         <button
           ref={menuToggleRef}
@@ -57,6 +69,9 @@ export function AppShell() {
           aria-label="Landing navigation"
         >
           <PrimaryNavigationLinks linkClassName="nav-item" onNavigate={closeMenu} />
+          <Link className="nav-item nav-item--get-started" to="/app/sign-in" onClick={closeMenu}>
+            <span className="nav-label">Get started</span>
+          </Link>
         </nav>
       </header>
 

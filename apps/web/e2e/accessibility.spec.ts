@@ -242,10 +242,14 @@ test.describe('accessibility and responsive layout', () => {
     await expectNoBlockingAxeViolations(page);
   });
 
-  test('keeps all landing navigation links in one row with intact labels', async ({ page }) => {
+  test('spaces all four landing navigation links without crowding or overflow', async ({
+    page,
+  }) => {
     for (const width of [320, 375, 393, 800, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/app');
+      const header = page.locator('.top-bar');
+      const headerBeforeOpening = await header.boundingBox();
       if (width <= 960) {
         await page.getByRole('button', { name: 'Open navigation' }).click();
         await expect(page.getByRole('navigation', { name: 'Landing navigation' })).toBeVisible();
@@ -255,7 +259,7 @@ test.describe('accessibility and responsive layout', () => {
 
       const navigation = page.getByRole('navigation', { name: 'Landing navigation' });
       const links = navigation.getByRole('link');
-      await expect(links).toHaveCount(3);
+      await expect(links).toHaveCount(4);
       await expect(page.locator('.nav-count')).toHaveCount(0);
 
       const navMetrics = await navigation.evaluate((element) => {
@@ -263,7 +267,7 @@ test.describe('accessibility and responsive layout', () => {
         const linkElements = [...element.querySelectorAll<HTMLElement>(':scope > .nav-item')];
         const linkRects = linkElements.map((link) => link.getBoundingClientRect());
         const labels = [...element.querySelectorAll<HTMLElement>('.nav-label')];
-        if (labels.length !== 3 || linkRects.length !== 3) {
+        if (labels.length !== 4 || linkRects.length !== 4) {
           throw new Error('The landing navigation label structure is incomplete.');
         }
 
@@ -292,10 +296,22 @@ test.describe('accessibility and responsive layout', () => {
             Math.max(...linkRects.map(({ top }) => top)) -
               Math.min(...linkRects.map(({ top }) => top)) <=
             1,
-          linksDoNotOverlap: linkRects.slice(1).every(({ left }, index) => {
-            const previousRect = linkRects[index];
-            return previousRect !== undefined && left >= previousRect.right - 1;
+          linksDoNotOverlap: linkRects.every((rect, index) =>
+            linkRects
+              .slice(index + 1)
+              .every(
+                (other) =>
+                  rect.right <= other.left + 1 ||
+                  other.right <= rect.left + 1 ||
+                  rect.bottom <= other.top + 1 ||
+                  other.bottom <= rect.top + 1,
+              ),
+          ),
+          linksAreStacked: linkRects.every((rect, index) => {
+            const previous = linkRects[index - 1];
+            return previous === undefined || rect.top >= previous.bottom - 1;
           }),
+          position: getComputedStyle(element).position,
           touchTargetsAreUsable: linkRects.every(
             ({ width, height }) => width >= 24 && height >= 44,
           ),
@@ -309,15 +325,28 @@ test.describe('accessibility and responsive layout', () => {
       ).toBeLessThanOrEqual(navMetrics.navigationClientWidth);
       expect(navMetrics.overflowingLink, `navigation link overflow at ${width}px`).toBeUndefined();
       expect(navMetrics.linksInsideNavigation, `navigation bounds at ${width}px`).toBe(true);
-      expect(navMetrics.linksShareRow, `navigation row at ${width}px`).toBe(true);
-      expect(navMetrics.linksDoNotOverlap, `navigation link overlap at ${width}px`).toBe(true);
-      expect(navMetrics.touchTargetsAreUsable, `navigation touch targets at ${width}px`).toBe(true);
-      expect(navMetrics.labels).toEqual(['How it works', 'Library info', 'FAQ']);
-      expect(navMetrics.labelLineCounts).toEqual([1, 1, 1]);
-      expect(navMetrics.labelWhiteSpace).toEqual(['nowrap', 'nowrap', 'nowrap']);
-
+      expect(navMetrics.linksShareRow, `navigation row at ${width}px`).toBe(width > 960);
+      expect(navMetrics.linksAreStacked, `navigation column at ${width}px`).toBe(width <= 960);
       const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(scrollWidth, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(width);
+      if (width <= 960) {
+        expect(navMetrics.position).toBe('absolute');
+        expect(
+          await header.boundingBox(),
+          `opening navigation shifts the header at ${width}px`,
+        ).toEqual(headerBeforeOpening);
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('button', { name: 'Open navigation' })).toBeFocused();
+        await expect(navigation).toBeHidden();
+        await page.getByRole('button', { name: 'Open navigation' }).click();
+        await navigation.getByRole('link', { name: 'Get started' }).click();
+        await expect(page).toHaveURL(/\/app\/sign-in$/);
+      }
+      expect(navMetrics.linksDoNotOverlap, `navigation link overlap at ${width}px`).toBe(true);
+      expect(navMetrics.touchTargetsAreUsable, `navigation touch targets at ${width}px`).toBe(true);
+      expect(navMetrics.labels).toEqual(['How it works', 'Library info', 'FAQ', 'Get started']);
+      expect(navMetrics.labelLineCounts).toEqual([1, 1, 1, 1]);
+      expect(navMetrics.labelWhiteSpace).toEqual(['nowrap', 'nowrap', 'nowrap', 'nowrap']);
 
       await page.goto('/app/sources');
       const sourcesScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);

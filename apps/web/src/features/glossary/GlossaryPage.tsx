@@ -1,5 +1,5 @@
 import { useState, type ReactElement } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 import { GLOSSARY_ENTRIES, GLOSSARY_GROUP_TERMS, type GlossaryEntry } from './glossary-data';
 import { filterGlossary, groupGlossary } from './glossary-search';
@@ -23,7 +23,10 @@ function Definitions({ entries }: { readonly entries: readonly GlossaryEntry[] }
   );
 }
 
-export function GlossaryPage(): ReactElement {
+export function GlossaryPage({ embedded = false }: { readonly embedded?: boolean }): ReactElement {
+  const PageHeading = embedded ? 'h2' : 'h1';
+  const SectionHeading = embedded ? 'h3' : 'h2';
+  const location = useLocation();
   const [query, setQuery] = useState('');
   const entries = filterGlossary(GLOSSARY_ENTRIES, query);
   const groupTerms = filterGlossary(GLOSSARY_GROUP_TERMS, query);
@@ -31,12 +34,15 @@ export function GlossaryPage(): ReactElement {
   const count = entries.length + groupTerms.length;
 
   return (
-    <article className="glossary-page" aria-labelledby="glossary-title">
+    <article
+      className={`glossary-page${embedded ? ' glossary-page--embedded' : ''}`}
+      aria-labelledby="glossary-title"
+    >
       <header className="page-header">
         <div>
-          <h1 id="glossary-title">Glossary</h1>
+          <PageHeading id="glossary-title">Glossary</PageHeading>
           <p className="page-intro">
-            A quick refresher on the strikes, footwork and practice formats in KendoMenu’s 11 dojo
+            A quick refresher on the strikes, footwork and practice formats in KendoMenu’s 10 dojo
             menus.
           </p>
           <p className="glossary-context">
@@ -80,9 +86,9 @@ export function GlossaryPage(): ReactElement {
       ) : null}
       {groups.map(({ letter, entries: letterEntries }) => (
         <section className="glossary-section" key={letter} aria-labelledby={`glossary-${letter}`}>
-          <h2 id={`glossary-${letter}`} tabIndex={-1}>
+          <SectionHeading id={`glossary-${letter}`} tabIndex={-1}>
             {letter}
-          </h2>
+          </SectionHeading>
           <Definitions entries={letterEntries} />
         </section>
       ))}
@@ -92,7 +98,7 @@ export function GlossaryPage(): ReactElement {
           aria-labelledby="glossary-groups-title"
         >
           <div>
-            <h2 id="glossary-groups-title">Practice group labels</h2>
+            <SectionHeading id="glossary-groups-title">Practice group labels</SectionHeading>
             <p>Umbrella terms used to organise named exercises in the menus.</p>
           </div>
           <Definitions entries={groupTerms} />
@@ -101,7 +107,19 @@ export function GlossaryPage(): ReactElement {
       <section className="glossary-references" aria-labelledby="glossary-references-title">
         <p>
           For the articles and filmed sessions behind the menus, visit{' '}
-          <Link to="/app/sources">Sources</Link>.
+          <Link
+            to={
+              embedded
+                ? {
+                    pathname: location.pathname,
+                    search: '?tab=resources',
+                  }
+                : '/app/sources'
+            }
+          >
+            {embedded ? 'Resources' : 'Sources'}
+          </Link>
+          .
         </p>
       </section>
     </article>

@@ -64,7 +64,7 @@ export function SignInPage(): ReactElement {
       </a>
       <section className="auth-story" aria-labelledby="auth-story-title">
         <BrandLockup className="auth-brand-lockup" />
-        <h1 id="auth-story-title">Enter the dojo</h1>
+        <h1 id="auth-story-title">Prepare for keiko</h1>
       </section>
       <section id="auth-panel" className="auth-panel-region" aria-label="Sign-in options">
         <div className="auth-panel">

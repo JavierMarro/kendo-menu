@@ -13,8 +13,8 @@ export function CookieNotice({ onDismiss }: CookieNoticeProps) {
   return (
     <aside className="cookie-notice" aria-label="Cookie notice">
       <p className="cookie-notice-copy">
-        If you sign in with Google, essential cookies maintain your session. KendoMenu does not use
-        tracking cookies. We use GoatCounter without cookies to improve the service.{' '}
+        If you sign in with Google, essential cookies maintain your session. Analytics use no
+        cookies. Videos load YouTube only when opened and may show adverts or use cookies.{' '}
         <Link to="/cookies">More information</Link>.
       </p>
       <button className="secondary-button cookie-notice-dismiss" type="button" onClick={onDismiss}>

@@ -188,7 +188,7 @@ test('Continue as a guest opens the guest dashboard while account routes stay se
   await expect(page.getByRole('heading', { name: 'Create a training session' })).toBeVisible();
   await page.goto('/app/account/dashboard');
   await expect(page).toHaveURL(/\/app\/sign-in$/);
-  await expect(page.getByRole('heading', { name: 'Enter the dojo', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Prepare for keiko', exact: true })).toBeVisible();
   expect(harness.apiCalls).toEqual([]);
 });
 
@@ -942,7 +942,7 @@ test('sign-out fences a late Save response and returns home', async ({ page }) =
   await expect(page).toHaveURL(/\/app$/);
   await page.goto('/app/account/dashboard');
   await expect(page).toHaveURL(/\/app\/sign-in$/);
-  await expect(page.getByRole('heading', { name: 'Enter the dojo', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Prepare for keiko', exact: true })).toBeVisible();
   expectCredentialFreeAccountTransport(harness);
 });
 

@@ -298,7 +298,7 @@ describe('KendoMenu application flows', () => {
     await user.click(screen.getByRole('button', { name: 'Is KendoMenu free?' }));
     const freeAnswer = screen.getByRole('region', { name: 'Is KendoMenu free?' });
     expect(freeAnswer).toHaveTextContent(
-      'Yes. KendoMenu is 100% free to use as a guest or with an account. There are no adverts or premium features, not now nor in the future.',
+      'Yes. KendoMenu is 100% free to use as a guest or with an account, with no premium features now or in the future. We do not place adverts on the site, but embedded YouTube videos may show adverts.',
     );
     await user.click(
       screen.getByRole('button', {
@@ -599,7 +599,7 @@ describe('KendoMenu application flows', () => {
     }
   });
 
-  it('keeps the landing navigation limited to the three informational anchors', () => {
+  it('shows the three informational anchors followed by Get started', () => {
     renderApp(createTestStore(), { initialEntries: ['/app'] });
 
     const navigationLinks = within(
@@ -609,6 +609,7 @@ describe('KendoMenu application flows', () => {
       '/app#how-it-works-title',
       '/app#library-story-title',
       '/app#faq-title',
+      '/app/sign-in',
     ]);
     expect(
       within(screen.getByRole('navigation', { name: 'Landing navigation' })).getByRole('link', {
@@ -641,9 +642,21 @@ describe('KendoMenu application flows', () => {
     );
     expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveFocus();
 
+    await user.click(menuToggle);
+    await user.click(screen.getByRole('heading', { name: 'Plan the keiko you need today' }));
+    expect(menuToggle).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(menuToggle);
+    for (let step = 0; step < 5; step += 1) await user.tab();
+    expect(menuToggle).toHaveAttribute('aria-expanded', 'false');
+
     await user.click(screen.getByRole('button', { name: 'Open navigation' }));
     const landingNavigation = screen.getByRole('navigation', { name: 'Landing navigation' });
-    expect(within(landingNavigation).getAllByRole('link')).toHaveLength(3);
+    expect(within(landingNavigation).getAllByRole('link')).toHaveLength(4);
+    expect(within(landingNavigation).getByRole('link', { name: 'Get started' })).toHaveAttribute(
+      'href',
+      '/app/sign-in',
+    );
     expect(within(landingNavigation).queryByRole('link', { name: 'Dashboard' })).toBeNull();
     await user.click(screen.getByRole('link', { name: 'Try without an account' }));
 

@@ -13,7 +13,7 @@ interface WorkspaceShellProps {
   readonly userContent: ReactNode;
 }
 
-function WorkspaceIcon({ name }: { readonly name: 'dashboard' | 'library' | 'user' }) {
+function WorkspaceIcon({ name }: { readonly name: 'dashboard' | 'library' | 'mitori' | 'user' }) {
   if (name === 'dashboard') {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -29,6 +29,16 @@ function WorkspaceIcon({ name }: { readonly name: 'dashboard' | 'library' | 'use
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path d="M4 5.5h5.5A2.5 2.5 0 0 1 12 8v12a3.5 3.5 0 0 0-3.5-2.5H4z" />
         <path d="M20 5.5h-5.5A2.5 2.5 0 0 0 12 8v12a3.5 3.5 0 0 1 3.5-2.5H20z" />
+      </svg>
+    );
+  }
+  if (name === 'mitori') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M12 21V10" />
+        <path d="M12 14c-4.5 0-7-2.5-7-6 4.5 0 7 2.5 7 6Z" />
+        <path d="M12 10c0-4.2 2.7-6.5 7-6.5 0 4.3-2.8 6.5-7 6.5Z" />
+        <path d="M8 21h8" />
       </svg>
     );
   }
@@ -58,9 +68,11 @@ export function WorkspaceShell({
   const userItemRef = useRef<HTMLLIElement>(null);
   const dashboardPath = `${basePath}/dashboard`;
   const libraryPath = `${basePath}/library`;
+  const mitoriPath = `${basePath}/mitori-room`;
   const isDashboard = location.pathname === dashboardPath;
   const isLibrary =
     location.pathname === libraryPath || location.pathname.startsWith(`${libraryPath}/`);
+  const isMitoriRoom = location.pathname === mitoriPath;
 
   useEffect(() => {
     if (!isUserOpen) return undefined;
@@ -115,6 +127,16 @@ export function WorkspaceShell({
             >
               <WorkspaceIcon name="library" />
               <span>Library</span>
+            </Link>
+          </li>
+          <li>
+            <Link
+              className="workspace-navigation-link"
+              to={mitoriPath}
+              aria-current={isMitoriRoom ? 'page' : undefined}
+            >
+              <WorkspaceIcon name="mitori" />
+              <span>Mitori room</span>
             </Link>
           </li>
           <li ref={userItemRef} className="workspace-user-item">

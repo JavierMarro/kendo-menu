@@ -29,7 +29,7 @@ export function CookiePolicyPage() {
         <section className="policy-section" aria-labelledby="how-kendo-menu-uses-cookies-title">
           <h2 id="how-kendo-menu-uses-cookies-title">How KendoMenu uses cookies</h2>
           <p>
-            <b>KendoMenu does not use cookies for analytics, advertising, or tracking.</b>
+            <b>KendoMenu’s own analytics do not use cookies.</b>
           </p>
           <p>
             Guest use needs no account cookies. Google sign-in uses essential cookies through Neon
@@ -64,6 +64,19 @@ export function CookiePolicyPage() {
             We receive your email address and profile name from Google, not access to your contacts,
             calendar or other Google data. Google and Neon process sign-in information under their
             own privacy terms.
+          </p>
+        </section>
+
+        <section className="policy-section" aria-labelledby="youtube-title">
+          <h2 id="youtube-title">YouTube videos</h2>
+          <p>
+            Mitori room connects to YouTube only when you open a video. We use privacy-enhanced
+            embeds, but YouTube receives network information and may use cookies and show adverts.
+            Video playback needs an internet connection and is covered by{' '}
+            <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">
+              Google’s privacy policy
+            </a>
+            .
           </p>
         </section>
 

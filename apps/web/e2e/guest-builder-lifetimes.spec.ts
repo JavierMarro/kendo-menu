@@ -466,7 +466,7 @@ test('duplicate Google entry stays coalesced and restores protection when the pe
   await clickGuestSignUp(page);
   await expect(page).toHaveURL(/\/app\/sign-in$/);
   const googleButton = page
-    .getByRole('region', { name: 'KendoMenu', exact: true })
+    .getByRole('region', { name: 'Sign-in options', exact: true })
     .getByRole('button');
   await googleButton.click();
   await expect.poll(() => calls).toBe(1);

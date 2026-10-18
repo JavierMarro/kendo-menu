@@ -60,12 +60,13 @@ activity quantities and notes can be adapted without mutating the built-in libra
 ## Information and workspace navigation
 
 The public landing page explains KendoMenu; its primary navigation links to How it works,
-Library info (the curated-library overview), and FAQ sections. Try without an account opens the
-guest dashboard. Sign up opens a dedicated Google-only authentication page headed “Enter the dojo”.
+Library info (the curated-library overview), and FAQ sections, followed by Get started for sign-in.
+The mobile menu opens a compact vertical dropdown with separated links and a Get started button. Try without an account opens the
+guest dashboard. Sign up opens a dedicated Google-only authentication page headed “Prepare for keiko”.
 Email/password authentication is an informational future option, not an available form.
 The landing and information pages retain the site footer; sign-in and workspace pages omit it.
 
-Guest and account workspaces share navigation for Dashboard, Library and User: a fixed left
+Guest and account workspaces share navigation for Dashboard, Library, Mitori room and User: a fixed left
 sidebar on desktop and a fixed bottom bar on mobile. The KendoMenu brand returns to the landing
 page. User shows guests their device-save status and sign-up, and verified account users their
 cloud-save status and sign-out action. Cloud status distinguishes confirmed saves from unsaved or
@@ -73,6 +74,22 @@ uncertain changes with text and colour. Account deletion is not offered in the U
 The new layouts retain KendoMenu’s navy/gold palette, typography and existing dashboard content.
 Google continues through the validated full-page redirect; navigation changes do not alter
 authentication, account saves, guest persistence or one-time guest-copy decisions.
+
+### Mitori room
+
+“Learn through observation.” The guest and account `/mitori-room` routes share five URL-addressable
+sections: Mitori (default), Documentaries, Kata, Resources and Glossary. The sprout navigation
+item sits after Library on desktop and between Library and User on mobile. Sections replace only
+the page content and use ordinary page scrolling; mobile section links scroll horizontally.
+
+Mitori, Documentaries and Kata use an owner-curated local video list. Existing `tab=techniques` links
+continue to select Mitori. A video series occupies one row with YouTube’s playlist controls.
+Documentaries omit uploader credits. Opening a title loads one
+privacy-enhanced YouTube embed without autoplay; closing it or changing sections removes the player.
+A YouTube fallback link remains available for restricted or unavailable playback. Videos require
+internet access and may contain YouTube adverts; no YouTube API key or automatic live detection is
+used. Resources and Glossary reuse the public pages’ content, retaining glossary search. Public
+Sources and Glossary routes remain available. This feature does not change training data or saves.
 
 ## Account journey — internal Migrations C and D
 

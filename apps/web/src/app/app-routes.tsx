@@ -17,6 +17,7 @@ import { SignInPage } from '../features/account/SignInPage';
 import { CookiePolicyPage } from '../features/privacy/CookiePolicyPage';
 import { GlossaryPage } from '../features/glossary/GlossaryPage';
 import { SourcesPage } from '../features/sources/SourcesPage';
+import { MitoriRoomPage } from '../features/mitori/MitoriRoomPage';
 import {
   AccountWorkspaceRoute,
   AccountWorkspaceIndex,
@@ -73,6 +74,7 @@ export const appRoutes: RouteObject[] = [
               { path: 'dashboard', element: <DashboardPage /> },
               { path: 'library', element: <LibraryPage /> },
               { path: 'library/:trainingSetId', element: <TrainingSetDetailPage /> },
+              { path: 'mitori-room', element: <MitoriRoomPage /> },
               { path: 'drills/new', element: <CreateDrillPage /> },
               { path: '*', element: <NotFoundPage /> },
             ],
@@ -86,6 +88,7 @@ export const appRoutes: RouteObject[] = [
               { path: 'dashboard', element: <DashboardPage /> },
               { path: 'library', element: <LibraryPage /> },
               { path: 'library/:trainingSetId', element: <TrainingSetDetailPage /> },
+              { path: 'mitori-room', element: <MitoriRoomPage /> },
               { path: 'drills/new', element: <CreateDrillPage /> },
               { path: '*', element: <NotFoundPage /> },
             ],

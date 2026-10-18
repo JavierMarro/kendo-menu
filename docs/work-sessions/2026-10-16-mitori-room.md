@@ -1,0 +1,8 @@
+- Session: Mitori room
+- Date/duration: 2026-10-16; feature implementation and verification
+- Scope/start: Add the approved observation room to both workspaces; started from a clean checkout after the sign-in UI work.
+- Changes: Sprout navigation; five shareable sections; 11 owner-selected videos; reused Sources/Glossary; YouTube disclosures and corrected stale sign-in test selectors.
+- Decisions: Techniques opens by default; one privacy-enhanced player mounts on demand with no autoplay; section changes remove it; no API keys, live detection or new dependencies.
+- Roadblocks: Full browser run found stale sign-in labels, an incorrect new glossary assertion and mobile cookie-notice overlap; corrected and verified the affected five files.
+- Verification: Node 24; check:web passed 345 tests/build/typecheck/lint (8 existing warnings); initial browser run 324 passed/11 failed/3 skipped, corrected five-file rerun 108 passed; final affected unit rerun 57 passed; formatting/session checks passed; desktop/mobile inspected; independent code and focus-fix reviews passed.
+- Follow-up: Full preview/PWA release gates and production deployment not run; video availability remains controlled by YouTube; no commit or remote changes.

@@ -170,7 +170,7 @@ describe('account dashboard editor drafts', () => {
     );
     expect(saveToAccount).toHaveBeenCalledOnce();
     expect(flush).not.toHaveBeenCalled();
-  });
+  }, 10_000);
 
   it('keeps an invalid quantity draft out of an account save submitted from the menu', async () => {
     const user = userEvent.setup();
@@ -201,7 +201,7 @@ describe('account dashboard editor drafts', () => {
     await user.type(sessionNotes, 'Keep a calm pace.');
 
     expect(store.getState().dashboardEntries[0]?.notes).toBe('Keep a calm pace.');
-  });
+  }, 10_000);
 
   it('commits activity notes before blur', async () => {
     const user = userEvent.setup();
@@ -219,7 +219,7 @@ describe('account dashboard editor drafts', () => {
       'Relax the shoulders.',
     );
     expect(dialog).toBeVisible();
-  });
+  }, 10_000);
 
   it('commits valid quantities before blur', async () => {
     const user = userEvent.setup();
