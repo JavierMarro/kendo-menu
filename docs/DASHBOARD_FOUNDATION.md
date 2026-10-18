@@ -171,13 +171,13 @@ the complete header before persistence.
 Direct tests use real Request headers and `createSessionAuthorization()` with injected persistence,
 without manufacturing authorization proofs. The targeted session-authorization/security run passed
 127 tests under Node 24.12.0. This correction touches only `auth/security.ts`, its public
-authorization test file, this handoff and the existing eight-line Job 5A session record. PostgreSQL
+authorization test file and this technical record. PostgreSQL
 tests were not rerun for this parser-only correction; the earlier 44-test result below remains
 historical evidence, not a new database claim.
 
 The correction-only independent source review returned **PASS**, with no findings. Final Node 24
 checks passed: `pnpm check:api` (387 tests), `pnpm check` (694 tests plus types, lint, formatting
-and build), `pnpm session:check`, `git diff --check`, and focused unsafe-type, skipped-test, debug-log,
+and build), `git diff --check`, and focused unsafe-type, skipped-test, debug-log,
 secret-shaped and generated-artifact scans. A before/after snapshot confirmed only the four scoped
 files changed and the Google parser/shared header helpers remained byte-identical.
 
@@ -189,18 +189,17 @@ context. No check was disabled. The workspace dependency was linked offline; the
 contains only that local link. Local cache, IPC/PostgreSQL sockets and registry audit access needed
 sandbox escalation. No credentials or environment values were printed or written.
 
-| Command/check                                                                                       | Result                                                                                                                     |
-| --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Targeted authorization, dashboard, domain codec and actual store compatibility tests                | PASS; direct interface regressions retained                                                                                |
-| `pnpm check:api`                                                                                    | PASS; 387 API tests, strict API/root types and lint                                                                        |
-| `pnpm test:api:integration`                                                                         | PASS; 44 real local PostgreSQL authentication tests, including missing/duplicate-CSRF logout rejection without revocation  |
-| `env -u TEST_DATABASE_URL pnpm test:api:integration`                                                | Expected exit 1 with `TEST_DATABASE_URL_REQUIRED_LOCAL_KENDOMENU_TEST`; no silent skip                                     |
-| `pnpm db:check`                                                                                     | PASS; existing migration metadata chain, no schema/migration diff                                                          |
-| `pnpm check`                                                                                        | PASS; 694 tests (73 domain, 69 store, 387 API, 165 web), types, ESLint, Prettier, session history and production web build |
-| `pnpm session:check`                                                                                | PASS; 59 entries, each at most eight lines                                                                                 |
-| Scoped debug/unsafe-type/secret-shaped/skipped-test/generated-artifact scans and `git diff --check` | PASS; no prohibited scope changes                                                                                          |
-| Affected foundation documentation links                                                             | PASS                                                                                                                       |
-| `pnpm audit --json`                                                                                 | WARN; only the existing moderate development-only esbuild advisory through Drizzle Kit; no high/critical advisories        |
+| Command/check                                                                                       | Result                                                                                                                    |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Targeted authorization, dashboard, domain codec and actual store compatibility tests                | PASS; direct interface regressions retained                                                                               |
+| `pnpm check:api`                                                                                    | PASS; 387 API tests, strict API/root types and lint                                                                       |
+| `pnpm test:api:integration`                                                                         | PASS; 44 real local PostgreSQL authentication tests, including missing/duplicate-CSRF logout rejection without revocation |
+| `env -u TEST_DATABASE_URL pnpm test:api:integration`                                                | Expected exit 1 with `TEST_DATABASE_URL_REQUIRED_LOCAL_KENDOMENU_TEST`; no silent skip                                    |
+| `pnpm db:check`                                                                                     | PASS; existing migration metadata chain, no schema/migration diff                                                         |
+| `pnpm check`                                                                                        | PASS; 694 tests (73 domain, 69 store, 387 API, 165 web), types, ESLint, Prettier and production web build                 |
+| Scoped debug/unsafe-type/secret-shaped/skipped-test/generated-artifact scans and `git diff --check` | PASS; no prohibited scope changes                                                                                         |
+| Affected foundation documentation links                                                             | PASS                                                                                                                      |
+| `pnpm audit --json`                                                                                 | WARN; only the existing moderate development-only esbuild advisory through Drizzle Kit; no high/critical advisories       |
 
 The advisory is the already documented `GHSA-67mh-4wv8-2f99` in esbuild 0.18.20. No package version
 was changed and no development server was exposed by this work. Browser E2E/PWA and release suites
@@ -232,8 +231,6 @@ remain unimplemented and unverified until Job 5B.
 - `docs/ACCOUNT_SYNC.md`
 - `docs/ARCHITECTURE.md`
 - `docs/DASHBOARD_FOUNDATION.md`
-- `docs/work-sessions/2026-09-12-dashboard-foundation.md`
-- `docs/work-sessions/README.md`
 - `packages/domain/package.json`
 - `packages/domain/src/dashboard-persistence.test.ts`
 - `packages/domain/src/dashboard-persistence.ts`

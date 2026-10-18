@@ -57,6 +57,5 @@ Keep suites sequential and reuse current evidence. Test through public contracts
 do not prove locks, concurrency, ownership, rollback, or migrations against PostgreSQL.
 
 Obtain the independent review required by `AGENTS.md` for security/persistence changes. Report exact
-commands, results, limitations, and live provider checks as observed or not run. Record the eight-line
-handoff for completed implementation or an explicitly requested history update, not a read-only
-review. Do not stage, commit, deploy, or change remote configuration.
+commands, results, limitations, and live provider checks as observed or not run. Do not stage,
+commit, deploy, or change remote configuration.

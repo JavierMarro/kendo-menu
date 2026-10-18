@@ -40,7 +40,7 @@ export function SiteFooter({ onNavigate }: SiteFooterProps): ReactElement {
                 type="button"
                 onClick={(event) => openInstallExperience(event.currentTarget)}
               >
-                Install KendoMenu
+                Install as app
               </button>
             ) : null}
           </nav>

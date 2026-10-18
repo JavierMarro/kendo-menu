@@ -6,7 +6,9 @@ guest LocalStorage and ordinary dashboard Save contracts. [Migration C](MANAGED_
 now consumes B with separate guest/account routes, memory-only drafts and explicit Save, retiring
 the browser session/CSRF contract and cache/synchronization modules. [Migration D](MANAGED_GUEST_COPY.md)
 adds the frontend copy setup screen without changing this backend contract.
-No deployment, remote migration or external configuration change is part of this implementation.
+Migration B's implementation scope excluded deployment, remote migration and external configuration.
+Current production status and evidence are maintained in the
+[deployment runbook](runbooks/DEPLOYMENT.md).
 
 ## Authorization and frontend contract
 
@@ -132,6 +134,12 @@ Neon, use schema push, reset a shared schema or edit `neon_auth` tables.
 
 ## Private live read/write checklist
 
+The checklist outcomes below are a historical snapshot from 2026-10-13, not the current release
+status. On 2026-10-18, the owner reported two-account HTTPS Preview checks (independent saved menus
+and guest-copy Yes/No behavior) and separately reported that the release reached production. See
+the [deployment runbook](runbooks/DEPLOYMENT.md); no post-release live journey was independently
+verified from this environment.
+
 The owner performs Google login and comparisons privately. Tokens, identity payloads, cookies,
 connection strings and raw errors are not evidence artifacts. Report pass/fail/not-run outcomes.
 
@@ -150,16 +158,15 @@ connection strings and raw errors are not evidence artifacts. Report pass/fail/n
 5. Before public release, sign in with a second dedicated test account and verify distinct managed
    identity/internal account UUID and isolated reads/writes. An expected first-account UUID must
    reject under the second token. Return to the first account and verify stable identity and its
-   original dashboard. **NOT RUN — owner-deferred**: one dedicated Google test account is available;
-   personal accounts are excluded. This permits internal B work but remains a public-release gate.
+   original dashboard. **NOT RUN — owner-deferred at this checklist snapshot**: one dedicated
+   Google test account was available; personal accounts were excluded. This permitted internal B
+   work and was then a public-release gate.
 
 On 2026-10-13, the owner reported applying the development-branch migrations and confirmed a
 single-account application journey: guest copy Yes, account creation/edit with explicit Save,
 reload, sign-out showing only the original guest menu, and sign-in restoring the saved account
-menus. These are owner-reported passes, not agent-observed live checks or completion of every
-checklist item. Exact guest-byte and full-application credential-storage checks, guest copy No,
-second-account isolation and deployed HTTPS remain unverified. Migration A's earlier callback
+menus. This dated report did not cover every checklist item. Migration A's earlier callback
 failures and later owner-reported single-account passes remain historical evidence. The inherited
-mobile failure also remains unresolved: `account-persistence.spec.ts:273`, View dashboard click at
-line 283, detached-element timeout after 30 seconds, 57/58 passed. B's API/database checks do not
-erase it or establish whole-branch release readiness.
+mobile-browser failure also remains historical: `account-persistence.spec.ts:273`, View dashboard
+click at line 283, detached-element timeout after 30 seconds, 57/58 passed. B's API/database checks
+do not erase it or establish whole-branch release readiness.

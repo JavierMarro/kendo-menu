@@ -33,7 +33,9 @@ retrieval. This avoids that write in synthetic tests. The owner reported the pri
 live attempt failed with no managed session; the latest owner-reported retry passes callback,
 reload, expiry refresh and sign-out. Initial storage evidence covered inspected sign-in/out only;
 subsequent private owner inspection reports credential-free storage/no account IndexedDB or
-CacheStorage after reload and JWT refresh, with stable identity. The 5 October amendment records second-account
-distinction/return stability as NOT RUN — owner-deferred, required before public account release
-but alone not blocking a reviewed A commit or internal B. No other gate is waived. Existing legacy runtime behavior remains implemented; no replacement production route
-or authentication path is enabled.
+CacheStorage after reload and JWT refresh, with stable identity. The 5 October amendment recorded
+second-account distinction/return stability as NOT RUN — owner-deferred, required before public
+account release but alone not blocking a reviewed A commit or internal B. No other gate was waived
+at that stage. Migrations A–D and the production database transition have since been completed; the
+owner reports that the managed-account release reached production on 2026-10-18. See the
+[deployment runbook](../runbooks/DEPLOYMENT.md) for current status and its verification boundary.

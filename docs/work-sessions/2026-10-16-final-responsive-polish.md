@@ -1,8 +1,0 @@
-- Session: final responsive polish
-- Date/duration: 2026-10-16; responsive UI and account-save follow-up
-- Scope/start: Final responsive refinements on the existing dirty UI branch, preserving the prior completed journey changes.
-- Changes: Filled the mobile landing image; centered gold-gradient menu teasers with uppercase titles; smaller mobile sign-in heading and taller options panel without bottom dead space; closer artwork crop; restored account-detail Save; shortened free-use FAQ.
-- Decisions: Account-detail Save uses the existing guarded whole-dashboard online save and acknowledged-state feedback; guest saves still flush local persistence; no new API or auth behavior.
-- Roadblocks: The console's token-request 401 is the existing signed-out result, not a reason to suppress checks or alter provider configuration.
-- Verification: Node 24 check:web passed (342 tests); targeted desktop/mobile E2E passed (6); full test:e2e passed (329, 3 expected skips); PWA suite passed (4, fresh build/types); independent review, layout scan, format:check, session:check and diff --check passed.
-- Follow-up: Leave all work uncommitted; owner checks real Google/Neon save and sign-in on HTTPS Preview; no deployment or remote settings changed.

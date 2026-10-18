@@ -1,8 +1,0 @@
-- Session: privacy license readme
-- Date/duration: 2026-10-13; not recorded
-- Scope/start: Owner-requested cookie disclosure, AGPL-3.0 and modest public-repository onboarding at f2429b2; preserve all prior uncommitted API/UI work.
-- Changes: Conditional Google-session cookie notice; expand guest/copy/online-storage policy; add official LICENSE and concise README; extend ignore rules and CI private-file-name guard; align two copy assertions and current owner-reported live-status documentation.
-- Decisions: AGPL-3.0-only applies to original code, with third-party terms retained; no analytics behavior or GoatCounter policy edits; CI checks names, not secret contents; no new dependencies or remote settings.
-- Roadblocks: A single compulsory-cookie claim would misdescribe guest use; no private env/key/database files were found by name in tracked files or reachable local history; no full content/history secret scan or third-party rights audit performed.
-- Verification: No tests, builds or browser suites run per owner; official-license equality, formatting, unchanged analytics-section fingerprint, CI shell syntax and independent review PASS; history and whitespace checks PASS.
-- Follow-up: Confirm GitHub secret scanning/push protection, required CI and private reporting; complete redacted history/asset-rights review before public exposure; existing live account/HTTPS gates remain open; nothing staged, committed or published.

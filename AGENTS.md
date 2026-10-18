@@ -28,7 +28,8 @@ Skills cannot authorize dependencies, contract, stack, visual-direction, or exte
   features, reusable web components, and browser integrations. Extend React Router under `src/app`.
 - `apps/api`: Node 24 + Elysia application, PostgreSQL adapters using Drizzle/pg, and explicit
   migration/test commands. Domain validation remains in `packages/domain`; HTTP and SQL stay here.
-- `apps/mobile`: reserved; do not initialize it without an explicit request.
+- `apps/web` is the complete responsive web and installable PWA product; do not create a second
+  application surface without an explicit product request.
 - `packages/domain`: platform-neutral training contracts, validation, and curated-data adaptation.
 - `packages/store`: Zustand store factory with injected platform storage.
 - `packages/ui`: reserved for genuinely shared platform-neutral tokens or components; keep empty
@@ -43,8 +44,8 @@ that never changes the guest source. No creating-session restriction, durable pe
 interrupted-copy recovery. Managed browser session cookies are expected; never put credentials in
 JavaScript-readable persistence. Do not self-host another auth system or add the Neon Data API.
 
-Backend/account work is limited to the assigned transition job; paid tiers, mobile initialization,
-and unrelated infrastructure remain out of scope. Never deploy, migrate a remote database, or change
+Backend/account work is limited to the assigned transition job; paid tiers and unrelated
+infrastructure remain out of scope. Never deploy, migrate a remote database, or change
 Vercel projects/configuration, DNS, domains, analytics, secrets, or remote environment variables
 without authorization for that exact action. Do not stage, commit, push, merge, or switch branches
 unless explicitly asked; preserve staged and unstaged owner work.
@@ -88,17 +89,17 @@ mobile usability, and non-color cues.
 
 ## Context and verification matrix
 
-| Task                   | Read first                                         | Minimum verification                             |
-| ---------------------- | -------------------------------------------------- | ------------------------------------------------ |
-| Domain or curated data | `CONTEXT.md`, JSON, schema, adapter, nearby tests  | `pnpm check:domain`                              |
-| Store or persistence   | domain contracts, store/persistence code and tests | `pnpm check:store`                               |
-| Web, UX, or routes     | `PRODUCT.md`, routes, nearby tests, matching skill | `pnpm check:web`; relevant E2E                   |
-| API or authorization   | affected API contracts/callers; API feature skill  | `pnpm check:api`; relevant HTTP/auth tests       |
-| PostgreSQL or schema   | adapter, schema, migration metadata, DB harness    | `pnpm test:api:integration`; `pnpm db:check`     |
-| Non-PWA browser        | routes, E2E tests, default and preview configs     | `pnpm test:e2e`; release with `test:e2e:preview` |
-| PWA behavior           | manifest, service worker, install code, PWA tests  | `pnpm test:e2e:pwa` separately                   |
-| Cross-package/final    | every affected contract and test                   | `pnpm check`; `pnpm verify:full` for release     |
-| Documentation/skills   | affected guidance and session-history policy       | `pnpm session:check`; targeted validation        |
+| Task                   | Read first                                         | Minimum verification                                        |
+| ---------------------- | -------------------------------------------------- | ----------------------------------------------------------- |
+| Domain or curated data | `CONTEXT.md`, JSON, schema, adapter, nearby tests  | `pnpm check:domain`                                         |
+| Store or persistence   | domain contracts, store/persistence code and tests | `pnpm check:store`                                          |
+| Web, UX, or routes     | `PRODUCT.md`, routes, nearby tests, matching skill | `pnpm check:web`; relevant E2E                              |
+| API or authorization   | affected API contracts/callers; API feature skill  | `pnpm check:api`; relevant HTTP/auth tests                  |
+| PostgreSQL or schema   | adapter, schema, migration metadata, DB harness    | `pnpm test:api:integration`; `pnpm db:check`                |
+| Non-PWA browser        | routes, E2E tests, default and preview configs     | `pnpm test:e2e`; release with `test:e2e:preview`            |
+| PWA behavior           | manifest, service worker, install code, PWA tests  | `pnpm test:e2e:pwa` separately                              |
+| Cross-package/final    | every affected contract and test                   | `pnpm check`; `pnpm verify:full` for release                |
+| Documentation/skills   | affected guidance and references                   | targeted formatting, link/config checks, `git diff --check` |
 
 `pnpm test:e2e` is the fast development-server suite. `pnpm test:e2e:preview` runs that complete
 non-PWA suite against a freshly built Vite preview. `pnpm verify:full` runs `pnpm check`, the preview

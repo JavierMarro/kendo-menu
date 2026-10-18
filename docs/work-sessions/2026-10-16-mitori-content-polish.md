@@ -1,8 +1,0 @@
-- Session: Mitori content and list polish
-- Date/duration: 2026-10-16; focused content and visual refinement
-- Scope/start: Refine the existing uncommitted Mitori feature; owner chose list polish over thumbnails or cards and confirmed the existing Rensei Taikai 2 video as Boot Camp Part 2.
-- Changes: Mitori label; reordered and expanded catalogue; one embedded video-series row; documentary uploader credits and inline YouTube notice removed; play icons and mobile title space; sign-in heading now Prepare for keiko.
-- Decisions: Preserved tab=techniques links, top tabs, one-player/no-autoplay behaviour and Cookies-page disclosure; playlist keeps the supplied starting video and native Previous/Next controls.
-- Roadblocks: Three existing recursive account-editor tests exceeded the default five seconds and contaminated following tests; gave only those cases ten seconds without changing assertions or application code.
-- Verification: Node 24 check:web passed 346 tests/typecheck/lint/build (8 existing warnings); 10 focused desktop/mobile browser checks passed; formatting passed; real playlist controls inspected; independent scoped review passed.
-- Follow-up: Full preview/PWA release gates not run; no commit, deployment or remote configuration changes.

@@ -1,8 +1,0 @@
-- Session: optional audit cleanups
-- Date/duration: 2026-10-12; not recorded
-- Scope/start: Only approved optional audit findings 1–3; clean worktree; production/test/configuration/export/dynamic callers reconfirmed before removal.
-- Changes: Removed retired API auth contracts/validators, unused adoption response parsing/types/envelope digest, and guest coordinator subscriptions/accessors; eight code/test paths, source +5/-686 lines and tests +32/-154 lines.
-- Decisions: Retained shared errors/clock/UUID/date validation, strict complete-copy validation, live acknowledgements, ordinary Save hashes/receipts, isAvailable fallback, Web Locks and lifecycle guards; tests 614→607 (six obsolete cases removed, clock assertions consolidated); subscription test replaced with queued-disposal coverage.
-- Roadblocks: Sandbox blocked local listeners/tsx IPC; complete affected commands passed outside sandbox; existing Fast Refresh, listener-count, bundle-size and color-environment warnings remain; independent review PASS, stale header corrected and rechecked.
-- Verification: Node 24.21.0/pnpm 11.22.0; focused API 52/web 87 PASS; check:api 147 PASS; pnpm check 607 PASS; complete dev E2E 291 PASS/3 intentional skips; fresh complete preview 291 PASS/3 skips; separate PWA 4 PASS; final guarded local PostgreSQL integration 67 PASS; session:check, targeted formatting and git diff --check HEAD PASS.
-- Follow-up: Live Google/Neon, two-account/return-to-first, B live persistence and Vercel/HTTPS release checks NOT RUN; no onboarding-comment job, schema/SQL/metadata/history rewrite, dependencies/private configuration changes, staging, commit, push, branch switch, deployment or remote action.

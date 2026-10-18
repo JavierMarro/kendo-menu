@@ -1,8 +1,0 @@
-- Session: private configuration policy
-- Date/duration: 2026-10-04; not recorded
-- Scope/start: Added persistent private-configuration guidance from clean HEAD 763852f; documentation only.
-- Changes: AGENTS.md now excludes secret-file inspection and environment dumps, requires sanitized reporting, and permits authorized application/test configuration loading without exposure.
-- Decisions: Guidance is not filesystem enforcement; no hook, permission profile, application, database, or remote configuration changes.
-- Roadblocks: None; private environment-file contents were not inspected.
-- Verification: Targeted Prettier, pnpm session:check, and git diff --check HEAD PASS under Node 25; application/database suites not run for this documentation-only change.
-- Follow-up: Owner may commit the documentation; ask an already-running CLI session to reread AGENTS.md once, or restart it to load the updated guidance.

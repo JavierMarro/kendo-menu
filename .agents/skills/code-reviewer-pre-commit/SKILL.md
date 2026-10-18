@@ -15,7 +15,7 @@ Return `PASS` only when the evidence supports it. Do not rubber-stamp.
   `git diff --name-only HEAD` and relevant untracked files from `git status --short`.
 - Apply `AGENTS.md` and read enough context to assess each change, including affected contracts,
   callers, state boundaries, side effects, persistence, and error paths. Expand beyond diff hunks
-  where needed; consult README, session history, configuration, or whole files only when relevant.
+  where needed; consult README, current contracts, configuration, or whole files only when relevant.
 - For KendoMenu, use pnpm commands from root package scripts. Inspect configuration when a command
   or its coverage is unclear.
 - Reuse verification evidence covering the current changes and configuration. Run checks when

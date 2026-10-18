@@ -44,7 +44,7 @@ Missing tooling is never silently treated as passing. Report `NOT CONFIGURED` or
 with a reason. Treat a required but missing test command as a readiness warning or failure according
 to repository policy, rather than claiming full confidence.
 
-For guidance/skills only, use `pnpm session:check`, targeted formatting, and skill/config validation;
+For guidance/skills only, use targeted formatting, `git diff --check`, and skill/config validation;
 do not run application or database suites. For comments only, use the comment skill's behavior-
 preserving checks. Reuse successful checks for an unchanged diff and environment, record their
 provenance, and rerun what subsequent changes invalidate. Serialize CPU-heavy suites to avoid load-

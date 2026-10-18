@@ -1,8 +1,0 @@
-- Session: agent guidance refresh
-- Date/duration: 2026-10-04; not recorded
-- Scope/start: Refreshed project agent guidance from clean codex/managed-auth-online-dashboard HEAD a4ca0c4; no application, SQL, dependency, or remote changes.
-- Changes: Added the API/PostgreSQL skill and allowlist; aligned AGENTS, existing skills and transition prompts; quieted the ignored local UI hook without hiding fresh findings.
-- Decisions: Follow the approved managed-auth/online-only account target; no creating-session or durable copy recovery; load task-specific context, reuse valid evidence, and serialize heavy checks; no new hooks or external skill installs.
-- Roadblocks: PyYAML unavailable, so existing Ruby YAML parsing validated skill metadata; local Impeccable HTML parser dependencies are absent and its regex fallback is advisory, not comprehensive UI/security verification.
-- Verification: Seven skill frontmatter/metadata checks, negative controls and local links PASS; actual hook subprocess smoke PASS; targeted Prettier, pnpm session:check (74 entries), git diff --check HEAD and independent guidance review PASS; docs tools used Node 25, application/database suites not run.
-- Follow-up: Owner reviews and commits guidance on the current branch, reviews local hooks via CLI /hooks, and has CLI reread instructions/recheck baseline before Migration A; real Google/Neon/HTTPS and deployment gates remain unverified.

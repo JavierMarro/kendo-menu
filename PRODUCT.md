@@ -14,10 +14,10 @@ their practice routine.
 
 ## Product Purpose
 
-KendoMenu is a deployed, local-first production MVP. It lets practitioners browse curated training
-sessions, add them to a dashboard, adjust activity quantities, attach notes, and create custom
-training sessions. A practitioner can assemble and adapt a useful session on the same device without
-an account, server, or network dependency.
+KendoMenu is a responsive web app for planning kendo practice. Guests can use it locally and offline;
+Google account users can save menus online and access them across devices. Both workflows let
+practitioners browse curated training sessions, adjust activity quantities, attach notes, and create
+custom training sessions.
 
 ## Positioning
 
@@ -45,17 +45,17 @@ activity quantities and notes can be adapted without mutating the built-in libra
 - Curated content is authored in `packages/domain/data/default-drills.json`, validated against
   `packages/domain/schema/kendo-drills.schema.json`, and adapted by
   `packages/domain/src/default-training-sets.ts`.
-- The production MVP is a React + Vite + TypeScript web app with React Router. Domain contracts live
+- The production app is a React + Vite + TypeScript web app with React Router. Domain contracts live
   in `packages/domain`; the platform-neutral Zustand store lives in `packages/store` and receives an
   injected storage adapter.
 - The guest dashboard uses Zustand with browser LocalStorage and retains its offline/recovery behavior.
-  Internal Migration C account routes use the same store factory with memory-only drafts and an
+  Managed account routes use the same store factory with memory-only drafts and an
   explicit Save to account. Persisted guest JSON remains untrusted, validated, versioned and migrated.
 - The owner reported successful Google sign-in, existing menus, Save/reload, sign-out and
   second-account/return-to-first checks on the development-branch HTTPS Vercel Preview on
-  2026-10-14. These are owner-reported Preview results, not production-release verification.
-  No deployment or provisioning is authorized. Paid tiers and initialization of `apps/mobile`
-  remain out of scope.
+  2026-10-14. These are owner-reported Preview results. On 2026-10-18 the owner reported the
+  managed-account release deployed and working in production; see the deployment runbook for the
+  verification boundary. Paid tiers remain out of scope.
 
 ## Information and workspace navigation
 
@@ -95,10 +95,11 @@ internet access and may contain YouTube adverts; no YouTube API key or automatic
 used. Resources and Glossary reuse the public pages’ content, retaining glossary search. Public
 Sources and Glossary routes remain available. This feature does not change training data or saves.
 
-## Account journey — internal Migrations C and D
+## Online account journey
 
-[Migration C](docs/MANAGED_ACCOUNT_WEB.md) separates `/app/guest/*` and `/app/account/*` routes,
-reusing the dashboard, library and custom-session builder. The landing offers guest entry and a
+The account integration described in [its implementation guide](docs/MANAGED_ACCOUNT_WEB.md)
+separates `/app/guest/*` and `/app/account/*` routes, reusing the dashboard, library and custom-
+session builder. The landing offers guest entry and a
 link to the authentication page when signed out, or a dashboard link for verified account users;
 each workspace has a dashboard shortcut. Guest use stays local and works
 without authentication availability. Verified signed-in visitors entering guest routes go to the
@@ -116,7 +117,7 @@ can lose unsaved work; intentional discard is warned and browser leave warnings 
 Sign-out hides account content, fences late requests and returns home.
 
 Guest and account data remain independent; signing in alone never uploads guest data. Legacy
-account caches are ignored without deletion. [Migration D](docs/MANAGED_GUEST_COPY.md) offers a
+account caches are ignored without deletion. The [guest-copy setup](docs/MANAGED_GUEST_COPY.md) offers a
 separate Yes/No setup screen only with the winning account-creation response, its one-time
 opportunity, an eligible cloud dashboard and complete valid non-empty guest data. Yes creates an
 independent online copy while leaving guest bytes unchanged; No permanently declines. Dispatch,
@@ -124,12 +125,12 @@ skipping or abandoning setup releases the browser handoff. An interruption may l
 there is no import retry or later import button. Account editing resumes only after authoritative
 dashboard loading; ordinary load and Save retries remain separate. A committed ordinary Save
 consumes an unused opportunity. [ADR 0007](docs/adr/0007-managed-auth-online-account-drafts.md)
-supersedes offline account caching, custom sessions and interrupted-copy recovery. C remains
-internal work, not a public account release.
+supersedes offline account caching, custom sessions and interrupted-copy recovery. Current release
+status is recorded in the deployment runbook.
 
 Realtime connections, CRDTs, automatic field merging, collaboration, paid tiers and public sharing
-remain excluded. See the [transition contract](docs/MANAGED_AUTH_TRANSITION.md) for sequential scope
-and [B's contract](docs/MANAGED_DASHBOARDS.md) for the unchanged backend boundary.
+remain excluded. See the [managed-auth contract](docs/MANAGED_AUTH_TRANSITION.md) for scope and
+the [account API contract](docs/MANAGED_DASHBOARDS.md) for the backend boundary.
 
 ## Brand Commitments
 

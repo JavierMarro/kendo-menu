@@ -712,11 +712,23 @@ describe('KendoMenu application flows', () => {
 
     await user.click(menuToggle);
     await user.click(screen.getByRole('heading', { name: 'Plan the keiko you need today' }));
-    expect(menuToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(menuToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('navigation', { name: 'Landing navigation' })).toBeVisible();
+    await user.click(menuToggle);
+    expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
 
     await user.click(menuToggle);
     for (let step = 0; step < 5; step += 1) await user.tab();
-    expect(menuToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(menuToggle).toHaveAttribute('aria-expanded', 'true');
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveFocus();
 
     await user.click(screen.getByRole('button', { name: 'Open navigation' }));
     const landingNavigation = screen.getByRole('navigation', { name: 'Landing navigation' });

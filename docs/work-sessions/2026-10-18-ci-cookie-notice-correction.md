@@ -1,8 +1,0 @@
-- Session: CI cookie notice correction
-- Date/duration: 2026-10-18; targeted test correction and release verification
-- Scope/start: Owner approved the smallest test-only correction for four mobile CI failures on commit 235927f; the working tree was clean and unchanged targeted tests passed locally.
-- Changes: Added four normal Cookie notice Got it clicks in three E2E files before dashboard View more or recovery Reset local data actions; no application, fixture, configuration, API or SQL changes.
-- Decisions: Keep all existing assertions and dedicated notice coverage; do not force clicks, change timeouts, globally suppress the notice or redesign the approved mobile UI.
-- Roadblocks: The supplied CI logs and screenshots showed the notice intercepting all four clicks; local macOS passes did not reproduce the Linux CI overlap and do not clear the required failing remote gate.
-- Verification: Node 24 pnpm verify:full passed: 653 unit tests, two packaged Node checks, 337 preview browser tests plus three expected device skips, and four PWA tests; four targeted mobile tests, scoped Prettier, git diff --check and independent review also passed; existing lint/listener/chunk warnings remain non-blocking.
-- Follow-up: Owner must commit and push this correction and confirm the new GitHub CI run is green before merging; local passes do not replace remote confirmation; no commit, push, merge, deployment or remote configuration changes performed.
