@@ -1,8 +1,11 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { test } from './guest-test';
+import { visibleWorkspaceBrandLink, workspaceLink } from './workspace-test-helpers';
 
 const SCROLL_TOLERANCE = 4;
 
 async function dismissCookieNotice(page: Page): Promise<void> {
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   const notice = page.getByRole('complementary', { name: 'Cookie notice' });
   if (await notice.isVisible()) {
     await notice.getByRole('button', { name: 'Got it' }).click();
@@ -31,9 +34,9 @@ async function expectScrollY(page: Page, expectedTop: number): Promise<void> {
     .toBeLessThanOrEqual(expectedTop + SCROLL_TOLERANCE);
 }
 
-async function expectTop(page: Page): Promise<void> {
+async function expectTop(page: Page, message = 'Route should start at the top'): Promise<void> {
   await expect
-    .poll(() => page.evaluate(() => window.scrollY))
+    .poll(() => page.evaluate(() => window.scrollY), { message })
     .toBeLessThanOrEqual(SCROLL_TOLERANCE);
 }
 
@@ -43,16 +46,7 @@ async function getPrimaryNavigationLink(page: Page, name: string | RegExp): Prom
     await menuToggle.click();
   }
 
-  return page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('link', { name });
-}
-
-async function clickVisibleLinkWithPointer(page: Page, link: Locator): Promise<void> {
-  const box = await link.boundingBox();
-  if (box === null) {
-    throw new Error('Expected the navigation link to be visible before pointer activation.');
-  }
-
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  return page.getByRole('navigation', { name: 'Landing navigation' }).getByRole('link', { name });
 }
 
 async function expectHashTarget(page: Page, id: string): Promise<void> {
@@ -83,79 +77,89 @@ test.describe('navigation scroll behavior', () => {
   test('returns a scrolled internal route to the top when the header logo goes home', async ({
     page,
   }) => {
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     await dismissCookieNotice(page);
     await scrollDown(page);
 
-    await page.locator('.top-bar').getByRole('link', { name: 'KendoMenu home' }).click();
+    await (await visibleWorkspaceBrandLink(page)).click();
     await expect(page).toHaveURL(/\/app$/);
     await expect(
-      page.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+      page.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeVisible();
     await expectTop(page);
   });
 
-  test('returns a scrolled landing page to the top when the library nav link is activated', async ({
+  test('landing library navigation scrolls to the informational section', async ({ page }) => {
+    await page.goto('/app');
+    await dismissCookieNotice(page);
+    await scrollDown(page);
+
+    const libraryLink = await getPrimaryNavigationLink(page, 'Library info');
+    await libraryLink.click();
+    await expect(page).toHaveURL(/\/app#library-story-title$/);
+    await expectHashTarget(page, 'library-story-title');
+
+    await page.goto('/app');
+    await dismissCookieNotice(page);
+    await scrollDown(page);
+    const keyboardLibraryLink = await getPrimaryNavigationLink(page, 'Library info');
+    await keyboardLibraryLink.focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/app#library-story-title$/);
+    await expectHashTarget(page, 'library-story-title');
+  });
+
+  test('workspace navigation keeps library routes separate and restores Back/Forward positions', async ({
     page,
   }) => {
     await page.goto('/app');
     await dismissCookieNotice(page);
-    await scrollDown(page);
+    await expect(await getPrimaryNavigationLink(page, 'Library info')).toHaveAttribute(
+      'href',
+      '/app#library-story-title',
+    );
+    await page.getByRole('link', { name: 'Try without an account' }).click();
+    await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
+    await workspaceLink(page, 'Library').click();
+    const card = page
+      .getByRole('heading', { name: 'Senior High School dojo menu' })
+      .locator('xpath=ancestor::article');
+    await card.getByRole('link', { name: 'View session' }).click();
+    await page.getByRole('button', { name: 'Add to dashboard' }).click();
+    await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
+    await expect(page.locator('body')).not.toHaveClass(/drill-dialog-open/);
+    const dashboardTop = await page.evaluate(() => window.scrollY);
 
-    const libraryLink = await getPrimaryNavigationLink(page, /Keiko library/);
+    const libraryLink = workspaceLink(page, 'Library');
     await libraryLink.click();
-    await expect(page).toHaveURL(/\/app\/library$/);
-    await expect(page.getByRole('heading', { name: 'Keiko library' })).toBeVisible();
-    await expectTop(page);
+    await expect(page).toHaveURL(/\/app\/guest\/library$/);
+    await expect(page.getByRole('heading', { name: 'Keiko library', exact: true })).toBeVisible();
+    await expectTop(page, 'Navigating from Dashboard to Library should reset scroll to the top');
 
-    await page.goto('/app');
-    await dismissCookieNotice(page);
-    await scrollDown(page);
-    const keyboardLibraryLink = await getPrimaryNavigationLink(page, /Keiko library/);
-    await keyboardLibraryLink.focus();
-    await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/\/app\/library$/);
-    await expectTop(page);
-  });
-
-  test('restores recorded positions across browser Back and Forward', async ({ page }) => {
-    await page.goto('/app');
-    await dismissCookieNotice(page);
-    const landingTop = await recordScrollY(page, 640);
-
-    const menuToggle = page.getByRole('button', { name: 'Open navigation' });
-    if (await menuToggle.isVisible()) {
-      await clickVisibleLinkWithPointer(page, menuToggle);
-    }
-    const libraryLink = page
-      .getByRole('navigation', { name: 'Primary navigation' })
-      .getByRole('link', { name: /Keiko library/ });
-    await clickVisibleLinkWithPointer(page, libraryLink);
-    await expect(page).toHaveURL(/\/app\/library$/);
-    await expectTop(page);
-
-    const libraryTop = await recordScrollY(page, 800);
+    const libraryTop = await recordScrollY(page, 200);
     await page.goBack();
-    await expect(page).toHaveURL(/\/app$/);
-    await expectScrollY(page, landingTop);
+    await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
+    await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+    await expectScrollY(page, dashboardTop);
 
     await page.goForward();
-    await expect(page).toHaveURL(/\/app\/library$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library$/);
+    await expect(page.getByRole('heading', { name: 'Keiko library', exact: true })).toBeVisible();
     await expectScrollY(page, libraryTop);
   });
 
   test('preserves a scrolled library position while opening and closing a drill dialog', async ({
     page,
   }) => {
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     await dismissCookieNotice(page);
-    const libraryTop = await recordScrollY(page, 320);
+    const libraryTop = await recordScrollY(page, 200);
 
     const card = page
       .getByRole('heading', { name: 'International dojo menu' })
       .locator('xpath=ancestor::article');
     await card.getByRole('link', { name: 'View session' }).click();
-    await expect(page).toHaveURL(/\/app\/library\?drill=international-dojo-2-hour-session$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library\?drill=international-dojo-2-hour-session$/);
     await expect(page.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
     await expectScrollY(page, libraryTop);
 
@@ -163,7 +167,7 @@ test.describe('navigation scroll behavior', () => {
       .getByRole('dialog', { name: 'International dojo menu' })
       .getByRole('button', { name: 'Close International dojo menu details.' })
       .click();
-    await expect(page).toHaveURL(/\/app\/library$/);
+    await expect(page).toHaveURL(/\/app\/guest\/library$/);
     await expectScrollY(page, libraryTop);
   });
 

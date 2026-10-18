@@ -12,8 +12,16 @@ import { DialogShell } from '../components/DialogShell';
 import { PersistenceContext } from '../features/persistence/PersistenceGate';
 import { DashboardTrainingSet } from '../features/dashboard/DashboardPage';
 import { DrillDetailContent } from '../features/library/DrillDetailContent';
+import { WorkspaceContextProvider } from '../lib/workspace-context';
 import { createTestStore, TestMemoryStorage } from './test-utils';
 import { RECURSIVE_TRAINING_SET } from './recursive-activity.fixture';
+
+const GUEST_WORKSPACE = {
+  kind: 'guest' as const,
+  basePath: '/app/guest' as const,
+  canEdit: true,
+  accountEmail: null,
+};
 
 function getRequiredSummary(container: ParentNode): HTMLElement {
   const summary = container.querySelector<HTMLElement>('summary');
@@ -26,11 +34,15 @@ function getRequiredSummary(container: ParentNode): HTMLElement {
 function renderLibraryFixture() {
   const store = createTestStore();
   const view = render(
-    <PersistenceContext.Provider value={{ mode: 'local', writeFailed: false }}>
+    <PersistenceContext.Provider
+      value={{ mode: 'local', writeFailed: false, pending: false, flush: () => Promise.resolve() }}
+    >
       <TrainingStoreProvider store={store}>
-        <MemoryRouter>
-          <DrillDetailContent titleId="synthetic-title" trainingSet={RECURSIVE_TRAINING_SET} />
-        </MemoryRouter>
+        <WorkspaceContextProvider value={GUEST_WORKSPACE}>
+          <MemoryRouter>
+            <DrillDetailContent titleId="synthetic-title" trainingSet={RECURSIVE_TRAINING_SET} />
+          </MemoryRouter>
+        </WorkspaceContextProvider>
       </TrainingStoreProvider>
     </PersistenceContext.Provider>,
   );
@@ -69,9 +81,13 @@ function renderDashboardFixture(storage?: TestMemoryStorage) {
   const store = createTestStore(storage);
   store.getState().addToDashboard(RECURSIVE_TRAINING_SET.id);
   const view = render(
-    <PersistenceContext.Provider value={{ mode: 'local', writeFailed: false }}>
+    <PersistenceContext.Provider
+      value={{ mode: 'local', writeFailed: false, pending: false, flush: () => Promise.resolve() }}
+    >
       <TrainingStoreProvider store={store}>
-        <RecursiveDashboardFixture />
+        <WorkspaceContextProvider value={GUEST_WORKSPACE}>
+          <RecursiveDashboardFixture />
+        </WorkspaceContextProvider>
       </TrainingStoreProvider>
     </PersistenceContext.Provider>,
   );
@@ -242,9 +258,18 @@ describe('recursive activity web consumers', () => {
     const entryId = store.getState().addToDashboard(RECURSIVE_TRAINING_SET.id);
     store.getState().setQuantityOverride(entryId, 'synthetic-station-a', 'repetitions', 9);
     render(
-      <PersistenceContext.Provider value={{ mode: 'local', writeFailed: false }}>
+      <PersistenceContext.Provider
+        value={{
+          mode: 'local',
+          writeFailed: false,
+          pending: false,
+          flush: () => Promise.resolve(),
+        }}
+      >
         <TrainingStoreProvider store={store}>
-          <RecursiveDashboardFixture />
+          <WorkspaceContextProvider value={GUEST_WORKSPACE}>
+            <RecursiveDashboardFixture />
+          </WorkspaceContextProvider>
         </TrainingStoreProvider>
       </PersistenceContext.Provider>,
     );
@@ -264,20 +289,29 @@ describe('recursive activity web consumers', () => {
     const store = createTestStore();
 
     render(
-      <PersistenceContext.Provider value={{ mode: 'local', writeFailed: false }}>
+      <PersistenceContext.Provider
+        value={{
+          mode: 'local',
+          writeFailed: false,
+          pending: false,
+          flush: () => Promise.resolve(),
+        }}
+      >
         <TrainingStoreProvider store={store}>
-          <MemoryRouter>
-            <DialogShell
-              titleId="synthetic-dialog-title"
-              closeLabel="Close Synthetic recursive keiko details."
-              onClose={onClose}
-            >
-              <DrillDetailContent
+          <WorkspaceContextProvider value={GUEST_WORKSPACE}>
+            <MemoryRouter>
+              <DialogShell
                 titleId="synthetic-dialog-title"
-                trainingSet={RECURSIVE_TRAINING_SET}
-              />
-            </DialogShell>
-          </MemoryRouter>
+                closeLabel="Close Synthetic recursive keiko details."
+                onClose={onClose}
+              >
+                <DrillDetailContent
+                  titleId="synthetic-dialog-title"
+                  trainingSet={RECURSIVE_TRAINING_SET}
+                />
+              </DialogShell>
+            </MemoryRouter>
+          </WorkspaceContextProvider>
         </TrainingStoreProvider>
       </PersistenceContext.Provider>,
     );

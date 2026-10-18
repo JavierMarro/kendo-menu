@@ -1,3 +1,8 @@
+/**
+ * Displays one curated training session and adds it to the active workspace dashboard.
+ * Guest success follows the browser persistence flush, while account success describes only the
+ * in-memory draft and leaves durable account saving to the explicit save action.
+ */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -16,6 +21,8 @@ import {
   type TrainingActivityRenderContext,
 } from '../../components/TrainingActivityList';
 import { TrainingSetTags } from '../../components/TrainingSetTags';
+import { usePersistenceStatus } from '../persistence/persistence-context';
+import { useWorkspace, workspacePath } from '../../lib/workspace-context';
 
 interface DrillDetailContentProps {
   readonly titleId: string;
@@ -59,8 +66,41 @@ function renderLibraryActivityAside(context: TrainingActivityRenderContext) {
 
 export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentProps) {
   const addToDashboard = useTrainingStore((state) => state.addToDashboard);
+  const { flush: flushPersistence } = usePersistenceStatus();
+  const workspace = useWorkspace();
   const [statusMessage, setStatusMessage] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
   const description = getTrainingSetDescription(trainingSet);
+
+  const handleAddToDashboard = async () => {
+    if (isAdding) {
+      return;
+    }
+
+    setIsAdding(true);
+    let added = false;
+    try {
+      if (!workspace.canEdit) throw new Error('The workspace is read-only.');
+      addToDashboard(trainingSet.id);
+      added = true;
+      // Keep the UI's success claim aligned with durable browser storage, not merely the
+      // synchronous Zustand mutation.
+      if (workspace.kind === 'guest') await flushPersistence();
+      setStatusMessage(
+        workspace.kind === 'account'
+          ? `${trainingSet.name} added to your account draft. Save to account to keep this change.`
+          : `${trainingSet.name} added to your dashboard.`,
+      );
+    } catch {
+      setStatusMessage(
+        added
+          ? `${trainingSet.name} was added, but KendoMenu could not confirm it was saved on this device.`
+          : `${trainingSet.name} could not be added to your dashboard.`,
+      );
+    } finally {
+      setIsAdding(false);
+    }
+  };
 
   return (
     <div className="drill-detail-content">
@@ -73,10 +113,9 @@ export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentP
         <button
           className="primary-button"
           type="button"
-          onClick={() => {
-            addToDashboard(trainingSet.id);
-            setStatusMessage(`${trainingSet.name} added to your dashboard.`);
-          }}
+          onClick={() => void handleAddToDashboard()}
+          disabled={isAdding || !workspace.canEdit}
+          aria-busy={isAdding}
         >
           Add to dashboard
         </button>
@@ -90,7 +129,8 @@ export function DrillDetailContent({ titleId, trainingSet }: DrillDetailContentP
       </p>
       {statusMessage.length > 0 ? (
         <p className="inline-confirmation">
-          {statusMessage} <Link to="/app/dashboard">View dashboard</Link>
+          {statusMessage}{' '}
+          <Link to={workspacePath(workspace.basePath, 'dashboard')}>View dashboard</Link>
         </p>
       ) : null}
 

@@ -1,0 +1,8 @@
+- Session: install release gate
+- Date/duration: 2026-09-30; about 70 minutes
+- Scope/start: Correct Job 6D-A mobile install release-gate regression on clean commit 0b12930; Job 6D-B excluded.
+- Changes: Kept the hidden-account warning slot stable before TrainingStoreProvider; held explicit signed-out session responses in mobile install tests to verify landing identity, one visit, deferred prompt, and cookie priority.
+- Decisions: Guest route and install provider stay mounted while the visible store remains the same; no install flags, thresholds, or account behavior changed.
+- Roadblocks: Sandbox denied local Vite port binding; approved local-server runs passed outside the sandbox.
+- Verification: Node 24 check:web PASS; focused development and preview mobile tests 2 passed each; verify:full PASS (297 preview passed, 3 skipped; 4 PWA passed); independent focused review PASS; session:check and diff check PASS.
+- Follow-up: Job 6D-B remains unstarted; no stage, commit, push, or deployment.

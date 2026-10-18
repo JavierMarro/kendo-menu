@@ -8,19 +8,25 @@ production state.
 
 The checked-in settings are the source of truth for the build:
 
-| Setting                  | Declared value                                      | Source                                    |
-| ------------------------ | --------------------------------------------------- | ----------------------------------------- |
-| Package manager          | `pnpm@11.22.0` (`packageManager`)                   | [`package.json`](../../package.json)      |
-| Node requirement         | `>=20.19.0` (`engines.node`)                        | [`package.json`](../../package.json)      |
-| Checked-in Vercel config | Repository root: [`vercel.json`](../../vercel.json) | [`vercel.json`](../../vercel.json)        |
-| Build command            | `pnpm build`                                        | [`vercel.json`](../../vercel.json)        |
-| Build implementation     | `pnpm --filter @kendo-menu/web build`               | root [`package.json`](../../package.json) |
-| Output directory         | `apps/web/dist`                                     | [`vercel.json`](../../vercel.json)        |
-| SPA rewrite              | `/(.*)` → `/index.html`                             | [`vercel.json`](../../vercel.json)        |
+| Setting                  | Declared value                                              | Source                                    |
+| ------------------------ | ----------------------------------------------------------- | ----------------------------------------- |
+| Package manager          | `pnpm@11.22.0` (`packageManager`)                           | [`package.json`](../../package.json)      |
+| Node requirement         | `24.x` (`engines.node`)                                     | [`package.json`](../../package.json)      |
+| Checked-in Vercel config | Repository root: [`vercel.json`](../../vercel.json)         | [`vercel.json`](../../vercel.json)        |
+| Build command            | `pnpm build`                                                | [`vercel.json`](../../vercel.json)        |
+| Build implementation     | `pnpm build:api` then `pnpm --filter @kendo-menu/web build` | root [`package.json`](../../package.json) |
+| Output directory         | `apps/web/dist`                                             | [`vercel.json`](../../vercel.json)        |
+| SPA rewrite              | Non-API paths → `/index.html`                               | [`vercel.json`](../../vercel.json)        |
 
-The root lockfile is `pnpm-lock.yaml`; no alternate package manager or lockfile is declared. No
-`installCommand`, framework override, function, API, or provider-specific environment value is
-checked into `vercel.json`. Vercel documents package-manager detection and the `packageManager`
+The root lockfile is `pnpm-lock.yaml`; no alternate package manager or lockfile is declared. The root
+API function dispatches API requests ahead of the SPA fallback. `pnpm build:api` reuses the installed
+web Vite toolchain with `apps/web/vite.api.config.ts` to emit `apps/api/dist/index.js`, bundling the
+API, domain workspace code and curated JSON while leaving third-party server dependencies external.
+This server build does not load private env files; credentials remain runtime configuration. The API
+package uses source exports for types/development and emitted JavaScript by default. Generated output
+is ignored and must not be committed. A Ready build alone does not verify deployed API behavior.
+No `installCommand`, framework override, or
+provider-specific environment value is checked into `vercel.json`. Vercel documents package-manager detection and the `packageManager`
 field in its [Package Managers guide](https://vercel.com/docs/package-managers), build/output and
 root-directory settings in [Configuring a Build](https://vercel.com/docs/builds/configure-a-build),
 and the SPA pattern in [Rewrites on Vercel](https://vercel.com/docs/routing/rewrites).
@@ -35,6 +41,7 @@ pnpm session:check
 pnpm format:check
 pnpm check
 pnpm build
+pnpm test:api:package
 pnpm test:e2e:preview
 pnpm test:e2e:pwa
 pnpm verify:full
@@ -42,6 +49,25 @@ pnpm verify:full
 
 `pnpm verify:full` is the release gate: it runs `pnpm check`, the complete non-PWA suite against a
 fresh Vite preview, and the dedicated PWA suite. It does not rerun the development-server suite.
+`pnpm check` runs the package test after its fresh build; `pnpm test:api:package` also runs that pair
+on its own. The plain-Node test loads the transpiled Vercel adapter and packaged API without workspace TypeScript, private configuration,
+database access or outbound auth requests. This catches source-only package exports; it does not
+replace the owner-run HTTPS health, Google sign-in, account Save and isolation checks on Vercel.
+
+Account API requests include same-origin cookies so protected Previews can recognise Vercel access.
+The API still authorizes only a verified Neon bearer token; a hosting cookie cannot open an account.
+A successful Neon session/token exchange followed by an account 401 with a Vercel SSO challenge
+can indicate hosting protection, not a Google failure. Keep protection enabled and do not embed
+Vercel bypass secrets in browser code. Local synthetic cookie-gate tests do not prove live HTTPS access.
+
+The API rewrite uses the anonymous `/api/(.*)` capture, not `/api/:path*`. Vercel forwards unused
+named rewrite parameters as query parameters; an injected `path` selector would correctly trigger
+the account API's `INVALID_ACCOUNT_REQUEST` guard. Keep query validation intact and correct routing
+instead. The configuration regression checks API-before-SPA ordering and anonymous captures; the
+native adapter check confirms query-free account requests reach authorization while genuine query
+selectors remain rejected. Neither check executes Vercel's live routing pipeline. After publishing
+this correction, the owner must retest sign-in on the stable HTTPS Preview; a Ready build is not
+evidence of a verified account. See [Vercel's rewrite parameter behavior](https://vercel.com/docs/routing/rewrites).
 
 ## Production facts as of 2026-09-02
 

@@ -1,0 +1,84 @@
+:root {
+  color: #f4f6f8;
+  background: #0b1b33;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.6;
+  color-scheme: dark;
+}
+
+.managed-proof {
+  max-width: 48rem;
+  margin: 4rem auto;
+  padding: 0 1.5rem;
+}
+
+.managed-proof h1 {
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  line-height: 1.2;
+}
+
+.managed-proof h2 {
+  font-size: 1.25rem;
+  margin-top: 2rem;
+}
+
+.managed-proof-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 2rem 0;
+}
+
+.managed-proof button {
+  font: inherit;
+  padding: 0.65rem 1rem;
+  min-height: 2.75rem;
+  color: #f4f6f8;
+  background: #193451;
+  border: 1px solid #74869b;
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+
+.managed-proof button:first-child {
+  background: #c89b3c;
+  color: #0b1b33;
+}
+
+.managed-proof button:hover:enabled {
+  border-color: #f3c95e;
+}
+
+.managed-proof button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.managed-proof button:focus-visible {
+  outline: 3px solid #f3c95e;
+  outline-offset: 4px;
+}
+
+.managed-proof dt {
+  margin-top: 0.75rem;
+  color: #b9c4d0;
+}
+
+.managed-proof dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.managed-proof-note {
+  color: #b9c4d0;
+  margin-top: 2rem;
+}
+
+@media (max-width: 30rem) {
+  .managed-proof {
+    margin: 2rem auto;
+  }
+  .managed-proof-actions button {
+    width: 100%;
+  }
+}

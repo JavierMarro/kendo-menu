@@ -26,6 +26,80 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-10-18 — CI cookie notice correction](./2026-10-18-ci-cookie-notice-correction.md)
+- [2026-10-18 — Release check corrections](./2026-10-18-release-check-corrections.md)
+- [2026-10-18 — Production database migrations](./2026-10-18-production-database-migrations.md)
+- [2026-10-18 — Production Google diagnostic](./2026-10-18-production-google-diagnostic.md)
+- [2026-10-18 — Production Google helper](./2026-10-18-production-google-helper.md)
+- [2026-10-18 — Privacy and production setup](./2026-10-18-privacy-and-production-setup.md)
+- [2026-10-18 — Mobile dropdown refinement](./2026-10-18-mobile-dropdown-refinement.md)
+- [2026-10-18 — Final navigation and production handoff](./2026-10-18-final-navigation-handoff.md)
+- [2026-10-16 — Mitori content and list polish](./2026-10-16-mitori-content-polish.md)
+- [2026-10-16 — Mitori room](./2026-10-16-mitori-room.md)
+- [2026-10-16 — Edge-to-edge sign-in artwork](./2026-10-16-edge-to-edge-sign-in.md)
+- [2026-10-16 — Sign-in proportions correction](./2026-10-16-sign-in-proportions.md)
+- [2026-10-16 — Final responsive polish](./2026-10-16-final-responsive-polish.md)
+- [2026-10-16 — Signed-in UI polish](./2026-10-16-signed-in-ui-polish.md)
+- [2026-10-16 — UI refinements](./2026-10-16-ui-refinements.md)
+- [2026-10-15 — UI journey](./2026-10-15-ui-journey.md)
+- [2026-10-14 — Vercel API routing](./2026-10-14-vercel-api-routing.md)
+- [2026-10-14 — Preview account cookies](./2026-10-14-preview-account-cookies.md)
+- [2026-10-14 — Vercel API package](./2026-10-14-vercel-api-package.md)
+- [2026-10-13 — privacy, license and README](./2026-10-13-privacy-license-readme.md)
+- [2026-10-13 — landing copy and clean sign-out](./2026-10-13-landing-copy-clean-signout.md)
+- [2026-10-13 — managed empty account POST](./2026-10-13-managed-empty-account-post.md)
+- [2026-10-13 — managed pooler startup](./2026-10-13-managed-pooler-startup.md)
+- [2026-10-12 — onboarding comments](./2026-10-12-onboarding-comments.md)
+- [2026-10-12 — optional audit cleanups](./2026-10-12-optional-audit-cleanups.md)
+- [2026-10-10 — managed guest copy](./2026-10-10-managed-guest-copy.md)
+- [2026-10-07 — managed account web](./2026-10-07-managed-account-web.md)
+- [2026-10-05 — managed dashboard backend](./2026-10-05-managed-dashboard-backend.md)
+- [2026-10-05 — managed auth owner review and gate amendment](./2026-10-05-managed-auth-owner-review.md)
+- [2026-10-04 — managed auth callback handoff](./2026-10-04-managed-auth-callback-handoff.md)
+- [2026-10-04 — managed auth storage gate (initial token-only attempt)](./2026-10-04-managed-auth-storage-gate.md)
+
+- [2026-10-04 — private configuration policy](./2026-10-04-private-configuration-policy.md)
+
+- [2026-10-04 — agent guidance refresh](./2026-10-04-agent-guidance-refresh.md)
+
+- [2026-10-04 — managed auth transition plan](./2026-10-04-managed-auth-transition-plan.md)
+
+- [2026-09-30 — guest adoption web](./2026-09-30-guest-adoption-web.md)
+
+- [2026-09-30 — install release gate](./2026-09-30-install-release-gate.md)
+
+- [2026-09-27 — account workspace foundation](./2026-09-27-account-workspace-foundation.md)
+
+- [2026-09-24 — account sync review and onboarding comments](./2026-09-24-account-sync-review-comments.md)
+
+- [2026-09-24 — account sync review fixes](./2026-09-24-account-sync-review-fixes.md)
+
+- [2026-09-24 — account sync hardening](./2026-09-24-account-sync-hardening.md)
+
+- [2026-09-23 — internal account sync](./2026-09-23-internal-account-sync.md)
+
+- [2026-09-23 — account cache no-op](./2026-09-23-account-cache-no-op.md)
+
+- [2026-09-23 — IndexedDB account cutover](./2026-09-23-indexeddb-account-cutover.md)
+
+- [2026-09-23 — revocation result contract](./2026-09-23-revocation-result-contract.md)
+
+- [2026-09-20 — account bootstrap and workspace isolation](./2026-09-20-account-workspace-bootstrap.md)
+
+- [2026-09-19 — authoritative adoption and account recovery](./2026-09-19-authoritative-adoption.md)
+
+- [2026-09-13 — PostgreSQL dashboard persistence and routes](./2026-09-13-dashboard-postgres-persistence.md)
+
+- [2026-09-12 — protected dashboard application foundation](./2026-09-12-dashboard-foundation.md)
+
+- [2026-09-11 — Google OIDC and opaque application sessions](./2026-09-11-google-oidc-opaque-sessions.md)
+
+- [2026-09-10 — authentication persistence foundation](./2026-09-10-auth-persistence-foundation.md)
+
+- [2026-09-09 — Node and Elysia API foundation](./2026-09-09-node-elysia-api.md)
+
+- [2026-09-09 — account and synchronization architecture](./2026-09-09-account-sync-architecture.md)
+
 - [2026-09-08 — user-facing kendo glossary](./2026-09-08-kendo-glossary.md)
 
 - [2026-09-08 — Astra repository instruction migration](./2026-09-08-astra-instruction-migration.md)

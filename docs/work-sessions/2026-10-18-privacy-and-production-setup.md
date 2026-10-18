@@ -1,0 +1,8 @@
+- Session: privacy and production setup
+- Date/duration: 2026-10-18; privacy page, footer and setup evidence
+- Scope/start: Added public Privacy page and requested footer order on codex/ui-journey; owner supplied production-setup screenshots.
+- Changes: Added /privacy with metadata, signed-out analytics mapping and offline shell; Navigation ends with conditional Install; Information is GitHub, Sources, Cookies, Privacy.
+- Decisions: CookiePolicyPage wording unchanged; reused existing policy styling; Privacy URL belongs in Google's Privacy Policy field, not Terms; no remote changes or commits.
+- Roadblocks: Production Google still uses shared keys; prior conversation confirms hidden-prompt Neon CLI helper changed only auth-simplification-dev to standard credentials; temporary helper is no longer present; Vercel warning classifies a public Auth URL as a secret.
+- Verification: Node 24 check:web passed (348 tests); focused browser suite passed 11 with 3 device skips; PWA passed 4; independent content/desktop/mobile review passed; production migration state not observed.
+- Follow-up: With exact authorization prepare production-guarded Google-provider helper; read-only check production migration history before applying 0000–0003; full release gate and live HTTPS smoke checks remain separate.

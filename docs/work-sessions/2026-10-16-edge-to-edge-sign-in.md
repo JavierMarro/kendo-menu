@@ -1,0 +1,8 @@
+- Session: Edge-to-edge sign-in artwork
+- Date/duration: 2026-10-16; focused visual refinement
+- Scope/start: Sign-in composition only; preserved the existing dirty branch and authentication behaviour.
+- Changes: Full-height desktop artwork with a faint central divider; full-width mobile artwork above a halfway divider; removed the duplicate options heading and rebalanced panel spacing.
+- Decisions: Reused the existing knee-up desktop and thigh-up mobile CSS crops; retained an accessible Sign-in options region and all controls; shorter screens may scroll.
+- Roadblocks: None.
+- Verification: Browser appearance inspected at 1440x900 and 412x915; mobile regions measured equal heights with no horizontal overflow; regression expectations updated; tests intentionally not run at the owner's request.
+- Follow-up: Owner visual approval; no commit, deployment or remote settings changed.

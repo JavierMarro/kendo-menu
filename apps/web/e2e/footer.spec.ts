@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { test } from './guest-test';
 
 async function dismissCookieNotice(page: Page): Promise<void> {
   const notice = page.getByRole('complementary', { name: 'Cookie notice' });
@@ -66,19 +67,43 @@ function expectAaTextContrast(state: Awaited<ReturnType<typeof getInstallActionV
 async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): Promise<void> {
   await expect(footer.getByRole('link', { name: 'KendoMenu home' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'How it works' })).toBeVisible();
-  await expect(footer.getByRole('link', { name: /Keiko library/ })).toBeVisible();
-  await expect(footer.getByRole('link', { name: 'Dashboard' })).toBeVisible();
+  await expect(footer.getByRole('link', { name: 'Library info' })).toBeVisible();
+  await expect(footer.getByRole('link', { name: 'Dashboard' })).toHaveCount(0);
   await expect(footer.getByRole('link', { name: 'FAQ' })).toBeVisible();
+  await expect(footer.getByRole('link', { name: 'GitHub', exact: true })).toHaveAttribute(
+    'href',
+    'https://github.com/JavierMarro/kendo-menu',
+  );
   await expect(footer.getByRole('link', { name: 'Sources' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'Cookies' })).toBeVisible();
+  await expect(footer.getByRole('link', { name: 'Privacy', exact: true })).toBeVisible();
 
+  const information = footer.getByRole('navigation', { name: 'Information' });
+  expect(
+    (await information.getByRole('link').allTextContents()).map((text) => text.trim()),
+  ).toEqual(['GitHub', 'Sources', 'Cookies', 'Privacy']);
+  await expect(information.getByRole('link', { name: 'GitHub' }).locator('svg')).toHaveAttribute(
+    'aria-hidden',
+    'true',
+  );
+
+  const navigation = footer.getByRole('navigation', { name: 'Navigation' });
+  expect(
+    (await navigation.locator(':scope > *').allTextContents()).map((text) => text.trim()),
+  ).toEqual(['How it works', 'Library info', 'FAQ', 'Install KendoMenu']);
   const sourcesLink = footer.getByRole('link', { name: 'Sources' });
   const cookiesLink = footer.getByRole('link', { name: 'Cookies' });
-  await sourcesLink.focus();
+  const githubLink = footer.getByRole('link', { name: 'GitHub' });
+  const privacyLink = footer.getByRole('link', { name: 'Privacy', exact: true });
+  await githubLink.focus();
+  await page.keyboard.press('Tab');
+  await expect(sourcesLink).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(cookiesLink).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(privacyLink).toBeFocused();
 
-  const focusStyle = await cookiesLink.evaluate((element) => {
+  const focusStyle = await privacyLink.evaluate((element) => {
     const computedStyle = getComputedStyle(element);
     return {
       outlineStyle: computedStyle.outlineStyle,
@@ -88,7 +113,7 @@ async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): P
   expect(focusStyle.outlineStyle).not.toBe('none');
   expect(Number.parseFloat(focusStyle.outlineWidth)).toBeGreaterThanOrEqual(3);
 
-  const installAction = footer.getByRole('button', { name: 'Install KendoMenu' });
+  const installAction = navigation.getByRole('button', { name: 'Install KendoMenu' });
   const sourceFontSize = await sourcesLink.evaluate((element) =>
     Number.parseFloat(getComputedStyle(element).fontSize),
   );
@@ -122,7 +147,7 @@ async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): P
 test.describe('responsive site footer', () => {
   test('uses a three-column layout at 1440px without horizontal overflow', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/app/dashboard');
+    await page.goto('/app');
     await dismissCookieNotice(page);
 
     const footer = page.getByRole('contentinfo', { name: 'Site footer' });
@@ -162,7 +187,7 @@ test.describe('responsive site footer', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.goto('/app/dashboard');
+    await page.goto('/app');
     await dismissCookieNotice(page);
 
     const footer = page.getByRole('contentinfo', { name: 'Site footer' });
@@ -181,7 +206,7 @@ test.describe('responsive site footer', () => {
           if (column.querySelector('.footer-nav') !== null) {
             return 'navigation';
           }
-          return 'social';
+          return 'information';
         }),
         gridColumnCount: getComputedStyle(element).gridTemplateColumns.split(/\s+/).filter(Boolean)
           .length,
@@ -195,7 +220,7 @@ test.describe('responsive site footer', () => {
     });
 
     expect(mobileLayout).toEqual({
-      columnOrder: ['brand', 'navigation', 'social'],
+      columnOrder: ['brand', 'navigation', 'information'],
       gridColumnCount: 2,
       isBrandAboveLinks: true,
       areLinkColumnsAligned: true,

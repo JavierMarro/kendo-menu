@@ -1,0 +1,8 @@
+- Session: internal account sync
+- Date/duration: 2026-09-23; ~3 hours
+- Scope/start: Job 6C-B from reviewed 6C-A; internal account sync only, guest LocalStorage preserved, no public account entry or deployment.
+- Changes: Added account-scoped atomic pending/ack/conflict transactions, validated provenance and payloads, conditional GET/PUT replay, guest adoption gate, explicit conflict resolution, durable losing-local recovery, and internal workspace wiring.
+- Decisions: Fresh empty cache may load cloud; migrated empty cache conflicts with divergent cloud. Job 6D owns adoption POST/choice and public UI; no commit.
+- Roadblocks: The postcommit recovery loss window and dashboard-401 exposure found after this session were closed by the 2026-09-24 hardening; see that dated handoff.
+- Verification: Node 24 individual check stages PASS; parallel pnpm check had unrelated test timeouts, with store 69/69 and web 257/257 on isolated reruns; account dev and preview browser suites 48/48 each; independent persistence review PASS.
+- Follow-up: Job 6D must implement adoption Yes/No request and guest cleanup, conflict UI and export; live provider/HTTPS/Neon/Vercel integration remains unverified.

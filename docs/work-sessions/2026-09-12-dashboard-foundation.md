@@ -1,0 +1,8 @@
+- Session: Protected dashboard application foundation (Job 5A)
+- Date/duration: 2026-09-12; duration not recorded across interrupted work
+- Scope/start: Clean codex/account-sync-integration at d51e564; preserved Job 4B explanatory documentation; Job 5A only.
+- Changes: Shared authorization/logout CSRF correction, strict v10 codec and unregistered dashboard foundation; external review's unrelated/login-cookie session-invalidation finding corrected with protected-cookie isolation and public authorization regressions.
+- Decisions: Complete 2,097,152-byte envelope; structural validation before retained receipt lookup and current-catalogue compatibility afterward; protected proof/intent interface documented in DASHBOARD_FOUNDATION.md; no dashboard SQL or reachable routes.
+- Roadblocks: Local cache/IPC/database/audit access required sandbox escalation; existing moderate development-only esbuild advisory remains; no third-party package added.
+- Verification: Node 24 correction checks passed: targeted auth/security 127, check:api 387, check 694; session:check, diff and focused scans passed; correction-only independent review PASS; prior PostgreSQL 44-test evidence retained, not rerun for this parser-only correction.
+- Follow-up: Owner commit required before Job 5B; no commit, deployment, environment, schema or production-runtime changes; real Google/HTTPS/Neon/Vercel and external start-rate-limit gates remain.

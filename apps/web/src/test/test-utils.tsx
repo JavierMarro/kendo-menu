@@ -9,6 +9,8 @@ import {
   type PersistenceContextValue,
 } from '../features/persistence/PersistenceGate';
 import { TrainingStoreProvider } from '../lib/training-store-context';
+import { ManagedAuthProvider } from '../features/account/ManagedAuthProvider';
+import { WorkspaceContextProvider } from '../lib/workspace-context';
 
 export const TEST_STORAGE_KEY = 'kendo-menu-test';
 
@@ -55,15 +57,23 @@ export function renderApp(store: TrainingStoreApi, options: AppRenderOptions = {
   const persistenceValue: PersistenceContextValue = {
     mode: persistence.mode ?? 'local',
     writeFailed: persistence.writeFailed ?? false,
+    pending: persistence.pending ?? false,
+    flush: persistence.flush ?? (() => Promise.resolve()),
   };
 
   function Wrapper({ children }: { readonly children: ReactNode }) {
     return (
-      <PersistenceContext.Provider value={persistenceValue}>
-        <TrainingStoreProvider store={store}>
-          <MemoryRouter initialEntries={[...initialEntries]}>{children}</MemoryRouter>
-        </TrainingStoreProvider>
-      </PersistenceContext.Provider>
+      <ManagedAuthProvider>
+        <PersistenceContext.Provider value={persistenceValue}>
+          <WorkspaceContextProvider
+            value={{ kind: 'guest', basePath: '/app/guest', canEdit: true, accountEmail: null }}
+          >
+            <TrainingStoreProvider store={store}>
+              <MemoryRouter initialEntries={[...initialEntries]}>{children}</MemoryRouter>
+            </TrainingStoreProvider>
+          </WorkspaceContextProvider>
+        </PersistenceContext.Provider>
+      </ManagedAuthProvider>
     );
   }
 

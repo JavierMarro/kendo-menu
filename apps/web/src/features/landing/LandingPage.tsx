@@ -1,8 +1,22 @@
+/**
+ * Presents the public entry point for guest planning and managed Google sign-in, alongside the
+ * curated-library overview. Scroll reveals are optional presentation behavior and are skipped
+ * when reduced motion is requested or the browser lacks the observer API.
+ */
 import { useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
+import { TrainingSetTags } from '../../components/TrainingSetTags';
+import { useManagedAuth } from '../../lib/managed-auth-context';
+import {
+  CURATED_EXERCISE_COUNT,
+  CURATED_TRAINING_SET_COUNT,
+  findTrainingSet,
+  getBrowsableTrainingSets,
+  getTrainingSetActivityCount,
+  getTrainingSetDescription,
+} from '../../lib/training-data';
 import { useInstallLandingEntry } from '../install/install-context';
-import { CURATED_EXERCISE_COUNT, CURATED_TRAINING_SET_COUNT } from '../../lib/training-data';
 
 interface FaqItem {
   readonly id: string;
@@ -15,13 +29,13 @@ const FAQ_ITEMS: readonly FaqItem[] = [
     id: 'what-is-kendomenu',
     question: 'What is KendoMenu?',
     answer:
-      'KendoMenu is a free web app for choosing, adapting, creating and organising keiko menus. Choose a menu, add it to your dashboard, then adjust each activity’s repetitions or duration to prepare a session. You can also record a session practised with a visiting sensei or at a seminar, or create one from scratch, and save it on your device.',
+      'KendoMenu is a free web app for choosing, adapting, creating and organising keiko menus. Choose a menu and adjust each activity’s repetitions or duration, or create your own. Keep a journal of sessions you have practised, such as keiko with a visiting sensei or at a seminar.',
   },
   {
     id: 'is-kendomenu-free',
     question: 'Is KendoMenu free?',
     answer:
-      'Yes. KendoMenu is free to use, with no adverts or premium features. Your menus and dashboard data stay on the device you use; account-based cloud access will be available in the future.',
+      'Yes. KendoMenu is 100% free to use as a guest or with an account, with no premium features now or in the future. We do not place adverts on the site, but embedded YouTube videos may show adverts.',
   },
   {
     id: 'all-experience-levels',
@@ -60,17 +74,33 @@ const FAQ_ITEMS: readonly FaqItem[] = [
     id: 'phone-and-computer',
     question: 'Can I use KendoMenu on my phone and computer?',
     answer:
-      'Yes. KendoMenu is designed for desktop and mobile browsers. Depending on your browser, you may also be able to add a shortcut to your phone’s home screen.',
+      'Yes. Use KendoMenu in a phone or computer browser. Guest dashboards are saved on the device where you use KendoMenu; account dashboards can be opened on other devices after you select Save to account. Depending on your browser, you can also add the app to your phone’s home screen as a PWA (Progressive Web App).',
   },
   {
-    id: 'device-sync',
-    question: 'Are my menus synchronised between devices?',
-    answer:
-      'Not currently. Your saved menus and dashboard are tied to the device where you create them, so your computer and phone keep separate local data. Cloud synchronisation will be available in the future.',
+    id: 'open-source',
+    question: 'Is KendoMenu open source?',
+    answer: (
+      <>
+        Yes. KendoMenu is open source under the AGPL-3.0 license. The full source code lives at{' '}
+        <a className="landing-faq-source-link" href="https://github.com/JavierMarro/kendo-menu">
+          https://github.com/JavierMarro/kendo-menu
+        </a>
+        . The product is free, with no ads or premium tier, and is built by a solo developer.
+      </>
+    ),
   },
 ];
 
 const LANDING_REVEAL_SELECTOR = '[data-landing-reveal]';
+const LANDING_TEASER_IDS = [
+  'international-dojo-2-hour-session',
+  'university-high-school',
+  'university-version-2',
+] as const;
+const LANDING_TEASERS = LANDING_TEASER_IDS.flatMap((trainingSetId) => {
+  const trainingSet = findTrainingSet(getBrowsableTrainingSets(), trainingSetId);
+  return trainingSet === undefined ? [] : [trainingSet];
+});
 
 function useLandingScrollReveal() {
   const sectionsRef = useRef<HTMLDivElement>(null);
@@ -148,6 +178,8 @@ function useLandingScrollReveal() {
 
 export function LandingPage(): ReactElement {
   useInstallLandingEntry();
+  const { identity } = useManagedAuth();
+  const isVerified = identity.status === 'verified';
   const [openFaqId, setOpenFaqId] = useState<string | null>(null);
   const sectionsRef = useLandingScrollReveal();
 
@@ -178,63 +210,93 @@ export function LandingPage(): ReactElement {
         </picture>
         <div className="landing-content">
           <p className="eyebrow">Kendo practice, curated for you</p>
-          <h1 id="landing-page-title">Plan the keiko you need today.</h1>
+          <h1 id="landing-page-title">Plan the keiko you need today</h1>
           <p className="landing-intro">
             Choose from {CURATED_TRAINING_SET_COUNT} curated menus, shape the workload for your
-            training and keep polishing mind, spirit and character through varied kendo practice.
+            training and keep polishing mind, spirit and character through varied kendo practice
           </p>
-          <Link
-            className="primary-button landing-cta landing-primary-action"
-            to="/app/library"
-            aria-label="Browse Keiko library"
-          >
-            BROWSE KEIKO LIBRARY HERE →
-          </Link>
+          <div className="landing-entry-actions">
+            {isVerified ? (
+              <Link
+                className="primary-button landing-cta landing-primary-action"
+                to="/app/account/dashboard"
+              >
+                Back to your dashboard
+              </Link>
+            ) : (
+              <>
+                <Link
+                  className="primary-button landing-cta landing-primary-action"
+                  to="/app/guest/dashboard"
+                >
+                  Try without an account
+                </Link>
+                <Link className="secondary-button landing-cta" to="/app/sign-in">
+                  Sign up here
+                </Link>
+              </>
+            )}
+          </div>
         </div>
       </section>
 
       <div ref={sectionsRef} className="landing-sections">
         <section className="landing-section landing-introduction" aria-labelledby="intro-title">
-          <div className="landing-section-inner landing-introduction-grid">
-            <div className="landing-section-heading">
-              <h2 id="intro-title">A keiko menu for the day in front of you.</h2>
-            </div>
+          <div className="landing-section-inner">
+            <div className="landing-introduction-grid">
+              <div className="landing-section-heading">
+                <h2 id="intro-title">A keiko menu for the day in front of you</h2>
+              </div>
 
-            <div className="landing-section-copy" data-landing-reveal="left">
-              <p>
-                <strong>KendoMenu meets you where you are in your keiko.</strong> It is for senpai
-                looking for fresh inspiration, sensei and dojo leaders planning a training session,
-                and practitioners who want to adapt activities by changing repetitions or duration.
-              </p>
-              <p>
-                <strong>Start with a curated practice plan or build from scratch.</strong> Shape it
-                around the people, time, and goals in front of you.
-              </p>
-
-              <div className="landing-benefits">
-                <h3>Make the plan yours</h3>
-                <ul className="landing-benefits-list">
-                  <li>
-                    <span>
-                      <strong>Structure it quickly.</strong> Prepare a focused keiko session without
-                      starting from zero.
-                    </span>
-                  </li>
-                  <li>
-                    <span>
-                      <strong>Use real context.</strong> Draw on curated training ideas gathered
-                      from online available kendo resources.
-                    </span>
-                  </li>
-                  <li>
-                    <span>
-                      <strong>Keep it close.</strong> Your created sessions stay available on this
-                      device for future reference.
-                    </span>
-                  </li>
-                </ul>
+              <div className="landing-section-copy" data-landing-reveal="left">
+                <p>
+                  <strong>KendoMenu meets you where you are in your kendo journey.</strong> It is
+                  for senpai looking for fresh inspiration, sensei planning keiko, or practitioners
+                  who want to keep a journal of their training sessions.
+                </p>
+                <p>
+                  <strong>Start with a curated practice plan or build from scratch.</strong> Shape
+                  it around the people, time, and goals in front of you.
+                </p>
               </div>
             </div>
+
+            <section
+              className="landing-menu-preview"
+              aria-labelledby="landing-menu-preview-title"
+              data-landing-reveal="up"
+            >
+              <h3 id="landing-menu-preview-title">Explore a few curated menus</h3>
+              <ul className="landing-menu-teasers">
+                {LANDING_TEASERS.map((trainingSet) => (
+                  <li key={trainingSet.id}>
+                    <Link
+                      className="landing-menu-teaser"
+                      to={{
+                        pathname: '/app/guest/library',
+                        search: `?drill=${encodeURIComponent(trainingSet.id)}`,
+                      }}
+                    >
+                      <TrainingSetTags trainingSet={trainingSet} />
+                      <h4>{trainingSet.name}</h4>
+                      <p className="landing-menu-teaser-description">
+                        {getTrainingSetDescription(trainingSet) ??
+                          trainingSet.activities
+                            .slice(0, 4)
+                            .map((activity) => activity.name)
+                            .join(' · ')}
+                      </p>
+                      <span className="step-count">
+                        {getTrainingSetActivityCount(trainingSet)} activities
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <Link className="landing-menu-preview-link" to="/app/guest/library">
+                See all {CURATED_TRAINING_SET_COUNT} menus →
+              </Link>
+            </section>
           </div>
         </section>
 
@@ -280,7 +342,7 @@ export function LandingPage(): ReactElement {
           <div className="landing-section-inner">
             <div className="landing-library-heading" data-landing-reveal="split">
               <div className="landing-section-heading landing-reveal-right">
-                <h2 id="library-story-title">A curated library with real training context.</h2>
+                <h2 id="library-story-title">A curated library with real training context</h2>
               </div>
               <p className="landing-reveal-left">
                 <strong>Carefully sourced and easy to adapt.</strong> These figures reflect the
@@ -398,7 +460,7 @@ export function LandingPage(): ReactElement {
           <div className="landing-section-inner">
             <div className="landing-final-cta-panel" data-landing-reveal="split">
               <div className="landing-final-cta-copy landing-reveal-right">
-                <h2 id="final-cta-title">Your next keiko starts with a clear plan.</h2>
+                <h2 id="final-cta-title">Your next keiko starts with a clear plan</h2>
                 <p>
                   <strong>Make today’s plan real.</strong> Choose a session from the library, adjust
                   it and make the plan yours.
@@ -406,10 +468,10 @@ export function LandingPage(): ReactElement {
               </div>
               <Link
                 className="primary-button landing-primary-action landing-reveal-left"
-                to="/app/library"
-                aria-label="Record your first keiko"
+                to={isVerified ? '/app/account/dashboard' : '/app/guest/dashboard'}
+                aria-label={isVerified ? undefined : 'Record your first keiko'}
               >
-                RECORD YOUR FIRST KEIKO HERE →
+                {isVerified ? 'Continue to your dashboard' : 'RECORD YOUR FIRST KEIKO HERE →'}
               </Link>
             </div>
           </div>

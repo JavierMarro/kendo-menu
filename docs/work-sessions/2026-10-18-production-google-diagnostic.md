@@ -1,0 +1,8 @@
+- Session: production google diagnostic
+- Date/duration: 2026-10-18; failed update diagnosis and read-only verification
+- Scope/start: Owner's production Google update was not confirmed; preserved prior app changes and did not retry the remote write.
+- Changes: Temporary production helper now uses CLI-safe --data=- with JSON only on stdin; added guarded GET-only --inspect mode and safe CLI exit/HTTP-status diagnostics without raw responses or credential values.
+- Decisions: Live read-only inspection independently confirmed KendoMenu/default production still uses shared Google keys with no custom client ID; owner-supplied Oct 13 history confirms development Google became standard, not production SQL migration status.
+- Roadblocks: Actual Neon CLI 8.4.3 rejects separate --data and - arguments before any request; use --data=-; local HTTP test must spawn the CLI asynchronously to avoid blocking its stub server; terminal history contains no production migration acknowledgement.
+- Verification: Node 24 helper self-tests, strict TypeScript and independent review passed; live production GET-only inspection passed; pinned CLI synthetic local-stub test passed with one PATCH, expected JSON body from stdin and no credential echo.
+- Follow-up: Owner can run corrected production helper for one confirmed update and share sanitized result; production credentials and SQL migrations remain unverified; no remote writes, migrations or deployments performed by the agent.

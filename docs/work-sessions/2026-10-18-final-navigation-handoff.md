@@ -1,0 +1,8 @@
+- Session: Final navigation and production handoff
+- Date/duration: 2026-10-18; final UI fixes and production configuration handoff
+- Scope/start: Finish the October 16 mobile heading and landing-navigation changes on the existing dirty codex/ui-journey branch; review the owner's masked Vercel configuration screenshot.
+- Changes: Mobile sign-in heading enlarged about five percent; header-only Get started opens sign-in; expanded mobile navigation uses two spaced rows; footer links unchanged.
+- Decisions: Reuse the existing Vercel project; recommend keeping the development account/branch and starting production accounts independently; main auto-deploy is owner-confirmed, so configure production before merging.
+- Roadblocks: Screenshot shows managed Auth URLs only on a different branch-specific Preview; Production DATABASE_URL and APP_ORIGIN exist but their hidden values/targets are unverified; old Vercel Google variables are unused by the managed runtime.
+- Verification: Reused exact-diff October 16 Node 24 results: 2 focused unit and 6 desktop/mobile browser checks passed; mobile appearance/Get started manually verified; whitespace check passed; no full suite rerun requested.
+- Follow-up: Confirm production Neon branch/Auth status, apply reviewed forward migrations separately, configure own Google provider/trusted origin and matching Production URLs/database, scope the UI branch Preview, then run release gates before merging; no commit, deletion, deployment or remote changes performed.

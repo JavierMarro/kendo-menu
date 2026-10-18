@@ -1,0 +1,8 @@
+- Session: production database migrations
+- Date/duration: 2026-10-18; ~20m
+- Scope/start: Owner confirmed production still serves the LocalStorage MVP and explicitly authorized applying reviewed SQL migrations 0000–0003 to the production Neon branch.
+- Changes: Applied the unchanged migration chain once to KendoMenu/default production, database kendomenu_dev; fresh read-back verified all four journal hashes/timestamps, seven application tables and columns, and both migration functions.
+- Decisions: Temporary production-only wrapper reused migrateDatabase with a direct connection obtained privately in memory through the authenticated Neon CLI; no agent inspection of credential files, secrets printed, development data copied, neon_auth changes, website deployment or Git mutations.
+- Roadblocks: Preflight checks public/drizzle relations and the two function-name collisions because Drizzle can create its ledger before the migration transaction; guarded local tests needed an explicit local URL and sandbox socket approval; current pg emitted a non-blocking future TLS-mode compatibility warning.
+- Verification: Node 24 mock-only helper self-tests, strict TypeScript, formatting and independent security review passed; pnpm db:check passed; guarded local PostgreSQL integration passed all 67 tests; live production read-only preflight and apply/read-back both passed.
+- Follow-up: Owner previously reported production Google provider standard with matching client ID; live Google sign-in, production account Save/isolation and whole-branch release verification remain unverified; website still serves the existing MVP.

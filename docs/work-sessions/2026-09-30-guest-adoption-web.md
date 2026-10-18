@@ -1,0 +1,8 @@
+- Session: Job 6D-B guest adoption web and bounded correction pass.
+- Date/duration: 2026-09-30–2026-10-03; multi-turn implementation, correction, and verification.
+- Scope/start: Owner baseline 0b12930 and clean descendant 25350c1; all work remains uncommitted, with backend, dependencies, and production configuration untouched.
+- Changes: Added Google entry and durable Yes/No; corrected ordinary PUT priority across stale offers, reload/reconnect, and later same-identity generations; accepted exact generation-2 peer acknowledgement at cloud revision 1.
+- Decisions: A durable ordinary request keeps its ID and payload and wins over later adoption eligibility; exact acknowledged same-account caches may rehydrate; divergent or unconfirmed caches stay blocked; guest LocalStorage remains intact.
+- Review: Independent final review passed both event orderings with no findings after stale-peer and later-generation pending-PUT findings were corrected.
+- Verification: Node 24 pnpm check passed (73 domain, 69 store, 437 API, 330 web); focused unit 106 passed plus stale-peer desktop/mobile 2 passed; full dev E2E 339 pass/3 skip/2 fail; fresh preview 340 pass/3 skip/1 fail.
+- Follow-up: Full-suite failures remain unresolved, so this is not ready to commit/push; artifacts are retained under /private/tmp/job6db-{e2e,preview}-final-source-failure-2026-10-03; no PWA behavior or deployment changed.

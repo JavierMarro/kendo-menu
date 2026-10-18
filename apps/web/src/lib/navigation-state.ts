@@ -1,3 +1,7 @@
+/**
+ * Carries the one-time saved-menu confirmation between the builder and dashboard routes.
+ * History state is treated as unknown and accepted only after checking the expected shape.
+ */
 export interface SavedMenuNavigationState {
   readonly type: 'saved-menu';
   readonly menuName: string;

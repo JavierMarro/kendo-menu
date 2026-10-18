@@ -15,6 +15,8 @@ apps/web/playwright-report/
 !.agents/skills/README.md
 !.agents/skills/code-reviewer-pre-commit/
 !.agents/skills/kendomenu-web-feature/
+!.agents/skills/kendomenu-api-feature/
+!.agents/skills/onboarding-code-comments/
 !.agents/skills/pre-commit-verification/
 !.agents/skills/testing-fuzz-stress/
 !.agents/skills/work-session-history/
@@ -34,6 +36,21 @@ apps/web/playwright-report/
 .impeccable/hook.pending.json
 .impeccable/live/
 .impeccable/review/
+
+# Local hosting metadata, credentials, and database exports
+.vercel/
+.neon
+*.pem
+*.key
+*.p12
+*.pfx
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.backup
+backups/
+dumps/
 
 .env
 .env.*

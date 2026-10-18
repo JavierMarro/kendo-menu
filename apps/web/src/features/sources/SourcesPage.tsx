@@ -151,13 +151,20 @@ function SourceList({ sources }: SourceListProps): ReactElement {
   );
 }
 
-export function SourcesPage(): ReactElement {
+export function SourcesPage({ embedded = false }: { readonly embedded?: boolean }): ReactElement {
+  const PageHeading = embedded ? 'h2' : 'h1';
+  const GroupHeading = embedded ? 'h3' : 'h2';
+  const SeriesHeading = embedded ? 'h4' : 'h3';
+
   return (
-    <article className="sources-page" aria-labelledby="sources-title">
+    <article
+      className={`sources-page${embedded ? ' sources-page--embedded' : ''}`}
+      aria-labelledby="sources-title"
+    >
       <header className="page-header sources-header">
         <div>
           <p className="eyebrow">Research and reference</p>
-          <h1 id="sources-title">Sources</h1>
+          <PageHeading id="sources-title">{embedded ? 'Resources' : 'Sources'}</PageHeading>
           <p className="page-intro">
             Publicly available articles and videos used to research KendoMenu’s curated keiko menus,
             followed by an additional official reference.
@@ -168,7 +175,9 @@ export function SourcesPage(): ReactElement {
       <div className="sources-groups">
         <section className="sources-group" aria-labelledby="practice-menu-sources-title">
           <div className="sources-group-heading">
-            <h2 id="practice-menu-sources-title">Practice menus and training context</h2>
+            <GroupHeading id="practice-menu-sources-title">
+              Practice menus and training context
+            </GroupHeading>
             <p>Articles describing real session structures and school or dojo practice.</p>
           </div>
           <SourceList sources={PRACTICE_MENU_SOURCES} />
@@ -176,7 +185,7 @@ export function SourcesPage(): ReactElement {
 
         <section className="sources-group" aria-labelledby="kihon-sources-title">
           <div className="sources-group-heading">
-            <h2 id="kihon-sources-title">Bokuto kihon waza</h2>
+            <GroupHeading id="kihon-sources-title">Bokuto kihon waza</GroupHeading>
             <p>English-language explanations of the nine-part basic-waza method.</p>
           </div>
           <SourceList sources={KIHON_SOURCES} />
@@ -184,16 +193,20 @@ export function SourcesPage(): ReactElement {
 
         <section className="sources-group" aria-labelledby="video-sources-title">
           <div className="sources-group-heading">
-            <h2 id="video-sources-title">Kendo Jidai International videos</h2>
+            <GroupHeading id="video-sources-title">Kendo Jidai International videos</GroupHeading>
             <p>Filmed university and high-school keiko published on YouTube.</p>
           </div>
           <div className="sources-series-list">
             <section className="sources-series" aria-labelledby="kanoya-series-title">
-              <h3 id="kanoya-series-title">Kanoya University YouTube series</h3>
+              <SeriesHeading id="kanoya-series-title">
+                Kanoya University YouTube series
+              </SeriesHeading>
               <SourceList sources={KANOYA_VIDEO_SOURCES} />
             </section>
             <section className="sources-series" aria-labelledby="takachiho-series-title">
-              <h3 id="takachiho-series-title">Takachiho High School YouTube series</h3>
+              <SeriesHeading id="takachiho-series-title">
+                Takachiho High School YouTube series
+              </SeriesHeading>
               <SourceList sources={TAKACHIHO_VIDEO_SOURCES} />
             </section>
           </div>
@@ -201,7 +214,7 @@ export function SourcesPage(): ReactElement {
 
         <section className="sources-group" aria-labelledby="reference-sources-title">
           <div className="sources-group-heading">
-            <h2 id="reference-sources-title">Further official reference</h2>
+            <GroupHeading id="reference-sources-title">Further official reference</GroupHeading>
             <p>A useful teaching resource listed separately from KendoMenu’s current sources.</p>
           </div>
           <SourceList sources={REFERENCE_SOURCES} />

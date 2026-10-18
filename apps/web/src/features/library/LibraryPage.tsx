@@ -1,4 +1,9 @@
-import { useCallback, useEffect, useRef } from 'react';
+/**
+ * Lists curated sessions and resolves the selected detail dialog from the library query string.
+ * This keeps deep links and browser history meaningful, and closing returns focus to the opener
+ * when it is still available.
+ */
+import { useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import type { TrainingSet } from '@kendo-menu/domain';
@@ -6,12 +11,14 @@ import type { TrainingSet } from '@kendo-menu/domain';
 import {
   findTrainingSet,
   getAllTrainingSets,
-  getTrainingSetDescription,
+  getBrowsableTrainingSets,
   getTrainingSetActivityCount,
+  getTrainingSetDescription,
 } from '../../lib/training-data';
 import { DialogShell } from '../../components/DialogShell';
 import { TrainingSetTags } from '../../components/TrainingSetTags';
 import { DrillDetailContent } from './DrillDetailContent';
+import { useWorkspace, workspacePath } from '../../lib/workspace-context';
 import {
   getLibraryDrillLocation,
   getLibraryLocationWithoutDrill,
@@ -40,29 +47,35 @@ function LibraryDetailDialog({ onClose, trainingSet }: LibraryDetailDialogProps)
 }
 
 export function LibraryPage() {
-  const trainingSets = getAllTrainingSets();
+  const trainingSets = getBrowsableTrainingSets();
+  const workspace = useWorkspace();
+  const libraryPath = workspacePath(workspace.basePath, 'library');
   const location = useLocation();
   const navigate = useNavigate();
   const selectedDrillId = getSelectedDrillId(location.search);
-  const selectedTrainingSet = findTrainingSet(trainingSets, selectedDrillId ?? '');
+  const selectedTrainingSet = findTrainingSet(getAllTrainingSets(), selectedDrillId ?? '');
   const openerLinksRef = useRef(new Map<string, HTMLAnchorElement>());
   const originatingDrillIdRef = useRef<string | null>(null);
   const previousSelectedDrillIdRef = useRef<string | null>(null);
 
+  // A stale drill ID should not leave a broken selection in the shareable URL; preserve the hash
+  // and replace only the invalid selection without adding another history entry.
   useEffect(() => {
     if (selectedDrillId === undefined || selectedTrainingSet !== undefined) {
       return;
     }
 
     void navigate(
-      { ...getLibraryLocationWithoutDrill(location.search), hash: location.hash },
+      { ...getLibraryLocationWithoutDrill(location.search, libraryPath), hash: location.hash },
       {
         replace: true,
         state: null,
       },
     );
-  }, [location.hash, location.search, navigate, selectedDrillId, selectedTrainingSet]);
+  }, [libraryPath, location.hash, location.search, navigate, selectedDrillId, selectedTrainingSet]);
 
+  // Restore focus to the card that opened the dialog; direct links have no opener, so use the main
+  // content landmark as the fallback.
   useEffect(() => {
     const nextSelectedDrillId = selectedTrainingSet?.id ?? null;
     const previousSelectedDrillId = previousSelectedDrillIdRef.current;
@@ -85,20 +98,20 @@ export function LibraryPage() {
     document.getElementById('main-content')?.focus({ preventScroll: true });
   }, [selectedTrainingSet?.id]);
 
-  const closeSelectedDrill = useCallback(() => {
+  function closeSelectedDrill() {
     if (isLibraryDrillNavigationState(location.state)) {
       void navigate(-1);
       return;
     }
 
     void navigate(
-      { ...getLibraryLocationWithoutDrill(location.search), hash: location.hash },
+      { ...getLibraryLocationWithoutDrill(location.search, libraryPath), hash: location.hash },
       {
         replace: true,
         state: null,
       },
     );
-  }, [location.hash, location.search, location.state, navigate]);
+  }
 
   return (
     <>
@@ -110,7 +123,7 @@ export function LibraryPage() {
             Browse curated keiko menus, add them to your dashboard and set the workload.
           </p>
         </div>
-        {/* <Link className="primary-button" to="/app/drills/new">
+        {/* <Link className="primary-button" to={workspacePath(workspace.basePath, 'drills/new')}>
           Create session
         </Link> */}
       </header>
@@ -120,7 +133,7 @@ export function LibraryPage() {
           <p className="eyebrow">Build your catalogue</p>
           <h2 id="empty-library-title">No training sessions are available yet.</h2>
           <p>Create the first training session for your own practice.</p>
-          <Link className="primary-button" to="/app/drills/new">
+          <Link className="primary-button" to={workspacePath(workspace.basePath, 'drills/new')}>
             Create a training session
           </Link>
         </section>
@@ -131,7 +144,11 @@ export function LibraryPage() {
           </h2>
           {trainingSets.map((trainingSet) => {
             const description = getTrainingSetDescription(trainingSet);
-            const detailLocation = getLibraryDrillLocation(location.search, trainingSet.id);
+            const detailLocation = getLibraryDrillLocation(
+              location.search,
+              trainingSet.id,
+              libraryPath,
+            );
 
             return (
               <article className="library-card" key={trainingSet.id}>

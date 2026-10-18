@@ -1,3 +1,8 @@
+/**
+ * Updates document title, canonical and Open Graph URLs, and route-owned robots metadata.
+ * Query-bearing, hash-bearing, and noncanonical routes are no-indexed and point canonical links
+ * back to the public app entry rather than exposing workspace URLs.
+ */
 export const CANONICAL_ORIGIN = 'https://www.kendomenu.com';
 
 const ROUTE_METADATA_ATTRIBUTE = 'data-kendo-menu-route-metadata';
@@ -12,9 +17,9 @@ function isCanonicalRoute(pathname: string): boolean {
 
   return (
     normalizedPathname === '/app' ||
-    normalizedPathname === '/app/library' ||
     normalizedPathname === '/app/sources' ||
     normalizedPathname === '/app/glossary' ||
+    normalizedPathname === '/privacy' ||
     normalizedPathname === '/cookies'
   );
 }

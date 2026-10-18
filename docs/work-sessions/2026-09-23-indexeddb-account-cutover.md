@@ -1,0 +1,8 @@
+- Session: indexeddb account cutover
+- Date/duration: 2026-09-23; ~80 minutes
+- Scope/start: Job 6C-A storage/migration only from clean 276addb; account entry remains internal and guest data remains in LocalStorage.
+- Changes: Versioned account IndexedDB holds validated v10 cache/generation, unknown ack, bounded pending/conflict slots and idempotent recovery copies; verified migration, CAS writes, and stale-tab recovery are wired into workspace activation.
+- Decisions: Cleanup requires confirmed IndexedDB readback, unchanged legacy source, and the shared account lock; malformed legacy markers are ignored; no synchronization, account UI, commit, or deployment.
+- Roadblocks: LocalStorage has no atomic compare/remove; source remains when the lock is unavailable, while queued validated event values protect observed writes during cutover; arbitrary writers bypassing the lock remain a platform limit.
+- Verification: Node 24 pnpm check PASS (web 254, API 437, store 69, domain 73 tests); development and preview browsers each 165 PASS/3 skipped; independent persistence review PASS; PWA and deployment not run.
+- Follow-up: Job 6C-B suspends ordinary PUT only for eligible non-empty validated cloud-size-compliant guest data awaiting Yes/No or unresolved adoption; absent/invalid/oversized guest data creates no No or upload block, and an ordinary write may consume Job 6A capability. Sync-lock failure pauses uploads while local saves work; sync lock may cover HTTP, but account lock/IndexedDB transactions never span fetch. See docs/ACCOUNT_SYNC.md.

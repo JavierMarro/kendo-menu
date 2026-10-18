@@ -15,6 +15,7 @@ export default defineConfig({
     command: `pnpm typecheck && pnpm exec vite build --config vite.preview.config.ts --configLoader runner && pnpm preview --host 127.0.0.1 --port ${previewPort}`,
     url: previewUrl,
     reuseExistingServer: false,
+    env: { VITE_NEON_AUTH_URL: 'https://synthetic-auth.example.invalid/neon/auth' },
     timeout: 120_000,
   },
 });

@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from './guest-test';
 
 test('selects responsive brand images without changing layout', async ({ page }) => {
   await page.goto('/app');
@@ -40,6 +41,7 @@ for (const format of ['webp', 'jpeg']) {
     await page.goto('/app');
     for (const selector of ['.top-bar picture', '.landing-hero']) {
       const picture = page.locator(selector);
+      await expect(picture.locator('source')).toHaveCount(2);
       // Emulate a browser without support for the preceding source types.
       await picture.locator('source').evaluateAll((sources, target) => {
         for (const source of sources) {

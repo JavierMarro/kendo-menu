@@ -1,3 +1,7 @@
+/**
+ * Publishes the product's browser-storage, managed-session, and analytics disclosures as static
+ * route content. Runtime privacy gates live in their owning browser integrations rather than here.
+ */
 export function CookiePolicyPage() {
   return (
     <article className="policy-page" aria-labelledby="cookie-policy-title">
@@ -18,48 +22,93 @@ export function CookiePolicyPage() {
           <p>
             Cookies are small text files that websites can save in your browser to remember
             information between visits. They can support essential functionality, remember
-            preferences, or used for analytics or advertising.
+            preferences, or be used for analytics or advertising.
           </p>
         </section>
 
         <section className="policy-section" aria-labelledby="how-kendo-menu-uses-cookies-title">
           <h2 id="how-kendo-menu-uses-cookies-title">How KendoMenu uses cookies</h2>
           <p>
-            <b>KendoMenu does not use cookies for analytics, advertising, or tracking.</b>
+            <b>KendoMenu’s own analytics do not use cookies.</b>
+          </p>
+          <p>
+            Guest use needs no account cookies. Google sign-in uses essential cookies through Neon
+            Auth to keep you signed in. Blocking them may prevent sign-in, but guest use remains
+            available. KendoMenu does not store sign-in credentials in your browser’s local storage.
           </p>
         </section>
 
         <section className="policy-section" aria-labelledby="local-storage-title">
           <h2 id="local-storage-title">Local storage</h2>
           <p>
-            Your dashboard training sessions are stored locally in your browser so KendoMenu can
-            work without an account or a server. This training data is separate from cookies, is not
-            sent to a remote service and can be deleted by clearing site data in your browser. Small
-            device-only preferences, including notice acknowledgements and installation prompt
-            state, are stored locally in the same way.
+            Guest menus, including exercises, quantities and notes, stay in your browser’s
+            localStorage and work offline. Signing in does not upload them. If a new account offers
+            to copy guest menus, only choosing “Copy menus” uploads an independent copy; the
+            originals stay on your device.
+          </p>
+          <p>
+            An optional account stores your email address and saved menus in a PostgreSQL database
+            so you can access them across devices. Account changes need an internet connection and
+            are saved only when you choose “Save to account” and receive confirmation. Unsaved
+            changes can be lost if you reload, close the tab or sign out.
+          </p>
+          <p>
+            Notice and installation preferences are also stored on this device. A temporary
+            session-storage marker helps complete sign-in; it contains no credentials or menu data.
+          </p>
+        </section>
+
+        <section className="policy-section" aria-labelledby="google-sign-in-title">
+          <h2 id="google-sign-in-title">Google sign-in</h2>
+          <p>
+            We receive your email address and profile name from Google, not access to your contacts,
+            calendar or other Google data. Google and Neon process sign-in information under their
+            own privacy terms.
+          </p>
+        </section>
+
+        <section className="policy-section" aria-labelledby="youtube-title">
+          <h2 id="youtube-title">YouTube videos</h2>
+          <p>
+            Mitori room connects to YouTube only when you open a video. We use privacy-enhanced
+            embeds, but YouTube receives network information and may use cookies and show adverts.
+            Video playback needs an internet connection and is covered by{' '}
+            <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">
+              Google’s privacy policy
+            </a>
+            .
           </p>
         </section>
 
         <section className="policy-section" aria-labelledby="analytics-title">
           <h2 id="analytics-title">Analytics</h2>
           <p>
-            KendoMenu uses{' '}
+            GoatCounter receives a cookie-free page count only after you are confirmed signed out
+            and online. We send a fixed page path, not your email, menus, notes, query strings or
+            referrer. Like any web request, it includes network information such as your IP address
+            and browser type. No count is sent while sign-in is being checked or you are signed in.
+          </p>
+          <p>
+            Learn about the service from{' '}
             <strong>
               <a
                 href="https://www.goatcounter.com/help/privacy"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                GoatCounter Analytics
+                GoatCounter
               </a>
             </strong>
-            , a privacy-friendly web analytics service.
+            .
           </p>
+        </section>
+
+        <section className="policy-section" aria-labelledby="delete-data-title">
+          <h2 id="delete-data-title">Deleting your data</h2>
           <p>
-            KendoMenu uses GoatCounter for cookie-free, aggregate usage statistics such as page
-            paths, browser and operating-system categories, screen size, country, and short-lived
-            session deduplication. Individual pageviews and referrer collection are disabled.
-            Training plans, notes, and menu names are not intentionally sent to GoatCounter.
+            Delete guest menus individually on your dashboard, or clear this site’s browser storage
+            to remove all local menus and preferences. Keep a backup first if needed. To delete your
+            account and its saved online data, contact the maintainer.
           </p>
         </section>
 
@@ -74,8 +123,10 @@ export function CookiePolicyPage() {
         <section className="policy-section" aria-labelledby="contact-title">
           <h2 id="contact-title">Contact</h2>
           <p>
-            If you have questions, please contact the KendoMenu maintainers through the project
-            repository.
+            For privacy questions or data deletion requests, contact the maintainer through the{' '}
+            <a href="https://github.com/JavierMarro/kendo-menu">project repository</a>. Issues are
+            public: do not include private information; ask for a private contact method when
+            needed.
           </p>
         </section>
       </div>

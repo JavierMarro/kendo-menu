@@ -1,0 +1,8 @@
+- Session: vercel api routing
+- Date/duration: 2026-10-14; not recorded
+- Scope/start: Clean HEAD de47851 on codex/managed-auth-online-dashboard; owner requested routing-only correction after reporting Preview session/token 200 and account 400 INVALID_ACCOUNT_REQUEST.
+- Changes: Replace named API rewrite capture with anonymous /api/(.*); extend existing native package test with rewrite-order and account-query regressions; document the routing boundary in the deployment runbook.
+- Decisions: Preserve API-before-SPA dispatch, static-file precedence, strict query rejection, managed bearer authorization and all guest/account rules; add no dependencies or runtime application changes.
+- Roadblocks: Vercel forwards unused named rewrite captures into query parameters; local account?path=account reproduces the reported 400, but the live server-side URL and corrected routing outcome remain unobserved.
+- Verification: Node 24.21.0: test:api:package PASS (fresh API build and 2 checks); check:api PASS (163 tests, type/lint checks) after permitting localhost listeners; scoped independent review PASS; formatting, history and whitespace checks PASS.
+- Follow-up: Nothing staged, committed, pushed or deployed; owner must publish and retest sign-in, existing menus, Save/reload and isolation on the stable HTTPS Preview; no remote settings/database work or full browser/PWA release gate run.

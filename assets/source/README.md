@@ -63,3 +63,7 @@ The SVG overlay uses Arial, matching the existing sans-serif identity. Font avai
 versions can change exact bytes; inspect the resulting 1200×630 card at thumbnail size after
 regeneration. Keep the social JPEG publicly fetchable but excluded from precaching: it is for
 external link previews, not offline app rendering.
+
+`kendomenu-sign-in.jpeg` is the sign-in artwork source. Its 1600px-wide derivative in
+`apps/web/public/assets/kendomenu-sign-in-1600.jpeg` is used only on the sign-in page. Regenerate it
+with `sips -Z 1600 assets/source/kendomenu-sign-in.jpeg --out apps/web/public/assets/kendomenu-sign-in-1600.jpeg`.

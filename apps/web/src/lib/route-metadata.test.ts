@@ -19,6 +19,8 @@ describe('canonical and indexing boundaries', () => {
     '/\\external.example',
     'https://external.example',
     '/app/dashboard',
+    '/app/guest/dashboard',
+    '/app/account/dashboard',
     '/app/drills/new',
     '/app/library/private-id',
     '/missing',
@@ -28,7 +30,7 @@ describe('canonical and indexing boundaries', () => {
     expect(shouldNoIndexRoute(pathname, '', '')).toBe(true);
   });
 
-  it.each(['/app', '/app/library', '/app/sources', '/app/glossary', '/cookies'])(
+  it.each(['/app', '/app/sources', '/app/glossary', '/privacy', '/cookies'])(
     'canonicalizes the public route %s',
     (pathname) => {
       expect(getCanonicalUrl(`${pathname}/`)).toBe(`${CANONICAL_ORIGIN}${pathname}`);

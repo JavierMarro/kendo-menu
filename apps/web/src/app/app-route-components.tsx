@@ -1,6 +1,12 @@
-import { Component, useCallback, useEffect, useState, type ReactElement } from 'react';
+/**
+ * Owns browser behavior shared by routed pages: document metadata, main-content focus, scroll
+ * restoration, notice state, and pageview scheduling. Callback notices use fixed route state, and
+ * analytics waits for signed-out verification and cancels when an account transition begins.
+ */
+import { Component, useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import {
   NavigationType,
+  useNavigate,
   Outlet,
   useLocation,
   useNavigationType,
@@ -16,16 +22,42 @@ import {
   readCookieNoticeAcknowledgement,
 } from '../lib/cookie-notice';
 import { updateRouteMetadata } from '../lib/route-metadata';
+import { scheduleGuestPageview } from '../lib/guest-pageview';
+import { useManagedAuth } from '../lib/managed-auth-context';
 
 const routeTitles: Readonly<Record<string, string>> = {
   '/app': 'Plan your keiko',
-  '/app/dashboard': 'Dashboard',
-  '/app/library': 'Keiko library',
-  '/app/drills/new': 'Create session',
+  '/app/sign-in': 'Sign in to KendoMenu',
+  '/app/guest/dashboard': 'Dashboard',
+  '/app/guest/library': 'Keiko library',
+  '/app/guest/mitori-room': 'Mitori room',
+  '/app/guest/drills/new': 'Create session',
+  '/app/account/dashboard': 'Dashboard',
+  '/app/account/library': 'Keiko library',
+  '/app/account/mitori-room': 'Mitori room',
+  '/app/account/drills/new': 'Create session',
   '/app/sources': 'Sources',
   '/app/glossary': 'Glossary',
+  '/privacy': 'Privacy Policy',
   '/cookies': 'Cookie Policy',
 };
+
+const authErrorMessages = new Map([
+  ['cancelled', 'Google sign-in was cancelled. You can continue using KendoMenu as a guest.'],
+  ['failed', 'Google sign-in could not be completed. Please try again.'],
+  ['unavailable', 'Account sign-in is temporarily unavailable. Guest use remains available.'],
+]);
+
+function authNoticeFromSearch(search: string): string | null {
+  const authError = new URLSearchParams(search).get('authError');
+  return authError === null ? null : (authErrorMessages.get(authError) ?? null);
+}
+
+function authErrorFromNavigationState(state: unknown): string | null {
+  if (typeof state !== 'object' || state === null || !('authError' in state)) return null;
+  const code = state.authError;
+  return typeof code === 'string' && authErrorMessages.has(code) ? code : null;
+}
 
 interface ScrollPosition {
   readonly top: number;
@@ -93,6 +125,9 @@ function hasLocationChanged(previous: Location, next: Location): boolean {
 }
 
 export function AppLayout() {
+  const location = useLocation();
+  const isWorkspaceRoute = /^\/app\/(guest|account)(?:\/|$)/u.test(location.pathname);
+  if (isWorkspaceRoute || location.pathname === '/app/sign-in') return <Outlet />;
   return <AppShell />;
 }
 
@@ -191,7 +226,7 @@ function RouteFocusAndTitle(): ReactElement {
   useEffect(() => {
     const title =
       routeTitles[location.pathname] ??
-      (location.pathname.startsWith('/app/library/') ? 'Session details' : 'KendoMenu');
+      (location.pathname.includes('/library/') ? 'Session details' : 'KendoMenu');
     updateRouteMetadata({
       pathname: location.pathname,
       search: location.search,
@@ -209,15 +244,83 @@ function RouteFocusAndTitle(): ReactElement {
 
 export function RouteRoot() {
   const [isCookieNoticeVisible, setIsCookieNoticeVisible] = useState(shouldShowBrowserCookieNotice);
+  const location = useLocation();
+  const authNotice =
+    authNoticeFromSearch(location.search) ??
+    authErrorMessages.get(authErrorFromNavigationState(location.state) ?? '') ??
+    null;
+  const navigate = useNavigate();
+  const { identity } = useManagedAuth();
+  const pageviewScheduled = useRef(false);
+  const cancelScheduledPageview = useRef<(() => boolean) | null>(null);
+  const initialPathname = useRef(location.pathname);
   const dismissCookieNotice = useCallback((): void => {
     persistBrowserCookieNoticeAcknowledgement();
     setIsCookieNoticeVisible(false);
+  }, []);
+
+  useEffect(() => {
+    // The landing redirect carries the query to /app. Let that navigation finish before
+    // removing the callback code, or the two replacements can discard its notice state.
+    if (location.pathname === '/') return;
+    const parameters = new URLSearchParams(location.search);
+    const queryError = parameters.get('authError');
+    if (queryError !== null) {
+      // Keep only a recognized callback code in route state. A history replacement can
+      // remount this layout, so component state alone cannot carry the fixed notice.
+      // The provider's document-load check already verifies the session after the redirect.
+      parameters.delete('authError');
+      const search = parameters.toString();
+      void navigate(
+        { pathname: location.pathname, search: search.length === 0 ? '' : `?${search}` },
+        {
+          replace: true,
+          state: authErrorMessages.has(queryError) ? { authError: queryError } : null,
+        },
+      );
+    }
+  }, [location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    if (identity.status !== 'signed-out' || location.pathname.startsWith('/app/account')) {
+      if (cancelScheduledPageview.current?.()) {
+        pageviewScheduled.current = false;
+      }
+      cancelScheduledPageview.current = null;
+      if (identity.status !== 'checking') pageviewScheduled.current = true;
+      return;
+    }
+    if (pageviewScheduled.current) return;
+    pageviewScheduled.current = true;
+    cancelScheduledPageview.current = scheduleGuestPageview(initialPathname.current);
+  }, [identity.status, location.pathname]);
+
+  useEffect(() => {
+    const cancelPageview = () => {
+      const cancelled = cancelScheduledPageview.current?.();
+      if (cancelled === true) pageviewScheduled.current = false;
+      else if (cancelled === false) pageviewScheduled.current = true;
+      cancelScheduledPageview.current = null;
+    };
+    window.addEventListener('kendomenu:sign-in-started', cancelPageview);
+    window.addEventListener('kendomenu:session-verification-started', cancelPageview);
+    return () => {
+      window.removeEventListener('kendomenu:sign-in-started', cancelPageview);
+      window.removeEventListener('kendomenu:session-verification-started', cancelPageview);
+      if (cancelScheduledPageview.current?.()) pageviewScheduled.current = false;
+      cancelScheduledPageview.current = null;
+    };
   }, []);
 
   return (
     <InstallExperienceProvider isAutomaticPromptBlocked={isCookieNoticeVisible}>
       <RouteFocusAndTitle />
       <Outlet />
+      {authNotice === null ? null : (
+        <p className="auth-error-notice" role="alert">
+          {authNotice}
+        </p>
+      )}
       {isCookieNoticeVisible ? <CookieNotice onDismiss={dismissCookieNotice} /> : null}
     </InstallExperienceProvider>
   );

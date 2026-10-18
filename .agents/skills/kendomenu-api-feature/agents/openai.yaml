@@ -1,0 +1,4 @@
+interface:
+  display_name: 'KendoMenu API Feature'
+  short_description: 'Build bounded KendoMenu API and PostgreSQL slices'
+  default_prompt: 'Use $kendomenu-api-feature to implement or review the requested KendoMenu backend slice with its existing contracts and local test harness.'

@@ -1,4 +1,8 @@
-export const LIBRARY_PATH = '/app/library';
+/**
+ * Encodes library dialog selection in the `drill` query parameter while preserving other search
+ * values. Navigation-state checks are deliberately structural because history state is untrusted.
+ */
+export const LIBRARY_PATH = '/app/guest/library';
 export const DRILL_QUERY_PARAMETER = 'drill';
 
 export const LIBRARY_DRILL_NAVIGATION_STATE = {
@@ -34,16 +38,16 @@ function updateDrillSearch(search: string, drillId?: string): string {
   return nextSearch.length === 0 ? '' : `?${nextSearch}`;
 }
 
-export function getLibraryDrillLocation(search: string, drillId: string) {
+export function getLibraryDrillLocation(search: string, drillId: string, pathname = LIBRARY_PATH) {
   return {
-    pathname: LIBRARY_PATH,
+    pathname,
     search: updateDrillSearch(search, drillId),
   };
 }
 
-export function getLibraryLocationWithoutDrill(search: string) {
+export function getLibraryLocationWithoutDrill(search: string, pathname = LIBRARY_PATH) {
   return {
-    pathname: LIBRARY_PATH,
+    pathname,
     search: updateDrillSearch(search),
   };
 }

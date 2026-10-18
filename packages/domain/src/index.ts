@@ -1,6 +1,17 @@
-export { DEFAULT_TRAINING_SETS } from './default-training-sets';
-export { getTrainingQuantityPolicy } from './training-quantity-policy';
-export type { TrainingQuantityPolicy } from './training-quantity-policy';
+/**
+ * Public platform-neutral domain surface for training data, validation, quantities, and dashboard
+ * contracts.
+ * It exposes curated defaults and the v10 dashboard codec without depending on browser storage,
+ * Zustand, or API persistence.
+ */
+export { DEFAULT_TRAINING_SETS } from './default-training-sets.js';
+export {
+  encodeDashboardPersistenceV10,
+  isDashboardCatalogueCompatible,
+  parseDashboardPersistenceV10,
+} from './dashboard-persistence.js';
+export { getTrainingQuantityPolicy } from './training-quantity-policy.js';
+export type { TrainingQuantityPolicy } from './training-quantity-policy.js';
 export {
   DURATION_UNITS,
   MAX_REPETITIONS,
@@ -46,7 +57,7 @@ export {
   validateCuratedDrills,
   validateTrainingSet,
   validateTrainingSetInput,
-} from './types';
+} from './types.js';
 export type {
   CuratedDrill,
   CustomTrainingIntensity,
@@ -80,4 +91,11 @@ export type {
   TrainingSetTag,
   ValidationIssue,
   ValidationResult,
-} from './types';
+} from './types.js';
+export type {
+  PersistedCustomTrainingSet,
+  PersistedDashboardEntryV10,
+  PersistedTrainingExercise,
+  PersistedTrainingSection,
+  PersistedTrainingWireStateV10,
+} from './dashboard-persistence.js';

@@ -24,6 +24,22 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Reject tracked private configuration and data files
+        shell: bash
+        run: |
+          blocked=0
+          while IFS= read -r -d '' tracked_path; do
+            case "$tracked_path" in
+              .env.example|*/.env.example) continue ;;
+              .env|.env.*|*/.env|*/.env.*|*.pem|*.key|*.p12|*.pfx|*.sqlite|*.sqlite3|*.db|*.dump|*.backup|.vercel/*|*/.vercel/*|backups/*|*/backups/*|dumps/*|*/dumps/*)
+                blocked=1 ;;
+            esac
+          done < <(git ls-files -z)
+          if (( blocked )); then
+            printf '%s\n' 'Remove tracked private configuration, key, database or backup files. Only .env.example templates are allowed.'
+            exit 1
+          fi
+
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:

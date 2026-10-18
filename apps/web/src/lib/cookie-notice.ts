@@ -1,3 +1,7 @@
+/**
+ * Stores a device-local notice acknowledgement as an expiry timestamp, not as a browser cookie.
+ * Read or write failures are contained so the route can show the notice again without blocking use.
+ */
 export const COOKIE_NOTICE_ACKNOWLEDGEMENT_STORAGE_KEY =
   'kendo-menu-cookie-notice-acknowledged-until';
 

@@ -1,3 +1,8 @@
+/**
+ * Owns custom-session draft transitions and converts the form into domain input only after
+ * validation. Numeric fields remain strings while editing, and centralized limits constrain the
+ * nested activity shape before submission.
+ */
 import {
   TRAINING_DATA_LIMITS,
   isValidTrainingQuantityValue,

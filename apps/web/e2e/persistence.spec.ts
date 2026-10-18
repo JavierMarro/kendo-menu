@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from './guest-test';
 
 const STORAGE_KEY = 'kendo-menu';
 
@@ -8,7 +9,7 @@ test.describe('local persistence recovery', () => {
   test('downloads the exact corrupt payload, preserves it on cancel, and resets only KendoMenu data', async ({
     page,
   }) => {
-    await page.goto('/app/dashboard');
+    await page.goto('/app/guest/dashboard');
     const raw = '{not valid json';
     await page.evaluate(
       ({ key, value }) => {
@@ -60,7 +61,7 @@ test.describe('local persistence recovery', () => {
   test('does not treat a future persistence version as corrupt or overwrite it', async ({
     page,
   }) => {
-    await page.goto('/app/dashboard');
+    await page.goto('/app/guest/dashboard');
     const raw = JSON.stringify({ version: 999, state: { untouched: true } });
     await page.evaluate(({ key, value }) => window.localStorage.setItem(key, value), {
       key: STORAGE_KEY,
@@ -89,15 +90,18 @@ test.describe('local persistence recovery', () => {
         },
       });
     });
-    await page.goto('/app/dashboard');
+    await page.goto('/app/guest/dashboard');
 
     await expect(
       page.getByRole('heading', { name: 'KendoMenu cannot access local data.' }),
     ).toBeVisible();
     await page.getByRole('button', { name: 'Continue without saving' }).click();
     await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'User', exact: true }).click();
     await expect(
-      page.getByRole('banner').getByRole('status', { name: 'Session only' }),
+      page
+        .getByRole('region', { name: 'User options' })
+        .getByRole('status', { name: 'Session only' }),
     ).toBeVisible();
   });
 
@@ -115,14 +119,20 @@ test.describe('local persistence recovery', () => {
         },
       });
     });
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     const seniorHighSchoolCard = page
       .getByRole('heading', { name: 'Senior High School dojo menu' })
       .locator('xpath=ancestor::article');
     await seniorHighSchoolCard.getByRole('link', { name: 'View session' }).click();
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
-    await expect(page.getByRole('status', { name: 'Changes are not being saved' })).toBeVisible();
+    await page.getByRole('button', { name: 'User', exact: true }).click();
+    await expect(
+      page
+        .getByRole('region', { name: 'User options' })
+        .getByRole('status', { name: 'Changes are not being saved' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
 
     const dashboardCard = page
       .locator('.dashboard-card--compact')
@@ -141,10 +151,9 @@ test.describe('local persistence recovery', () => {
     await minutes.fill('12');
     await minutes.blur();
     await expect(page.getByText('Not saved to this device.')).toBeVisible();
-    const appBanner = page.locator('.top-bar');
     await expect(
-      appBanner.locator('[role="status"]').filter({ hasText: 'Changes are not being saved' }),
-    ).toBeVisible();
+      page.getByRole('status', { name: 'Changes are not being saved', includeHidden: true }),
+    ).toHaveCount(1);
     const notes = dashboardDialog.getByLabel('Practice notes');
     await notes.fill('Quota test note.');
     await notes.blur();
@@ -166,7 +175,7 @@ test.describe('local persistence recovery', () => {
         },
       });
     });
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     const seniorHighSchoolCard = page
       .getByRole('heading', { name: 'Senior High School dojo menu' })
       .locator('xpath=ancestor::article');

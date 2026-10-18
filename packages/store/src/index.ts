@@ -1,3 +1,9 @@
+/**
+ * Builds the dashboard's Zustand actions and delegates persistence to caller-supplied StateStorage.
+ * Guest callers can inject browser storage; account drafts use memory-only storage and the same
+ * bounded v10 validation.
+ * This module owns neither authentication credentials nor managed-session cookies.
+ */
 import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import { persist, type StateStorage } from 'zustand/middleware';
 
@@ -731,6 +737,7 @@ function createValidatedTrainingStore(
         storage: createTrainingJSONStorage(storage),
         version: TRAINING_STORE_PERSISTENCE_VERSION,
         migrate: migratePersistedTrainingState,
+        // Hydration uses the current parser; invalid input leaves live state intact.
         merge: (persistedState, currentState) => {
           const parsedState = parsePersistedTrainingStateV10(persistedState);
           return parsedState === null

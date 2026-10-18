@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { test } from './guest-test';
 
 const UNIVERSITY_HIGH_SCHOOL = 'university-high-school';
 const TOP_UNIVERSITY = 'top-university';
@@ -47,7 +48,7 @@ async function openDashboardMenu(page: Page, name: string): Promise<Locator> {
 
 test.describe('Job 5 complex curated sessions', () => {
   test('exposes the ordered University stations and Top University branches', async ({ page }) => {
-    await page.goto(`/app/library?drill=${UNIVERSITY_HIGH_SCHOOL}`);
+    await page.goto(`/app/guest/library?drill=${UNIVERSITY_HIGH_SCHOOL}`);
     const universityDialog = page.getByRole('dialog', {
       name: 'University High School dojo menu',
     });
@@ -79,7 +80,7 @@ test.describe('Job 5 complex curated sessions', () => {
     await expect(universityDialog.locator('[data-activity-id]')).toHaveCount(31);
     await expectNoBlockingAxeViolations(page);
 
-    await page.goto(`/app/library?drill=${TOP_UNIVERSITY}`);
+    await page.goto(`/app/guest/library?drill=${TOP_UNIVERSITY}`);
     const topDialog = page.getByRole('dialog', { name: 'Top university dojo menu' });
     const sandan = activity(page, TOP_SANDAN);
     const sandanDetails = await openNestedDetails(sandan);
@@ -108,9 +109,12 @@ test.describe('Job 5 complex curated sessions', () => {
   test('edits Station, Free-version, and final Kakarigeiko leaves on the dashboard', async ({
     page,
   }) => {
-    await page.goto(`/app/library?drill=${UNIVERSITY_HIGH_SCHOOL}`);
+    await page.goto(`/app/guest/library?drill=${UNIVERSITY_HIGH_SCHOOL}`);
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
+    await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+    const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+    if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
 
     const universityDialog = await openDashboardMenu(page, 'University High School dojo menu');
     const kenTore = activity(universityDialog, UNIVERSITY_KEN_TORE);
@@ -131,7 +135,7 @@ test.describe('Job 5 complex curated sessions', () => {
     await stationSeconds.blur();
     await expect(stationSeconds).toHaveValue('45');
 
-    await page.goto(`/app/library?drill=${TOP_UNIVERSITY}`);
+    await page.goto(`/app/guest/library?drill=${TOP_UNIVERSITY}`);
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
 

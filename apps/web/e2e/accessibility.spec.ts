@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { test } from './guest-test';
 
 const STORAGE_KEY = 'kendo-menu';
 
@@ -87,7 +88,7 @@ test.describe('accessibility and responsive layout', () => {
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
 
     await expectNoBlockingAxeViolations(page);
 
@@ -107,22 +108,22 @@ test.describe('accessibility and responsive layout', () => {
     const viewport = page.viewportSize();
     if (viewport !== null && viewport.width <= 760) {
       await page.getByRole('button', { name: 'Open navigation' }).click();
-      await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
+      await expect(page.getByRole('navigation', { name: 'Landing navigation' })).toBeVisible();
     }
     await expect(
-      page.getByRole('heading', { name: 'Plan the keiko you need today.' }),
+      page.getByRole('heading', { name: 'Plan the keiko you need today' }),
     ).toBeVisible();
     await expectNoBlockingAxeViolations(page);
   });
 
   test('has no critical or serious axe violations on the dashboard route', async ({ page }) => {
-    await page.goto('/app/dashboard');
+    await page.goto('/app/guest/dashboard');
     await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
     await expectNoBlockingAxeViolations(page);
   });
 
   test('has no critical or serious axe violations on the library route', async ({ page }) => {
-    await page.goto('/app/library');
+    await page.goto('/app/guest/library');
     await expect(page.getByRole('heading', { name: 'Keiko library', exact: true })).toBeVisible();
     await expectNoBlockingAxeViolations(page);
   });
@@ -130,7 +131,7 @@ test.describe('accessibility and responsive layout', () => {
   test('has no critical or serious axe violations on the library detail route', async ({
     page,
   }) => {
-    await page.goto('/app/library?drill=international-dojo-2-hour-session');
+    await page.goto('/app/guest/library?drill=international-dojo-2-hour-session');
     const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
     await expect(dialog).toBeVisible();
     const firstSection = page.locator('details.detail-section').first();
@@ -140,17 +141,20 @@ test.describe('accessibility and responsive layout', () => {
   });
 
   test('has no critical or serious axe violations on the drill builder route', async ({ page }) => {
-    await page.goto('/app/drills/new');
+    await page.goto('/app/guest/drills/new');
     await expect(
       page.getByRole('heading', { name: 'Create a training session', exact: true }),
     ).toBeVisible();
+    const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+    if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
     await expect(page.getByRole('heading', { name: 'Session details' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Activities' })).toBeVisible();
 
     const backLink = page.getByRole('link', { name: 'Back to keiko library' });
     await expect(backLink).toHaveText('← Back to keiko library');
-    await expect(backLink).toHaveAttribute('href', '/app/library');
+    await expect(backLink).toHaveAttribute('href', '/app/guest/library');
     await expect(backLink).toHaveCSS('text-decoration-line', 'underline');
+    await page.keyboard.press('Tab');
     await backLink.focus();
     await expect(backLink).toBeFocused();
     await expect(backLink).toHaveCSS('outline-style', 'solid');
@@ -187,7 +191,7 @@ test.describe('accessibility and responsive layout', () => {
   });
 
   test('keeps the builder keyboard order and layout usable at 200% text size', async ({ page }) => {
-    await page.goto('/app/drills/new');
+    await page.goto('/app/guest/drills/new');
     const backLink = page.getByRole('link', { name: 'Back to keiko library' });
     await backLink.focus();
     await page.keyboard.press('Tab');
@@ -238,18 +242,56 @@ test.describe('accessibility and responsive layout', () => {
     await expectNoBlockingAxeViolations(page);
   });
 
-  test('keeps all primary navigation links in one row with intact labels', async ({ page }) => {
+  test('opens the privacy policy from the footer by keyboard with no blocking axe violations', async ({
+    page,
+  }) => {
+    await page.goto('/app');
+    const footer = page.getByRole('contentinfo', { name: 'Site footer' });
+    await footer.scrollIntoViewIfNeeded();
+    const information = footer.getByRole('navigation', { name: 'Information' });
+    const privacyLink = information.getByRole('link', { name: 'Privacy', exact: true });
+    await privacyLink.focus();
+    await page.keyboard.press('Enter');
+
+    await expect(page).toHaveURL('/privacy');
+    await expect(page.getByRole('main')).toBeFocused();
+    await expect(page).toHaveTitle('Privacy Policy · KendoMenu');
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+      'href',
+      'https://www.kendomenu.com/privacy',
+    );
+    await expect(page.locator('meta[property="og:url"]')).toHaveAttribute(
+      'content',
+      'https://www.kendomenu.com/privacy',
+    );
+    await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Privacy Policy', exact: true })).toBeVisible();
+    await expect(
+      page.getByText(/only choosing “Copy menus” uploads an independent copy/u),
+    ).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Cookie Policy' })).toHaveAttribute(
+      'href',
+      '/cookies',
+    );
+    await expectNoBlockingAxeViolations(page);
+  });
+
+  test('spaces all four landing navigation links without crowding or overflow', async ({
+    page,
+  }) => {
     for (const width of [320, 375, 393, 800, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/app');
+      const header = page.locator('.top-bar');
+      const headerBeforeOpening = await header.boundingBox();
       if (width <= 960) {
         await page.getByRole('button', { name: 'Open navigation' }).click();
-        await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
+        await expect(page.getByRole('navigation', { name: 'Landing navigation' })).toBeVisible();
       } else {
         await expect(page.locator('.brand-name')).toBeVisible();
       }
 
-      const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
+      const navigation = page.getByRole('navigation', { name: 'Landing navigation' });
       const links = navigation.getByRole('link');
       await expect(links).toHaveCount(4);
       await expect(page.locator('.nav-count')).toHaveCount(0);
@@ -258,15 +300,9 @@ test.describe('accessibility and responsive layout', () => {
         const navigationRect = element.getBoundingClientRect();
         const linkElements = [...element.querySelectorAll<HTMLElement>(':scope > .nav-item')];
         const linkRects = linkElements.map((link) => link.getBoundingClientRect());
-        const libraryLabel = element.querySelector<HTMLElement>('.nav-label--wrappable');
-        const libraryWords = [
-          ...element.querySelectorAll<HTMLElement>('.nav-label--wrappable .nav-label-word'),
-        ];
-        const fixedLabels = [
-          ...element.querySelectorAll<HTMLElement>('.nav-label:not(.nav-label--wrappable)'),
-        ];
-        if (libraryLabel === null || libraryWords.length !== 2 || linkRects.length !== 4) {
-          throw new Error('The primary navigation label structure is incomplete.');
+        const labels = [...element.querySelectorAll<HTMLElement>('.nav-label')];
+        if (labels.length !== 4 || linkRects.length !== 4) {
+          throw new Error('The landing navigation label structure is incomplete.');
         }
 
         const textLineCount = (target: HTMLElement) => {
@@ -275,10 +311,8 @@ test.describe('accessibility and responsive layout', () => {
           return [...range.getClientRects()].filter(({ width, height }) => width > 0 && height > 0)
             .length;
         };
-        const wordRects = libraryWords.map((word) => word.getBoundingClientRect());
-        const libraryLineTops = new Set(wordRects.map(({ top }) => Math.round(top)));
-
         return {
+          labels: labels.map((label) => label.textContent?.trim() ?? ''),
           navigationClientWidth: element.clientWidth,
           navigationScrollWidth: element.scrollWidth,
           overflowingLink: linkElements
@@ -296,18 +330,27 @@ test.describe('accessibility and responsive layout', () => {
             Math.max(...linkRects.map(({ top }) => top)) -
               Math.min(...linkRects.map(({ top }) => top)) <=
             1,
-          linksDoNotOverlap: linkRects.slice(1).every(({ left }, index) => {
-            const previousRect = linkRects[index];
-            return previousRect !== undefined && left >= previousRect.right - 1;
+          linksDoNotOverlap: linkRects.every((rect, index) =>
+            linkRects
+              .slice(index + 1)
+              .every(
+                (other) =>
+                  rect.right <= other.left + 1 ||
+                  other.right <= rect.left + 1 ||
+                  rect.bottom <= other.top + 1 ||
+                  other.bottom <= rect.top + 1,
+              ),
+          ),
+          linksAreStacked: linkRects.every((rect, index) => {
+            const previous = linkRects[index - 1];
+            return previous === undefined || rect.top >= previous.bottom - 1;
           }),
+          position: getComputedStyle(element).position,
           touchTargetsAreUsable: linkRects.every(
             ({ width, height }) => width >= 24 && height >= 44,
           ),
-          fixedLabelLineCounts: fixedLabels.map(textLineCount),
-          libraryLineCount: libraryLineTops.size,
-          libraryWordLineCounts: libraryWords.map(textLineCount),
-          libraryWordWhiteSpace: libraryWords.map((word) => getComputedStyle(word).whiteSpace),
-          libraryOverflowWrap: getComputedStyle(libraryLabel).overflowWrap,
+          labelLineCounts: labels.map(textLineCount),
+          labelWhiteSpace: labels.map((label) => getComputedStyle(label).whiteSpace),
         };
       });
       expect(
@@ -316,17 +359,28 @@ test.describe('accessibility and responsive layout', () => {
       ).toBeLessThanOrEqual(navMetrics.navigationClientWidth);
       expect(navMetrics.overflowingLink, `navigation link overflow at ${width}px`).toBeUndefined();
       expect(navMetrics.linksInsideNavigation, `navigation bounds at ${width}px`).toBe(true);
-      expect(navMetrics.linksShareRow, `navigation row at ${width}px`).toBe(true);
-      expect(navMetrics.linksDoNotOverlap, `navigation link overlap at ${width}px`).toBe(true);
-      expect(navMetrics.touchTargetsAreUsable, `navigation touch targets at ${width}px`).toBe(true);
-      expect(navMetrics.fixedLabelLineCounts).toEqual([1, 1, 1]);
-      expect(navMetrics.libraryLineCount).toBeLessThanOrEqual(2);
-      expect(navMetrics.libraryWordLineCounts).toEqual([1, 1]);
-      expect(navMetrics.libraryWordWhiteSpace).toEqual(['nowrap', 'nowrap']);
-      expect(navMetrics.libraryOverflowWrap).toBe('normal');
-
+      expect(navMetrics.linksShareRow, `navigation row at ${width}px`).toBe(width > 960);
+      expect(navMetrics.linksAreStacked, `navigation column at ${width}px`).toBe(width <= 960);
       const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(scrollWidth, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(width);
+      if (width <= 960) {
+        expect(navMetrics.position).toBe('absolute');
+        expect(
+          await header.boundingBox(),
+          `opening navigation shifts the header at ${width}px`,
+        ).toEqual(headerBeforeOpening);
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('button', { name: 'Open navigation' })).toBeFocused();
+        await expect(navigation).toBeHidden();
+        await page.getByRole('button', { name: 'Open navigation' }).click();
+        await navigation.getByRole('link', { name: 'Get started' }).click();
+        await expect(page).toHaveURL(/\/app\/sign-in$/);
+      }
+      expect(navMetrics.linksDoNotOverlap, `navigation link overlap at ${width}px`).toBe(true);
+      expect(navMetrics.touchTargetsAreUsable, `navigation touch targets at ${width}px`).toBe(true);
+      expect(navMetrics.labels).toEqual(['How it works', 'Library info', 'FAQ', 'Get started']);
+      expect(navMetrics.labelLineCounts).toEqual([1, 1, 1, 1]);
+      expect(navMetrics.labelWhiteSpace).toEqual(['nowrap', 'nowrap', 'nowrap', 'nowrap']);
 
       await page.goto('/app/sources');
       const sourcesScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
@@ -337,7 +391,7 @@ test.describe('accessibility and responsive layout', () => {
   test('aligns Library activity quantities responsively with long titles', async ({ page }) => {
     for (const width of [320, 375, 393, 1440]) {
       await page.setViewportSize({ width, height: 900 });
-      await page.goto('/app/library?drill=international-dojo-2-hour-session');
+      await page.goto('/app/guest/library?drill=international-dojo-2-hour-session');
       const dialog = page.getByRole('dialog', { name: 'International dojo menu' });
       await expect(dialog).toBeVisible();
 
@@ -400,15 +454,19 @@ test.describe('accessibility and responsive layout', () => {
       const height = width <= 393 ? 812 : 900;
       await page.setViewportSize({ width, height });
 
-      await page.goto('/app/dashboard');
+      await page.goto('/app/guest/dashboard');
+      if (width === 320) {
+        await page.getByRole('button', { name: 'Got it' }).click();
+      }
       await page.evaluate((key) => window.localStorage.removeItem(key), STORAGE_KEY);
       await page.reload();
       const dashboardScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
-      expect(dashboardScrollWidth, `/app/dashboard overflow at ${width}px`).toBeLessThanOrEqual(
-        width,
-      );
+      expect(
+        dashboardScrollWidth,
+        `/app/guest/dashboard overflow at ${width}px`,
+      ).toBeLessThanOrEqual(width);
 
-      await page.goto('/app/drills/new');
+      await page.goto('/app/guest/drills/new');
       await page
         .getByLabel('Session name')
         .fill('A deliberately long session name for responsive builder verification');
@@ -436,13 +494,14 @@ test.describe('accessibility and responsive layout', () => {
       ).toBeFocused();
 
       const builderScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
-      expect(builderScrollWidth, `/app/drills/new overflow at ${width}px`).toBeLessThanOrEqual(
-        width,
-      );
+      expect(
+        builderScrollWidth,
+        `/app/guest/drills/new overflow at ${width}px`,
+      ).toBeLessThanOrEqual(width);
 
       await firstExercises.getByLabel('Repetitions', { exact: true }).fill('50');
       await page.getByRole('button', { name: 'Save session to dashboard' }).click();
-      await expect(page).toHaveURL(/\/app\/dashboard/);
+      await expect(page).toHaveURL(/\/app\/guest\/dashboard/);
     }
   });
 
@@ -658,10 +717,20 @@ test.describe('accessibility and responsive layout', () => {
     const firstQuestion = faqGrid.getByRole('button', { name: 'What is KendoMenu?' });
     await expect(faqGrid).not.toHaveClass(/is-revealed/);
 
-    const heroCta = page.getByRole('link', { name: 'Browse Keiko library' });
+    const heroCta = page.getByRole('link', { name: 'Try without an account' });
     await heroCta.focus();
     await expect(heroCta).toBeFocused();
     await page.keyboard.press('Tab');
+    await expect(page.getByRole('link', { name: 'Sign up here' })).toBeFocused();
+    await page.keyboard.press('Tab');
+
+    const firstMenuTeaser = page.getByRole('link', { name: /International dojo menu/ });
+    const menuPreview = page.locator('.landing-menu-preview[data-landing-reveal]');
+    await expect(firstMenuTeaser).toBeFocused();
+    await expect(menuPreview).toHaveClass(/is-revealed/);
+    for (let index = 0; index < 4; index += 1) {
+      await page.keyboard.press('Tab');
+    }
 
     await expect(firstQuestion).toBeFocused();
     await expect(faqGrid).toHaveClass(/is-revealed/);

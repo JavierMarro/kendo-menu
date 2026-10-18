@@ -1,59 +1,53 @@
+/**
+ * Composes the shared header, main outlet, and footer around each app route. Navigation links keep
+ * the active workspace destination, while the mobile menu closes on Escape and route changes.
+ */
 import { useEffect, useRef, useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 
-import {
-  getPersistenceStatusLabel,
-  usePersistenceStatus,
-} from '../features/persistence/persistence-context';
 import { BrandLockup } from './BrandLockup';
 import { PrimaryNavigationLinks } from './PrimaryNavigation';
 import { SiteFooter } from './SiteFooter';
 
 export function AppShell() {
-  const { mode, writeFailed } = usePersistenceStatus();
   const location = useLocation();
   const [openLocationKey, setOpenLocationKey] = useState<string | null>(null);
+  const headerRef = useRef<HTMLElement>(null);
   const menuToggleRef = useRef<HTMLButtonElement>(null);
-  const persistenceStatusLabel = getPersistenceStatusLabel({ mode, writeFailed });
   const isMenuOpen = openLocationKey === location.key;
   const isLandingPage = location.pathname === '/app';
 
   useEffect(() => {
-    if (!isMenuOpen) {
-      return undefined;
-    }
-
+    if (!isMenuOpen) return undefined;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') {
-        return;
-      }
-
+      if (event.key !== 'Escape') return;
       setOpenLocationKey(null);
       menuToggleRef.current?.focus();
     };
-
+    const handleOutsideInteraction = (event: Event) => {
+      if (event.target instanceof Node && !headerRef.current?.contains(event.target)) {
+        setOpenLocationKey(null);
+      }
+    };
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('pointerdown', handleOutsideInteraction);
+    document.addEventListener('focusin', handleOutsideInteraction);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('pointerdown', handleOutsideInteraction);
+      document.removeEventListener('focusin', handleOutsideInteraction);
+    };
   }, [isMenuOpen]);
 
   const closeMenu = () => setOpenLocationKey(null);
   const toggleMenu = () => setOpenLocationKey(isMenuOpen ? null : location.key);
-
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
-      <header className="top-bar">
+      <header ref={headerRef} className="top-bar">
         <BrandLockup onClick={closeMenu} />
-        <div
-          className={writeFailed ? 'session-status is-error' : 'session-status'}
-          aria-label={persistenceStatusLabel}
-          role="status"
-        >
-          <span className="status-pulse" aria-hidden="true" />
-          <span className="session-status-label">{persistenceStatusLabel}</span>
-        </div>
         <button
           ref={menuToggleRef}
           className="menu-toggle"
@@ -72,9 +66,12 @@ export function AppShell() {
         <nav
           id="primary-navigation"
           className={isMenuOpen ? 'primary-nav is-open' : 'primary-nav'}
-          aria-label="Primary navigation"
+          aria-label="Landing navigation"
         >
           <PrimaryNavigationLinks linkClassName="nav-item" onNavigate={closeMenu} />
+          <Link className="nav-item nav-item--get-started" to="/app/sign-in" onClick={closeMenu}>
+            <span className="nav-label">Get started</span>
+          </Link>
         </nav>
       </header>
 
