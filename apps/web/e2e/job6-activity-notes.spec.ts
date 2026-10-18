@@ -68,6 +68,10 @@ test.describe('Job 6 dashboard activity notes', () => {
     await dialog.getByRole('button', { name: 'Add to dashboard' }).click();
     await dialog.getByRole('link', { name: 'View dashboard' }).click();
     await expect(page).toHaveURL(/\/app\/guest\/dashboard$/);
+    await page
+      .getByRole('complementary', { name: 'Cookie notice' })
+      .getByRole('button', { name: 'Got it', exact: true })
+      .click();
 
     const card = firstDashboardCard(page);
     await expect(card).toHaveCount(1);

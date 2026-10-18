@@ -64,6 +64,10 @@ for (const completion of ['Try again', 'Continue without saving', 'Reset local d
       page.locator('form.builder-form').locator('xpath=ancestor::div[@inert]').first(),
     ).toHaveAttribute('inert', '');
     if (completion === 'Reset local data') {
+      await page
+        .getByRole('complementary', { name: 'Cookie notice' })
+        .getByRole('button', { name: 'Got it', exact: true })
+        .click();
       await page.getByRole('button', { name: completion, exact: true }).click();
       const resetDialog = page.getByRole('alertdialog');
       await resetDialog.getByRole('button', { name: 'Keep my data' }).click();

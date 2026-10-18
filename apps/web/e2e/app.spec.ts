@@ -661,6 +661,10 @@ test.describe('routed training flows', () => {
       'International dojo menu',
     );
     await page.goto('/app/guest/dashboard');
+    await page
+      .getByRole('complementary', { name: 'Cookie notice' })
+      .getByRole('button', { name: 'Got it', exact: true })
+      .click();
 
     const card = dashboardCard(page, 'International dojo menu');
     const viewMore = card.getByRole('button', { name: 'View more' });
@@ -865,6 +869,10 @@ test.describe('routed training flows', () => {
     await card.getByRole('link', { name: 'View session' }).click();
     await page.getByRole('button', { name: 'Add to dashboard' }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'View dashboard' }).click();
+    await page
+      .getByRole('complementary', { name: 'Cookie notice' })
+      .getByRole('button', { name: 'Got it', exact: true })
+      .click();
 
     let dashboardDialog = await openDashboardMenu(page, 'International dojo menu');
     const minutes = dashboardDialog.getByLabel('Minutes for Warm-up');
