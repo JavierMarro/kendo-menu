@@ -14,6 +14,7 @@ describe('guest analytics page mapping', () => {
       '/app/guest/library/session',
     );
     expect(getGuestPageviewPath('/app/dashboard')).toBe('/app/guest/dashboard');
+    expect(getGuestPageviewPath('/privacy')).toBe('/privacy');
     expect(getGuestPageviewPath('/cookies')).toBe('/cookies');
   });
 

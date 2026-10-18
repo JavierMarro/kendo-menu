@@ -126,7 +126,7 @@ test.describe('routed training flows', () => {
 
       await menuToggle.click();
       await expect(primaryNavigation).toBeVisible();
-      await expect(primaryNavigation.getByRole('link')).toHaveCount(3);
+      await expect(primaryNavigation.getByRole('link')).toHaveCount(4);
       await expect(primaryNavigation.getByRole('link', { name: 'Dashboard' })).toHaveCount(0);
       await page.goto('/app');
     } else {

@@ -248,6 +248,59 @@ describe('KendoMenu application flows', () => {
     expect(goatCounterLink.parentElement?.tagName).toBe('STRONG');
   });
 
+  it('renders the public privacy policy with current guest, account, and provider disclosures', async () => {
+    renderApp(createTestStore(), { initialEntries: ['/privacy'] });
+
+    const policy = screen.getByRole('article', { name: 'Privacy Policy' });
+    expect(policy).toHaveClass('policy-page');
+    expect(
+      within(policy).getByRole('heading', { name: 'Guest data on your device' }),
+    ).toBeVisible();
+    expect(
+      within(policy).getByRole('heading', { name: 'Account data and saved changes' }),
+    ).toBeVisible();
+    expect(within(policy).getByRole('heading', { name: 'Google sign-in' })).toBeVisible();
+    expect(
+      within(policy).getByRole('heading', { name: 'Cookies, analytics, and videos' }),
+    ).toBeVisible();
+    expect(
+      within(policy).getByRole('heading', { name: 'Deleting your data and contact' }),
+    ).toBeVisible();
+    expect(policy).toHaveTextContent(
+      'only choosing “Copy menus” uploads an independent copy; the originals stay on your device.',
+    );
+    expect(policy).toHaveTextContent('A new account gets this offer once.');
+    expect(policy).toHaveTextContent(
+      'Account changes need an internet connection and are saved only when you choose “Save to account” and receive confirmation.',
+    );
+    expect(policy).toHaveTextContent(
+      'Vercel hosts KendoMenu. Neon provides managed authentication',
+    );
+    expect(policy).toHaveTextContent(
+      'We receive your email address and profile name from Google, not access to your contacts, calendar or other Google data.',
+    );
+    expect(policy).toHaveTextContent(
+      'GoatCounter receives a cookie-free page count only after you are confirmed signed out and online.',
+    );
+    expect(policy).toHaveTextContent('Mitori room connects to YouTube only when you open a video.');
+    expect(policy).toHaveTextContent(
+      'To delete your account and its saved online data, contact the maintainer.',
+    );
+    expect(within(policy).getByRole('link', { name: 'project repository' })).toHaveAttribute(
+      'href',
+      'https://github.com/JavierMarro/kendo-menu',
+    );
+    expect(within(policy).getByRole('link', { name: 'Cookie Policy' })).toHaveAttribute(
+      'href',
+      '/cookies',
+    );
+    await waitFor(() => expect(document.title).toBe('Privacy Policy · KendoMenu'));
+    expect(document.querySelector('link[rel="canonical"]')).toHaveAttribute(
+      'href',
+      'https://www.kendomenu.com/privacy',
+    );
+  });
+
   it('renders a named footer with shared navigation and information links', () => {
     renderApp(createTestStore(), { initialEntries: ['/app'] });
 
@@ -268,6 +321,20 @@ describe('KendoMenu application flows', () => {
     ).toEqual(['/app#how-it-works-title', '/app#library-story-title', '/app#faq-title']);
 
     const informationNavigation = within(footer).getByRole('navigation', { name: 'Information' });
+    const informationLinks = within(informationNavigation).getAllByRole('link');
+    expect(informationLinks.map((link) => link.textContent?.trim())).toEqual([
+      'GitHub',
+      'Sources',
+      'Cookies',
+      'Privacy',
+    ]);
+    expect(informationLinks.map((link) => link.getAttribute('href'))).toEqual([
+      'https://github.com/JavierMarro/kendo-menu',
+      '/app/sources',
+      '/cookies',
+      '/privacy',
+    ]);
+    expect(informationLinks[0]?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
     expect(within(informationNavigation).getByRole('link', { name: 'Sources' })).toHaveAttribute(
       'href',
       '/app/sources',
@@ -514,6 +581,7 @@ describe('KendoMenu application flows', () => {
       '/app#how-it-works-title',
       '/app#library-story-title',
       '/app#faq-title',
+      '/app/sign-in',
     ]);
     const keikoMenusLink = landingLinks[1];
     if (keikoMenusLink === undefined) {

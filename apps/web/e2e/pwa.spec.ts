@@ -3,7 +3,7 @@ import { expect, type Page } from '@playwright/test';
 import { test } from './guest-test';
 
 const STORAGE_KEY = 'kendo-menu';
-const OFFLINE_PATHS = ['/app', '/app/guest/dashboard', '/app/guest/library'] as const;
+const OFFLINE_PATHS = ['/app', '/app/guest/dashboard', '/app/guest/library', '/privacy'] as const;
 const OFFLINE_STORAGE_RAW = JSON.stringify({
   state: {
     dashboardEntries: [
@@ -191,6 +191,11 @@ test.describe('production PWA shell', () => {
     try {
       for (const path of OFFLINE_PATHS) {
         await page.goto(path);
+        if (path === '/privacy') {
+          await expect(
+            page.getByRole('heading', { name: 'Privacy Policy', exact: true }),
+          ).toBeVisible();
+        }
         await page.reload();
 
         if (path === '/app') {
@@ -204,11 +209,15 @@ test.describe('production PWA shell', () => {
           await expect(
             page.locator('.dashboard-card--compact').filter({ hasText: 'International dojo menu' }),
           ).toBeVisible();
-        } else {
+        } else if (path === '/app/guest/library') {
           await expect(
             page.getByRole('heading', { name: 'Keiko library', exact: true }),
           ).toBeVisible();
           await expect(page.locator('.library-card')).toHaveCount(10);
+        } else {
+          await expect(
+            page.getByRole('heading', { name: 'Privacy Policy', exact: true }),
+          ).toBeVisible();
         }
 
         await expect(

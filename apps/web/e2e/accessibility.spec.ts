@@ -242,6 +242,40 @@ test.describe('accessibility and responsive layout', () => {
     await expectNoBlockingAxeViolations(page);
   });
 
+  test('opens the privacy policy from the footer by keyboard with no blocking axe violations', async ({
+    page,
+  }) => {
+    await page.goto('/app');
+    const footer = page.getByRole('contentinfo', { name: 'Site footer' });
+    await footer.scrollIntoViewIfNeeded();
+    const information = footer.getByRole('navigation', { name: 'Information' });
+    const privacyLink = information.getByRole('link', { name: 'Privacy', exact: true });
+    await privacyLink.focus();
+    await page.keyboard.press('Enter');
+
+    await expect(page).toHaveURL('/privacy');
+    await expect(page.getByRole('main')).toBeFocused();
+    await expect(page).toHaveTitle('Privacy Policy · KendoMenu');
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+      'href',
+      'https://www.kendomenu.com/privacy',
+    );
+    await expect(page.locator('meta[property="og:url"]')).toHaveAttribute(
+      'content',
+      'https://www.kendomenu.com/privacy',
+    );
+    await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Privacy Policy', exact: true })).toBeVisible();
+    await expect(
+      page.getByText(/only choosing “Copy menus” uploads an independent copy/u),
+    ).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Cookie Policy' })).toHaveAttribute(
+      'href',
+      '/cookies',
+    );
+    await expectNoBlockingAxeViolations(page);
+  });
+
   test('spaces all four landing navigation links without crowding or overflow', async ({
     page,
   }) => {

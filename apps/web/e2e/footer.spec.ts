@@ -70,16 +70,40 @@ async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): P
   await expect(footer.getByRole('link', { name: 'Library info' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'Dashboard' })).toHaveCount(0);
   await expect(footer.getByRole('link', { name: 'FAQ' })).toBeVisible();
+  await expect(footer.getByRole('link', { name: 'GitHub', exact: true })).toHaveAttribute(
+    'href',
+    'https://github.com/JavierMarro/kendo-menu',
+  );
   await expect(footer.getByRole('link', { name: 'Sources' })).toBeVisible();
   await expect(footer.getByRole('link', { name: 'Cookies' })).toBeVisible();
+  await expect(footer.getByRole('link', { name: 'Privacy', exact: true })).toBeVisible();
 
+  const information = footer.getByRole('navigation', { name: 'Information' });
+  expect(
+    (await information.getByRole('link').allTextContents()).map((text) => text.trim()),
+  ).toEqual(['GitHub', 'Sources', 'Cookies', 'Privacy']);
+  await expect(information.getByRole('link', { name: 'GitHub' }).locator('svg')).toHaveAttribute(
+    'aria-hidden',
+    'true',
+  );
+
+  const navigation = footer.getByRole('navigation', { name: 'Navigation' });
+  expect(
+    (await navigation.locator(':scope > *').allTextContents()).map((text) => text.trim()),
+  ).toEqual(['How it works', 'Library info', 'FAQ', 'Install KendoMenu']);
   const sourcesLink = footer.getByRole('link', { name: 'Sources' });
   const cookiesLink = footer.getByRole('link', { name: 'Cookies' });
-  await sourcesLink.focus();
+  const githubLink = footer.getByRole('link', { name: 'GitHub' });
+  const privacyLink = footer.getByRole('link', { name: 'Privacy', exact: true });
+  await githubLink.focus();
+  await page.keyboard.press('Tab');
+  await expect(sourcesLink).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(cookiesLink).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(privacyLink).toBeFocused();
 
-  const focusStyle = await cookiesLink.evaluate((element) => {
+  const focusStyle = await privacyLink.evaluate((element) => {
     const computedStyle = getComputedStyle(element);
     return {
       outlineStyle: computedStyle.outlineStyle,
@@ -89,7 +113,7 @@ async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): P
   expect(focusStyle.outlineStyle).not.toBe('none');
   expect(Number.parseFloat(focusStyle.outlineWidth)).toBeGreaterThanOrEqual(3);
 
-  const installAction = footer.getByRole('button', { name: 'Install KendoMenu' });
+  const installAction = navigation.getByRole('button', { name: 'Install KendoMenu' });
   const sourceFontSize = await sourcesLink.evaluate((element) =>
     Number.parseFloat(getComputedStyle(element).fontSize),
   );
@@ -182,7 +206,7 @@ test.describe('responsive site footer', () => {
           if (column.querySelector('.footer-nav') !== null) {
             return 'navigation';
           }
-          return 'social';
+          return 'information';
         }),
         gridColumnCount: getComputedStyle(element).gridTemplateColumns.split(/\s+/).filter(Boolean)
           .length,
@@ -196,7 +220,7 @@ test.describe('responsive site footer', () => {
     });
 
     expect(mobileLayout).toEqual({
-      columnOrder: ['brand', 'navigation', 'social'],
+      columnOrder: ['brand', 'navigation', 'information'],
       gridColumnCount: 2,
       isBrandAboveLinks: true,
       areLinkColumnsAligned: true,

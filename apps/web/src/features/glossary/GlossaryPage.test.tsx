@@ -57,15 +57,16 @@ describe('glossary', () => {
     expect(screen.getByText('Jigeiko', { selector: 'dt' })).toBeVisible();
   });
 
-  it('navigates from the footer immediately after Cookies and from the experience-level FAQ', async () => {
+  it('keeps Glossary off the footer while retaining experience-level FAQ navigation', async () => {
     const user = userEvent.setup();
     renderApp(createTestStore(), { initialEntries: ['/app'] });
     const information = screen.getByRole('navigation', { name: 'Information' });
     const cookies = within(information).getByRole('link', { name: 'Cookies' });
-    const glossary = within(information).getByRole('link', { name: 'Glossary' });
-    expect(cookies.nextElementSibling).toBe(glossary);
-    await user.click(glossary);
-    expect(screen.getByRole('heading', { name: 'Glossary', level: 1 })).toBeVisible();
+    const privacy = within(information).getByRole('link', { name: 'Privacy' });
+    expect(cookies.nextElementSibling).toBe(privacy);
+    expect(within(information).queryByRole('link', { name: 'Glossary' })).not.toBeInTheDocument();
+    await user.click(privacy);
+    expect(screen.getByRole('heading', { name: 'Privacy Policy', level: 1 })).toBeVisible();
     await user.click(
       within(screen.getByRole('contentinfo')).getByRole('link', { name: 'KendoMenu home' }),
     );

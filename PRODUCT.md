@@ -65,6 +65,10 @@ The mobile menu opens a compact vertical dropdown with separated links and a Get
 guest dashboard. Sign up opens a dedicated Google-only authentication page headed “Prepare for keiko”.
 Email/password authentication is an informational future option, not an available form.
 The landing and information pages retain the site footer; sign-in and workspace pages omit it.
+Public `/privacy` explains guest/account data, service providers and deletion choices alongside the
+unchanged `/cookies` page. Footer Navigation ends with installation when available; Information lists
+GitHub, Sources, Cookies and Privacy, in that order. Glossary remains available through its public route
+and Mitori room.
 
 Guest and account workspaces share navigation for Dashboard, Library, Mitori room and User: a fixed left
 sidebar on desktop and a fixed bottom bar on mobile. The KendoMenu brand returns to the landing

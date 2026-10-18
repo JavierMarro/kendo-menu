@@ -19,6 +19,7 @@ const PUBLIC_ROUTE_PATHS: Readonly<Record<string, string>> = {
   '/app/drills/new': '/app/guest/drills/new',
   '/app/sources': '/app/sources',
   '/app/glossary': '/app/glossary',
+  '/privacy': '/privacy',
   '/cookies': '/cookies',
 };
 

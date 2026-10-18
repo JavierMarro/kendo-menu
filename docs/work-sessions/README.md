@@ -26,6 +26,11 @@ Add `--date YYYY-MM-DD` when recording a previous session. Replace every placeho
 
 ## Sessions
 
+- [2026-10-18 — Release check corrections](./2026-10-18-release-check-corrections.md)
+- [2026-10-18 — Production database migrations](./2026-10-18-production-database-migrations.md)
+- [2026-10-18 — Production Google diagnostic](./2026-10-18-production-google-diagnostic.md)
+- [2026-10-18 — Production Google helper](./2026-10-18-production-google-helper.md)
+- [2026-10-18 — Privacy and production setup](./2026-10-18-privacy-and-production-setup.md)
 - [2026-10-18 — Mobile dropdown refinement](./2026-10-18-mobile-dropdown-refinement.md)
 - [2026-10-18 — Final navigation and production handoff](./2026-10-18-final-navigation-handoff.md)
 - [2026-10-16 — Mitori content and list polish](./2026-10-16-mitori-content-polish.md)

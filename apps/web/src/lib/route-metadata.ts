@@ -19,6 +19,7 @@ function isCanonicalRoute(pathname: string): boolean {
     normalizedPathname === '/app' ||
     normalizedPathname === '/app/sources' ||
     normalizedPathname === '/app/glossary' ||
+    normalizedPathname === '/privacy' ||
     normalizedPathname === '/cookies'
   );
 }

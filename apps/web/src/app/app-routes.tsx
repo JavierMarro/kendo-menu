@@ -15,6 +15,7 @@ import { NotFoundPage } from '../features/not-found/NotFoundPage';
 import { AccountSetupPage } from '../features/account/AccountSetupPage';
 import { SignInPage } from '../features/account/SignInPage';
 import { CookiePolicyPage } from '../features/privacy/CookiePolicyPage';
+import { PrivacyPolicyPage } from '../features/privacy/PrivacyPolicyPage';
 import { GlossaryPage } from '../features/glossary/GlossaryPage';
 import { SourcesPage } from '../features/sources/SourcesPage';
 import { MitoriRoomPage } from '../features/mitori/MitoriRoomPage';
@@ -97,6 +98,11 @@ export const appRoutes: RouteObject[] = [
           { path: 'glossary', element: <GlossaryPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
+      },
+      {
+        path: '/privacy',
+        element: <AppLayout />,
+        children: [{ index: true, element: <PrivacyPolicyPage /> }],
       },
       {
         path: '/cookies',

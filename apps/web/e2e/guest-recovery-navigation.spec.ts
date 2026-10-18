@@ -101,6 +101,10 @@ test('session-only guest recovery requires explicit discard before a public-page
   page.once('dialog', (dialog) => dialog.accept());
   await (await visibleWorkspaceBrandLink(page)).click();
   await expect(page).toHaveURL(/\/app$/);
+  await page
+    .getByRole('complementary', { name: 'Cookie notice' })
+    .getByRole('button', { name: 'Got it', exact: true })
+    .click();
   await page.getByRole('contentinfo').getByRole('link', { name: 'Cookies', exact: true }).click();
   await expect(page).toHaveURL(/\/cookies$/);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();

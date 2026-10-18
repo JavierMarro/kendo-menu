@@ -50,7 +50,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,svg,jpg,jpeg,avif,webp}'],
         globIgnores: ['**/kendo-menu-social.jpg'],
         navigateFallback: 'index.html',
-        navigateFallbackAllowlist: [/^\/(?:app(?:\/|$)|cookies(?:\/|$)|$)/],
+        navigateFallbackAllowlist: [/^\/(?:app(?:\/|$)|cookies(?:\/|$)|privacy(?:\/|$)|$)/],
         cleanupOutdatedCaches: true,
       },
     }),

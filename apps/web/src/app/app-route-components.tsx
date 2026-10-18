@@ -38,6 +38,7 @@ const routeTitles: Readonly<Record<string, string>> = {
   '/app/account/drills/new': 'Create session',
   '/app/sources': 'Sources',
   '/app/glossary': 'Glossary',
+  '/privacy': 'Privacy Policy',
   '/cookies': 'Cookie Policy',
 };
 

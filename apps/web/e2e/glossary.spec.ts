@@ -1,22 +1,24 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect } from '@playwright/test';
 import { test } from './guest-test';
+import {
+  COOKIE_NOTICE_ACKNOWLEDGEMENT_DURATION_MS,
+  COOKIE_NOTICE_ACKNOWLEDGEMENT_STORAGE_KEY,
+} from '../src/lib/cookie-notice';
 
-test('glossary supports footer and FAQ navigation, keyboard search, reload and accessible mobile layout', async ({
+test('glossary supports direct entry, FAQ navigation, keyboard search, reload and accessible mobile layout', async ({
   page,
 }, testInfo) => {
-  await page.goto('/app');
-  await expect(page.getByRole('heading', { name: 'Plan the keiko you need today' })).toBeVisible();
-  const notice = page.getByRole('button', { name: 'Got it', exact: true });
-  if (await notice.isVisible()) await notice.click();
+  await page.addInitScript(
+    ({ key, duration }) => window.localStorage.setItem(key, String(Date.now() + duration)),
+    {
+      key: COOKIE_NOTICE_ACKNOWLEDGEMENT_STORAGE_KEY,
+      duration: COOKIE_NOTICE_ACKNOWLEDGEMENT_DURATION_MS,
+    },
+  );
+  await page.goto('/app/glossary');
+  await expect(page.getByRole('heading', { name: 'Glossary', exact: true })).toBeVisible();
   const footer = page.getByRole('contentinfo');
-  await footer.getByRole('link', { name: 'Cookies', exact: true }).focus();
-  await page.keyboard.press('Tab');
-  const glossaryLink = footer.getByRole('link', { name: 'Glossary', exact: true });
-  await expect(glossaryLink).toBeFocused();
-  await expect(glossaryLink).toHaveCSS('outline-style', 'solid');
-  await page.keyboard.press('Enter');
-  await expect(page).toHaveURL('/app/glossary');
   await expect(page.getByRole('main')).toBeFocused();
   await expect(page).toHaveTitle('Glossary · KendoMenu');
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
