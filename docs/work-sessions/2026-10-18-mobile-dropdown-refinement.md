@@ -1,8 +1,0 @@
-- Session: Mobile dropdown refinement
-- Date/duration: 2026-10-18; focused mobile UI correction
-- Scope/start: Refine the mobile sign-in heading and replace the two-row landing navigation on the existing dirty codex/ui-journey branch.
-- Changes: Mobile heading enlarged about 15% at typical phone widths; single-column dropdown overlays the page with separated links and outlined Get started; outside pointer/focus and Escape dismiss it.
-- Decisions: Preserve desktop navigation and artwork crop; no new dependencies or remote changes; run focused checks rather than the full release gate as requested.
-- Roadblocks: Owner screenshots show Neon production exists as the default branch but Better Auth is not enabled; production migration/configuration readiness remains unverified.
-- Verification: Node 24: 2 focused navigation unit tests and 6 desktop/mobile browser tests passed; manually inspected the dropdown and larger heading at mobile widths; targeted typecheck/lint/format, session and whitespace checks passed; full release gate not run.
-- Follow-up: Enable/configure managed Google Auth on the intended production Neon branch, pair its Auth/database URLs in Vercel, prepare reviewed migrations separately and complete release gates before merging main; nothing committed or deployed.

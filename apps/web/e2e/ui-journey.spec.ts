@@ -252,6 +252,7 @@ test('guest workspace navigation works on desktop and mobile and preserves conte
   await page.keyboard.press('Enter');
   const userOptions = page.getByRole('region', { name: 'User options' });
   await expect(userOptions).toBeVisible();
+  await expect(userOptions).toHaveCSS('background-color', 'rgb(3, 13, 28)');
   await expect(userOptions).toContainText('Guest mode');
   await expect(userOptions.getByRole('status', { name: 'Saved on this device' })).toBeVisible();
   await expect(userOptions.getByRole('link', { name: 'Sign up', exact: true })).toHaveAttribute(
@@ -308,6 +309,17 @@ test('guest workspace navigation works on desktop and mobile and preserves conte
   await mobileUserButton.click();
   const mobileUserOptions = page.getByRole('region', { name: 'User options' });
   await expect(mobileUserOptions).toBeVisible();
+  await expect
+    .poll(() =>
+      mobileUserOptions.evaluate((element) => ({
+        backgroundColor: getComputedStyle(element).backgroundColor,
+        borderColor: getComputedStyle(element).borderTopColor,
+      })),
+    )
+    .toEqual({
+      backgroundColor: 'rgb(3, 13, 28)',
+      borderColor: 'rgba(200, 155, 60, 0.48)',
+    });
   await expect(mobileUserOptions).toContainText('Guest mode');
   await expect(
     mobileUserOptions.getByRole('status', { name: 'Saved on this device' }),

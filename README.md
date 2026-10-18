@@ -9,9 +9,10 @@ and duration, add training notes, or build your own sessions.
 - **Guest copy:** eligible new accounts receive one choice to copy their guest menus. The original
   stays on the device, and subsequent guest/account edits are independent.
 
-The deployed guest MVP and the managed-account development work have different release boundaries.
-Single-account development persistence has owner-reported passes; multi-account and deployed HTTPS
-validation remain open before a public account release. See the [account contract and live checklist](docs/MANAGED_DASHBOARDS.md).
+The managed-account release reached production on 2026-10-18. The owner reports that the site is
+deployed and working; this status is owner-reported, not an independent live verification. See the
+[deployment runbook](docs/runbooks/DEPLOYMENT.md) for the evidence distinction and the
+[account contract](docs/MANAGED_DASHBOARDS.md).
 
 ## Run locally
 
@@ -68,7 +69,8 @@ Real database integration tests require the guarded local `kendomenu_test` datab
 - `apps/api`: Node 24, Elysia, PostgreSQL and Drizzle.
 - `packages/domain`: training contracts, validation and the curated catalogue.
 - `packages/store`: Zustand state with injected browser or memory storage.
-- `apps/mobile` and `packages/ui`: reserved boundaries, not initialized applications.
+- `packages/ui`: reserved for genuinely shared platform-neutral components; the responsive web app
+  and installable PWA cover mobile use.
 
 Curated content lives in `packages/domain/data/default-drills.json`. Read [PRODUCT.md](PRODUCT.md)
 and [CONTEXT.md](CONTEXT.md) for the product and terminology, or [the architecture](docs/ARCHITECTURE.md)

@@ -93,16 +93,14 @@ escalation. No environment file or credential was written or printed.
 | `env -u TEST_DATABASE_URL pnpm test:api:integration`                              | Expected exit 1: `TEST_DATABASE_URL_REQUIRED_LOCAL_KENDOMENU_TEST`; no silent skip                      |
 | `pnpm db:check`                                                                   | PASS: migration metadata chain                                                                          |
 | Repeated `pnpm db:generate`                                                       | PASS: five tables, no schema changes and no new migration                                               |
-| `pnpm check`                                                                      | PASS: 696 tests (73 domain, 69 store, 389 API, 165 web), types, lint, formatting, history and web build |
+| `pnpm check`                                                                      | PASS: 696 tests (73 domain, 69 store, 389 API, 165 web), types, lint, formatting and web build          |
 | Scoped unsafe-type, skipped-test, debug-log, secret and generated-artifact checks | PASS: no prohibited matches or unexplained artifacts; original migration and dependency files unchanged |
 | Dependency audit                                                                  | Not applicable: manifests and lockfile unchanged                                                        |
 
-Final documentation-only updates are checked separately with Prettier, `pnpm session:check`,
-relative-link validation and `git diff --check`. Browser E2E/PWA and release verification were not
+Final documentation-only updates were checked separately with Prettier, relative-link validation
+and `git diff --check`. Browser E2E/PWA and release verification were not
 run for this backend-only change; the successful web build is not live backend/provider evidence.
-New/affected links pass. The history index retains two pre-existing broken links to
-`2026-08-22-responsive-site-footer.md` and `2026-08-21-landing-page-polish.md`; neither target nor
-historical entry was changed by this task. Scoped scans cover all 25 changed files and found no
+New/affected links pass. Scoped scans cover all 25 changed files and found no
 unsafe casts/suppressions, skipped tests, debug logs, secret-shaped additions or unexpected artifacts.
 
 Real PostgreSQL tests cover migration hashes/snapshot linkage, empty and upgraded schemas,
@@ -169,5 +167,3 @@ frontend accounts/workspaces, guest adoption, automatic sync/retry or conflict U
 - `docs/ACCOUNT_SYNC.md`
 - `docs/ARCHITECTURE.md`
 - `docs/DASHBOARD_PERSISTENCE.md`
-- `docs/work-sessions/2026-09-13-dashboard-postgres-persistence.md`
-- `docs/work-sessions/README.md`

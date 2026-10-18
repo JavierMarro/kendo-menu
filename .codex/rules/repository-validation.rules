@@ -10,7 +10,6 @@ prefix_rule(
             "check:web",
             "format:check",
             "lint",
-            "session:check",
             "test",
             "test:domain",
             "test:e2e",
@@ -35,7 +34,6 @@ prefix_rule(
         "pnpm check:web",
         "pnpm format:check",
         "pnpm lint",
-        "pnpm session:check",
         "pnpm test",
         "pnpm test:domain",
         "pnpm test:e2e",
@@ -59,7 +57,6 @@ prefix_rule(
         "pnpm install",
         "pnpm publish",
         "pnpm remove react",
-        "pnpm session:new -- --slug example --duration 1m",
         "pnpm update",
     ],
 )

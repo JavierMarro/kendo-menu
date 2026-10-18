@@ -1,8 +1,0 @@
-- Session: managed auth token-only proof
-- Date/duration: 2026-10-04; not recorded
-- Scope/start: Migration A from clean codex/managed-auth-online-dashboard HEAD 14465d2; isolated development proof only.
-- Changes: Pinned web @neondatabase/auth 0.5.0-beta and API jose 6.2.12 in one lockfile; added token-only proof UI, injectable loopback verifier/entry, empty URL templates, SDK/UI/Node/browser tests, ADR 0007 and handoff.
-- Decisions: No session retrieval/hooks because SDK getSession refresh writes credentials to LocalStorage; supported token-only retrieval avoids this in synthetic tests; guest source, production routes/providers, legacy SQL and B–D unchanged.
-- Roadblocks: Owner rendering PASS after fresh-tab retry; Google returned to homepage with Neon verifier, now handled by development root-return bridge; real identity/expiry/two-account/storage retry pending; legacy mobile account-persistence timeout separate; no database/private-file inspection.
-- Verification: Node 24.21.0 pnpm check PASS (934 tests); post-callback-fix web typecheck/scoped lint and SDK callback tests 5 PASS; desktop/mobile proof 2 PASS with accessibility/storage checks; preview proof 404, production proof absent, ordinary Node/Vercel endpoint 404; independent API/client/callback reviews clear; guest smoke 46 PASS plus unrelated account 1 timeout.
-- Follow-up: Owner confirms Google-only settings and filled VITE_NEON_AUTH_URL/NEON_AUTH_BASE_URL files; agent observes native missing/synthetic-invalid bearer 401 and fresh rendering without errors; A remains unproven until private live identity/storage gates pass; no staging/commit/push or remote changes.

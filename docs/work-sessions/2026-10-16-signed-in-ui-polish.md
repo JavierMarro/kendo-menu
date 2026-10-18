@@ -1,8 +1,0 @@
-- Session: signed in ui polish
-- Date/duration: 2026-10-16; follow-up UI implementation and verification
-- Scope/start: Follow-up UI/content refinements on the existing dirty codex/ui-journey branch; preserve the owner's restored Library detail markup.
-- Changes: New sign-in artwork and centered heading; verified landing CTAs; cloud-save status and primary sign-out; compact draft warning; Library-aligned dashboard details and bottom actions; three landing menu teasers; concise privacy/FAQ copy.
-- Decisions: Browse 10 menus while retaining canonical ZNKR data and saved/direct detail compatibility; keep explicit account saves, isolated guest data and established Google redirects unchanged; remove unavailable account deletion UI.
-- Roadblocks: Restored detail markup needed scoped header/count spacing; mobile brand grid-area needed explicit auth placement; Google OAuth branding requires provider-console configuration, not APP_ORIGIN or React text changes.
-- Verification: Node 24 check:web passed (340 tests); full test:e2e passed (325, 3 expected skips); PWA suite passed (4, fresh build/types); sign-in screenshots/layout passed desktop/mobile; scoped independent review, format:check and session:check passed.
-- Follow-up: Leave changes uncommitted; owner verifies live Google/Neon behavior on controlled HTTPS Preview; Google branding configuration is separate and was not changed.

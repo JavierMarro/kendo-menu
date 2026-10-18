@@ -52,7 +52,11 @@ async function getInstallActionVisualState(action: Locator) {
     return {
       backgroundColor: style.backgroundColor,
       color: style.color,
+      fontFamily: style.fontFamily,
       fontSize: Number.parseFloat(style.fontSize),
+      fontWeight: style.fontWeight,
+      letterSpacing: style.letterSpacing,
+      lineHeight: style.lineHeight,
       outlineStyle: style.outlineStyle,
       outlineWidth: Number.parseFloat(style.outlineWidth),
       textDecorationLine: style.textDecorationLine,
@@ -90,7 +94,7 @@ async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): P
   const navigation = footer.getByRole('navigation', { name: 'Navigation' });
   expect(
     (await navigation.locator(':scope > *').allTextContents()).map((text) => text.trim()),
-  ).toEqual(['How it works', 'Library info', 'FAQ', 'Install KendoMenu']);
+  ).toEqual(['How it works', 'Library info', 'FAQ', 'Install as app']);
   const sourcesLink = footer.getByRole('link', { name: 'Sources' });
   const cookiesLink = footer.getByRole('link', { name: 'Cookies' });
   const githubLink = footer.getByRole('link', { name: 'GitHub' });
@@ -113,12 +117,25 @@ async function verifyFooterLinksAndKeyboardFocus(page: Page, footer: Locator): P
   expect(focusStyle.outlineStyle).not.toBe('none');
   expect(Number.parseFloat(focusStyle.outlineWidth)).toBeGreaterThanOrEqual(3);
 
-  const installAction = navigation.getByRole('button', { name: 'Install KendoMenu' });
-  const sourceFontSize = await sourcesLink.evaluate((element) =>
-    Number.parseFloat(getComputedStyle(element).fontSize),
-  );
+  const installAction = navigation.getByRole('button', { name: 'Install as app' });
+  const sourceTypography = await sourcesLink.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      fontFamily: style.fontFamily,
+      fontSize: Number.parseFloat(style.fontSize),
+      fontWeight: style.fontWeight,
+      letterSpacing: style.letterSpacing,
+      lineHeight: style.lineHeight,
+    };
+  });
   const normalState = await getInstallActionVisualState(installAction);
-  expect(normalState.fontSize).toBeGreaterThan(sourceFontSize);
+  expect({
+    fontFamily: normalState.fontFamily,
+    fontSize: normalState.fontSize,
+    fontWeight: normalState.fontWeight,
+    letterSpacing: normalState.letterSpacing,
+    lineHeight: normalState.lineHeight,
+  }).toEqual(sourceTypography);
   expect(normalState.textDecorationLine).toContain('underline');
   expectAaTextContrast(normalState);
 

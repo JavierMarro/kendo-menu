@@ -16,7 +16,7 @@ The production references before this pass were:
 
 Both JPEGs were copied unchanged from `public` into `dist`, and both appeared in the generated
 service-worker precache: **1,760,202 logo bytes + 1,485,301 hero bytes = 3,245,503 bytes combined**. Existing integration/E2E tests also referenced
-the old paths; they have been updated. Historical work-session references remain historical.
+the old paths; they have been updated.
 
 ## Encoding and delivery
 
@@ -130,27 +130,26 @@ control. All external settings remain owner verification required.
 - Tests: `apps/web/src/lib/route-metadata.test.ts`,
   `apps/web/src/test/app.integration.test.tsx`, and
   `apps/web/e2e/{accessibility,app,images,metadata,pwa}.spec.ts`.
-- Documentation: this report, `docs/runbooks/DEPLOYMENT.md`, the
-  `docs/work-sessions/2026-09-08-production-polish.md` handoff, and the history index.
+- Documentation: this report and `docs/runbooks/DEPLOYMENT.md`.
 
 ## Verification
 
-| Check                         | Status  | Evidence                                                                                                                                                             |
-| ----------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm check:web`              | PASS    | Initial package gate: 145 tests plus typecheck, lint, and production build; final web changes covered again by the release gate (158 tests).                         |
-| `pnpm test:e2e:preview`       | PASS    | 149 passed; 3 expected platform skips.                                                                                                                               |
-| `pnpm test:e2e:pwa`           | PASS    | 4 passed, including every responsive format/width fetched offline.                                                                                                   |
-| `pnpm verify:full`            | PASS    | Exit 0; session policy, typecheck, lint, format, 289 unit tests (63 domain / 68 store / 158 web), production build, 149 preview tests with 3 skips, and 4 PWA tests. |
-| Independent semantic review   | PASS    | Image crop/delivery, canonical allowlist, recovery metadata, PWA output, and operational documentation reviewed; findings addressed.                                 |
-| Diff and debug-log checks     | PASS    | `git diff --check`; no debug logs or debugger statements in changed product code.                                                                                    |
-| Dependency audit              | SKIPPED | No dependency/lockfile changes; network vulnerability audit was outside this focused pass.                                                                           |
-| External operational controls | SKIPPED | No deployment or account changes; rollback and continuity settings require owner verification.                                                                       |
+| Check                         | Status  | Evidence                                                                                                                                             |
+| ----------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm check:web`              | PASS    | Initial package gate: 145 tests plus typecheck, lint, and production build; final web changes covered again by the release gate (158 tests).         |
+| `pnpm test:e2e:preview`       | PASS    | 149 passed; 3 expected platform skips.                                                                                                               |
+| `pnpm test:e2e:pwa`           | PASS    | 4 passed, including every responsive format/width fetched offline.                                                                                   |
+| `pnpm verify:full`            | PASS    | Exit 0; typecheck, lint, format, 289 unit tests (63 domain / 68 store / 158 web), production build, 149 preview tests with 3 skips, and 4 PWA tests. |
+| Independent semantic review   | PASS    | Image crop/delivery, canonical allowlist, recovery metadata, PWA output, and operational documentation reviewed; findings addressed.                 |
+| Diff and debug-log checks     | PASS    | `git diff --check`; no debug logs or debugger statements in changed product code.                                                                    |
+| Dependency audit              | SKIPPED | No dependency/lockfile changes; network vulnerability audit was outside this focused pass.                                                           |
+| External operational controls | SKIPPED | No deployment or account changes; rollback and continuity settings require owner verification.                                                       |
 
 The first complete preview run found the existing tablet test still asserting the removed CSS
 background property. The assertion now checks actual cover geometry at 680/800/960px; the full
 rerun and final release gate both passed. Recovery metadata was added to both fallback surfaces
 following independent review. The final gate's production output was remeasured and matched the
-byte table exactly. Work-session history records the completed pass.
+byte table exactly. The completed pass is summarized in this report.
 
 Ready for commit: **YES**. This is code readiness, not authorization to deploy or change external
 settings.

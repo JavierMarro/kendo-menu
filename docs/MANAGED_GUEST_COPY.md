@@ -3,7 +3,9 @@
 D extends reviewed Migration C at `6475f9184a72a0afb4a11b2451506e2d309dce7a` on
 `codex/managed-auth-online-dashboard`, including C's reviewed lifecycle corrections. It changes
 only the frontend and directly affected guidance. B's authorization, consumption, atomic copy and
-ordinary Save contracts remain authoritative. This is internal integration, not public release.
+ordinary Save contracts remain authoritative. This document records the implementation and its
+historical local verification; current release status is in the
+[deployment runbook](runbooks/DEPLOYMENT.md).
 
 ## Choice and one-use lifetime
 
@@ -74,25 +76,24 @@ D's scoped caller search found no remaining runtime references to those modules.
 sentinel in managed-account tests intentionally verifies preservation and stays. No additional
 runtime deletion is needed; historical SQL, ADRs, evidence and stored browser data remain intact.
 
-The [D work-session handoff](work-sessions/2026-10-10-managed-guest-copy.md) records actual checks and
-independent review. Required suites run sequentially under Node 24 and pinned pnpm: focused checks,
+Required suites ran sequentially under Node 24 and pinned pnpm: focused checks,
 `pnpm check`, full development E2E, freshly built full preview E2E, and separate PWA E2E, followed
-by session and diff checks. No database suite is required for this frontend-only slice. Passing
+by formatting and diff checks. No database suite is required for this frontend-only slice. Passing
 isolated tests do not clear a required failing full suite. The retired mobile detached-click failure
-from C remains unresolved historical evidence, not a pass obtained by deleting that journey.
+from C remains historical browser-test evidence, not a pass obtained by deleting that journey.
 
 Original D verification before the post-decision freshness correction, under Node **24.21.0**
 and pnpm **11.22.0**, with suites run sequentially:
 
-| Check                                                                       | Observed result                                                                                                                                                                             |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Focused API/draft/guest-reader/setup/proxy tests                            | PASS — 92 tests; final code also covered by the complete check below.                                                                                                                       |
-| `pnpm check`                                                                | PASS — 608 tests (73 domain, 69 store, 154 API, 312 web), typecheck, lint, formatting, session check and production build.                                                                  |
-| `pnpm test:e2e`                                                             | PASS — 287 tests, 3 intentional skips; desktop Chromium and mobile Chrome, including all 18 D cases.                                                                                        |
-| `pnpm test:e2e:preview`                                                     | PASS — freshly built complete suite, 287 tests and 3 intentional skips.                                                                                                                     |
-| `pnpm test:e2e:pwa`                                                         | PASS — 4 tests in the separate production PWA suite.                                                                                                                                        |
-| Bounded independent review                                                  | PASS — identity-cancellation lease release and BFCache abandonment findings fixed and re-reviewed; ownership, complete copy, guest preservation, late responses and accessibility reviewed. |
-| Final `pnpm session:check`, targeted formatting and `git diff --check HEAD` | PASS.                                                                                                                                                                                       |
+| Check                                                 | Observed result                                                                                                                                                                             |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Focused API/draft/guest-reader/setup/proxy tests      | PASS — 92 tests; final code also covered by the complete check below.                                                                                                                       |
+| `pnpm check`                                          | PASS — 608 tests (73 domain, 69 store, 154 API, 312 web), typecheck, lint, formatting and production build.                                                                                 |
+| `pnpm test:e2e`                                       | PASS — 287 tests, 3 intentional skips; desktop Chromium and mobile Chrome, including all 18 D cases.                                                                                        |
+| `pnpm test:e2e:preview`                               | PASS — freshly built complete suite, 287 tests and 3 intentional skips.                                                                                                                     |
+| `pnpm test:e2e:pwa`                                   | PASS — 4 tests in the separate production PWA suite.                                                                                                                                        |
+| Bounded independent review                            | PASS — identity-cancellation lease release and BFCache abandonment findings fixed and re-reviewed; ownership, complete copy, guest preservation, late responses and accessibility reviewed. |
+| Final targeted formatting and `git diff --check HEAD` | PASS.                                                                                                                                                                                       |
 
 Initial focused browser fixture failures and lint failures were corrected before the complete final
 suite passes. A sandbox-denied API socket run was cleared by rerunning the complete `pnpm check`
@@ -122,7 +123,6 @@ Correction paths (the pre-existing uncommitted D implementation is preserved):
 - `apps/web/e2e/synthetic-managed-harness.ts`
 - `docs/MANAGED_ACCOUNT_WEB.md`
 - `docs/MANAGED_GUEST_COPY.md`
-- `docs/work-sessions/2026-10-10-managed-guest-copy.md`
 
 Focused controller/setup regressions pass: 33 tests. Four new desktop Chromium/mobile Chrome cases
 cover the freshness journey within the complete managed-adoption browser file.
@@ -137,16 +137,16 @@ The corrected runtime and tests passed independent re-review.
 
 Final correction verification under Node **24.21.0** and pinned pnpm **11.22.0**, sequentially:
 
-| Check                                                          | Observed result                                                                                 |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Focused controller/setup tests                                 | PASS — 33 tests                                                                                 |
-| Complete managed-adoption browser file                         | PASS — 22 desktop/mobile tests                                                                  |
-| `pnpm check`                                                   | PASS — 614 tests (73 domain, 69 store, 154 API, 318 web), typecheck, lint, formatting and build |
-| Complete `pnpm test:e2e`                                       | PASS — 291 tests, 3 intentional skips                                                           |
-| Fresh complete `pnpm test:e2e:preview`                         | PASS — 291 tests, 3 intentional skips                                                           |
-| Separate `pnpm test:e2e:pwa`                                   | PASS — 4 tests                                                                                  |
-| Independent review                                             | PASS — progress-state finding fixed and re-reviewed                                             |
-| Final session, targeted formatting and `git diff --check HEAD` | PASS                                                                                            |
+| Check                                                 | Observed result                                                                                 |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Focused controller/setup tests                        | PASS — 33 tests                                                                                 |
+| Complete managed-adoption browser file                | PASS — 22 desktop/mobile tests                                                                  |
+| `pnpm check`                                          | PASS — 614 tests (73 domain, 69 store, 154 API, 318 web), typecheck, lint, formatting and build |
+| Complete `pnpm test:e2e`                              | PASS — 291 tests, 3 intentional skips                                                           |
+| Fresh complete `pnpm test:e2e:preview`                | PASS — 291 tests, 3 intentional skips                                                           |
+| Separate `pnpm test:e2e:pwa`                          | PASS — 4 tests                                                                                  |
+| Independent review                                    | PASS — progress-state finding fixed and re-reviewed                                             |
+| Final targeted formatting and `git diff --check HEAD` | PASS                                                                                            |
 
 The initial sandboxed check failed because the local API test listener was denied; the complete
 check passed with local listener permission, and passed again after the final progress-state fix.
@@ -154,8 +154,9 @@ Initial new browser fixtures needed to await the failed verification response an
 existing direct dashboard navigation after successful Retry; final focused and full suites passed.
 The first full development pass preceded the progress-state fix and was repeated in full afterward.
 Existing Fast Refresh, listener-count, color-environment and bundle-size warnings remain non-blocking.
-No database or remote work was performed. Live persistence, multi-account and deployed HTTPS checks
-remain **NOT RUN**; synthetic localhost and preview tests do not establish those live results.
+No database or remote work was performed for this D verification. At that time, live persistence,
+multi-account and deployed HTTPS checks were **NOT RUN**; synthetic localhost and preview tests did
+not establish those live results. Later owner reports are recorded in the deployment runbook.
 
 ## Changed paths
 
@@ -180,10 +181,15 @@ Verification changes:
 - `apps/web/e2e/managed-adoption.spec.ts` (new)
 
 Guidance: `PRODUCT.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/MANAGED_ACCOUNT_WEB.md`,
-`docs/MANAGED_AUTH_TRANSITION.md`, `docs/MANAGED_DASHBOARDS.md`, this new document,
-`docs/work-sessions/README.md` and the new `docs/work-sessions/2026-10-10-managed-guest-copy.md`.
+`docs/MANAGED_AUTH_TRANSITION.md`, `docs/MANAGED_DASHBOARDS.md` and this document.
 
-## Owner-run private live checklist
+## Owner-run private live checklist — historical snapshot
+
+The checklist below records its original pre-release state; its `NOT RUN` entries are not the
+current status. On 2026-10-18, the owner reported testing two accounts on HTTPS Preview, saving
+distinct menus, and confirming guest-copy Yes/No isolation. The owner also reported that the
+managed-account release reached production. These are owner reports; no post-release live journey
+was independently verified here. See the [deployment runbook](runbooks/DEPLOYMENT.md).
 
 Run only in the owner's separately authorized non-production environment. Keep credentials,
 identity payloads, cookies, opportunity IDs and connection details private; record sanitized
@@ -207,6 +213,6 @@ PASS/FAIL/NOT RUN outcomes. Synthetic tests do not prove live provider, persiste
    lifecycle, Origin handling and exact account/dashboard/adoption routes over HTTPS, plus Save,
    copy/decline and sign-out. Do not infer this from localhost or synthetic preview passes.
 
-Live B persistence remains **NOT RUN**. The second-account/return-to-first gate remains **NOT RUN —
-owner-deferred**. No remote actions were executed for D; internal completion is not public release
-approval.
+At the time of this checklist, live B persistence and the second-account/return-to-first gate were
+**NOT RUN — owner-deferred**. No remote actions were executed for D; current production status is
+recorded separately in the deployment runbook.

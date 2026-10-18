@@ -1,4 +1,9 @@
-# Migration A owner review packet
+# Migration A owner review packet — historical assessment (2026-10-05)
+
+This packet preserves Migration A's decision-time readiness and evidence. Later owner-reported
+Preview checks and the production release report are recorded in the
+[deployment runbook](runbooks/DEPLOYMENT.md); the historical status below is not the current release
+status.
 
 Migration A adds an isolated, loopback-only development proof of Neon-managed Google authentication
 and the Node/Elysia JWT identity seam. Production account routes, legacy OAuth/session runtime,
@@ -11,11 +16,12 @@ The callback code has no outstanding concrete finding from the bounded independe
 reviewed implementation commit and subsequent internal B work are not blocked by the deferred
 second-account check alone; no B work is authorized by this review preparation.
 
-**Public account release readiness: NO.** Second-account distinction and return-to-first-account
-stability are **NOT RUN — owner-deferred**, because the owner has one dedicated Google test account
-and will not use personal accounts. Complete live multi-account validation is not claimed. This
-check remains outstanding before public account release. Production replacement and release
-verification belong to later assigned jobs.
+**Public account release readiness at that review: NO.** Second-account distinction and
+return-to-first-account stability were **NOT RUN — owner-deferred**, because the owner then had one
+dedicated Google test account and excluded personal accounts. At that snapshot, complete live
+multi-account validation and production release verification were outstanding. Later owner-reported
+two-account HTTPS Preview checks and production release status are recorded in the deployment
+runbook; no post-release live journey was independently verified for this review packet.
 
 Owner-reported live PASS: callback exchange/backend-verified identity, stable identity after reload,
 stable identity after JWT expiry/refresh, sign-out followed by no managed session, credential-free
@@ -30,9 +36,8 @@ sign-in/out evidence. The reply supplies no new guest fingerprints; retain the e
 identical-custom-menu evidence without claiming an additional comparison.
 
 Historical blank rendering, homepage callback and token-before-bootstrap failures remain evidence;
-see the preserved [initial proof](work-sessions/2026-10-04-managed-auth-storage-gate.md),
-[callback correction](work-sessions/2026-10-04-managed-auth-callback-handoff.md) and
-[current gate amendment](work-sessions/2026-10-05-managed-auth-owner-review.md).
+their causes and correction outcomes are summarized in the
+[Migration A proof record](MANAGED_AUTH_PROOF.md).
 
 ## Review and verification
 
@@ -50,10 +55,10 @@ Reused unchanged implementation evidence under Node 24.21.0: `pnpm check:web` PA
 404 and ordinary Node/Vercel proof endpoint 404. Synthetic mocks do not clear live gates.
 
 Fresh final `pnpm check` under Node 24.21.0 PASS: 938 tests (domain 73, store 69, API 454,
-web 342), cross-package/root typecheck, lint (zero errors), formatting, session-history validation
-and production build. The first sandbox run could not bind synthetic HTTP listeners; rerunning the
+web 342), cross-package/root typecheck, lint (zero errors), formatting and production build. The
+first sandbox run could not bind synthetic HTTP listeners; rerunning the
 same check with approved local-listener access passed, without an implementation change. Final
-targeted documentation formatting/session checks passed after the new owner evidence was recorded.
+targeted documentation formatting checks passed after the new owner evidence was recorded.
 The exact manifest matches all 34 changed/untracked files; scoped debug/unsafe-TypeScript scans and
 tracked/untracked whitespace checks are clear. Lockfile review found no changed existing package
 integrities or existing snapshot contents; the Drizzle snapshot gains the SDK's Kysely peer context,
@@ -102,10 +107,6 @@ docs/MANAGED_AUTH_PROOF.md
 docs/MANAGED_AUTH_TRANSITION.md
 docs/MIGRATION_A_REVIEW.md
 docs/adr/0007-managed-auth-online-account-drafts.md
-docs/work-sessions/2026-10-04-managed-auth-callback-handoff.md
-docs/work-sessions/2026-10-04-managed-auth-storage-gate.md
-docs/work-sessions/2026-10-05-managed-auth-owner-review.md
-docs/work-sessions/README.md
 pnpm-lock.yaml
 pnpm-workspace.yaml
 ```

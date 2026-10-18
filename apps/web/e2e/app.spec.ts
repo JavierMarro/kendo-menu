@@ -128,6 +128,9 @@ test.describe('routed training flows', () => {
       await expect(primaryNavigation).toBeVisible();
       await expect(primaryNavigation.getByRole('link')).toHaveCount(4);
       await expect(primaryNavigation.getByRole('link', { name: 'Dashboard' })).toHaveCount(0);
+      await primaryNavigation.getByRole('link', { name: 'FAQ', exact: true }).click();
+      await expect(page).toHaveURL(/\/app#faq-title$/);
+      await expect(primaryNavigation).toBeHidden();
       await page.goto('/app');
     } else {
       await expect(page.locator('.brand-name')).toBeVisible();

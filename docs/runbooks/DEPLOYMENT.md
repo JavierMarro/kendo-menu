@@ -30,14 +30,13 @@ provider-specific environment value is checked into `vercel.json`. Vercel docume
 field in its [Package Managers guide](https://vercel.com/docs/package-managers), build/output and
 root-directory settings in [Configuring a Build](https://vercel.com/docs/builds/configure-a-build),
 and the SPA pattern in [Rewrites on Vercel](https://vercel.com/docs/routing/rewrites).
-The current Vercel supported-version table lists pnpm through version 10; the repository's pnpm 11
-pin therefore needs confirmation in the current or next build log and, if necessary, the documented
-Corepack setup.
+The checked-in package-manager and Node declarations above are the intended build inputs. When a
+Vercel build reports a runtime or package-manager warning, compare that deployment's log and commit
+with the declarations rather than treating an older build log as current configuration.
 
 Relevant repository release commands are:
 
 ```text
-pnpm session:check
 pnpm format:check
 pnpm check
 pnpm build
@@ -69,7 +68,7 @@ selectors remain rejected. Neither check executes Vercel's live routing pipeline
 this correction, the owner must retest sign-in on the stable HTTPS Preview; a Ready build is not
 evidence of a verified account. See [Vercel's rewrite parameter behavior](https://vercel.com/docs/routing/rewrites).
 
-## Production facts as of 2026-09-02
+## Historical production facts observed on 2026-09-02
 
 ### Owner-reported
 
@@ -94,8 +93,43 @@ Therefore the current observed canonical behavior is **www**: the apex redirects
 `https://www.kendomenu.com/`, while `www` serves the app. This records observed behavior, not the
 undocumented dashboard mechanism that implements it.
 
-The [2026-08-31 preview-readiness entry](../work-sessions/2026-08-31-vercel-preview-readiness.md)
-remains a valid pre-deployment historical snapshot; it is not replaced by these current facts.
+These observations describe the public deployment on that date. They are historical snapshots, not
+evidence of current live behavior.
+
+## Managed-account production release status — 2026-10-18
+
+### Owner-reported
+
+- The managed-account release reached production and the owner reports the deployed site is
+  working.
+- Before that release, the owner tested two Google accounts on HTTPS Preview: menus saved by each
+  account remained separate across sign-out/sign-in, and the accounts' guest-copy Yes/No choices
+  behaved independently. The copied guest menu appeared only in the account that accepted the copy;
+  the guest LocalStorage source remains a separate, unchanged dataset.
+- The owner-run production setup helper reported a standard Google provider and a matching OAuth
+  client ID. The Google client secret is intentionally not read back or printed, so its value was
+  not independently compared after configuration.
+
+### Independently verified configuration
+
+On 2026-10-18, the authorized migration helper applied the reviewed production migrations and its
+fresh read-back confirmed the recorded migration hashes/timestamps, seven application tables and
+the two migration functions. A separate read-only check confirmed the production Google provider is
+standard and has a client ID configured. These checks do not expose
+credential values and do not independently establish live sign-in or application behavior.
+
+### Not independently verified
+
+No post-release live Google sign-in, account Save/read-back, account isolation, or production HTTPS
+journey was exercised from this environment. The owner reports the site is working; distinguish
+that report from the configuration/database read-backs above and from local/Preview tests.
+
+Google's account-picker destination and branding are separate from Neon's trusted-domain redirect
+allowlist. The OAuth redirect URI must remain exactly the URI Neon provides, which uses Neon's
+authentication hostname. Removing `neon.tech` from Google's authorized domains does not rebrand the
+Google account picker and can invalidate the OAuth callback. See [Neon's Google OAuth branding
+guide](https://neon.com/docs/auth/guides/setup-oauth#google-oauth-branding) before changing provider
+or redirect settings; no custom Neon Auth hostname is configured by this repository.
 
 ## Intentional canonical origin and indexing
 

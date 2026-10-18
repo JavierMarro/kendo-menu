@@ -2,9 +2,10 @@
 
 Migration C consumes the reviewed Migration B contract from
 `629d2b0edb6c1b152d6ee47d45d4b32ad4664eaf` on `codex/managed-auth-online-dashboard`.
-This is internal browser integration, not a public account release. Backend contracts, SQL,
-dependencies and remote configuration are unchanged. [Migration D](MANAGED_GUEST_COPY.md) now
-extends this baseline with the separate one-use guest-copy setup screen.
+This document records the browser integration built on that contract. Backend contracts, SQL,
+dependencies and remote configuration were unchanged by C. [Migration D](MANAGED_GUEST_COPY.md)
+extends this baseline with the separate one-use guest-copy setup screen. Current release status is
+in the [deployment runbook](runbooks/DEPLOYMENT.md).
 
 ## Routes and store lifetimes
 
@@ -149,19 +150,17 @@ background-sync and adoption-recovery tests no longer describe an approved requi
 browser data remains untouched. An explicit connection retry probes validated identity and dashboard
 availability without replacing the current draft or its expected revision.
 
-The inherited mobile `account-persistence.spec.ts:273` View dashboard click at line 283 timed out on
+The inherited mobile-browser `account-persistence.spec.ts:273` View dashboard click at line 283 timed out on
 a detached element (57/58 passed). That historical failure remains unresolved. C replaces that
 changed journey's leave-warning coverage with managed-account desktop/mobile tests; deleting the
 obsolete IndexedDB journey does not establish a historical pass. The owner reported single-account
 development persistence passes on 2026-10-13, including guest copy Yes, explicit Save, reload and
-sign-out/sign-in; see the [live checklist status](MANAGED_DASHBOARDS.md#private-live-readwrite-checklist).
-The remaining full-application storage checks, guest copy No, second-account/return-to-first and
-deployed HTTPS validation remain unverified public-release gates.
+sign-out/sign-in. The owner later reported two-account Preview checks including guest-copy Yes/No,
+and that the release reached production on 2026-10-18; these reports are recorded in the
+[deployment runbook](runbooks/DEPLOYMENT.md). They are not independent production verification.
 
-Final local verification and independent implementation review are recorded in the
-[C work-session handoff](work-sessions/2026-10-07-managed-account-web.md).
-No staging, commit, push, deployment, remote migration or provider configuration change
-belongs to this work.
+Final local verification and independent implementation review were completed for C. No staging,
+commit, push, deployment, remote migration or provider configuration change was part of that work.
 
 ### Post-decision dashboard freshness
 

@@ -1,8 +1,0 @@
-- Session: landing copy clean signout
-- Date/duration: 2026-10-13; not recorded
-- Scope/start: Owner-listed landing copy and saved-account sign-out correction at f2429b2 on codex/managed-auth-online-dashboard; preserve existing uncommitted API fixes.
-- Changes: Update specified headings, hero labels, introduction and three FAQs; clean sign-out uses the existing discard/fencing path, while unsaved-work conditions retain confirmation; update callers and browser regressions.
-- Decisions: Keep Google authentication and guest destinations unchanged; reuse the existing dirty/builder/editor/pending predicate; use owner-supplied AGPL-3.0 wording without changing licensing files.
-- Roadblocks: Two clean/saved sign-out regressions reproduced the unconditional dialog before correction; pending guest-copy submissions still correctly warn; no local license file or independently verified remote license was found.
-- Verification: Node 24.21.0/pnpm 11.22.0; web types/lint/build PASS; full 319 units PASS with one worker after existing editor timeout and corrected copy-count assertion; complete development E2E 299 PASS/3 skips with two workers after two four-worker mobile mount timeouts; PWA 4 PASS; desktop/mobile visual confirmation, formatting and independent review PASS.
-- Follow-up: Owner reports live guest copy, account creation/edit Save, reload and return persistence PASS with guest/account separation; exact guest bytes, full-application credential storage, two-account and HTTPS remain unverified; full preview not rerun; prior pooler PostgreSQL verification still lacks local TEST_DATABASE_URL; no staging or commits.

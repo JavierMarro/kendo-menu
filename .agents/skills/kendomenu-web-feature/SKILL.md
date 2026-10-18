@@ -63,5 +63,3 @@ Use the API feature skill only when the assigned slice also changes backend cont
   Preserve independent review for the changes specified in `AGENTS.md`.
 - Reuse current verification evidence; repeat or broaden checks only for changed code, stale
   evidence, failures, or unresolved concerns. Additional skills do not replace required gates.
-- Record completed implementation with `$work-session-history`; a read-only review should not
-  modify the history or files unless the user also asks for changes.

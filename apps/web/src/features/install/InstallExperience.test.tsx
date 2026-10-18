@@ -276,7 +276,7 @@ describe('install experience', () => {
 
     const footerAction = within(screen.getByRole('contentinfo', { name: 'Site footer' })).getByRole(
       'button',
-      { name: 'Install KendoMenu' },
+      { name: 'Install as app' },
     );
     await waitFor(() => expect(footerAction).toHaveFocus());
     expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true });
@@ -325,7 +325,7 @@ describe('install experience', () => {
     expect(window.localStorage.getItem(INSTALL_DISMISSAL_STORAGE_KEY)).toBe('true');
     const footerAction = within(screen.getByRole('contentinfo', { name: 'Site footer' })).getByRole(
       'button',
-      { name: 'Install KendoMenu' },
+      { name: 'Install as app' },
     );
     expect(footerAction).toBeVisible();
 
@@ -353,7 +353,7 @@ describe('install experience', () => {
     );
     expect(
       within(screen.getByRole('contentinfo', { name: 'Site footer' })).getByRole('button', {
-        name: 'Install KendoMenu',
+        name: 'Install as app',
       }),
     ).toBeVisible();
   });
@@ -381,7 +381,7 @@ describe('install experience', () => {
     await waitFor(() =>
       expect(
         within(screen.getByRole('contentinfo', { name: 'Site footer' })).getByRole('button', {
-          name: 'Install KendoMenu',
+          name: 'Install as app',
         }),
       ).toHaveFocus(),
     );
@@ -392,7 +392,7 @@ describe('install experience', () => {
     renderApp(createTestStore(), { initialEntries: ['/app'] });
 
     const footer = screen.getByRole('contentinfo', { name: 'Site footer' });
-    await user.click(within(footer).getByRole('button', { name: 'Install KendoMenu' }));
+    await user.click(within(footer).getByRole('button', { name: 'Install as app' }));
 
     const dialog = await screen.findByRole('dialog', { name: 'Install KendoMenu' });
     expect(
@@ -421,7 +421,7 @@ describe('install experience', () => {
     renderApp(createTestStore(), { initialEntries: ['/app'] });
 
     const footer = screen.getByRole('contentinfo', { name: 'Site footer' });
-    await user.click(within(footer).getByRole('button', { name: 'Install KendoMenu' }));
+    await user.click(within(footer).getByRole('button', { name: 'Install as app' }));
 
     const dialog = await screen.findByRole('dialog', { name: 'Install KendoMenu' });
     expect(
@@ -452,7 +452,7 @@ describe('install experience', () => {
 
     const footerAction = within(screen.getByRole('contentinfo', { name: 'Site footer' })).getByRole(
       'button',
-      { name: 'Install KendoMenu' },
+      { name: 'Install as app' },
     );
     const menuToggle = screen.getByRole('button', { name: 'Open navigation' });
     await user.click(menuToggle);
@@ -482,7 +482,7 @@ describe('install experience', () => {
     renderApp(createTestStore(), { initialEntries: ['/app'] });
 
     const footer = screen.getByRole('contentinfo', { name: 'Site footer' });
-    await user.click(within(footer).getByRole('button', { name: 'Install KendoMenu' }));
+    await user.click(within(footer).getByRole('button', { name: 'Install as app' }));
     const dialog = await screen.findByRole('dialog', { name: 'Install KendoMenu' });
     expect(within(dialog).getByRole('heading', { name: 'iPhone or iPad' })).toBeVisible();
     expect(dialog).toHaveTextContent("browser's Share menu");
@@ -511,7 +511,7 @@ describe('install experience', () => {
     ).not.toBeInTheDocument();
     expect(
       within(screen.getByRole('contentinfo', { name: 'Site footer' })).queryByRole('button', {
-        name: 'Install KendoMenu',
+        name: 'Install as app',
       }),
     ).not.toBeInTheDocument();
   });
@@ -521,7 +521,7 @@ describe('install experience', () => {
     renderApp(createTestStore(), { initialEntries: ['/app'] });
     expect(
       within(screen.getByRole('contentinfo', { name: 'Site footer' })).queryByRole('button', {
-        name: 'Install KendoMenu',
+        name: 'Install as app',
       }),
     ).not.toBeInTheDocument();
   });
@@ -537,7 +537,7 @@ describe('install experience', () => {
     expect(within(promo).getByRole('button', { name: 'Install KendoMenu' })).toBeVisible();
     expect(
       within(screen.getByRole('contentinfo', { name: 'Site footer' })).getByRole('button', {
-        name: 'Install KendoMenu',
+        name: 'Install as app',
       }),
     ).toBeVisible();
     window.dispatchEvent(new Event('appinstalled'));
@@ -550,7 +550,7 @@ describe('install experience', () => {
     await waitFor(() =>
       expect(
         within(screen.getByRole('contentinfo', { name: 'Site footer' })).queryByRole('button', {
-          name: 'Install KendoMenu',
+          name: 'Install as app',
         }),
       ).not.toBeInTheDocument(),
     );

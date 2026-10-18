@@ -235,4 +235,61 @@ test.describe('navigation scroll behavior', () => {
     await expect(page).toHaveURL(/\/app$/);
     await expectTop(page);
   });
+
+  test('keeps the mobile landing menu open outside it and closes through its controls', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/app');
+    await dismissCookieNotice(page);
+
+    const menuToggle = page.locator('.menu-toggle');
+    const navigation = page.getByRole('navigation', { name: 'Landing navigation' });
+    await menuToggle.click();
+    await expect(navigation).toBeVisible();
+
+    const menuSurface = await navigation.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        backgroundColor: style.backgroundColor,
+        borderColor: style.borderTopColor,
+        backdropFilter: style.getPropertyValue('backdrop-filter'),
+        webkitBackdropFilter: style.getPropertyValue('-webkit-backdrop-filter'),
+        supportsBackdropFilter:
+          CSS.supports('backdrop-filter', 'blur(4px)') ||
+          CSS.supports('-webkit-backdrop-filter', 'blur(4px)'),
+      };
+    });
+    expect(menuSurface.borderColor).toBe('rgba(200, 155, 60, 0.48)');
+    if (menuSurface.supportsBackdropFilter) {
+      expect(menuSurface.backgroundColor).toBe('rgba(3, 13, 28, 0.98)');
+      expect(
+        [menuSurface.backdropFilter, menuSurface.webkitBackdropFilter].some((filter) =>
+          filter.includes('blur(4px)'),
+        ),
+      ).toBe(true);
+    } else {
+      expect(menuSurface.backgroundColor).toBe('rgb(3, 13, 28)');
+    }
+
+    await page.mouse.click(370, 500);
+    await expect(navigation).toBeVisible();
+    await page.getByRole('link', { name: 'Try without an account' }).focus();
+    await expect(navigation).toBeVisible();
+    await page.evaluate(() => window.scrollTo({ top: 600, left: 0 }));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
+    await expect(navigation).toBeInViewport();
+
+    await menuToggle.click();
+    await expect(navigation).toBeHidden();
+    await menuToggle.click();
+    await page.keyboard.press('Escape');
+    await expect(menuToggle).toBeFocused();
+    await expect(navigation).toBeHidden();
+
+    await menuToggle.click();
+    await navigation.getByRole('link', { name: 'FAQ', exact: true }).click();
+    await expect(page).toHaveURL(/\/app#faq-title$/);
+    await expect(navigation).toBeHidden();
+  });
 });

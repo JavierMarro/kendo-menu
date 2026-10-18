@@ -15,7 +15,10 @@ provides managed bearer authorization, internal account mapping and PostgreSQL d
 memory-only explicit account saves. Legacy browser account cache/synchronization modules are retired;
 legacy SQL/auth/adoption rows stay preserved without linking to managed identities.
 [Migration D](MANAGED_GUEST_COPY.md) adds the one-use guest-copy setup screen. Live B persistence and second-account/return-to-first validation remain
-NOT RUN public-release gates. The [transition handoff](MANAGED_AUTH_TRANSITION.md) owns the scope.
+NOT RUN public-release gates in the historical October 13 checklist. The owner later reported
+two-account Preview checks and a production release on October 18; see the
+[deployment runbook](runbooks/DEPLOYMENT.md) for the current evidence boundary. The
+[transition contract](MANAGED_AUTH_TRANSITION.md) owns the implementation scope.
 
 ### Managed account API boundary
 
@@ -186,20 +189,20 @@ and referrer data with `no-referrer`, and carries no account or training content
 GoatCounter JavaScript. Ordinary request metadata such as IP address and user-agent still reaches
 GoatCounter. It does not attempt continuing guest-only tracking across tabs.
 
-## Current production exclusions
+## Production status and platform boundaries
 
-The browser now has a local account workspace integration backed by the separate API scaffold, but
-there is no deployed production account service or production remote sync. The database, paid tier,
-and initialized mobile app remain unavailable. `apps/mobile` remains a reserved boundary and
-`packages/ui` remains reserved for genuinely
-shared platform-neutral UI.
+The managed account routes and API are implemented. The owner reports that the release reached
+production on 2026-10-18; this document does not independently verify live application behavior.
+See the [deployment runbook](runbooks/DEPLOYMENT.md) for owner-reported and read-back evidence.
+There is no native mobile application: the responsive web app and installable PWA cover mobile use.
+`packages/ui` remains reserved for genuinely shared platform-neutral UI.
 
 For the original recursive-model decision, see [ADR 0001](./adr/0001-recursive-training-activities.md).
 
 ## Local API and managed persistence
 
-The local API has no deployed production account service. Migration B implements the server
-replacement approved by [ADR 0007](adr/0007-managed-auth-online-account-drafts.md), preserving
+Migration B implements the managed account server replacement approved by
+[ADR 0007](adr/0007-managed-auth-online-account-drafts.md), preserving
 independent dashboards and whole-dashboard atomic writes while retiring application sessions and
 copy recovery. The older auth/synchronization ADRs describe superseded decisions.
 

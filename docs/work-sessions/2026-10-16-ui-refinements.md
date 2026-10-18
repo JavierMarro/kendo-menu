@@ -1,8 +1,0 @@
-- Session: ui refinements
-- Date/duration: 2026-10-16; multi-session refinement and verification
-- Scope/start: Refine the approved public, guest and account UI journey on codex/ui-journey.
-- Changes: Scoped footers; mobile wordmarks and Library info label; guest status in User; aligned detail headers; new sign-in artwork/Google button; guest-copy and sign-out copy; dashboard draft-warning placement.
-- Decisions: Preserve authentication, account saves, guest persistence and guest-copy behavior; use an optimized derivative of the owner-provided sign-in artwork; draft download remains a device JSON backup.
-- Roadblocks: Legacy mobile status rules and trailing-slash warning duplication were corrected; browser setup now dismisses cookie notices after accessible route content and chooses the accessible responsive brand.
-- Verification: Node 24 check:web passed (326 tests, types, lint, build); test:e2e passed (321, 3 skipped); final typecheck/lint, format:check, session:check and diff --check passed; independent review and desktop/mobile visual checks passed.
-- Follow-up: Leave changes uncommitted; owner checks the final UI and live Google/Neon behavior on controlled HTTPS Preview before release.

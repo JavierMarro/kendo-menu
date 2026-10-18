@@ -1,8 +1,0 @@
-- Session: production google helper
-- Date/duration: 2026-10-18; production credential helper and branding research
-- Scope/start: Owner authorized production Google-provider setup; production screenshots still show shared keys and a credential dialog without fields.
-- Changes: Prepared temporary /private/tmp/kendomenu-production-google-setup.ts for owner-run hidden prompts using cached official Neon CLI 8.4.3; no credentials embedded or live API calls made.
-- Decisions: Verify owner-selected KendoMenu project ID, default production branch and branch ownership; recheck drift; one confirmed Google PATCH via stdin; sanitize output and require successful update plus standard/client-ID readback.
-- Roadblocks: Console differs from current Neon documentation; supplied guide uses legacy Stack integration; custom credentials alone do not change Neon-hosted callback domain or publish Google's verified branding.
-- Verification: Node 24 mocked self-tests, strict TypeScript and non-TTY refusal passed; real PTY echo-off/Ctrl-C/restoration passed; independent review passed after fixing false acknowledgement of failed PATCH; no live setup verification.
-- Follow-up: Owner enters project ID and Google credentials locally and verifies target before confirmation; report only sanitized result; then inspect production migration history, complete Google branding after /privacy is public, and run release/live checks before deployment.

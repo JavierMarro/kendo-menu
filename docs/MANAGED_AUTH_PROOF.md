@@ -1,12 +1,16 @@
 # Migration A — isolated managed-auth proof
 
-The development proof is implemented; live single-account identity checks have owner-reported passes.
+This document records Migration A's isolated proof stage and its evidence as of 2026-10-05; current
+production and later owner-reported Preview status are in the
+[deployment runbook](runbooks/DEPLOYMENT.md). The development proof is implemented; live
+single-account identity checks have owner-reported passes.
 Migration A changed no application account mapping, database, deployment or provider settings.
 [Migration C](MANAGED_ACCOUNT_WEB.md) reuses this lifecycle in the application while preserving
-proof isolation; its internal account routes do not establish a public release. The second-account check is **NOT RUN — owner-deferred** under the 5 October amendment:
-it does not block a reviewed A implementation commit or subsequent internal B work, but remains
-required before public account release. The owner's subsequent private inspection reports PASS
-for credential-free storage after reload and JWT refresh with the existing dedicated account;
+proof isolation; its internal account routes did not establish a public release at that stage. The
+second-account check was **NOT RUN — owner-deferred** under the 5 October amendment: it did not
+block a reviewed A implementation commit or subsequent internal B work. The owner's subsequent
+private inspection reports PASS for credential-free storage after reload and JWT refresh with the
+existing dedicated account;
 this is additional stage-specific evidence, not a waived invariant. Google-only settings
 and filled private URL files are owner-confirmed; private contents remain unread.
 
@@ -23,8 +27,10 @@ path. Owner-filled variables only:
 Empty `.env.example` templates are supplied. No database URL, Google secret, management key or
 application cookie secret is needed. Google secrets remain in Neon's branch/provider settings.
 The callback is exactly `{Auth Base URL}/callback/google`; preserve the old callback. The browser
-origin is `http://localhost:5173`, and Google stays in Testing. The owner has one dedicated test
-account and will not use personal accounts; do not request a second account for implementation review.
+origin is `http://localhost:5173`, and Google stayed in Testing. At this proof stage, the owner had
+one dedicated test account and excluded personal accounts; a second account was not available for
+this isolated proof. Later owner-reported two-account Preview results are recorded in the deployment
+runbook.
 
 In separate terminals from the repository root, using Node 24:
 
@@ -173,14 +179,14 @@ atomicity, or editing historical migrations. A changes none of them.
 
 ## Evidence
 
-The [owner-review handoff](work-sessions/2026-10-05-managed-auth-owner-review.md) records the gate
-amendment and current readiness. The [callback correction handoff](work-sessions/2026-10-04-managed-auth-callback-handoff.md)
-preserves the earlier gates and actual correction evidence; the latest amendment supersedes only
-its second-account blocking requirement, not its historical outcomes or limited storage coverage.
+The [Migration A review packet](MIGRATION_A_REVIEW.md) records the gate amendment and historical
+readiness assessment. The earlier callback failure and correction remain described above; the
+October 5 amendment superseded only the then-current second-account blocking requirement, not the
+historical outcomes or limited storage coverage.
 The subsequent owner report separately adds reload/JWT-refresh storage passes. Synthetic SDK,
 UI/native browser and Node/Elysia tests are local evidence, not real Google/Neon/HTTPS/Vercel proof.
-No database work was run. The previously observed mobile legacy account-persistence E2E timeout
-remains separate from proof verification and prevents claiming whole-branch release readiness.
+No database work was run for this proof stage. The previously observed mobile-browser account-
+persistence E2E timeout was a separate historical test result, not evidence about the auth proof.
 The earlier failed callback-to-session attempt remains historical evidence. The latest private
 retry produced the following **owner-reported** results; the agent did not inspect live credentials
 or cookies, and these reports are separate from the agent-run synthetic checks.
@@ -198,9 +204,10 @@ or cookies, and these reports are separate from the agent-run synthetic checks.
 | Managed session cookie HttpOnly and Secure flags                               | Reported enabled; no cookie-setting correction indicated |
 | Second-account distinction and return-to-first-account stability               | NOT RUN — owner-deferred                                 |
 
-Complete live multi-account validation is not claimed. The deferred second-account check alone
-does not block a reviewed A implementation commit or subsequent internal B work; public account
-release still requires it. The original storage observations cover inspected sign-in/sign-out
+Complete live multi-account validation of the isolated A proof is not claimed. The deferred
+second-account check alone did not block a reviewed A implementation commit or subsequent internal
+B work. Later owner-reported application-level Preview results and production status are recorded
+in the runbook. The original storage observations cover inspected sign-in/sign-out
 stages only; the subsequent owner report adds explicit credential-free storage/no account
 IndexedDB or CacheStorage passes after reload and JWT refresh, with stable identity in both.
 No storage invariant was waived or inferred from identity success. Guest fingerprint evidence

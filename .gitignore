@@ -19,7 +19,6 @@ apps/web/playwright-report/
 !.agents/skills/onboarding-code-comments/
 !.agents/skills/pre-commit-verification/
 !.agents/skills/testing-fuzz-stress/
-!.agents/skills/work-session-history/
 .agents/skills/*/*
 !.agents/skills/*/SKILL.md
 !.agents/skills/*/agents/

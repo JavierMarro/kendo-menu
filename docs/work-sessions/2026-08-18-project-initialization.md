@@ -1,8 +1,0 @@
-- Session: project initialization
-- Date/duration: 2026-08-18; 23m 51s.
-- Scope/start: Initialized an effectively empty repository from its broad-stack README.
-- Changes: Added a pnpm React/Vite workspace, strict tooling, SPA shell, and domain/store packages.
-- Decisions: Local-first web; injected Zustand storage; deferred Expo, APIs, Query, and Dexie.
-- Roadblocks: Network and TS 7 issues were resolved with approved install access and TS 6.
-- Verification: pnpm check passed typecheck, ESLint, Prettier, and the Vite build.
-- Follow-up: Add stable-id drills, custom sets, dashboard editing, and persistence migrations.

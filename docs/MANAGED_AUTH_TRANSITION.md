@@ -1,7 +1,10 @@
 # Managed authentication and online account dashboards
 
-Prepared 4 October 2026 from the owner's approved simplification. This is a transition handoff,
-not evidence of deployment or complete public-release validation.
+Prepared 4 October 2026 from the owner's approved simplification. This is a historical transition
+plan; Migrations A–D and the production database transition have since been completed. The owner
+reports the managed-account release reached production on 2026-10-18. See the
+[deployment runbook](runbooks/DEPLOYMENT.md) for current status and the distinction between
+owner-reported behavior and independently checked configuration.
 
 Migration A now has an [isolated development proof](MANAGED_AUTH_PROOF.md) with callback-only session
 bootstrap and subsequent token retrieval. The owner reports single-account callback/backend,
@@ -16,13 +19,14 @@ separate guest/account routes and memory-only explicit saves; legacy browser acc
 synchronization are retired without deleting stored data. Legacy SQL records remain preserved.
 [Migration D](MANAGED_GUEST_COPY.md) adds the separate one-use copy setup screen using C's
 in-memory creation handoff and B's unchanged adoption contract.
-No live B dashboard persistence, remote migration or deployment is claimed.
+Those statements describe the state when this plan was prepared; they are not current release
+status. The runbook records the later production database read-back and owner-reported release.
 
 On 5 October 2026 the owner deferred second-account distinction and return-to-first-account
-stability because only one dedicated Google test account is available and personal accounts will
-not be used. Record this as **NOT RUN — owner-deferred**, never PASS. It alone no longer blocks a
-reviewed Migration A implementation commit or subsequent internal Migration B work; it remains
-outstanding before public account release. No other A gate or limited storage evidence is waived.
+stability because only one dedicated Google test account was available and personal accounts would
+not be used. This was **NOT RUN — owner-deferred** at that time. On 2026-10-18, the owner later
+reported two-account HTTPS Preview checks; see the runbook. This later report is not an independent
+production check or a replacement for the stage-specific Migration A proof evidence.
 Internal B still requires the reviewed A predecessor and remaining A evidence; this amendment
 does not authorize beginning B during A review or claim complete live multi-account validation.
 
@@ -59,7 +63,8 @@ does not authorize beginning B during A review or claim complete live multi-acco
 The existing ADRs still describe the previous implementation. The target above includes the owner's
 later clarification that creating-session eligibility and durable interrupted-copy recovery are no
 longer required. Migration A will explicitly record which decisions are superseded and which remain
-in force; historical ADRs and session evidence stay. This guidance update changes no runtime code.
+in force; historical ADRs remain available. Current verification evidence lives in the active
+contracts and deployment runbook. This guidance update changes no runtime code.
 
 ## 1. Preserve the current work before restructuring
 
@@ -78,7 +83,7 @@ Create a local archive branch, stage the known work, inspect it, and make a chec
 git status --short
 git switch -c codex/archive-account-sync
 git add -u
-git add -- apps/web/e2e/account-adoption-peers.spec.ts apps/web/e2e/account-adoption.spec.ts apps/web/src/features/account/AdoptionDialog.test.tsx apps/web/src/features/account/AdoptionDialog.tsx docs/work-sessions/2026-09-30-guest-adoption-web.md docs/MANAGED_AUTH_TRANSITION.md docs/work-sessions/2026-10-04-managed-auth-transition-plan.md
+git add -- apps/web/e2e/account-adoption-peers.spec.ts apps/web/e2e/account-adoption.spec.ts apps/web/src/features/account/AdoptionDialog.test.tsx apps/web/src/features/account/AdoptionDialog.tsx docs/MANAGED_AUTH_TRANSITION.md
 git diff --cached --name-only
 git diff --cached --stat
 git commit -m "chore(checkpoint): preserve unfinished account sync before simplification"
@@ -170,8 +175,8 @@ no staging, commit, push, merge, production access, deployment, or external cons
 agent. Use established SDK/library verification rather than handwritten OAuth or JWT cryptography.
 Apply the repository's independent-review policy to material auth/persistence changes. Keep tests
 for observable guarantees; retire tests only when their requirement has explicitly been removed.
-Record short evidence-based handoffs and unresolved provider evidence without reopening the entire
-legacy feature in every review.
+Report verification results and unresolved provider evidence without reopening the entire legacy
+feature in every review.
 
 ### Migration A — prove managed Google authentication
 
@@ -219,7 +224,8 @@ for guest-copy eligibility; Migration B owns server-side new-KendoMenu-account/c
 Run affected package checks and relevant proof tests; reuse guest baseline evidence where valid.
 Obtain independent security review. Report dependency versions, exact configuration/loading,
 identity/session behavior, observed live results vs not-run checks, and the Migration B contract.
-Update work-session history. Do not commit or change provider/Vercel configuration.
+Update the active contract and deployment guidance. Do not commit or change provider/Vercel
+configuration.
 ```
 
 Do not proceed to B on the strength of a mock-only login proof. The managed identity must reach

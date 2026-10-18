@@ -1,7 +1,11 @@
 # Accounts and synchronization
 
-Documentation baseline: 2026-09-11; local integration status updated for 6D-B on 2026-10-01.
-**No production authentication or synchronization exists.**
+Historical account/synchronization baseline: 2026-09-11; local integration status updated for
+6D-B on 2026-10-01. This document preserves the superseded custom Google OAuth/session design and
+its job-by-job evidence; its status statements describe those dates, not the current release.
+See [current architecture](ARCHITECTURE.md) and the
+[deployment runbook](runbooks/DEPLOYMENT.md) for current implementation boundaries and release
+status.
 Job 4B connects local Google OIDC and opaque-session HTTP behavior to Job 4A PostgreSQL persistence;
 real Google, Neon, HTTPS-browser, and Vercel integration remain unverified.
 Job 5A adds an unregistered protected dashboard application foundation and shared authorization;
@@ -15,17 +19,11 @@ the owner's later account/synchronization decisions. Its findings about validati
 byte limits, cache isolation, and operational responsibility still apply. The memo was supplied as
 an attachment; no private attachment path or new product-demand claim is published here.
 
-Current facts come from [production architecture](ARCHITECTURE.md),
-[store persistence](../packages/store/src/persistence.ts),
-[store construction](../packages/store/src/index.ts), and
-[guest browser storage](../apps/web/src/lib/training-persistence.ts). The guest dashboard uses
-Zustand and the `kendo-menu` LocalStorage key; the integration checkout also has verified account
-workspaces using Zustand, account-scoped IndexedDB caches, and the cloud API. Bounded v10
-validation/migration applies to local data. Custom snapshots have a two-level stored shape;
-built-ins are canonicalized from the current catalogue. Recovery downloads exist, but an ordinary
-backup import workflow does not. The local account foundation is not a deployed account journey.
-The [deployment runbook](runbooks/DEPLOYMENT.md) remains authoritative about repository-declared,
-independently observed, owner-reported, and unverified deployment facts.
+This historical plan was originally cross-checked against the architecture, store persistence,
+store construction and guest browser-storage sources. Its later custom-auth and account-cache job
+descriptions are superseded by the managed-auth contracts and current implementation. Source and
+tests define present behavior; the [deployment runbook](runbooks/DEPLOYMENT.md) is authoritative
+about repository-declared, independently observed, owner-reported and unverified deployment facts.
 
 ## 1. Approved decisions
 
@@ -343,9 +341,9 @@ fixtures. Node 25.2.1 review checks provide separate useful evidence, not Node 2
 Independent review covered schema/migrations, concurrency/rollback, secrets/error leakage, pool and
 client lifecycle, test validity, and scope. Findings about stale activity, replacement timestamps,
 client-close error reporting, and documentation were resolved. The final technical review found no
-remaining defects. Session history, targeted formatting, diff, and secret/debug/unsafe-type/artifact
-scans passed. A documentation-link scan found two pre-existing broken history-index links, left
-unchanged: `2026-08-22-responsive-site-footer.md` and `2026-08-21-landing-page-polish.md`.
+remaining defects. Targeted formatting, diff, and secret/debug/unsafe-type/artifact scans passed. A
+documentation-link scan at that time found two broken links to files no longer present; those
+references are removed from the maintained guidance.
 
 The approved dependency set has now executed locally under Node 24; deployed Node compatibility and
 Vercel lifecycle behavior remain unverified. `pnpm db:migrate` was not run against a shared schema:
@@ -468,7 +466,7 @@ loopback listener; no dependency upgrade or framework change is introduced.
 
 Verification ran under Node 24.12.0 with pnpm dependency auto-repair disabled. `pnpm check:api`
 passed 224 tests plus API/root composition TypeScript and lint checks. `pnpm check` passed all 520
-workspace tests, typechecking, lint, formatting, session-history validation, and the production web
+workspace tests, typechecking, lint, formatting, and the production web
 build. `pnpm test:api:integration` passed 44 tests against the configured local `kendomenu_test`, using
 unique harness-owned schemas. Running that command without `TEST_DATABASE_URL` failed explicitly
 with `TEST_DATABASE_URL_REQUIRED_LOCAL_KENDOMENU_TEST`; no database tests were skipped.
@@ -727,6 +725,6 @@ Future implementation acceptance covers:
 
 Job 2 validates documentation only: independently review decision status and safety; check relative
 links, ADR numbering, terminology, and owner-decision coverage; run targeted Prettier,
-`git diff --check`, and `pnpm session:check`. Disable pnpm's automatic dependency repair for these
-commands if needed. Finish with an at-most-eight-line work-session entry and history index.
+`git diff --check`, relative-link validation, and ADR/terminology checks. Disable pnpm's automatic
+dependency repair for these commands if needed.
 No implementation tests, provider provisioning, live authentication, or deployment are claimed.

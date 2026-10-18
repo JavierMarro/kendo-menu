@@ -12,7 +12,6 @@ import { SiteFooter } from './SiteFooter';
 export function AppShell() {
   const location = useLocation();
   const [openLocationKey, setOpenLocationKey] = useState<string | null>(null);
-  const headerRef = useRef<HTMLElement>(null);
   const menuToggleRef = useRef<HTMLButtonElement>(null);
   const isMenuOpen = openLocationKey === location.key;
   const isLandingPage = location.pathname === '/app';
@@ -24,18 +23,9 @@ export function AppShell() {
       setOpenLocationKey(null);
       menuToggleRef.current?.focus();
     };
-    const handleOutsideInteraction = (event: Event) => {
-      if (event.target instanceof Node && !headerRef.current?.contains(event.target)) {
-        setOpenLocationKey(null);
-      }
-    };
     document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('pointerdown', handleOutsideInteraction);
-    document.addEventListener('focusin', handleOutsideInteraction);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('pointerdown', handleOutsideInteraction);
-      document.removeEventListener('focusin', handleOutsideInteraction);
     };
   }, [isMenuOpen]);
 
@@ -46,7 +36,7 @@ export function AppShell() {
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
-      <header ref={headerRef} className="top-bar">
+      <header className="top-bar">
         <BrandLockup onClick={closeMenu} />
         <button
           ref={menuToggleRef}
