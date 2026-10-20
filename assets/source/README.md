@@ -64,6 +64,10 @@ versions can change exact bytes; inspect the resulting 1200×630 card at thumbna
 regeneration. Keep the social JPEG publicly fetchable but excluded from precaching: it is for
 external link previews, not offline app rendering.
 
-`kendomenu-sign-in.jpeg` is the sign-in artwork source. Its 1600px-wide derivative in
-`apps/web/public/assets/kendomenu-sign-in-1600.jpeg` is used only on the sign-in page. Regenerate it
-with `sips -Z 1600 assets/source/kendomenu-sign-in.jpeg --out apps/web/public/assets/kendomenu-sign-in-1600.jpeg`.
+`kendomenu-sign-in.jpeg` is the 2752×1536 sign-in artwork source. Its full-resolution, quality-90
+JPEG derivative is used only on the sign-in page, preserving detail when the artwork fills the
+tall panel. Keep the original outside `public`; regenerate the production derivative with:
+
+```sh
+sips -s format jpeg -s formatOptions 90 assets/source/kendomenu-sign-in.jpeg --out apps/web/public/assets/kendomenu-sign-in-2752.jpeg
+```

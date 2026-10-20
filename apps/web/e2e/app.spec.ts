@@ -190,6 +190,10 @@ test.describe('routed training flows', () => {
     await expect(notice).toContainText(
       'If you sign in with Google, essential cookies maintain your session.',
     );
+    await expect(notice).toContainText(
+      'We use no tracking cookies. GoatCounter provides cookie-free analytics to improve the service.',
+    );
+    await expect(notice).not.toContainText('YouTube');
     await expect(notice.getByRole('link', { name: 'More information' })).toHaveAttribute(
       'href',
       '/cookies',

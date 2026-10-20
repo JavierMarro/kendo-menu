@@ -15,10 +15,14 @@ const ALTERNATIVE_SIGN_IN_MESSAGE =
 test('sign-in artwork keeps the brand top-left and the heading middle-left', async ({
   page,
 }, testInfo) => {
+  if (testInfo.project.name === 'chromium') {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+  }
   await SyntheticManagedHarness.install(page);
   await page.goto('/app/sign-in');
   await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
   const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+  await page.screenshot({ path: testInfo.outputPath('sign-in-with-notice.png') });
   if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
   const story = page.locator('.auth-story');
   const layout = await story.evaluate((element) => {
@@ -49,7 +53,14 @@ test('sign-in artwork keeps the brand top-left and the heading middle-left', asy
   expect(Math.abs(layout.titleCenter - layout.storyCenter)).toBeLessThanOrEqual(1);
   expect(layout.brandBottom).toBeLessThan(layout.titleTop);
   expect(layout.titleLeft).toBe(layout.brandLeft);
-  expect(layout.background).toContain('/assets/kendomenu-sign-in-1600.jpeg');
+  expect(layout.background).toContain('/assets/kendomenu-sign-in-2752.jpeg');
+  const artwork = await page.evaluate(async () => {
+    const image = new Image();
+    image.src = '/assets/kendomenu-sign-in-2752.jpeg';
+    await image.decode();
+    return { width: image.naturalWidth, height: image.naturalHeight };
+  });
+  expect(artwork).toEqual({ width: 2752, height: 1536 });
   expect(layout.fits).toBe(true);
   if (testInfo.project.name === 'mobile-chrome') {
     expect(layout.titleFontSize).toBeGreaterThanOrEqual(46);
