@@ -95,7 +95,9 @@ independent guest/account data, and run the relevant checks before proposing a c
   security issues privately when that channel is enabled; never attach credentials to a public issue.
 
 CI uses read-only repository permissions and runs the existing release checks without deployment
-credentials. Public source code does not grant access to a hosted account or database.
+credentials. It also checks migration metadata and runs the PostgreSQL integration suite against
+a disposable PostgreSQL 17 service with the guarded `kendomenu_test` database.
+Public source code does not grant access to a hosted account or database.
 
 ## License
 
