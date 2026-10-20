@@ -132,6 +132,10 @@ describe('KendoMenu application flows', () => {
     expect(notice).toHaveTextContent(
       'If you sign in with Google, essential cookies maintain your session.',
     );
+    expect(notice).toHaveTextContent(
+      'We use no tracking cookies. GoatCounter provides cookie-free analytics to improve the service.',
+    );
+    expect(notice).not.toHaveTextContent('YouTube');
     expect(screen.getByRole('link', { name: 'More information' })).toHaveAttribute(
       'href',
       '/cookies',

@@ -239,10 +239,20 @@ test('precaches responsive fallbacks without source originals or the social card
   const workerSource = await worker.text();
   expect(workerSource).not.toContain('kendo-menu-logo.jpeg');
   expect(workerSource).not.toContain('kendo-menu-hero.jpeg');
+  expect(workerSource).not.toContain('kendomenu-sign-in.jpeg');
+  expect(workerSource).toContain('kendomenu-sign-in-2752.jpeg');
+  expect(workerSource).not.toContain('kendomenu-sign-in-1600.jpeg');
   expect(workerSource).not.toContain('kendo-menu-social.jpg');
   await page.goto('/app');
   await establishServiceWorkerControl(page);
   await page.context().setOffline(true);
+  const artwork = await page.evaluate(async () => {
+    const image = new Image();
+    image.src = '/assets/kendomenu-sign-in-2752.jpeg';
+    await image.decode();
+    return { width: image.naturalWidth, height: image.naturalHeight };
+  });
+  expect(artwork).toEqual({ width: 2752, height: 1536 });
   for (const format of ['avif', 'webp', 'jpeg']) {
     for (const [name, widths] of [
       ['logo', [44, 88, 176, 264]],
