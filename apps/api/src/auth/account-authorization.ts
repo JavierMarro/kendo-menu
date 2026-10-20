@@ -139,10 +139,3 @@ export function createAccountAuthorization(dependencies: {
     createProof,
   };
 }
-
-export function accountProofIsCurrent(
-  proof: AccountAuthorizationProof,
-  now = Math.floor(Date.now() / 1000),
-): boolean {
-  return isCurrent(proof, now);
-}
