@@ -4772,9 +4772,22 @@ textarea[aria-invalid='true'] {
   border-bottom: 1px solid var(--line-strong);
 }
 
+.mitori-video-row {
+  display: flex;
+  align-items: center;
+  background: transparent;
+  transition: background-color 160ms ease-out;
+}
+
+.mitori-video-item--seen .mitori-video-row {
+  background: var(--accent-soft);
+}
+
 .mitori-video-toggle {
   display: grid;
   width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
   min-height: 5rem;
   grid-template-columns: 2.5rem minmax(0, 1fr) auto;
   align-items: center;
@@ -4791,6 +4804,11 @@ textarea[aria-invalid='true'] {
 .mitori-video-toggle:hover,
 .mitori-video-toggle[aria-expanded='true'] {
   background: var(--surface-soft);
+}
+
+.mitori-video-item--seen .mitori-video-toggle:hover,
+.mitori-video-item--seen .mitori-video-toggle[aria-expanded='true'] {
+  background: transparent;
 }
 
 .mitori-video-icon {
@@ -4846,6 +4864,44 @@ textarea[aria-invalid='true'] {
   font-weight: 650;
 }
 
+.mitori-seen-control {
+  display: inline-flex;
+  min-height: 2.75rem;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4) var(--space-2) 0;
+  color: var(--muted-strong);
+  font-size: var(--type-14);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.mitori-seen-control input {
+  width: 1rem;
+  height: 1rem;
+  min-height: 1rem;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent-bright);
+}
+
+.mitori-seen-control input:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.mitori-seen-note {
+  margin: calc(-1 * var(--space-4)) 0 var(--space-4);
+  color: var(--muted);
+  font-size: var(--type-14);
+}
+
+.mitori-seen-note[role='status'] {
+  margin-top: calc(-1 * var(--space-2));
+  color: var(--accent-hover);
+}
+
 .mitori-video-player {
   padding: 0 var(--space-4) var(--space-5);
 }
@@ -4892,9 +4948,33 @@ textarea[aria-invalid='true'] {
     padding-inline: var(--space-3);
   }
 
+  .mitori-video-row {
+    position: relative;
+    display: block;
+  }
+
   .mitori-video-toggle {
     grid-template-columns: 2.5rem minmax(0, 1fr);
     padding-inline: var(--space-2);
+  }
+
+  .mitori-video-author {
+    display: flex;
+    min-height: 2.75rem;
+    align-items: center;
+    padding-inline-end: 4.5rem;
+  }
+
+  .mitori-video-copy:not(:has(.mitori-video-author))::after {
+    min-height: 2.75rem;
+    content: '';
+  }
+
+  .mitori-seen-control {
+    position: absolute;
+    inset-inline-end: 0;
+    bottom: var(--space-5);
+    padding-right: var(--space-2);
   }
 
   .mitori-video-action {

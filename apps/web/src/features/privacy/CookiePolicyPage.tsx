@@ -56,6 +56,10 @@ export function CookiePolicyPage() {
             Notice and installation preferences are also stored on this device. A temporary
             session-storage marker helps complete sign-in; it contains no credentials or menu data.
           </p>
+          <p>
+            Seen marks for Mitori room videos stay in this browser, including when you are signed
+            in. They are not sent to the account service or synced across devices.
+          </p>
         </section>
 
         <section className="policy-section" aria-labelledby="google-sign-in-title">

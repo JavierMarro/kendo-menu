@@ -1,22 +1,28 @@
-# KendoMenu
+# KendoMenu 🥋: Plan the keiko you need today.
 
-A free, open-source planner for kendo practice. Browse 11 curated keiko menus, adjust repetitions
-and duration, add training notes, or build your own sessions.
+[![CI](https://github.com/JavierMarro/kendo-menu/actions/workflows/ci.yml/badge.svg)](https://github.com/JavierMarro/kendo-menu/actions/workflows/ci.yml)
+[![License: AGPL-3.0-only](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE)
 
-- **Guest:** your dashboard stays in this browser, with offline use and backup export.
-- **Google account:** saved menus live online and are available across devices. Account edits stay
-  in memory until you choose **Save to account**.
-- **Guest copy:** eligible new accounts receive one choice to copy their guest menus. The original
-  stays on the device, and subsequent guest/account edits are independent.
+KendoMenu is a free, open-source web app for planning kendo practice. Choose from 10 curated
+training menus, shape the workload for your session, keep practice notes, or create a menu of your
+own. Use it as a guest in your browser or sign in with Google to save a dashboard online.
 
-The managed-account release reached production on 2026-10-18. The owner reports that the site is
-deployed and working; this status is owner-reported, not an independent live verification. See the
-[deployment runbook](docs/runbooks/DEPLOYMENT.md) for the evidence distinction and the
-[account contract](docs/MANAGED_DASHBOARDS.md).
+![KendoMenu landing page with the headline “Plan the keiko you need today”](docs/images/kendomenu-landing.png)
 
-## Run locally
+## Use it
 
-Use Node **24.x** and the pnpm version declared in `package.json`.
+Open [kendomenu.com](https://www.kendomenu.com/app) and choose **Try without an account** to start
+in guest mode. Your dashboard is saved in this browser and works offline. You can also sign in with
+Google to use an online account dashboard across devices; account edits are saved only when you
+choose **Save to account**. Eligible new accounts can choose once whether to copy their guest
+dashboard. The guest copy stays on the original device either way.
+
+KendoMenu is a responsive web app and installable PWA. There is no native mobile app.
+
+## Quick start
+
+You need Node.js **24.x** and pnpm **11.22.0**. Guest mode needs no database, API server, or auth
+configuration.
 
 ```sh
 corepack enable pnpm
@@ -24,86 +30,82 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open `http://localhost:5173`. Guest use does not require a database or Google credentials.
+Open `http://localhost:5173`.
 
-For account development, use your own non-production Neon branch. Copy the placeholder templates
-and fill the ignored files privately:
+For account and API development, use a non-production Neon branch and follow the
+[managed-account development guide](docs/MANAGED_ACCOUNT_WEB.md). Do not use production credentials
+or data for local development.
 
-```sh
-cp apps/web/.env.example apps/web/.env.local
-cp apps/api/.env.example apps/api/.env.local
-```
-
-The web app needs `VITE_NEON_AUTH_URL`. The API needs `NEON_AUTH_BASE_URL`, `DATABASE_URL`, and
-`APP_ORIGIN=http://localhost:5173`. The two Auth URL variables refer to the same complete Neon Auth
-base URL. Database migrations use a separate `MIGRATION_DATABASE_URL`; applying them is an explicit
-owner action, never part of starting the app. Follow the [database checklist](docs/MANAGED_DASHBOARDS.md#owner-run-non-production-migration)
-before enabling account storage.
-
-Keep the web terminal running. In a second terminal, start the API from its own directory:
+Check your changes with:
 
 ```sh
-cd apps/api
-pnpm exec node --env-file=.env.local --import tsx --watch src/node.ts
+pnpm check
+pnpm test:e2e
+pnpm test:e2e:pwa
 ```
 
-The API listens on port 3000; Vite proxies the account requests. See the
-[managed-account guide](docs/MANAGED_ACCOUNT_WEB.md) for the complete development flow.
+`pnpm verify:full` runs the release checks, the production-preview browser suite, and the PWA suite.
+Database integration tests use only a guarded local `kendomenu_test` database; never use Neon or a
+development database as `TEST_DATABASE_URL`.
 
-## Useful commands
+## What the app does for the practitioner
 
-```sh
-pnpm check                # Types, lint, formatting, unit tests, build
-pnpm test:e2e             # Desktop/mobile development browser suite
-pnpm test:e2e:preview     # Complete suite against a fresh production preview
-pnpm test:e2e:pwa         # Service worker and offline guest shell
-pnpm verify:full          # Code checks, preview suite, and PWA suite
-```
+- **Curated practice menus.** Browse 10 kendo training sessions for different practice goals and
+  experience levels.
+- **Session planning.** Add a menu to your dashboard, adjust repetitions or duration for the day,
+  and keep notes about your practice.
+- **Custom menus.** Build and edit your own ordered practice session.
+- **Mitori room.** Explore curated videos in Mitori, Documentaries, and Kata, alongside Resources
+  and a searchable Glossary. Mark videos as Seen and clear the mark later when you want to revisit
+  one; marks are saved in this browser only. Videos load from YouTube only when opened and may
+  include YouTube ads.
+- **Guest or Google account.** Guests keep data in their browser. Account dashboards are stored
+  online and require an explicit save. Guest and account data remain separate.
+- **Installable web app.** Use KendoMenu in a desktop or mobile browser, or install the PWA where
+  your browser supports it.
 
-Real database integration tests require the guarded local `kendomenu_test` database. Never point
-`TEST_DATABASE_URL` at Neon, development, or production data.
+## How a practice menu works
 
-## Project layout
+A curated menu describes an ordered session of kendo activities and exercises. Adding one to your
+dashboard creates a session-specific copy, where you can adjust repetitions or duration and attach
+notes without changing the curated library. Custom menus use the same activity structure and can be
+edited on your dashboard.
 
-- `apps/web`: React, Vite, React Router and the browser UI.
-- `apps/api`: Node 24, Elysia, PostgreSQL and Drizzle.
-- `packages/domain`: training contracts, validation and the curated catalogue.
-- `packages/store`: Zustand state with injected browser or memory storage.
-- `packages/ui`: reserved for genuinely shared platform-neutral components; the responsive web app
-  and installable PWA cover mobile use.
+## Workspace
 
-Curated content lives in `packages/domain/data/default-drills.json`. Read [PRODUCT.md](PRODUCT.md)
-and [CONTEXT.md](CONTEXT.md) for the product and terminology, or [the architecture](docs/ARCHITECTURE.md)
-for data flow. [AGENTS.md](AGENTS.md) describes repository conventions for coding agents.
+This is a pnpm monorepo. The responsive web app is the complete product surface.
+
+| Path              | Role                                                  | Run or check                                  |
+| ----------------- | ----------------------------------------------------- | --------------------------------------------- |
+| `apps/web`        | React and Vite application, responsive UI, and PWA    | `pnpm dev`, `pnpm check:web`, `pnpm test:e2e` |
+| `apps/api`        | Node 24 and Elysia API with PostgreSQL persistence    | `pnpm dev:api`, `pnpm check:api`              |
+| `packages/domain` | Training contracts, validation, and curated menu data | `pnpm check:domain`                           |
+| `packages/store`  | Zustand dashboard state and persistence boundaries    | `pnpm check:store`                            |
+| `packages/ui`     | Reserved for genuinely shared, platform-neutral UI    | —                                             |
+
+## Documentation
+
+| File                                                                                               | What it covers                                       |
+| -------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| [PRODUCT.md](PRODUCT.md)                                                                           | Product behavior and user journeys                   |
+| [CONTEXT.md](CONTEXT.md)                                                                           | KendoMenu training and account terminology           |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)                                                       | Package layout, contracts, and data flow             |
+| [docs/MANAGED_AUTH_TRANSITION.md](docs/MANAGED_AUTH_TRANSITION.md)                                 | Approved managed-auth scope and transition jobs      |
+| [docs/MANAGED_ACCOUNT_WEB.md](docs/MANAGED_ACCOUNT_WEB.md)                                         | Account setup and local development                  |
+| [docs/MANAGED_GUEST_COPY.md](docs/MANAGED_GUEST_COPY.md)                                           | One-time guest dashboard copy behavior               |
+| [docs/MANAGED_DASHBOARDS.md](docs/MANAGED_DASHBOARDS.md)                                           | Account dashboard API and database contract          |
+| [`apps/web/.env.example`](apps/web/.env.example), [`apps/api/.env.example`](apps/api/.env.example) | Placeholder configuration templates                  |
+| [AGENTS.md](AGENTS.md)                                                                             | Repository conventions and verification requirements |
 
 ## Contributing and security
 
-Small, focused issues and pull requests are welcome. Describe the user-visible change, preserve
-independent guest/account data, and run the relevant checks before proposing a code change.
-
-- Keep database passwords, OAuth secrets, management keys, tokens and personal training data out of
-  commits, issues, screenshots and logs. `VITE_*` values are exposed to browsers; never put secrets
-  in them. The Neon Auth base URL is public configuration, not a credential.
-- `.gitignore` and CI reject common private configuration, key and database-export file names.
-  This is a file guard, not a content-based secret scanner. `.env.example` files must stay empty
-  placeholder templates.
-- Before making a repository public, run a redacted scan of its entire Git history and review
-  third-party content/asset permissions. Ignoring or deleting a file does not remove earlier
-  commits; revoke and rotate any credential that was exposed.
-- Confirm [GitHub secret scanning and push protection](https://docs.github.com/en/code-security/concepts/secret-security/secret-scanning),
-  protect `main` with required CI checks, and enable private vulnerability reporting. Report
-  security issues privately when that channel is enabled; never attach credentials to a public issue.
-
-CI uses read-only repository permissions and runs the existing release checks without deployment
-credentials. It also checks migration metadata and runs the PostgreSQL integration suite against
-a disposable PostgreSQL 17 service with the guarded `kendomenu_test` database.
-Public source code does not grant access to a hosted account or database.
+Focused issues and pull requests are welcome. Keep credentials and private configuration out of
+commits, screenshots, logs, and `.env.example` files. Read [AGENTS.md](AGENTS.md) before making code
+changes; it describes the required checks and data-safety boundaries.
 
 ## License
 
 Copyright (C) 2026 JavierMarro.
 
 KendoMenu's original code is licensed under **GNU AGPL version 3 only** (`AGPL-3.0-only`); see
-[LICENSE](LICENSE). Reuse, modification and commercial use are allowed under its terms. If you host
-an applicable modified version, offer users the corresponding source for that version. Third-party
-dependencies and materials retain their own license terms.
+[LICENSE](LICENSE). Third-party dependencies and materials retain their own license terms.

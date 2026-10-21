@@ -1,7 +1,9 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import { MITORI_VIDEOS } from '../features/mitori/mitori-videos';
+import { MITORI_SEEN_STORAGE_KEY } from '../lib/mitori-seen';
 import { createTestStore, renderApp } from './test-utils';
 
 describe('Mitori room', () => {
@@ -63,6 +65,53 @@ describe('Mitori room', () => {
   it('falls back to Mitori for an unknown section', () => {
     renderApp(createTestStore(), { initialEntries: ['/app/guest/mitori-room?tab=unknown'] });
     expect(screen.getByRole('heading', { name: 'Mitori', level: 2 })).toBeVisible();
+  });
+
+  it('remembers Seen marks across video sections and lets the user clear them', async () => {
+    const user = userEvent.setup();
+    renderApp(createTestStore(), { initialEntries: ['/app/guest/mitori-room'] });
+    const sections = screen.getByRole('navigation', { name: 'Mitori room sections' });
+    const firstSeen = screen.getByRole('checkbox', {
+      name: /Kendo Training Boot Camp — by Hidehisa Nishimura$/,
+    });
+    const firstVideoId = MITORI_VIDEOS.techniques[0]?.id;
+    if (firstVideoId === undefined) throw new Error('Expected a Mitori video fixture.');
+
+    await user.click(firstSeen);
+    expect(firstSeen).toBeChecked();
+    expect(firstSeen.closest('.mitori-video-item')).toHaveClass('mitori-video-item--seen');
+    expect(window.localStorage.getItem(MITORI_SEEN_STORAGE_KEY)).toContain(firstVideoId);
+
+    await user.click(within(sections).getByRole('link', { name: 'Documentaries' }));
+    const documentarySeen = screen.getByRole('checkbox', { name: /Naoki Eiga/ });
+    await user.click(documentarySeen);
+    await user.click(within(sections).getByRole('link', { name: 'Mitori' }));
+    expect(
+      screen.getByRole('checkbox', { name: /Kendo Training Boot Camp — by Hidehisa Nishimura$/ }),
+    ).toBeChecked();
+    await user.click(within(sections).getByRole('link', { name: 'Documentaries' }));
+    expect(screen.getByRole('checkbox', { name: /Naoki Eiga/ })).toBeChecked();
+
+    await user.click(screen.getByRole('checkbox', { name: /Naoki Eiga/ }));
+    expect(screen.getByRole('checkbox', { name: /Naoki Eiga/ })).not.toBeChecked();
+    expect(screen.getByText(/stay in this browser and don’t sync/)).toBeVisible();
+  });
+
+  it('keeps marking available in memory when browser storage is unavailable', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('Storage is unavailable.');
+    });
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('Storage is unavailable.');
+    });
+    renderApp(createTestStore(), { initialEntries: ['/app/guest/mitori-room'] });
+    const seen = screen.getByRole('checkbox', {
+      name: /Kendo Training Boot Camp — by Hidehisa Nishimura$/,
+    });
+    await user.click(seen);
+    expect(seen).toBeChecked();
+    expect(screen.getByRole('status')).toHaveTextContent(/last until you leave this room/);
   });
 
   it('opens a video series with playlist controls and omits documentary uploader credits', async () => {

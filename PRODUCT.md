@@ -93,7 +93,9 @@ privacy-enhanced YouTube embed without autoplay; closing it or changing sections
 A YouTube fallback link remains available for restricted or unavailable playback. Videos require
 internet access and may contain YouTube adverts; no YouTube API key or automatic live detection is
 used. Resources and Glossary reuse the public pages’ content, retaining glossary search. Public
-Sources and Glossary routes remain available. This feature does not change training data or saves.
+Sources and Glossary routes remain available. Practitioners can mark any listed video Seen; these
+marks use separate browser local storage on guest and account pages and do not sync across devices
+or change training data or saves.
 
 ## Online account journey
 

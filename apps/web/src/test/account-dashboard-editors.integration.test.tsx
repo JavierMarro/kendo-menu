@@ -161,7 +161,7 @@ describe('account dashboard editor drafts', () => {
     expect(remove.parentElement?.firstElementChild).toHaveClass('dashboard-card-save-group');
     expect(remove.parentElement?.lastElementChild).toBe(remove);
 
-    const sessionNotes = within(dialog).getByLabelText('Practice notes');
+    const sessionNotes = within(dialog).getByRole('textbox', { name: 'Practice notes' });
     await user.type(sessionNotes, 'Saved from the expanded account menu.');
     await user.click(saveButton);
 
@@ -197,7 +197,7 @@ describe('account dashboard editor drafts', () => {
     const { store } = renderAccountDashboard();
     const dialog = await openDashboardMenu(user);
 
-    const sessionNotes = within(dialog).getByLabelText('Practice notes');
+    const sessionNotes = within(dialog).getByRole('textbox', { name: 'Practice notes' });
     await user.type(sessionNotes, 'Keep a calm pace.');
 
     expect(store.getState().dashboardEntries[0]?.notes).toBe('Keep a calm pace.');
