@@ -95,6 +95,12 @@ function openAllDetails(container: HTMLElement): void {
   }
 }
 
+function getActivity(container: HTMLElement, activityId: string): HTMLElement {
+  const activity = container.querySelector<HTMLElement>(`[data-activity-id="${activityId}"]`);
+  if (activity === null) throw new Error(`Expected activity ${activityId}.`);
+  return activity;
+}
+
 function countStandaloneLandingMenuWords(): number {
   const landing = document.querySelector('.main-content--landing');
   if (!(landing instanceof HTMLElement)) {
@@ -904,7 +910,11 @@ describe('KendoMenu application flows', () => {
       expect(
         within(secondDialog).getByRole('heading', { name: 'Senior High School dojo menu' }),
       ).toBeVisible();
-      expect(within(secondDialog).getByLabelText('Minutes for Stretch')).toBeInTheDocument();
+      expect(
+        within(getActivity(secondDialog, SENIOR_HIGH_SCHOOL_STRETCH_ID)).getByLabelText(
+          'Minutes for Stretch',
+        ),
+      ).toBeInTheDocument();
       expect(
         within(secondDialog).getByRole('button', {
           name: 'Close Senior High School dojo menu details.',
@@ -1331,15 +1341,15 @@ describe('KendoMenu application flows', () => {
 
     await user.click(within(card).getByRole('link', { name: 'View session' }));
     const dialog = screen.getByRole('dialog', { name: 'International dojo menu' });
-    expect(
-      within(dialog).getByRole('heading', { name: 'International dojo menu', level: 1 }),
-    ).toBeVisible();
-    const detailTags = within(dialog).getByLabelText('Session tags');
-    const detailBadge = within(detailTags).getByText('Intense session');
     const detailTitle = within(dialog).getByRole('heading', {
       name: 'International dojo menu',
       level: 1,
     });
+    expect(detailTitle).toBeVisible();
+    const detailHeader = detailTitle.closest('header');
+    if (detailHeader === null) throw new Error('Expected the session detail header.');
+    const detailTags = within(detailHeader).getByLabelText('Session tags');
+    const detailBadge = within(detailTags).getByText('Intense session');
     expect(detailTags).toHaveClass('training-set-tags');
     expect(detailTags).toHaveClass('drill-detail-category');
     expect(detailBadge).toHaveClass('category-pill');
@@ -1592,7 +1602,10 @@ describe('KendoMenu application flows', () => {
       }
       expect(within(dashboardCard).getByText('High intensity session')).toBeVisible();
 
-      const minutes = within(dialog).getByLabelText(/minutes for stretch/i);
+      const minutes = within(getActivity(dialog, SENIOR_HIGH_SCHOOL_STRETCH_ID)).getByRole(
+        'spinbutton',
+        { name: 'Minutes for Stretch' },
+      );
       expect(minutes).toHaveValue(null);
 
       await user.type(minutes, '0');
@@ -1623,11 +1636,12 @@ describe('KendoMenu application flows', () => {
       const japaneseDialog = await openDashboardMenu(user, 'Japanese school dojo menu');
       openAllDetails(japaneseDialog);
 
-      const repetitions = within(japaneseDialog).getByLabelText('Repetitions for Joge');
-      const existingMinutes = within(japaneseDialog).getByLabelText('Minutes for Joge');
+      const joge = within(getActivity(japaneseDialog, JAPANESE_SCHOOL_JOGE_ID));
+      const repetitions = joge.getByRole('spinbutton', { name: 'Repetitions for Joge' });
+      const existingMinutes = joge.getByRole('spinbutton', { name: 'Minutes for Joge' });
       expect(repetitions).toHaveValue(null);
       expect(existingMinutes).toHaveValue(2);
-      expect(screen.queryByLabelText('Seconds for Joge')).not.toBeInTheDocument();
+      expect(joge.queryByLabelText('Seconds for Joge')).not.toBeInTheDocument();
 
       await user.type(repetitions, '24');
       await user.tab();
@@ -1671,7 +1685,10 @@ describe('KendoMenu application flows', () => {
       const dialog = await openDashboardMenu(user, 'Official ZNKR/AJKF menu');
       openAllDetails(dialog);
 
-      const repetitions = within(dialog).getByLabelText('Repetitions for Men');
+      const repetitions = within(getActivity(dialog, OFFICIAL_ZNKR_MEN_ID)).getByRole(
+        'spinbutton',
+        { name: 'Repetitions for Men' },
+      );
       expect(repetitions).toHaveValue(null);
 
       await user.type(repetitions, '501');
@@ -1737,11 +1754,12 @@ describe('KendoMenu application flows', () => {
       const dialog = await openDashboardMenu(user, 'Junior-high school dojo menu');
       openAllDetails(dialog);
 
-      const repetitions = within(dialog).getByLabelText('Repetitions for Haya');
-      const sets = within(dialog).getByLabelText('Sets for Haya');
+      const haya = within(getActivity(dialog, JUNIOR_HIGH_HAYA_ID));
+      const repetitions = haya.getByRole('spinbutton', { name: 'Repetitions for Haya' });
+      const sets = haya.getByRole('spinbutton', { name: 'Sets for Haya' });
       expect(repetitions).toHaveValue(100);
       expect(sets).toHaveValue(2);
-      expect(screen.queryByLabelText('Minutes for Haya')).not.toBeInTheDocument();
+      expect(haya.queryByLabelText('Minutes for Haya')).not.toBeInTheDocument();
 
       await user.clear(sets);
       await user.type(sets, '0');
@@ -1794,14 +1812,15 @@ describe('KendoMenu application flows', () => {
         throw new Error('Expected the standalone International Suburi section.');
       }
       const suburiMinutes = within(suburiSection).getByLabelText('Minutes for Suburi');
-      const seconds = within(dialog).getByLabelText('Seconds for Kakarigeiko');
+      const kakarigeiko = within(getActivity(dialog, INTERNATIONAL_KAKARIGEIKO_ID));
+      const seconds = kakarigeiko.getByRole('spinbutton', { name: 'Seconds for Kakarigeiko' });
       expect(minutes).toHaveValue(10);
       expect(suburiMinutes).toHaveValue(15);
       expect(
         within(suburiSection).queryByLabelText('Repetitions for Suburi'),
       ).not.toBeInTheDocument();
       expect(seconds).toHaveValue(60);
-      expect(screen.queryByLabelText('Rounds for Kakarigeiko')).not.toBeInTheDocument();
+      expect(kakarigeiko.queryByLabelText('Rounds for Kakarigeiko')).not.toBeInTheDocument();
 
       await user.clear(minutes);
       await user.type(minutes, '12.5');
@@ -1832,7 +1851,7 @@ describe('KendoMenu application flows', () => {
       const dialog = await openDashboardMenu(user, 'Senior High School dojo menu');
       openAllDetails(dialog);
 
-      const notes = within(dialog).getByLabelText('Practice notes');
+      const notes = within(dialog).getByRole('textbox', { name: 'Practice notes' });
       await user.type(notes, 'Keep the shoulders relaxed.');
       await user.tab();
       await waitFor(() => {

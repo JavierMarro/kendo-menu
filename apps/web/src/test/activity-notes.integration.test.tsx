@@ -154,7 +154,7 @@ describe('dashboard activity notes', () => {
         [WARM_UP_ID]: { minutes: 12 },
       });
 
-      const sessionNotes = within(dialog).getByLabelText('Practice notes');
+      const sessionNotes = within(dialog).getByRole('textbox', { name: 'Practice notes' });
       await user.type(sessionNotes, 'General session note.');
       await user.tab();
       expect(store.getState().dashboardEntries[0]).toMatchObject({
@@ -222,7 +222,7 @@ describe('dashboard activity notes', () => {
         [WARM_UP_ID]: 'Relax the shoulders.',
       });
 
-      const sessionNotes = within(dialog).getByLabelText('Practice notes');
+      const sessionNotes = within(dialog).getByRole('textbox', { name: 'Practice notes' });
       await user.type(sessionNotes, 'Keep the pace calm.');
       await user.click(saveButton);
       expect(store.getState().dashboardEntries[0]).toMatchObject({
@@ -267,7 +267,9 @@ describe('dashboard activity notes', () => {
         name: 'Any extra details?',
       });
       await user.click(firstWarmUp);
-      const firstTextarea = within(firstDialog).getByLabelText('Extra notes for Warm-up');
+      const firstTextarea = within(firstDialog).getByRole('textbox', {
+        name: 'Extra notes for Warm-up',
+      });
       await user.type(firstTextarea, 'First dashboard entry.');
       await user.tab();
       await user.click(
@@ -286,7 +288,9 @@ describe('dashboard activity notes', () => {
         name: 'Any extra details?',
       });
       await user.click(secondWarmUp);
-      const secondTextarea = within(secondDialog).getByLabelText('Extra notes for Warm-up');
+      const secondTextarea = within(secondDialog).getByRole('textbox', {
+        name: 'Extra notes for Warm-up',
+      });
       await user.type(secondTextarea, 'Second dashboard entry.');
       await user.tab();
       await user.click(
@@ -316,9 +320,9 @@ describe('dashboard activity notes', () => {
       }
       await user.click(within(restoredFirstCard).getByRole('button', { name: 'View more' }));
       const restoredFirstDialog = screen.getByRole('dialog', { name: 'International dojo menu' });
-      expect(within(restoredFirstDialog).getByLabelText('Extra notes for Warm-up')).toHaveValue(
-        'First dashboard entry.',
-      );
+      expect(
+        within(restoredFirstDialog).getByRole('textbox', { name: 'Extra notes for Warm-up' }),
+      ).toHaveValue('First dashboard entry.');
       await user.click(
         within(restoredFirstDialog).getByRole('button', {
           name: 'Close International dojo menu details.',
@@ -341,9 +345,9 @@ describe('dashboard activity notes', () => {
         }
         await user.click(within(card).getByRole('button', { name: 'View more' }));
         const reloadedDialog = screen.getByRole('dialog', { name: 'International dojo menu' });
-        expect(within(reloadedDialog).getByLabelText('Extra notes for Warm-up')).toHaveValue(
-          expectedNote,
-        );
+        expect(
+          within(reloadedDialog).getByRole('textbox', { name: 'Extra notes for Warm-up' }),
+        ).toHaveValue(expectedNote);
         await user.click(
           within(reloadedDialog).getByRole('button', {
             name: 'Close International dojo menu details.',
@@ -421,7 +425,7 @@ describe('dashboard activity notes', () => {
 
       const warmUp = getActivity(WARM_UP_ID);
       await user.click(within(warmUp).getByRole('button', { name: 'Any extra details?' }));
-      const textarea = within(dialog).getByLabelText('Extra notes for Warm-up');
+      const textarea = within(dialog).getByRole('textbox', { name: 'Extra notes for Warm-up' });
       await user.type(textarea, 'This write should be reported.');
       await user.tab();
       await waitFor(() =>
