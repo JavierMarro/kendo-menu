@@ -23,6 +23,10 @@ export function PrivacyPolicyPage() {
             to copy guest menus, only choosing “Copy menus” uploads an independent copy; the
             originals stay on your device. A new account gets this offer once.
           </p>
+          <p>
+            Seen marks for Mitori room videos are a separate browser preference. They stay on this
+            device, including when you are signed in, and are not synced across devices.
+          </p>
         </section>
 
         <section className="policy-section" aria-labelledby="account-data-title">
