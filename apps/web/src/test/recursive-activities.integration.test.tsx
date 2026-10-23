@@ -86,7 +86,9 @@ function renderDashboardFixture(storage?: TestMemoryStorage) {
     >
       <TrainingStoreProvider store={store}>
         <WorkspaceContextProvider value={GUEST_WORKSPACE}>
-          <RecursiveDashboardFixture />
+          <MemoryRouter>
+            <RecursiveDashboardFixture />
+          </MemoryRouter>
         </WorkspaceContextProvider>
       </TrainingStoreProvider>
     </PersistenceContext.Provider>,
@@ -268,7 +270,9 @@ describe('recursive activity web consumers', () => {
       >
         <TrainingStoreProvider store={store}>
           <WorkspaceContextProvider value={GUEST_WORKSPACE}>
-            <RecursiveDashboardFixture />
+            <MemoryRouter>
+              <RecursiveDashboardFixture />
+            </MemoryRouter>
           </WorkspaceContextProvider>
         </TrainingStoreProvider>
       </PersistenceContext.Provider>,

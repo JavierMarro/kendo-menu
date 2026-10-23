@@ -723,7 +723,11 @@ function AccountNavigationGuard({
 }) {
   useBlocker(({ currentLocation, nextLocation }) => {
     if (!shouldWarn) return false;
-    if (builderDirty && currentLocation.pathname.endsWith('/drills/new')) {
+    if (
+      builderDirty &&
+      (currentLocation.pathname.endsWith('/drills/new') ||
+        /^\/app\/account\/drills\/[^/]+\/edit$/u.test(currentLocation.pathname))
+    ) {
       return !window.confirm(
         'Your custom-session draft exists only in memory and may be lost. Leave this page?',
       );

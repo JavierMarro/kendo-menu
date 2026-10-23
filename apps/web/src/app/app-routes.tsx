@@ -6,7 +6,7 @@
 import { Navigate, useLocation, type RouteObject } from 'react-router-dom';
 
 import { RouteErrorRethrow } from '../features/errors/RouteErrorRethrow';
-import { CreateDrillPage } from '../features/custom-sets/CreateDrillPage';
+import { CreateDrillPage, EditDrillPage } from '../features/custom-sets/CreateDrillPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { LandingPage } from '../features/landing/LandingPage';
 import { LibraryPage } from '../features/library/LibraryPage';
@@ -77,6 +77,7 @@ export const appRoutes: RouteObject[] = [
               { path: 'library/:trainingSetId', element: <TrainingSetDetailPage /> },
               { path: 'mitori-room', element: <MitoriRoomPage /> },
               { path: 'drills/new', element: <CreateDrillPage /> },
+              { path: 'drills/:entryId/edit', element: <EditDrillPage /> },
               { path: '*', element: <NotFoundPage /> },
             ],
           },
@@ -91,6 +92,7 @@ export const appRoutes: RouteObject[] = [
               { path: 'library/:trainingSetId', element: <TrainingSetDetailPage /> },
               { path: 'mitori-room', element: <MitoriRoomPage /> },
               { path: 'drills/new', element: <CreateDrillPage /> },
+              { path: 'drills/:entryId/edit', element: <EditDrillPage /> },
               { path: '*', element: <NotFoundPage /> },
             ],
           },

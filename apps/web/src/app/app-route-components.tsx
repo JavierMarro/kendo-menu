@@ -226,7 +226,11 @@ function RouteFocusAndTitle(): ReactElement {
   useEffect(() => {
     const title =
       routeTitles[location.pathname] ??
-      (location.pathname.includes('/library/') ? 'Session details' : 'KendoMenu');
+      (/^\/app\/(?:guest|account)\/drills\/[^/]+\/edit$/u.test(location.pathname)
+        ? 'Edit menu'
+        : location.pathname.includes('/library/')
+          ? 'Session details'
+          : 'KendoMenu');
     updateRouteMetadata({
       pathname: location.pathname,
       search: location.search,

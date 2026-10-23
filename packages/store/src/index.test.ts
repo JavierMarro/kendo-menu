@@ -541,6 +541,202 @@ describe('custom training sets', () => {
     }
     expect(storage.writes).toBe(0);
   });
+
+  it('retains prototype-named activity overrides through custom edits and v10 rehydration', () => {
+    const storage = new MemoryStorage();
+    const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+    const created = store.getState().createCustomTrainingSetAndAddToDashboard({
+      name: 'Prototype identity',
+      category: 'custom',
+      sections: [
+        { name: 'Main practice', exercises: [{ name: 'Men', quantities: { repetitions: 12 } }] },
+      ],
+    });
+    const entry = created.dashboardEntry;
+    const trainingSet = entry.trainingSet;
+    const section = trainingSet?.activities[0];
+    const exercise = section?.children[0];
+    if (trainingSet === undefined || section === undefined || exercise === undefined) {
+      throw new Error('Expected the custom menu fixture.');
+    }
+
+    const protoExercise = { ...exercise, id: '__proto__' };
+    const protoTrainingSet = {
+      ...trainingSet,
+      activities: [{ ...section, children: [protoExercise] }],
+    };
+    store.setState((state) => ({
+      dashboardEntries: state.dashboardEntries.map((candidate) =>
+        candidate.id === entry.id
+          ? {
+              ...candidate,
+              trainingSet: protoTrainingSet,
+              quantityOverrides: Object.fromEntries([['__proto__', { repetitions: 24 }]]),
+            }
+          : candidate,
+      ),
+    }));
+
+    const hydratedStore = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+    const hydratedEntry = hydratedStore.getState().dashboardEntries[0];
+    if (hydratedEntry?.trainingSet === undefined) {
+      throw new Error('Expected the prototype-named custom menu to rehydrate.');
+    }
+    const retainedSection = hydratedEntry.trainingSet.activities[0];
+    const retainedExercise = retainedSection?.children[0];
+    if (retainedSection === undefined || retainedExercise === undefined) {
+      throw new Error('Expected the retained prototype-named exercise.');
+    }
+
+    hydratedStore.getState().updateCustomTrainingSet(
+      hydratedEntry.id,
+      {
+        name: 'Renamed prototype identity',
+        category: 'custom',
+        sections: [{ name: 'Main practice', exercises: [{ name: 'Men' }] }],
+      },
+      { sections: [{ id: retainedSection.id, exercises: [{ id: '__proto__' }] }] },
+    );
+
+    const updatedEntry = hydratedStore.getState().dashboardEntries[0];
+    const updatedExercise = updatedEntry?.trainingSet?.activities[0]?.children[0];
+    expect(Object.hasOwn(updatedEntry?.quantityOverrides ?? {}, '__proto__')).toBe(true);
+    expect(updatedExercise?.id).toBe('__proto__');
+    expect(updatedExercise).toBeDefined();
+    if (updatedEntry === undefined || updatedExercise === undefined) {
+      throw new Error('Expected the edited prototype-named exercise.');
+    }
+    expect(
+      getDashboardEffectiveTrainingQuantity(updatedEntry, updatedExercise, 'repetitions'),
+    ).toBe(24);
+
+    const rehydratedAgain = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+    const finalEntry = rehydratedAgain.getState().dashboardEntries[0];
+    const finalExercise = finalEntry?.trainingSet?.activities[0]?.children[0];
+    expect(finalEntry?.trainingSet?.name).toBe('Renamed prototype identity');
+    expect(Object.hasOwn(finalEntry?.quantityOverrides ?? {}, '__proto__')).toBe(true);
+    expect(finalExercise?.id).toBe('__proto__');
+    if (finalEntry === undefined || finalExercise === undefined) {
+      throw new Error('Expected the serialized edit to rehydrate.');
+    }
+    expect(getDashboardEffectiveTrainingQuantity(finalEntry, finalExercise, 'repetitions')).toBe(
+      24,
+    );
+  });
+
+  it('preserves untouched ranges, zero and decimal quantities, and hidden activity metadata', () => {
+    const storage = new MemoryStorage();
+    const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+    const created = store.getState().createCustomTrainingSetAndAddToDashboard({
+      name: 'Detailed custom menu',
+      description: 'Keep this description.',
+      category: 'custom',
+      sections: [
+        {
+          name: 'Empty activity',
+          quantities: { duration: { unit: 'minutes', value: 0 } },
+          notes: 'Hidden section quantity and note.',
+          exercises: [],
+        },
+        {
+          name: 'Timed practice',
+          quantities: { sets: 2 },
+          notes: 'Second section note.',
+          exercises: [
+            {
+              name: 'Range',
+              quantities: { duration: { unit: 'minutes', min: 2, max: 5 }, sets: 3 },
+              notes: 'Authored exercise note.',
+            },
+            {
+              name: 'Zero',
+              quantities: { duration: { unit: 'seconds', value: 0 }, rounds: 4 },
+            },
+            { name: 'Decimal', quantities: { duration: { unit: 'minutes', value: 12.5 } } },
+          ],
+        },
+      ],
+    });
+    const originalSet = created.trainingSet;
+    const emptySection = originalSet.activities[0];
+    const timedSection = originalSet.activities[1];
+    const rangedExercise = timedSection?.children[0];
+    const zeroExercise = timedSection?.children[1];
+    const decimalExercise = timedSection?.children[2];
+    if (
+      emptySection === undefined ||
+      timedSection === undefined ||
+      rangedExercise === undefined ||
+      zeroExercise === undefined ||
+      decimalExercise === undefined
+    ) {
+      throw new Error('Expected the detailed custom menu fixture.');
+    }
+    store
+      .getState()
+      .setQuantityOverride(created.dashboardEntryId, rangedExercise.id, 'minutes', 3.5);
+    store.getState().updateDashboardEntry(created.dashboardEntryId, { notes: 'Practice notes.' });
+
+    store.getState().updateCustomTrainingSet(
+      created.dashboardEntryId,
+      {
+        name: 'Renamed detailed custom menu',
+        description: 'Keep this description.',
+        category: 'custom',
+        sections: originalSet.activities.map((section) => ({
+          name: section.name,
+          exercises: section.children.map((exercise) => ({ name: exercise.name })),
+        })),
+      },
+      {
+        sections: originalSet.activities.map((section) => ({
+          id: section.id,
+          exercises: section.children.map((exercise) => ({ id: exercise.id })),
+        })),
+      },
+    );
+
+    const rehydratedStore = createTrainingStore({ storage, storageKey: STORAGE_KEY });
+    const entry = rehydratedStore.getState().dashboardEntries[0];
+    const updatedSet = entry?.trainingSet;
+    const updatedEmpty = updatedSet?.activities[0];
+    const updatedTimed = updatedSet?.activities[1];
+    const updatedRange = updatedTimed?.children[0];
+    const updatedZero = updatedTimed?.children[1];
+    const updatedDecimal = updatedTimed?.children[2];
+    if (
+      entry === undefined ||
+      updatedSet === undefined ||
+      updatedEmpty === undefined ||
+      updatedTimed === undefined ||
+      updatedRange === undefined ||
+      updatedZero === undefined ||
+      updatedDecimal === undefined
+    ) {
+      throw new Error('Expected the edited custom menu to survive v10 rehydration.');
+    }
+
+    expect(updatedSet.name).toBe('Renamed detailed custom menu');
+    expect(updatedSet.activities.map(({ id }) => id)).toEqual(
+      originalSet.activities.map(({ id }) => id),
+    );
+    expect(updatedEmpty).toMatchObject({
+      quantities: { duration: { unit: 'minutes', value: 0 } },
+      notes: 'Hidden section quantity and note.',
+      children: [],
+    });
+    expect(updatedTimed).toMatchObject({ quantities: { sets: 2 }, notes: 'Second section note.' });
+    expect(updatedRange).toMatchObject({
+      quantities: { duration: { unit: 'minutes', min: 2, max: 5 }, sets: 3 },
+      notes: 'Authored exercise note.',
+    });
+    expect(updatedZero.quantities?.duration).toEqual({ unit: 'seconds', value: 0 });
+    expect(updatedZero.quantities?.rounds).toBe(4);
+    expect(updatedDecimal.quantities?.duration).toEqual({ unit: 'minutes', value: 12.5 });
+    expect(entry.quantityOverrides[rangedExercise.id]).toEqual({ minutes: 3.5 });
+    expect(entry.notes).toBe('Practice notes.');
+    expect(getDashboardEffectiveTrainingQuantity(entry, updatedRange, 'minutes')).toBe(3.5);
+  });
 });
 
 describe('persistence resource limits', () => {

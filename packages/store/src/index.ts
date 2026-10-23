@@ -143,6 +143,13 @@ export interface CustomTrainingSetCreationResult {
   readonly dashboardEntry: DashboardEntry;
 }
 
+export interface CustomTrainingSetEditIdentities {
+  readonly sections: readonly {
+    readonly id?: string;
+    readonly exercises: readonly { readonly id?: string }[];
+  }[];
+}
+
 export interface TrainingStore {
   readonly dashboardEntries: readonly DashboardEntry[];
   readonly addToDashboard: (trainingSetId: TrainingSetId) => string;
@@ -165,6 +172,11 @@ export interface TrainingStore {
   readonly createCustomTrainingSetAndAddToDashboard: (
     input: TrainingSetInput,
   ) => CustomTrainingSetCreationResult;
+  readonly updateCustomTrainingSet: (
+    entryId: string,
+    input: TrainingSetInput,
+    identities: CustomTrainingSetEditIdentities,
+  ) => DashboardEntry;
 }
 
 export interface TrainingStoreOptions {
@@ -486,6 +498,217 @@ function buildCustomTrainingSet(input: TrainingSetInput, usedIds: Set<string>): 
   return result.value;
 }
 
+function getBuilderQuantityUnit(activity: TrainingActivity, overrides: TrainingQuantityOverrides) {
+  if (activity.quantities?.repetitions !== undefined || overrides.repetitions !== undefined) {
+    return 'repetitions';
+  }
+  if (activity.quantities?.duration !== undefined) {
+    return activity.quantities.duration.unit;
+  }
+  if (overrides.seconds !== undefined) return 'seconds';
+  if (overrides.minutes !== undefined) return 'minutes';
+  return undefined;
+}
+
+function getInputQuantityUnit(quantities: TrainingQuantities | undefined) {
+  if (quantities?.repetitions !== undefined) return 'repetitions';
+  return quantities?.duration?.unit;
+}
+
+function removeQuantityUnit(
+  quantities: TrainingQuantities | undefined,
+  unit: TrainingQuantityUnit | undefined,
+): TrainingQuantities | undefined {
+  if (quantities === undefined || unit === undefined) return quantities;
+  const result = {
+    ...(unit === 'repetitions' || quantities.repetitions === undefined
+      ? {}
+      : { repetitions: quantities.repetitions }),
+    ...(quantities.sets === undefined ? {} : { sets: quantities.sets }),
+    ...(quantities.rounds === undefined ? {} : { rounds: quantities.rounds }),
+    ...(quantities.duration === undefined || quantities.duration.unit === unit
+      ? {}
+      : { duration: quantities.duration }),
+  };
+  return Object.keys(result).length === 0 ? undefined : result;
+}
+
+function validateCustomTrainingSetEditIdentities(
+  input: TrainingSetInput,
+  identities: CustomTrainingSetEditIdentities,
+  current: TrainingSet,
+): readonly {
+  readonly section?: TrainingActivity;
+  readonly exercises: readonly (TrainingActivity | undefined)[];
+}[] {
+  if (
+    !isRecord(identities) ||
+    !Array.isArray(identities.sections) ||
+    identities.sections.length !== input.sections.length
+  ) {
+    throw new Error('Custom-menu activity identities do not match the replacement activities.');
+  }
+
+  const sections = new Map<string, TrainingActivity>();
+  const exercises = new Map<string, TrainingActivity>();
+  for (const section of current.activities) {
+    if (section.children.some((exercise) => exercise.children.length > 0)) {
+      throw new Error('This custom menu contains an activity shape the editor cannot preserve.');
+    }
+    if (sections.has(section.id) || exercises.has(section.id)) {
+      throw new Error('Custom-menu activity ids must be unique.');
+    }
+    sections.set(section.id, section);
+    for (const exercise of section.children) {
+      if (sections.has(exercise.id) || exercises.has(exercise.id)) {
+        throw new Error('Custom-menu activity ids must be unique.');
+      }
+      exercises.set(exercise.id, exercise);
+    }
+  }
+
+  const used = new Set<string>();
+  const requireIdentity = (identity: unknown, available: ReadonlyMap<string, TrainingActivity>) => {
+    if (!isRecord(identity)) throw new Error('Custom-menu activity identity is invalid.');
+    const id = identity['id'];
+    if (id === undefined) return undefined;
+    if (!isNonBlankString(id) || !available.has(id) || used.has(id)) {
+      throw new Error('Custom-menu activity identities must refer uniquely to this menu.');
+    }
+    used.add(id);
+    return available.get(id);
+  };
+
+  return identities.sections.map((sectionIdentity, sectionIndex) => {
+    const inputSection = input.sections[sectionIndex];
+    if (
+      inputSection === undefined ||
+      !isRecord(sectionIdentity) ||
+      !Array.isArray(sectionIdentity['exercises']) ||
+      sectionIdentity['exercises'].length !== inputSection.exercises.length
+    ) {
+      throw new Error('Custom-menu exercise identities do not match the replacement exercises.');
+    }
+    const section = requireIdentity(sectionIdentity, sections);
+    const retainedExercises = sectionIdentity['exercises'].map((exerciseIdentity) =>
+      requireIdentity(exerciseIdentity, exercises),
+    );
+    if (
+      retainedExercises.some(
+        (exercise) => exercise !== undefined && section?.children.includes(exercise) !== true,
+      )
+    ) {
+      throw new Error('Custom-menu exercises must remain within their original activity.');
+    }
+    return { ...(section === undefined ? {} : { section }), exercises: retainedExercises };
+  });
+}
+
+function buildEditedCustomTrainingSet(
+  current: TrainingSet,
+  input: TrainingSetInput,
+  retained: ReturnType<typeof validateCustomTrainingSetEditIdentities>,
+  usedIds: Set<string>,
+  quantityOverrides: DashboardQuantityOverrides,
+): { readonly trainingSet: TrainingSet; readonly quantityOverrides: DashboardQuantityOverrides } {
+  const activities = input.sections.map((sectionInput, sectionIndex) => {
+    const identities = retained[sectionIndex];
+    if (identities === undefined) throw new Error('Custom-menu activity identity is missing.');
+    const originalSection = identities.section;
+    const sectionId = originalSection?.id ?? createUniqueId('custom-section', usedIds);
+    const children = sectionInput.exercises.map((exerciseInput, exerciseIndex) => {
+      const originalExercise = identities.exercises[exerciseIndex];
+      if (originalExercise === undefined) {
+        const id = createUniqueId('custom-exercise', usedIds);
+        return {
+          id,
+          name: exerciseInput.name,
+          ...(exerciseInput.quantities === undefined
+            ? {}
+            : { quantities: copyQuantities(exerciseInput.quantities) }),
+          ...(exerciseInput.notes === undefined ? {} : { notes: exerciseInput.notes }),
+          children: [],
+        } satisfies TrainingActivity;
+      }
+
+      const oldUnit = getBuilderQuantityUnit(
+        originalExercise,
+        quantityOverrides[originalExercise.id] ?? {},
+      );
+      const newUnit = getInputQuantityUnit(exerciseInput.quantities);
+      const baseQuantities =
+        oldUnit !== undefined && newUnit !== undefined && oldUnit !== newUnit
+          ? removeQuantityUnit(originalExercise.quantities, oldUnit)
+          : originalExercise.quantities;
+      const nextQuantities =
+        exerciseInput.quantities === undefined
+          ? baseQuantities
+          : { ...(baseQuantities ?? {}), ...copyQuantities(exerciseInput.quantities) };
+
+      if (exerciseInput.quantities !== undefined) {
+        if (oldUnit !== undefined && oldUnit !== newUnit) {
+          quantityOverrides = clearDashboardQuantityOverride(
+            quantityOverrides,
+            originalExercise.id,
+            oldUnit,
+          );
+        }
+        if (newUnit !== undefined) {
+          quantityOverrides = clearDashboardQuantityOverride(
+            quantityOverrides,
+            originalExercise.id,
+            newUnit,
+          );
+        }
+      }
+
+      const updatedExercise = {
+        ...originalExercise,
+        name: exerciseInput.name,
+      };
+      if (nextQuantities === undefined) {
+        delete updatedExercise.quantities;
+        return updatedExercise;
+      }
+      return { ...updatedExercise, quantities: nextQuantities };
+    });
+
+    return originalSection === undefined
+      ? {
+          id: sectionId,
+          name: sectionInput.name,
+          ...(sectionInput.quantities === undefined
+            ? {}
+            : { quantities: copyQuantities(sectionInput.quantities) }),
+          ...(sectionInput.notes === undefined ? {} : { notes: sectionInput.notes }),
+          children,
+        }
+      : { ...originalSection, name: sectionInput.name, children };
+  });
+
+  const trainingSetResult = validateTrainingSet({
+    id: current.id,
+    ...(current.sourceId === undefined ? {} : { sourceId: current.sourceId }),
+    name: input.name,
+    ...(input.description === undefined || input.description.length === 0
+      ? {}
+      : { description: input.description }),
+    category: 'custom',
+    ...(input.customIntensity === undefined ? {} : { customIntensity: input.customIntensity }),
+    activities,
+    isBuiltIn: false,
+  });
+  if (!trainingSetResult.success) throw new TrainingValidationError(trainingSetResult.issues);
+
+  const retainedIds = new Set(
+    getTrainingSetActivities(trainingSetResult.value).map(({ id }) => id),
+  );
+  const nextOverrides: Record<string, TrainingQuantityOverrides> = Object.fromEntries(
+    Object.entries(quantityOverrides).filter(([activityId]) => retainedIds.has(activityId)),
+  );
+  return { trainingSet: trainingSetResult.value, quantityOverrides: nextOverrides };
+}
+
 function findTrainingSetSource(trainingSetId: TrainingSetId): TrainingSet | undefined {
   return DEFAULT_TRAINING_SETS.find((trainingSet) => trainingSet.id === trainingSetId);
 }
@@ -729,6 +952,68 @@ function createValidatedTrainingStore(
           if (result === null) {
             throw new Error('Custom training-set creation did not produce a result.');
           }
+          return result;
+        },
+        updateCustomTrainingSet: (entryId, input, identities) => {
+          if (!isNonBlankString(entryId)) {
+            throw new Error(
+              'Dashboard entry ids must not be blank or exceed the identifier limit.',
+            );
+          }
+
+          let result: DashboardEntry | null = null;
+          set((state) => {
+            const entry = state.dashboardEntries.find((candidate) => candidate.id === entryId);
+            if (entry === undefined) throw new Error(`Dashboard entry ${entryId} does not exist.`);
+            const current = entry.trainingSet ?? findTrainingSetSource(entry.trainingSetId);
+            if (current === undefined) {
+              throw new Error(`Dashboard entry ${entryId} has no available training session.`);
+            }
+            if (
+              current.isBuiltIn ||
+              current.category !== 'custom' ||
+              DEFAULT_TRAINING_SETS.some((builtIn) => builtIn.id === entry.trainingSetId)
+            ) {
+              throw new Error('Only custom training sessions can be edited.');
+            }
+
+            const validation = validateTrainingSetInput(input);
+            if (!validation.success) throw new TrainingValidationError(validation.issues);
+            const retained = validateCustomTrainingSetEditIdentities(
+              validation.value,
+              identities,
+              current,
+            );
+            const edited = buildEditedCustomTrainingSet(
+              current,
+              validation.value,
+              retained,
+              collectUsedIds(state),
+              entry.quantityOverrides,
+            );
+            const activityIds = new Set(
+              getTrainingSetActivities(edited.trainingSet).map(({ id }) => id),
+            );
+            const activityNotes = Object.fromEntries(
+              Object.entries(entry.activityNotes).filter(([activityId]) =>
+                activityIds.has(activityId),
+              ),
+            );
+            const updatedEntry: DashboardEntry = {
+              ...entry,
+              trainingSet: edited.trainingSet,
+              quantityOverrides: edited.quantityOverrides,
+              activityNotes,
+            };
+            const dashboardEntries = state.dashboardEntries.map((candidate) =>
+              candidate.id === entryId ? updatedEntry : candidate,
+            );
+            assertPersistedDashboardEntriesWithinLimits(dashboardEntries);
+            result = updatedEntry;
+            return { dashboardEntries };
+          });
+
+          if (result === null) throw new Error('Custom-menu editing did not produce a result.');
           return result;
         },
       }),

@@ -204,6 +204,10 @@ export function createAccountDraftController(options: {
         assertWritable();
         return actions.createCustomTrainingSetAndAddToDashboard(...args);
       },
+      updateCustomTrainingSet: (...args) => {
+        assertWritable();
+        return actions.updateCustomTrainingSet(...args);
+      },
     });
     unsubscribeStore?.();
     store = next;

@@ -83,6 +83,14 @@ are stored as dashboard-owned snapshots: the v10 wire format embeds the custom s
 entry, so entries do not depend on a shared mutable custom-set collection. Built-in entries are
 canonicalized from the immutable defaults when loaded.
 
+Only custom dashboard snapshots can be structurally edited. The shared builder at
+`/app/guest/drills/:entryId/edit` and `/app/account/drills/:entryId/edit` keeps form changes outside
+the store until submission. The store validates the replacement and its serialized size before
+updating one entry, retaining existing node IDs, hidden authored metadata and practice notes, and
+removing overrides belonging to deleted nodes or replaced quantity units. The wire format remains
+v10. Guest writes use the existing local flush; account edits stay in memory until an explicit
+whole-dashboard Save is acknowledged.
+
 ## Curated data and validation
 
 The [`kendo-drills.schema.json`](../packages/domain/schema/kendo-drills.schema.json) is the strict

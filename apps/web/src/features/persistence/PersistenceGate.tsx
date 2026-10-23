@@ -484,7 +484,8 @@ function GuestNavigationGuard({
       nextLocation.pathname !== '/app/guest' && !nextLocation.pathname.startsWith('/app/guest/');
     const leavingDirtyBuilder =
       builderDirty &&
-      currentLocation.pathname === '/app/guest/drills/new' &&
+      (currentLocation.pathname === '/app/guest/drills/new' ||
+        /^\/app\/guest\/drills\/[^/]+\/edit$/u.test(currentLocation.pathname)) &&
       nextLocation.pathname !== currentLocation.pathname;
     const confirmGuestData = shouldWarnForGuestData && leavingGuest;
     if (!confirmGuestData && !leavingDirtyBuilder) return false;

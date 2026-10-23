@@ -69,9 +69,11 @@ export function RecursiveFixtureApp({
               </main>
             </MemoryRouter>
           ) : (
-            <main id="main-content" tabIndex={-1}>
-              <RecursiveDashboardFixture />
-            </main>
+            <MemoryRouter>
+              <main id="main-content" tabIndex={-1}>
+                <RecursiveDashboardFixture />
+              </main>
+            </MemoryRouter>
           )}
         </TrainingStoreProvider>
       </WorkspaceContextProvider>
