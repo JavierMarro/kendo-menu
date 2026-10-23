@@ -13,21 +13,29 @@ import {
   type FocusEvent,
   type FormEvent,
 } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { flushSync } from 'react-dom';
 
-import { isCustomTrainingIntensity, TRAINING_DATA_LIMITS } from '@kendo-menu/domain';
+import {
+  isCustomTrainingIntensity,
+  TRAINING_DATA_LIMITS,
+  type DashboardEntry,
+} from '@kendo-menu/domain';
 
 import {
   builderReducer,
+  createEditBuilderState,
   createInitialBuilderState,
+  getBuilderEditIdentities,
   parseBuilderState,
   type BuilderErrors,
+  type BuilderState,
 } from './builder-state';
 import { useTrainingStore } from '../../lib/training-store-context';
 import { createSavedMenuNavigationState } from '../../lib/navigation-state';
 import { usePersistenceStatus } from '../persistence/persistence-context';
 import { useWorkspace, workspacePath } from '../../lib/workspace-context';
+import { getDashboardTrainingSet } from '../../lib/training-data';
 
 const EMPTY_BUILDER_ERRORS: BuilderErrors = {};
 
@@ -64,7 +72,49 @@ function DirtyNavigationBlocker({ isDirty }: { readonly isDirty: boolean }) {
 }
 
 export function CreateDrillPage() {
-  const [state, dispatch] = useReducer(builderReducer, undefined, createInitialBuilderState);
+  return <BuilderForm key="create" initialState={createInitialBuilderState()} />;
+}
+
+export function EditDrillPage() {
+  const { entryId } = useParams<{ entryId: string }>();
+  const entry = useTrainingStore((store) =>
+    store.dashboardEntries.find((candidate) => candidate.id === entryId),
+  );
+  const trainingSet = entry === undefined ? undefined : getDashboardTrainingSet(entry);
+  const initialState = entry === undefined ? null : createEditBuilderState(entry);
+
+  if (entry === undefined || trainingSet === undefined) {
+    return <EditUnavailablePage message="This menu is not available on this dashboard." />;
+  }
+  if (trainingSet.isBuiltIn || trainingSet.category !== 'custom' || initialState === null) {
+    return <EditUnavailablePage message="Only custom menus can be edited here." />;
+  }
+  return <BuilderForm key={entry.id} initialState={initialState} entry={entry} />;
+}
+
+function EditUnavailablePage({ message }: { readonly message: string }) {
+  const workspace = useWorkspace();
+  return (
+    <section className="empty-state" aria-labelledby="edit-unavailable-title">
+      <p className="eyebrow">Custom menu</p>
+      <h1 id="edit-unavailable-title">Menu editing unavailable</h1>
+      <p>{message}</p>
+      <Link className="primary-button" to={workspacePath(workspace.basePath, 'dashboard')}>
+        Back to dashboard
+      </Link>
+    </section>
+  );
+}
+
+function BuilderForm({
+  initialState,
+  entry,
+}: {
+  readonly initialState: BuilderState;
+  readonly entry?: DashboardEntry;
+}) {
+  const isEditing = entry !== undefined;
+  const [state, dispatch] = useReducer(builderReducer, initialState);
   const [isDirty, setIsDirty] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitRequest, setSubmitRequest] = useState(0);
@@ -79,6 +129,7 @@ export function CreateDrillPage() {
   const createCustomTrainingSet = useTrainingStore(
     (store) => store.createCustomTrainingSetAndAddToDashboard,
   );
+  const updateCustomTrainingSet = useTrainingStore((store) => store.updateCustomTrainingSet);
   const persistence = usePersistenceStatus();
   const { flush: flushPersistence } = persistence;
   const workspace = useWorkspace();
@@ -169,24 +220,33 @@ export function CreateDrillPage() {
     }
 
     setIsSaving(true);
-    let created = false;
+    let saved = false;
     try {
       const input = parseResult.value;
-      createCustomTrainingSet(input);
-      created = true;
-      // Guest follows the durable local write boundary; account creation stays in its memory draft.
+      if (entry === undefined) {
+        createCustomTrainingSet(input);
+      } else {
+        updateCustomTrainingSet(entry.id, input, getBuilderEditIdentities(state));
+      }
+      saved = true;
+      // Guests wait for the durable local write; account changes remain in their memory draft.
       try {
         if (workspace.kind === 'guest') await flushPersistence();
         flushSync(() => setBuilderDirtyState(false));
-        const navigation = navigate(workspacePath(workspace.basePath, 'dashboard'), {
-          state: createSavedMenuNavigationState(input.name),
-        });
+        const navigation = navigate(
+          workspacePath(workspace.basePath, 'dashboard'),
+          entry === undefined ? { state: createSavedMenuNavigationState(input.name) } : undefined,
+        );
         void Promise.resolve(navigation).catch(() => {
           setBuilderDirtyState(true);
           setSubmitError(
-            workspace.kind === 'account'
-              ? 'The menu was added to your account draft, but KendoMenu could not open the dashboard.'
-              : 'The session was saved, but KendoMenu could not open the dashboard.',
+            isEditing
+              ? workspace.kind === 'account'
+                ? 'The menu was updated in your account draft, but KendoMenu could not open the dashboard.'
+                : 'The menu was saved, but KendoMenu could not open the dashboard.'
+              : workspace.kind === 'account'
+                ? 'The menu was added to your account draft, but KendoMenu could not open the dashboard.'
+                : 'The session was saved, but KendoMenu could not open the dashboard.',
           );
         });
       } catch {
@@ -196,15 +256,21 @@ export function CreateDrillPage() {
         void Promise.resolve(navigation).catch(() => {
           setBuilderDirtyState(true);
           setSubmitError(
-            'The session was added in memory, but KendoMenu could not confirm it was saved or open the dashboard.',
+            isEditing
+              ? 'The menu was updated in memory, but KendoMenu could not confirm it was saved or open the dashboard.'
+              : 'The session was added in memory, but KendoMenu could not confirm it was saved or open the dashboard.',
           );
         });
       }
     } catch {
       setSubmitError(
-        created
-          ? 'The session could not be confirmed as saved. Your draft is still here; try again.'
-          : 'The session could not be saved. Your draft is still here; try again.',
+        saved
+          ? isEditing
+            ? 'The menu could not be confirmed as saved. Your draft is still here; try again.'
+            : 'The session could not be confirmed as saved. Your draft is still here; try again.'
+          : isEditing
+            ? 'The menu could not be saved. Your draft is still here; try again.'
+            : 'The session could not be saved. Your draft is still here; try again.',
       );
     } finally {
       setIsSaving(false);
@@ -232,23 +298,27 @@ export function CreateDrillPage() {
     >
       <DirtyNavigationBlocker isDirty={isDirty} />
       <header className="page-header builder-header">
-        <Link className="builder-back-link" to={workspacePath(workspace.basePath, 'library')}>
+        <Link
+          className="builder-back-link"
+          to={workspacePath(workspace.basePath, isEditing ? 'dashboard' : 'library')}
+        >
           <span aria-hidden="true">← </span>
-          Back to keiko library
+          {isEditing ? 'Back to dashboard' : 'Back to keiko library'}
         </Link>
         <div>
           <p className="eyebrow">Your own practice</p>
-          <h1>Create a training session</h1>
+          <h1>{isEditing ? 'Edit menu' : 'Create a training session'}</h1>
           <p className="page-intro">
-            Build a repeatable keiko session containing the activities and exercises you want to
-            practise.
+            {isEditing
+              ? 'Update the activities and exercises in your custom keiko session.'
+              : 'Build a repeatable keiko session containing the activities and exercises you want to practise.'}
           </p>
         </div>
       </header>
 
       <form className="builder-form" onSubmit={handleSubmit} noValidate inert={!workspace.canEdit}>
         <fieldset className="builder-editable-fields" disabled={!workspace.canEdit}>
-          <legend className="visually-hidden">Session draft fields</legend>
+          <legend className="sr-only">Session draft fields</legend>
           {submitted && Object.keys(errors).length > 0 ? (
             <div
               ref={errorSummaryRef}
@@ -270,6 +340,12 @@ export function CreateDrillPage() {
           {submitError.length > 0 ? (
             <p className="form-error" role="alert">
               {submitError}
+            </p>
+          ) : null}
+          {isEditing && !workspace.canEdit ? (
+            <p className="form-error" role="status">
+              Menu editing is temporarily unavailable. Your draft will stay open while access is
+              restored.
             </p>
           ) : null}
 
@@ -453,8 +529,13 @@ export function CreateDrillPage() {
                           const quantityHintId = `quantity-hint-${step.id}`;
                           const hasRepsError =
                             showError(repsErrorKey) && errors[repsErrorKey] !== undefined;
-                          const quantityHint =
-                            step.measurement === 'repetitions'
+                          const keepExistingQuantity =
+                            step.activityId !== undefined &&
+                            step.quantityChanged !== true &&
+                            step.reps.length === 0;
+                          const quantityHint = keepExistingQuantity
+                            ? 'Leave blank to keep the existing quantity, including a duration range.'
+                            : step.measurement === 'repetitions'
                               ? 'Use a whole number from 0 to 500.'
                               : `Use ${step.durationUnit}; zero and decimal values are supported.`;
                           return (
@@ -582,7 +663,10 @@ export function CreateDrillPage() {
                               <button
                                 className="text-button destructive-button"
                                 type="button"
-                                disabled={section.steps.length <= 1}
+                                disabled={
+                                  section.steps.length <=
+                                  (state.allowEmptyExercises === true ? 0 : 1)
+                                }
                                 onClick={() =>
                                   update({
                                     type: 'remove-step',
@@ -623,13 +707,21 @@ export function CreateDrillPage() {
           </section>
 
           <div className="builder-actions">
+            {isEditing ? (
+              <Link
+                className="secondary-button"
+                to={workspacePath(workspace.basePath, 'dashboard')}
+              >
+                Cancel
+              </Link>
+            ) : null}
             <button
               className="primary-button"
               type="submit"
               disabled={isSaving}
               aria-busy={isSaving}
             >
-              Save session to dashboard
+              {isEditing ? 'Save changes' : 'Save session to dashboard'}
             </button>
           </div>
         </fieldset>

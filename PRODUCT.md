@@ -42,6 +42,11 @@ activity quantities and notes can be adapted without mutating the built-in libra
   stable ID; quantity overrides are keyed by activity ID and then unit.
 - Built-in sessions are immutable and marked `isBuiltIn: true`. Practitioner-authored sessions use
   the same model and are marked `isBuiltIn: false`.
+- Custom dashboard menus offer **Edit menu**, reopening the builder with their current contents and
+  quantities. Practitioners can edit menu details and add or remove activities and exercises.
+  **Save changes** updates the same menu, preserving retained activity IDs and practice notes;
+  **Cancel** discards the form edits. Guests save locally, including offline; account edits remain
+  in memory until **Save to account** succeeds. Library menus retain quantity and note editing only.
 - Curated content is authored in `packages/domain/data/default-drills.json`, validated against
   `packages/domain/schema/kendo-drills.schema.json`, and adapted by
   `packages/domain/src/default-training-sets.ts`.

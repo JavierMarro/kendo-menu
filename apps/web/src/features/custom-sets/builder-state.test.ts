@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { TRAINING_DATA_LIMITS } from '@kendo-menu/domain';
+import { TRAINING_DATA_LIMITS, asTrainingSetId, type DashboardEntry } from '@kendo-menu/domain';
 
 import {
   builderReducer,
+  createEditBuilderState,
   createInitialBuilderState,
+  getBuilderEditIdentities,
   parseBuilderState,
   type BuilderState,
   type SectionDraft,
@@ -59,7 +61,143 @@ function builderStateWithShape(sectionCount: number, stepsPerSection: number): B
   };
 }
 
+function customEntry(): DashboardEntry {
+  return {
+    id: 'custom-entry',
+    trainingSetId: asTrainingSetId('custom-session'),
+    trainingSet: {
+      id: asTrainingSetId('custom-session'),
+      name: 'My keiko',
+      description: 'Personal practice',
+      category: 'custom',
+      customIntensity: 'high-intensity-drill',
+      activities: [
+        {
+          id: 'empty-activity',
+          name: 'Empty activity',
+          quantities: { duration: { unit: 'seconds', min: 30, max: 60 } },
+          notes: 'Keep this hidden section note.',
+          children: [],
+        },
+        {
+          id: 'main-activity',
+          name: 'Main practice',
+          children: [
+            {
+              id: 'overridden-exercise',
+              name: 'Men',
+              quantities: { repetitions: 10, sets: 3 },
+              notes: 'Keep this authored exercise note.',
+              children: [],
+            },
+            {
+              id: 'ranged-exercise',
+              name: 'Jigeiko',
+              quantities: { duration: { unit: 'minutes', min: 2, max: 5 } },
+              children: [],
+            },
+            { id: 'quantity-free-exercise', name: 'Footwork', children: [] },
+          ],
+        },
+      ],
+      isBuiltIn: false,
+    },
+    quantityOverrides: { 'overridden-exercise': { repetitions: 24 } },
+    activityNotes: { 'main-activity': 'Dashboard activity note.' },
+    notes: 'Practice note.',
+    createdAt: '2026-08-19T10:00:00.000Z',
+  };
+}
+
 describe('session builder state', () => {
+  it('opens custom menus with effective quantities and preserves untouched optional values', () => {
+    const entry = customEntry();
+    const state = createEditBuilderState(entry);
+    expect(state).not.toBeNull();
+    if (state === null) throw new Error('Expected a supported custom menu.');
+
+    expect(state).toMatchObject({
+      name: 'My keiko',
+      description: 'Personal practice',
+      customIntensity: 'high-intensity-drill',
+      sections: [
+        { activityId: 'empty-activity', steps: [] },
+        {
+          activityId: 'main-activity',
+          steps: [
+            { activityId: 'overridden-exercise', label: 'Men', reps: '24' },
+            { activityId: 'ranged-exercise', label: 'Jigeiko', reps: '' },
+            { activityId: 'quantity-free-exercise', label: 'Footwork', reps: '' },
+          ],
+        },
+      ],
+    });
+    expect(getBuilderEditIdentities(state)).toEqual({
+      sections: [
+        { id: 'empty-activity', exercises: [] },
+        {
+          id: 'main-activity',
+          exercises: [
+            { id: 'overridden-exercise' },
+            { id: 'ranged-exercise' },
+            { id: 'quantity-free-exercise' },
+          ],
+        },
+      ],
+    });
+
+    const parsed = parseBuilderState(state);
+    expect(parsed).toMatchObject({
+      success: true,
+      value: {
+        sections: [
+          { name: 'Empty activity', exercises: [] },
+          {
+            name: 'Main practice',
+            exercises: [{ name: 'Men' }, { name: 'Jigeiko' }, { name: 'Footwork' }],
+          },
+        ],
+      },
+    });
+    if (!parsed.success) throw new Error('Expected a valid edit draft.');
+    expect(parsed.value.sections[1]?.exercises[0]?.quantities).toBeUndefined();
+    expect(parsed.value.sections[1]?.exercises[1]?.quantities).toBeUndefined();
+    expect(parsed.value.sections[1]?.exercises[2]?.quantities).toBeUndefined();
+  });
+
+  it('includes a quantity when an existing exercise quantity is deliberately changed', () => {
+    const initial = createEditBuilderState(customEntry());
+    if (initial === null) throw new Error('Expected a supported custom menu.');
+    const section = requireSection(initial, 1);
+    const step = requireStep(section, 0);
+    const changed = builderReducer(initial, {
+      type: 'set-step-reps',
+      stepId: step.id,
+      value: '36',
+    });
+    const parsed = parseBuilderState(changed);
+    if (!parsed.success) throw new Error('Expected a valid changed quantity.');
+    expect(parsed.value.sections[1]?.exercises[0]?.quantities).toEqual({ repetitions: 36 });
+  });
+
+  it('allows an edited activity to remove its last exercise and add one back', () => {
+    const initial = createEditBuilderState(customEntry());
+    if (initial === null) throw new Error('Expected a supported custom menu.');
+    const section = requireSection(initial, 1);
+    let emptySection = initial;
+    for (const step of section.steps) {
+      emptySection = builderReducer(emptySection, {
+        type: 'remove-step',
+        sectionId: section.id,
+        stepId: step.id,
+      });
+    }
+    expect(requireSection(emptySection, 1).steps).toHaveLength(0);
+    expect(
+      builderReducer(emptySection, { type: 'add-step', sectionId: section.id }).sections[1]?.steps,
+    ).toHaveLength(1);
+  });
+
   it('enforces exact builder collection limits in reducer and parser boundaries', () => {
     const exactSections = builderStateWithShape(TRAINING_DATA_LIMITS.customSections, 1);
     const afterSectionLimit = builderReducer(exactSections, { type: 'add-section' });

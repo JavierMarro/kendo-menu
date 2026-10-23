@@ -776,6 +776,14 @@ export function DashboardTrainingSet({
               </span>
             </div>
           </div>
+          {!trainingSet.isBuiltIn && trainingSet.category === 'custom' ? (
+            <Link
+              className="secondary-button"
+              to={workspacePath(workspace.basePath, `drills/${encodeURIComponent(entry.id)}/edit`)}
+            >
+              Edit menu
+            </Link>
+          ) : null}
           <button
             className="text-button destructive-button dashboard-card-remove"
             type="button"

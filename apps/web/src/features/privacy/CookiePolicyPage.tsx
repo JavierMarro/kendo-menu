@@ -47,18 +47,9 @@ export function CookiePolicyPage() {
             originals stay on your device.
           </p>
           <p>
-            An optional account stores your email address and saved menus in a PostgreSQL database
-            so you can access them across devices. Account changes need an internet connection and
-            are saved only when you choose “Save to account” and receive confirmation. Unsaved
-            changes can be lost if you reload, close the tab or sign out.
-          </p>
-          <p>
-            Notice and installation preferences are also stored on this device. A temporary
-            session-storage marker helps complete sign-in; it contains no credentials or menu data.
-          </p>
-          <p>
-            Seen marks for Mitori room videos stay in this browser, including when you are signed
-            in. They are not sent to the account service or synced across devices.
+            A signed-in account (optional) stores your email address and saved menus in a PostgreSQL
+            database so you can access them across devices. A temporary session-storage marker helps
+            complete sign-in; it contains no credentials or menu data.
           </p>
         </section>
 

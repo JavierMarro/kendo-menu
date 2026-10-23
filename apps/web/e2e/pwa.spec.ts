@@ -1,6 +1,12 @@
 import { expect, type Page } from '@playwright/test';
 
 import { test } from './guest-test';
+import {
+  CUSTOM_EDIT_DASHBOARD,
+  CUSTOM_EDIT_ENTRY_ID,
+  CUSTOM_EDIT_NAME,
+  CUSTOM_EDIT_NOTES,
+} from './custom-menu-edit-fixture';
 
 const STORAGE_KEY = 'kendo-menu';
 const OFFLINE_PATHS = ['/app', '/app/guest/dashboard', '/app/guest/library', '/privacy'] as const;
@@ -225,6 +231,46 @@ test.describe('production PWA shell', () => {
         ).resolves.toBe(OFFLINE_STORAGE_RAW);
       }
       expect(analyticsRequests).toEqual([]);
+    } finally {
+      await context.setOffline(false);
+    }
+  });
+
+  test('opens a custom edit deep link and saves added exercises while offline', async ({
+    page,
+    context,
+  }) => {
+    await page.goto('/app');
+    await establishServiceWorkerControl(page);
+    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+      key: STORAGE_KEY,
+      value: JSON.stringify(CUSTOM_EDIT_DASHBOARD),
+    });
+    await context.setOffline(true);
+    try {
+      await page.goto(`/app/guest/drills/${CUSTOM_EDIT_ENTRY_ID}/edit`);
+      await expect(page.getByRole('heading', { name: 'Edit menu', exact: true })).toBeVisible();
+      await expect(page.getByLabel('Session name')).toHaveValue(CUSTOM_EDIT_NAME);
+      const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+      if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
+      const activity = page.getByRole('group', { name: 'Activity 1', exact: true });
+      await expect(activity.getByLabel('Repetitions', { exact: true })).toHaveValue('24');
+      await activity.getByRole('button', { name: 'Add exercise' }).click();
+      await activity.getByLabel('Exercise name').nth(2).fill('Offline kirikaeshi');
+      await activity.getByLabel('Repetitions', { exact: true }).nth(1).fill('12');
+      await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+      await expect(page).toHaveURL('/app/guest/dashboard');
+      await page.reload();
+      await page
+        .getByRole('article')
+        .filter({ has: page.getByRole('heading', { name: CUSTOM_EDIT_NAME, exact: true }) })
+        .getByRole('button', { name: 'View more' })
+        .click();
+      const dialog = page.getByRole('dialog', { name: CUSTOM_EDIT_NAME, exact: true });
+      await expect(dialog.getByLabel('Practice notes')).toHaveValue(CUSTOM_EDIT_NOTES);
+      await dialog.locator('details.detail-section').first().locator(':scope > summary').click();
+      await expect(dialog.getByLabel('Repetitions for Suburi')).toHaveValue('24');
+      await expect(dialog.getByLabel('Repetitions for Offline kirikaeshi')).toHaveValue('12');
     } finally {
       await context.setOffline(false);
     }

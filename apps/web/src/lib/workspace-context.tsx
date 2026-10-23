@@ -48,7 +48,7 @@ export function WorkspaceContextProvider({
 
 export function workspacePath(
   basePath: WorkspaceContextValue['basePath'],
-  page: 'dashboard' | 'library' | 'drills/new' | `library/${string}`,
+  page: 'dashboard' | 'library' | 'drills/new' | `drills/${string}/edit` | `library/${string}`,
 ): string {
   return `${basePath}/${page}`;
 }

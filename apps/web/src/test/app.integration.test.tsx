@@ -228,7 +228,7 @@ describe('KendoMenu application flows', () => {
       'only choosing “Copy menus” uploads an independent copy; the originals stay on your device.',
     );
     expect(localStorageSection).toHaveTextContent(
-      'are saved only when you choose “Save to account” and receive confirmation.',
+      'A signed-in account (optional) stores your email address and saved menus in a PostgreSQL database so you can access them across devices. A temporary session-storage marker helps complete sign-in; it contains no credentials or menu data.',
     );
     expect(
       screen.getByRole('heading', { name: 'Google sign-in' }).closest('section'),
@@ -281,7 +281,7 @@ describe('KendoMenu application flows', () => {
     );
     expect(policy).toHaveTextContent('A new account gets this offer once.');
     expect(policy).toHaveTextContent(
-      'Account changes need an internet connection and are saved only when you choose “Save to account” and receive confirmation.',
+      'A signed-in account (optional) stores your email address and saved menus in a PostgreSQL database so you can access them across devices.',
     );
     expect(policy).toHaveTextContent(
       'Vercel hosts KendoMenu. Neon provides managed authentication',

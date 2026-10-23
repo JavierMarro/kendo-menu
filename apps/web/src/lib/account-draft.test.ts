@@ -600,6 +600,55 @@ describe('memory-only account draft lifecycle', () => {
     controller.dispose();
   });
 
+  it('fences a captured custom-menu edit action while offline, hidden, or disposed', async () => {
+    const { controller } = fixture();
+    await controller.load();
+    const store = controller.getSnapshot().store;
+    if (store === null) throw new Error('Expected a ready account store.');
+    const created = store.getState().createCustomTrainingSetAndAddToDashboard({
+      name: 'Account custom menu',
+      category: 'custom',
+      sections: [
+        {
+          name: 'Main practice',
+          exercises: [{ name: 'Men', quantities: { repetitions: 12 } }],
+        },
+      ],
+    });
+    const original = store
+      .getState()
+      .dashboardEntries.find((entry) => entry.id === created.dashboardEntryId);
+    const section = created.trainingSet.activities[0];
+    const exercise = section?.children[0];
+    if (original === undefined || section === undefined || exercise === undefined) {
+      throw new Error('Expected the custom menu fixture.');
+    }
+    const edit = store.getState().updateCustomTrainingSet;
+    const input = {
+      name: 'Changed account menu',
+      category: 'custom' as const,
+      sections: [{ name: 'Main practice', exercises: [{ name: 'Men' }] }],
+    };
+    const identities = {
+      sections: [{ id: section.id, exercises: [{ id: exercise.id }] }],
+    };
+    const before = store.getState().dashboardEntries;
+
+    controller.setOnline(false);
+    expect(() => edit(original.id, input, identities)).toThrow('Account editing is unavailable.');
+    expect(store.getState().dashboardEntries).toEqual(before);
+    controller.setOnline(true);
+    expect(controller.getSnapshot().canEdit).toBe(false);
+    await controller.checkAvailability();
+    expect(controller.getSnapshot().canEdit).toBe(true);
+
+    controller.hideForIdentityUncertainty();
+    expect(() => edit(original.id, input, identities)).toThrow('Account editing is unavailable.');
+    controller.dispose();
+    expect(() => edit(original.id, input, identities)).toThrow('Account editing is unavailable.');
+    expect(store.getState().dashboardEntries).toEqual(before);
+  });
+
   it('keeps failed-service drafts read-only until a dashboard probe succeeds without replacing them', async () => {
     const { controller, api, add } = fixture();
     await controller.load();

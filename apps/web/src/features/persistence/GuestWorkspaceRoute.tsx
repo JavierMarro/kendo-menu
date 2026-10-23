@@ -18,6 +18,7 @@ import { getPersistenceStatusLabel, usePersistenceStatus } from './persistence-c
 
 function AccountDestination(pathname: string): string {
   if (/^\/app\/guest\/mitori-room\/?$/u.test(pathname)) return '/app/account/mitori-room';
+  if (/^\/app\/guest\/drills\/[^/]+\/edit$/u.test(pathname)) return '/app/account/dashboard';
   if (pathname.endsWith('/drills/new')) return '/app/account/drills/new';
   const detail = pathname.match(/^\/app\/guest\/library\/([^/]+)$/u);
   if (detail !== null) return `/app/account/library/${encodeURIComponent(detail[1] ?? '')}`;

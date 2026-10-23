@@ -32,10 +32,8 @@ export function PrivacyPolicyPage() {
         <section className="policy-section" aria-labelledby="account-data-title">
           <h2 id="account-data-title">Account data and saved changes</h2>
           <p>
-            An optional account stores your email address and saved menus in a PostgreSQL database
-            so you can access them across devices. Account changes need an internet connection and
-            are saved only when you choose “Save to account” and receive confirmation. Unsaved
-            changes can be lost if you reload, close the tab or sign out.
+            A signed-in account (optional) stores your email address and saved menus in a PostgreSQL
+            database so you can access them across devices.
           </p>
           <p>
             Vercel hosts KendoMenu. Neon provides managed authentication and the PostgreSQL database

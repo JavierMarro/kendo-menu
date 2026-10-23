@@ -69,7 +69,9 @@ export function WorkspaceShell({
   const dashboardPath = `${basePath}/dashboard`;
   const libraryPath = `${basePath}/library`;
   const mitoriPath = `${basePath}/mitori-room`;
-  const isDashboard = location.pathname === dashboardPath;
+  const isDashboard =
+    location.pathname === dashboardPath ||
+    (location.pathname.startsWith(`${basePath}/drills/`) && location.pathname.endsWith('/edit'));
   const isLibrary =
     location.pathname === libraryPath || location.pathname.startsWith(`${libraryPath}/`);
   const isMitoriRoom = location.pathname === mitoriPath;
