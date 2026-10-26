@@ -11,8 +11,17 @@ import {
 import { MITORI_VIDEOS } from './mitori-videos';
 import type { MitoriVideo } from './mitori-videos';
 
-const MITORI_TABS = ['techniques', 'documentaries', 'kata', 'resources', 'glossary'] as const;
+const MITORI_TABS = [
+  'techniques',
+  'competitions',
+  'documentaries',
+  'kata',
+  'resources',
+  'glossary',
+] as const;
 type MitoriTab = (typeof MITORI_TABS)[number];
+const COMPETITION_COLLECTIONS = ['2026', 'ajkc-finals', 'ajkc-finals-womens'] as const;
+type CompetitionCollection = (typeof COMPETITION_COLLECTIONS)[number];
 const MITORI_VIDEO_IDS: ReadonlySet<string> = new Set(
   Object.values(MITORI_VIDEOS)
     .flat()
@@ -20,26 +29,37 @@ const MITORI_VIDEO_IDS: ReadonlySet<string> = new Set(
 );
 
 const TAB_LABELS: Readonly<Record<MitoriTab, string>> = {
-  techniques: 'Mitori',
+  techniques: 'General',
+  competitions: 'Competitions',
   documentaries: 'Documentaries',
   kata: 'Kata',
   resources: 'Resources',
   glossary: 'Glossary',
 };
 
+const COMPETITION_LABELS: Readonly<Record<CompetitionCollection, string>> = {
+  '2026': '2026',
+  'ajkc-finals': 'AJKC finals (mens)',
+  'ajkc-finals-womens': 'AJKC finals (womens)',
+};
+
 function isMitoriTab(value: string | null): value is MitoriTab {
   return value !== null && MITORI_TABS.some((tab) => tab === value);
 }
 
+function isCompetitionCollection(value: string | null): value is CompetitionCollection {
+  return value !== null && COMPETITION_COLLECTIONS.some((collection) => collection === value);
+}
+
 function VideoList({
   videos,
-  section,
+  title,
   seenVideoIds,
   onSeenChange,
   canPersist,
 }: {
   readonly videos: readonly MitoriVideo[];
-  readonly section: MitoriTab;
+  readonly title: string;
   readonly seenVideoIds: ReadonlySet<string>;
   readonly onSeenChange: (videoId: string, seen: boolean) => void;
   readonly canPersist: boolean;
@@ -48,10 +68,7 @@ function VideoList({
 
   return (
     <section className="mitori-video-section" aria-labelledby="mitori-video-heading">
-      <h2 id="mitori-video-heading">{TAB_LABELS[section]}</h2>
-      <p className="mitori-seen-note" id="mitori-seen-note">
-        Seen marks stay in this browser and don’t sync across devices.
-      </p>
+      <h2 id="mitori-video-heading">{title}</h2>
       {!canPersist ? (
         <p className="mitori-seen-note" role="status">
           Seen marks can’t be saved in this browser; they will last until you leave this room.
@@ -62,8 +79,14 @@ function VideoList({
           const isOpen = openVideoId === video.id;
           const isSeen = seenVideoIds.has(video.id);
           const playerId = `mitori-player-${video.id}`;
-          const playlistQuery = video.playlistId === undefined ? '' : `?list=${video.playlistId}`;
-          const youtubePlaylist = video.playlistId === undefined ? '' : `&list=${video.playlistId}`;
+          const videoUrl =
+            video.playlistId === undefined
+              ? `https://www.youtube.com/watch?v=${video.id}`
+              : `https://www.youtube.com/playlist?list=${video.playlistId}`;
+          const embedUrl =
+            video.playlistId === undefined
+              ? `https://www.youtube-nocookie.com/embed/${video.id}`
+              : `https://www.youtube-nocookie.com/embed/videoseries?list=${video.playlistId}`;
 
           return (
             <article
@@ -105,7 +128,6 @@ function VideoList({
                     type="checkbox"
                     checked={isSeen}
                     aria-label={`Seen: ${video.title}`}
-                    aria-describedby="mitori-seen-note"
                     onChange={(event) => onSeenChange(video.id, event.currentTarget.checked)}
                   />
                   <span>Seen</span>
@@ -116,7 +138,7 @@ function VideoList({
                   <>
                     <div className="mitori-video-frame">
                       <iframe
-                        src={`https://www.youtube-nocookie.com/embed/${video.id}${playlistQuery}`}
+                        src={embedUrl}
                         title={video.title}
                         referrerPolicy="strict-origin-when-cross-origin"
                         allow="encrypted-media; picture-in-picture; web-share"
@@ -125,7 +147,7 @@ function VideoList({
                     </div>
                     <a
                       className="mitori-youtube-link"
-                      href={`https://www.youtube.com/watch?v=${video.id}${youtubePlaylist}`}
+                      href={videoUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
@@ -147,8 +169,13 @@ export function MitoriRoomPage(): ReactElement {
   const [seenState, setSeenState] = useState<MitoriSeenState>(() =>
     readMitoriSeenState(() => window.localStorage, MITORI_VIDEO_IDS),
   );
-  const rawTab = new URLSearchParams(location.search).get('tab');
+  const searchParams = new URLSearchParams(location.search);
+  const rawTab = searchParams.get('tab');
   const selectedTab: MitoriTab = isMitoriTab(rawTab) ? rawTab : 'techniques';
+  const rawCollection = searchParams.get('collection');
+  const selectedCollection: CompetitionCollection = isCompetitionCollection(rawCollection)
+    ? rawCollection
+    : '2026';
   const handleSeenChange = (videoId: string, seen: boolean): void => {
     const seenVideoIds = new Set(seenState.seenVideoIds);
     if (seen) {
@@ -186,13 +213,47 @@ export function MitoriRoomPage(): ReactElement {
         })}
       </nav>
       <section className="mitori-content" aria-label={`${TAB_LABELS[selectedTab]} content`}>
+        {selectedTab === 'competitions' ? (
+          <>
+            <nav className="mitori-tabs mitori-subtabs" aria-label="Competition collections">
+              {COMPETITION_COLLECTIONS.map((collection) => {
+                const search = new URLSearchParams(location.search);
+                search.set('tab', 'competitions');
+                search.set('collection', collection);
+
+                return (
+                  <Link
+                    className="mitori-tab"
+                    key={collection}
+                    to={{ pathname: location.pathname, search: `?${search.toString()}` }}
+                    aria-current={selectedCollection === collection ? 'page' : undefined}
+                  >
+                    {COMPETITION_LABELS[collection]}
+                  </Link>
+                );
+              })}
+            </nav>
+            <VideoList
+              key={selectedCollection}
+              videos={
+                MITORI_VIDEOS[
+                  selectedCollection === '2026' ? 'competition-2026' : selectedCollection
+                ]
+              }
+              title={COMPETITION_LABELS[selectedCollection]}
+              seenVideoIds={seenState.seenVideoIds}
+              onSeenChange={handleSeenChange}
+              canPersist={seenState.canPersist}
+            />
+          </>
+        ) : null}
         {selectedTab === 'techniques' ||
         selectedTab === 'documentaries' ||
         selectedTab === 'kata' ? (
           <VideoList
             key={selectedTab}
             videos={MITORI_VIDEOS[selectedTab]}
-            section={selectedTab}
+            title={TAB_LABELS[selectedTab]}
             seenVideoIds={seenState.seenVideoIds}
             onSeenChange={handleSeenChange}
             canPersist={seenState.canPersist}

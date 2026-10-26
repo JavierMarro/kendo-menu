@@ -4726,8 +4726,20 @@ textarea[aria-invalid='true'] {
 
 .mitori-tabs {
   display: flex;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
   gap: var(--space-2);
   border-bottom: 1px solid var(--line-strong);
+  scrollbar-width: thin;
+}
+
+.mitori-subtabs {
+  margin-bottom: var(--space-6);
+}
+
+.mitori-subtabs .mitori-tab {
+  min-height: 2.75rem;
+  font-size: var(--type-14);
 }
 
 .mitori-tab {
@@ -4892,7 +4904,7 @@ textarea[aria-invalid='true'] {
 }
 
 .mitori-seen-note {
-  margin: calc(-1 * var(--space-4)) 0 var(--space-4);
+  margin: calc(-1 * var(--space-2)) 0 var(--space-4);
   color: var(--muted);
   font-size: var(--type-14);
 }
@@ -4938,12 +4950,6 @@ textarea[aria-invalid='true'] {
 }
 
 @media (max-width: 600px) {
-  .mitori-tabs {
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-    scrollbar-width: thin;
-  }
-
   .mitori-tab {
     padding-inline: var(--space-3);
   }

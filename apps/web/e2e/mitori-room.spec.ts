@@ -66,12 +66,131 @@ test('signed-in navigation and guest deep links reach the account Mitori room wi
   await expect(page.getByRole('checkbox', { name: /Nippon Kendo Kata/ })).toBeChecked();
   await workspaceLink(page, 'Dashboard').click();
   await workspaceLink(page, 'Mitori room').click();
-  await expect(page.getByRole('heading', { name: 'Mitori', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'General', exact: true })).toBeVisible();
   await expect(page.getByRole('checkbox', { name: /Nippon Kendo Kata/ })).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem('kendo-menu-mitori-seen'))).toContain(
     'QIpPUdTCv-Y',
   );
+  await page.goto('/app/guest/mitori-room?tab=competitions&collection=ajkc-finals');
+  await expect(page).toHaveURL(
+    /\/app\/account\/mitori-room\?tab=competitions&collection=ajkc-finals$/,
+  );
+  await expect(
+    page.getByRole('heading', { name: 'AJKC finals (mens)', exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.mitori-video-toggle')).toHaveCount(9);
+  await page
+    .getByRole('navigation', { name: 'Competition collections' })
+    .getByRole('link', { name: 'AJKC finals (womens)', exact: true })
+    .click();
+  await expect(page).toHaveURL(
+    /\/app\/account\/mitori-room\?tab=competitions&collection=ajkc-finals-womens$/,
+  );
+  await expect(
+    page.getByRole('heading', { name: 'AJKC finals (womens)', exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.mitori-video-toggle')).toHaveCount(7);
   expect(harness.apiCalls.filter((call) => call.method !== 'GET')).toEqual([]);
+});
+
+test('competition collections support keyboard navigation, history, playlists and local Seen marks', async ({
+  page,
+}) => {
+  const youtubeRequests: string[] = [];
+  await page.route(
+    /https:\/\/(?:www\.)?(?:youtube(?:-nocookie)?\.com|i\.ytimg\.com)\//,
+    async (route) => {
+      youtubeRequests.push(route.request().url());
+      await route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><title>Video</title>',
+      });
+    },
+  );
+  await page.goto('/app/guest/mitori-room');
+  const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+  await expect(notice).toBeVisible();
+  await notice.getByRole('button', { name: 'Got it' }).click();
+  const sections = page.getByRole('navigation', { name: 'Mitori room sections' });
+  await expect(sections.getByRole('link')).toHaveText([
+    'General',
+    'Competitions',
+    'Documentaries',
+    'Kata',
+    'Resources',
+    'Glossary',
+  ]);
+  await sections.getByRole('link', { name: 'Competitions', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: '2026', exact: true })).toBeVisible();
+  await expect(page.locator('.mitori-video-toggle')).toHaveCount(6);
+  await expect(
+    page.getByText('Seen marks stay in this browser and don’t sync across devices.'),
+  ).toHaveCount(0);
+  expect(youtubeRequests).toEqual([]);
+
+  const collections = page.getByRole('navigation', { name: 'Competition collections' });
+  const finals = collections.getByRole('link', { name: 'AJKC finals (mens)', exact: true });
+  await finals.focus();
+  await page.keyboard.press('Enter');
+  await expect(finals).toHaveAttribute('aria-current', 'page');
+  await expect(page).toHaveURL(/tab=competitions&collection=ajkc-finals$/);
+  await page.locator('.mitori-seen-control input').first().check();
+  await page.locator('.mitori-video-toggle').first().click();
+  await expect(page.locator('iframe')).toHaveAttribute(
+    'src',
+    'https://www.youtube-nocookie.com/embed/qYfR983_KwU',
+  );
+  await collections.getByRole('link', { name: '2026', exact: true }).click();
+  await expect(page.locator('iframe')).toHaveCount(0);
+  const playlist = page
+    .locator('.mitori-video-item')
+    .filter({ hasText: '68th All Japan Corporate' });
+  await playlist.getByRole('checkbox').check();
+  await playlist.getByRole('button').click();
+  await expect(page.locator('iframe')).toHaveAttribute(
+    'src',
+    'https://www.youtube-nocookie.com/embed/videoseries?list=PLTj3ptu6HjME',
+  );
+  await expect(playlist.getByRole('link', { name: 'Watch on YouTube' })).toHaveAttribute(
+    'href',
+    'https://www.youtube.com/playlist?list=PLTj3ptu6HjME',
+  );
+  await expect(page.locator('iframe')).toHaveCount(1);
+  await page.goBack();
+  await expect(
+    page.getByRole('heading', { name: 'AJKC finals (mens)', exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.mitori-seen-control input').first()).toBeChecked();
+  await expect(page.locator('iframe')).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('.mitori-seen-control input').first()).toBeChecked();
+  expect(await page.evaluate(() => localStorage.getItem('kendo-menu-mitori-seen'))).toContain(
+    'PLTj3ptu6HjME',
+  );
+  const womens = collections.getByRole('link', { name: 'AJKC finals (womens)', exact: true });
+  await womens.focus();
+  await page.keyboard.press('Enter');
+  await expect(womens).toHaveAttribute('aria-current', 'page');
+  await expect(page).toHaveURL(/collection=ajkc-finals-womens$/);
+  const womensSeen = page.getByRole('checkbox', { name: /64th All Japan Women’s/ });
+  await womensSeen.check();
+  await page.getByRole('button', { name: /64th All Japan Women’s/ }).click();
+  await expect(page.locator('iframe')).toHaveAttribute(
+    'src',
+    'https://www.youtube-nocookie.com/embed/xWwnza7khAE',
+  );
+  await finals.click();
+  await expect(page.locator('iframe')).toHaveCount(0);
+  await expect(page.locator('.mitori-seen-control input').first()).toBeChecked();
+  await page.goBack();
+  await expect(womensSeen).toBeChecked();
+  await page.reload();
+  await expect(
+    page.getByRole('heading', { name: 'AJKC finals (womens)', exact: true }),
+  ).toBeVisible();
+  await expect(womensSeen).toBeChecked();
+  await expect(page.locator('iframe')).toHaveCount(0);
 });
 
 test('Seen marks persist locally, can be cleared, and fit mobile widths', async ({
@@ -108,7 +227,7 @@ test('Seen marks persist locally, can be cleared, and fit mobile widths', async 
     exact: true,
   });
   await documentarySeen.check();
-  await sections.getByRole('link', { name: 'Mitori' }).click();
+  await sections.getByRole('link', { name: 'General' }).click();
   await expect(
     page.getByRole('checkbox', { name: /Kendo Training Boot Camp — by Hidehisa Nishimura$/ }),
   ).toBeChecked();
@@ -123,7 +242,7 @@ test('Seen marks persist locally, can be cleared, and fit mobile widths', async 
   if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
   for (const width of [320, 414, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    await sections.getByRole('link', { name: 'Mitori' }).click();
+    await sections.getByRole('link', { name: 'General' }).click();
     await expect(
       page.getByRole('checkbox', { name: /Kendo Training Boot Camp — by Hidehisa Nishimura$/ }),
     ).toBeChecked();
@@ -155,7 +274,7 @@ test('Seen marks persist locally, can be cleared, and fit mobile widths', async 
     await expect(documentarySeen).not.toBeChecked();
   }
 
-  await sections.getByRole('link', { name: 'Mitori' }).click();
+  await sections.getByRole('link', { name: 'General' }).click();
   await page.reload();
   await expect(
     page.getByRole('checkbox', { name: /Kendo Training Boot Camp — by Hidehisa Nishimura$/ }),
@@ -176,13 +295,14 @@ test('Mitori room stays accessible and within narrow and desktop viewports', asy
 }, testInfo) => {
   await page.goto('/app/guest/mitori-room');
   const notice = page.getByRole('complementary', { name: 'Cookie notice' });
-  if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
+  await expect(notice).toBeVisible();
+  await notice.getByRole('button', { name: 'Got it' }).click();
   const axe = await new AxeBuilder({ page }).analyze();
   expect(
     axe.violations.filter(({ impact }) => impact === 'critical' || impact === 'serious'),
   ).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('mitori-room.png'), fullPage: true });
-  for (const width of [320, 414, 1440]) {
+  for (const width of [320, 414, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       width,
@@ -196,5 +316,53 @@ test('Mitori room stays accessible and within narrow and desktop viewports', asy
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       width,
     );
+    await page
+      .getByRole('navigation', { name: 'Mitori room sections' })
+      .getByRole('link', { name: 'Competitions', exact: true })
+      .click();
+    const collections = page.getByRole('navigation', { name: 'Competition collections' });
+    await collections.getByRole('link', { name: '2026', exact: true }).click();
+    await expect(page.getByRole('heading', { name: '2026', exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    );
+    if (width === 320 || width === 1440) {
+      const competitionAxe = await new AxeBuilder({ page }).analyze();
+      expect(
+        competitionAxe.violations.filter(
+          ({ impact }) => impact === 'critical' || impact === 'serious',
+        ),
+      ).toEqual([]);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({
+        path: testInfo.outputPath(`competitions-${width}.png`),
+        fullPage: true,
+      });
+    }
+    await collections.getByRole('link', { name: 'AJKC finals (mens)', exact: true }).click();
+    await expect(
+      page.getByRole('heading', { name: 'AJKC finals (mens)', exact: true }),
+    ).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    );
+    await collections.getByRole('link', { name: 'AJKC finals (womens)', exact: true }).click();
+    await expect(
+      page.getByRole('heading', { name: 'AJKC finals (womens)', exact: true }),
+    ).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    );
+    if (width === 320 || width === 1440) {
+      const womensAxe = await new AxeBuilder({ page }).analyze();
+      expect(
+        womensAxe.violations.filter(({ impact }) => impact === 'critical' || impact === 'serious'),
+      ).toEqual([]);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({
+        path: testInfo.outputPath(`womens-finals-${width}.png`),
+        fullPage: true,
+      });
+    }
   }
 });
