@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect } from '@playwright/test';
 
+import { MITORI_VIDEOS } from '../src/features/mitori/mitori-videos';
 import { test } from './guest-test';
 import { SyntheticManagedHarness } from './synthetic-managed-harness';
 import { workspaceLink } from './workspace-test-helpers';
@@ -78,7 +79,9 @@ test('signed-in navigation and guest deep links reach the account Mitori room wi
   await expect(
     page.getByRole('heading', { name: 'AJKC finals (mens)', exact: true }),
   ).toBeVisible();
-  await expect(page.locator('.mitori-video-toggle')).toHaveCount(9);
+  await expect(page.locator('.mitori-video-toggle')).toHaveCount(
+    MITORI_VIDEOS['ajkc-finals'].length,
+  );
   await page
     .getByRole('navigation', { name: 'Competition collections' })
     .getByRole('link', { name: 'AJKC finals (womens)', exact: true })
@@ -89,7 +92,9 @@ test('signed-in navigation and guest deep links reach the account Mitori room wi
   await expect(
     page.getByRole('heading', { name: 'AJKC finals (womens)', exact: true }),
   ).toBeVisible();
-  await expect(page.locator('.mitori-video-toggle')).toHaveCount(7);
+  await expect(page.locator('.mitori-video-toggle')).toHaveCount(
+    MITORI_VIDEOS['ajkc-finals-womens'].length,
+  );
   expect(harness.apiCalls.filter((call) => call.method !== 'GET')).toEqual([]);
 });
 
@@ -123,7 +128,9 @@ test('competition collections support keyboard navigation, history, playlists an
   await sections.getByRole('link', { name: 'Competitions', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { name: '2026', exact: true })).toBeVisible();
-  await expect(page.locator('.mitori-video-toggle')).toHaveCount(6);
+  await expect(page.locator('.mitori-video-toggle')).toHaveCount(
+    MITORI_VIDEOS['competition-2026'].length,
+  );
   await expect(
     page.getByText('Seen marks stay in this browser and don’t sync across devices.'),
   ).toHaveCount(0);
@@ -135,8 +142,9 @@ test('competition collections support keyboard navigation, history, playlists an
   await page.keyboard.press('Enter');
   await expect(finals).toHaveAttribute('aria-current', 'page');
   await expect(page).toHaveURL(/tab=competitions&collection=ajkc-finals$/);
-  await page.locator('.mitori-seen-control input').first().check();
-  await page.locator('.mitori-video-toggle').first().click();
+  const mensSeen = page.getByRole('checkbox', { name: /73rd All Japan Kendo Championship/ });
+  await mensSeen.check();
+  await page.getByRole('button', { name: /73rd All Japan Kendo Championship/ }).click();
   await expect(page.locator('iframe')).toHaveAttribute(
     'src',
     'https://www.youtube-nocookie.com/embed/qYfR983_KwU',
@@ -161,10 +169,10 @@ test('competition collections support keyboard navigation, history, playlists an
   await expect(
     page.getByRole('heading', { name: 'AJKC finals (mens)', exact: true }),
   ).toBeVisible();
-  await expect(page.locator('.mitori-seen-control input').first()).toBeChecked();
+  await expect(mensSeen).toBeChecked();
   await expect(page.locator('iframe')).toHaveCount(0);
   await page.reload();
-  await expect(page.locator('.mitori-seen-control input').first()).toBeChecked();
+  await expect(mensSeen).toBeChecked();
   expect(await page.evaluate(() => localStorage.getItem('kendo-menu-mitori-seen'))).toContain(
     'PLTj3ptu6HjME',
   );
@@ -182,7 +190,7 @@ test('competition collections support keyboard navigation, history, playlists an
   );
   await finals.click();
   await expect(page.locator('iframe')).toHaveCount(0);
-  await expect(page.locator('.mitori-seen-control input').first()).toBeChecked();
+  await expect(mensSeen).toBeChecked();
   await page.goBack();
   await expect(womensSeen).toBeChecked();
   await page.reload();
