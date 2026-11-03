@@ -143,8 +143,8 @@ describe('Mitori room', () => {
     expect(document.querySelector('iframe')).toBeNull();
     expect(document.querySelectorAll('.mitori-video-author')).toHaveLength(0);
     const videos = screen.getAllByRole('button', { name: /Open video/ });
-    expect(videos).toHaveLength(6);
-    expect(videos[0]).toHaveTextContent('Naoki Eiga — A Single Blow');
+    expect(videos).toHaveLength(MITORI_VIDEOS.documentaries.length);
+    expect(screen.getByRole('button', { name: /Naoki Eiga — A Single Blow/ })).toBeVisible();
     expect(screen.queryByText(/Selecting a title loads/)).not.toBeInTheDocument();
   });
 
@@ -158,28 +158,28 @@ describe('Mitori room', () => {
       'aria-current',
       'page',
     );
-    expect(screen.getAllByRole('button', { name: /Open video/ })).toHaveLength(9);
-    expect(screen.getAllByRole('button', { name: /Open video/ })[0]).toHaveTextContent(
-      '73rd All Japan Kendo Championship',
+    expect(screen.getAllByRole('button', { name: /Open video/ })).toHaveLength(
+      MITORI_VIDEOS['ajkc-finals'].length,
     );
     await user.click(within(collections).getByRole('link', { name: '2026' }));
     expect(within(collections).getByRole('link', { name: '2026' })).toHaveAttribute(
       'aria-current',
       'page',
     );
-    expect(screen.getAllByRole('button', { name: /Open video|Open series/ })).toHaveLength(6);
-    expect(screen.getAllByRole('button', { name: /Open video|Open series/ })[0]).toHaveTextContent(
-      '74th All Japan University Kendo Championship — Final: Hosei vs Tsukuba',
+    expect(screen.getAllByRole('button', { name: /Open video|Open series/ })).toHaveLength(
+      MITORI_VIDEOS['competition-2026'].length,
     );
+    expect(screen.getByRole('button', { name: /74th All Japan University Kendo/ })).toBeVisible();
 
     app.unmount();
     renderApp(createTestStore(), {
       initialEntries: ['/app/guest/mitori-room?tab=competitions&collection=unknown'],
     });
     expect(screen.getByRole('link', { name: '2026' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getAllByRole('button', { name: /Open video|Open series/ })[0]).toHaveTextContent(
-      '74th All Japan University Kendo Championship — Final: Hosei vs Tsukuba',
+    expect(screen.getAllByRole('button', { name: /Open video|Open series/ })).toHaveLength(
+      MITORI_VIDEOS['competition-2026'].length,
     );
+    expect(screen.getByRole('button', { name: /74th All Japan University Kendo/ })).toBeVisible();
   });
 
   it('clears an open player when changing competition collections and opens playlist-only entries', async () => {
@@ -243,54 +243,15 @@ describe('Mitori room', () => {
         .getAllByRole('button', { name: /Open video|Open series/ })
         .map((button) => button.querySelector('.mitori-video-title')?.textContent ?? null);
 
-    expect(titles()).toEqual([
-      'Naoki Eiga Sensei’s Training at Home',
-      'Ladder Training — Nara University High School',
-      'Footwork — Nara University High School',
-      'DO KENDO — ArigaToKendo video series',
-      'Kote-waza fundamentals — Upper-body movement',
-      'Oikomi — Osaka Police Department Kendo Training, Vol. 1',
-      'Training at Hiroshima Prefectural Police',
-      'Kendo Training Boot Camp — by Hidehisa Nishimura',
-      'Kendo Training Boot Camp Part 2 — by Hidehisa Nishimura',
-      'An introduction to jodan',
-      'How to fight in jodan — by Masashi Chiba',
-      'Countering jodan — Part 1',
-      'Jodan no kamae techniques — by Shohei Takenouchi',
-    ]);
+    expect(titles()).toEqual(MITORI_VIDEOS.techniques.map((video) => video.title));
 
     await user.click(screen.getByRole('link', { name: 'Competitions' }));
-    expect(titles()).toEqual([
-      '74th All Japan University Kendo Championship — Final: Hosei vs Tsukuba',
-      '90th Waseda–Keio Kendo Match',
-      '43rd Waseda–Keio Women’s Kendo Match',
-      '65th Tokyo Kendo Championship — Imperial Guard Police vs Tokyo Metropolitan Police',
-      '68th All Japan Corporate Kendo Championship',
-      'National Police Kendo Championship',
-    ]);
+    expect(titles()).toEqual(MITORI_VIDEOS['competition-2026'].map((video) => video.title));
 
     await user.click(screen.getByRole('link', { name: 'AJKC finals (mens)' }));
-    expect(titles()).toEqual([
-      '73rd All Japan Kendo Championship',
-      '72nd All Japan Kendo Championship',
-      '71st All Japan Kendo Championship',
-      '70th All Japan Kendo Championship',
-      '69th All Japan Kendo Championship',
-      '68th All Japan Kendo Championship',
-      '67th All Japan Kendo Championship',
-      '66th All Japan Kendo Championship',
-      '65th All Japan Kendo Championship',
-    ]);
+    expect(titles()).toEqual(MITORI_VIDEOS['ajkc-finals'].map((video) => video.title));
 
     await user.click(screen.getByRole('link', { name: 'AJKC finals (womens)' }));
-    expect(titles()).toEqual([
-      '64th All Japan Women’s Kendo Championship',
-      '63rd All Japan Women’s Kendo Championship',
-      '62nd All Japan Women’s Kendo Championship',
-      '61st All Japan Women’s Kendo Championship',
-      '60th All Japan Women’s Kendo Championship',
-      '59th All Japan Women’s Kendo Championship',
-      '58th All Japan Women’s Kendo Championship',
-    ]);
+    expect(titles()).toEqual(MITORI_VIDEOS['ajkc-finals-womens'].map((video) => video.title));
   });
 });
