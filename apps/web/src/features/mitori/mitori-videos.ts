@@ -121,6 +121,11 @@ export const MITORI_VIDEOS: Readonly<
   ],
   'ajkc-finals': [
     {
+      id: 'i3MxJ_ohA9Q',
+      title: '74th All Japan Kendo Championship',
+      author: 'All Japan Kendo Federation',
+    },
+    {
       id: 'qYfR983_KwU',
       title: '73rd All Japan Kendo Championship',
       author: 'All Japan Kendo Federation',
