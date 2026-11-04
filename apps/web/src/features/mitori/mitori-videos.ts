@@ -5,7 +5,106 @@ export interface MitoriVideo {
   readonly playlistId?: string;
 }
 
-// Owner-selected additions checked against YouTube oEmbed on 2026-10-26.
+// Equipment links are curated from the owner’s list and the November 2026 review.
+export const MITORI_EQUIPMENT_CATEGORIES = [
+  'wear-fold',
+  'care-cleaning',
+  'craft-manufacture',
+] as const;
+export type MitoriEquipmentCategory = (typeof MITORI_EQUIPMENT_CATEGORIES)[number];
+export const MITORI_EQUIPMENT_CATEGORY_LABELS: Readonly<Record<MitoriEquipmentCategory, string>> = {
+  'wear-fold': 'Wear & fold',
+  'care-cleaning': 'Care & cleaning',
+  'craft-manufacture': 'Craft & manufacture',
+};
+
+export const MITORI_EQUIPMENT_VIDEOS: Readonly<
+  Record<MitoriEquipmentCategory, readonly MitoriVideo[]>
+> = {
+  'wear-fold': [
+    {
+      id: 'JZaNrPULNxs',
+      title: 'How to Wear a Kendo Uniform (Kendogi & Hakama)',
+      author: 'KendoStar — The Kendo Show',
+    },
+    {
+      id: 'emNrE_zpaLs',
+      title: 'How to Fold a Hakama',
+      author: 'Hyakushu Budogu',
+    },
+    {
+      id: 'DHXAmGiVWKs',
+      title: 'How to Wear Kendo Bogu (Armor)',
+      author: 'KendoStar — The Kendo Show',
+    },
+    {
+      id: 'B6ZTzJ4z6qY',
+      title: 'Shaping Men for a Clean Chakuso',
+      author: 'Yokosuka Ippondo',
+    },
+    {
+      id: 'x2wDiPeRooQ',
+      title: 'Uchimura Ryoichi’s Preparation — 65th All Japan Championship',
+      author: 'tv2ne1',
+    },
+  ],
+  'care-cleaning': [
+    {
+      id: 'mT9bLCrCmBE',
+      title: 'How to Wash Your Hakama',
+      author: 'Shogun Kendogu',
+    },
+    {
+      id: 'bArHeGBovGw',
+      title: 'How to Wash Your Keikogi',
+      author: 'Shogun Kendogu',
+    },
+    {
+      id: 'x_wdTWBMSEM',
+      title: 'How to Take Care of Your Kendo Bogu',
+      author: 'Paul Shin',
+    },
+    {
+      id: 'l4HwKDj6B-g',
+      title: 'Cleaning and Drying Men with Kensen',
+      author: 'BUSHIZO TV',
+    },
+  ],
+  'craft-manufacture': [
+    {
+      id: 'Lp3q9jxvH7c',
+      title: 'How Bushu-Ichi Kendogi and Hakama Are Made',
+      author: 'Kendo Nippon',
+    },
+    {
+      id: 'fil2vMZ6Vd4',
+      title: 'How Kendo Bogu Is Made',
+      author: 'Process X',
+    },
+    {
+      id: 'oyxUrPb_Fqw',
+      title: 'Inside a Bogu Factory with Yuta Esaki',
+      author: 'BUSHIDO',
+    },
+    {
+      id: '3VHGGHrdruc',
+      title: 'Exploring Kendo Equipment: Materials & Process',
+      author: 'Japanese Academy of Budo',
+    },
+    {
+      id: 'mL8uxqjL5aU',
+      title: 'THE MAKING: How Kendo Equipment Is Made',
+      author: 'JST Science Channel',
+    },
+    {
+      id: '3MuXjrp6xhc',
+      title: 'Inside the Mitsuboshi Kuji Factory',
+      author: 'LET’S KENDO',
+    },
+  ],
+};
+
+// Original Mitori selections checked against YouTube oEmbed on 2026-10-26.
 export const MITORI_VIDEOS: Readonly<
   Record<
     | 'techniques'

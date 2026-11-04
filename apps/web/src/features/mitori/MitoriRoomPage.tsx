@@ -1,5 +1,5 @@
-import { useState, type ReactElement } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { GlossaryPage } from '../glossary/GlossaryPage';
 import { SourcesPage } from '../sources/SourcesPage';
@@ -8,7 +8,13 @@ import {
   readMitoriSeenState,
   type MitoriSeenState,
 } from '../../lib/mitori-seen';
-import { MITORI_VIDEOS } from './mitori-videos';
+import {
+  MITORI_EQUIPMENT_CATEGORIES,
+  MITORI_EQUIPMENT_CATEGORY_LABELS,
+  MITORI_EQUIPMENT_VIDEOS,
+  MITORI_VIDEOS,
+  type MitoriEquipmentCategory,
+} from './mitori-videos';
 import type { MitoriVideo } from './mitori-videos';
 
 const MITORI_TABS = [
@@ -16,6 +22,7 @@ const MITORI_TABS = [
   'competitions',
   'documentaries',
   'kata',
+  'equipment',
   'resources',
   'glossary',
 ] as const;
@@ -23,9 +30,9 @@ type MitoriTab = (typeof MITORI_TABS)[number];
 const COMPETITION_COLLECTIONS = ['2026', 'ajkc-finals', 'ajkc-finals-womens'] as const;
 type CompetitionCollection = (typeof COMPETITION_COLLECTIONS)[number];
 const MITORI_VIDEO_IDS: ReadonlySet<string> = new Set(
-  Object.values(MITORI_VIDEOS)
-    .flat()
-    .map(({ id }) => id),
+  [...Object.values(MITORI_VIDEOS).flat(), ...Object.values(MITORI_EQUIPMENT_VIDEOS).flat()].map(
+    ({ id }) => id,
+  ),
 );
 
 const TAB_LABELS: Readonly<Record<MitoriTab, string>> = {
@@ -33,6 +40,7 @@ const TAB_LABELS: Readonly<Record<MitoriTab, string>> = {
   competitions: 'Competitions',
   documentaries: 'Documentaries',
   kata: 'Kata',
+  equipment: 'Equipment',
   resources: 'Resources',
   glossary: 'Glossary',
 };
@@ -49,6 +57,10 @@ function isMitoriTab(value: string | null): value is MitoriTab {
 
 function isCompetitionCollection(value: string | null): value is CompetitionCollection {
   return value !== null && COMPETITION_COLLECTIONS.some((collection) => collection === value);
+}
+
+function isMitoriEquipmentCategory(value: string | null): value is MitoriEquipmentCategory {
+  return value !== null && MITORI_EQUIPMENT_CATEGORIES.some((category) => category === value);
 }
 
 function VideoList({
@@ -166,6 +178,7 @@ function VideoList({
 
 export function MitoriRoomPage(): ReactElement {
   const location = useLocation();
+  const navigate = useNavigate();
   const [seenState, setSeenState] = useState<MitoriSeenState>(() =>
     readMitoriSeenState(() => window.localStorage, MITORI_VIDEO_IDS),
   );
@@ -176,6 +189,36 @@ export function MitoriRoomPage(): ReactElement {
   const selectedCollection: CompetitionCollection = isCompetitionCollection(rawCollection)
     ? rawCollection
     : '2026';
+  const rawEquipmentCategory = searchParams.get('category');
+  const selectedEquipmentCategory: MitoriEquipmentCategory | null =
+    selectedTab === 'equipment' && isMitoriEquipmentCategory(rawEquipmentCategory)
+      ? rawEquipmentCategory
+      : null;
+  const equipmentCategoryLinks = useRef<Record<MitoriEquipmentCategory, HTMLAnchorElement | null>>({
+    'wear-fold': null,
+    'care-cleaning': null,
+    'craft-manufacture': null,
+  });
+  const equipmentBackButton = useRef<HTMLButtonElement | null>(null);
+  const previousEquipmentCategory = useRef<MitoriEquipmentCategory | null>(null);
+  const equipmentSelectionPending = useRef(false);
+  useEffect(() => {
+    if (selectedTab !== 'equipment') {
+      previousEquipmentCategory.current = null;
+      return;
+    }
+    if (selectedEquipmentCategory !== null) {
+      if (equipmentSelectionPending.current) equipmentBackButton.current?.focus();
+      equipmentSelectionPending.current = false;
+      previousEquipmentCategory.current = selectedEquipmentCategory;
+      return;
+    }
+    const previousCategory = previousEquipmentCategory.current;
+    if (previousCategory !== null) {
+      equipmentCategoryLinks.current[previousCategory]?.focus();
+      previousEquipmentCategory.current = null;
+    }
+  }, [selectedEquipmentCategory, selectedTab]);
   const handleSeenChange = (videoId: string, seen: boolean): void => {
     const seenVideoIds = new Set(seenState.seenVideoIds);
     if (seen) {
@@ -199,6 +242,13 @@ export function MitoriRoomPage(): ReactElement {
         {MITORI_TABS.map((tab) => {
           const search = new URLSearchParams(location.search);
           search.set('tab', tab);
+          if (
+            tab !== 'equipment' ||
+            selectedTab !== 'equipment' ||
+            selectedEquipmentCategory !== null
+          ) {
+            search.delete('category');
+          }
 
           return (
             <Link
@@ -258,6 +308,67 @@ export function MitoriRoomPage(): ReactElement {
             onSeenChange={handleSeenChange}
             canPersist={seenState.canPersist}
           />
+        ) : null}
+        {selectedTab === 'equipment' && selectedEquipmentCategory === null ? (
+          <nav className="mitori-equipment-picker" aria-label="Equipment categories">
+            {MITORI_EQUIPMENT_CATEGORIES.map((category, index) => {
+              const search = new URLSearchParams(location.search);
+              search.set('tab', 'equipment');
+              search.set('category', category);
+
+              return (
+                <Link
+                  className={`mitori-equipment-bubble mitori-equipment-bubble--${index + 1}`}
+                  key={category}
+                  ref={(element) => {
+                    equipmentCategoryLinks.current[category] = element;
+                  }}
+                  onClick={(event) => {
+                    if (
+                      event.button === 0 &&
+                      !event.metaKey &&
+                      !event.ctrlKey &&
+                      !event.shiftKey &&
+                      !event.altKey
+                    ) {
+                      equipmentSelectionPending.current = true;
+                    }
+                  }}
+                  to={{ pathname: location.pathname, search: `?${search.toString()}` }}
+                >
+                  {MITORI_EQUIPMENT_CATEGORY_LABELS[category]}
+                </Link>
+              );
+            })}
+          </nav>
+        ) : null}
+        {selectedTab === 'equipment' && selectedEquipmentCategory !== null ? (
+          <div className="mitori-equipment-detail" key={selectedEquipmentCategory}>
+            <button
+              className="mitori-equipment-back"
+              type="button"
+              ref={equipmentBackButton}
+              onClick={() => {
+                const search = new URLSearchParams(location.search);
+                search.set('tab', 'equipment');
+                search.delete('category');
+                void navigate(
+                  { pathname: location.pathname, search: `?${search.toString()}` },
+                  { replace: true },
+                );
+              }}
+            >
+              Back to Equipment
+            </button>
+            <VideoList
+              key={selectedEquipmentCategory}
+              videos={MITORI_EQUIPMENT_VIDEOS[selectedEquipmentCategory]}
+              title={MITORI_EQUIPMENT_CATEGORY_LABELS[selectedEquipmentCategory]}
+              seenVideoIds={seenState.seenVideoIds}
+              onSeenChange={handleSeenChange}
+              canPersist={seenState.canPersist}
+            />
+          </div>
         ) : null}
         {selectedTab === 'resources' ? <SourcesPage embedded /> : null}
         {selectedTab === 'glossary' ? <GlossaryPage embedded /> : null}

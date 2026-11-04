@@ -56,6 +56,110 @@ test('Mitori room supports keyboard video selection, URL history and lazy privat
   await expect(page.getByRole('contentinfo', { name: 'Site footer' })).toHaveCount(0);
 });
 
+test('Equipment categories animate accessibly, restore focus and support direct links', async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.route(/https:\/\/(?:www\.)?(?:youtube(?:-nocookie)?\.com|i\.ytimg\.com)\//, (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Video</title>' }),
+  );
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/app/guest/mitori-room?tab=equipment');
+  const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+  await notice.getByRole('button', { name: 'Got it' }).click();
+
+  const categories = page.getByRole('navigation', { name: 'Equipment categories' });
+  await expect(categories.getByRole('link')).toHaveText([
+    'Wear & fold',
+    'Care & cleaning',
+    'Craft & manufacture',
+  ]);
+  await page.screenshot({
+    path: testInfo.outputPath('equipment-chooser-1440.png'),
+    fullPage: true,
+  });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1440);
+  const careBox = await categories.getByRole('link', { name: 'Care & cleaning' }).boundingBox();
+  const craftBox = await categories
+    .getByRole('link', { name: 'Craft & manufacture' })
+    .boundingBox();
+  if (careBox === null || craftBox === null)
+    throw new Error('Expected the lower equipment bubbles.');
+  expect(careBox.x + careBox.width).toBeLessThanOrEqual(craftBox.x);
+
+  const craft = categories.getByRole('link', { name: 'Craft & manufacture' });
+  await craft.focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/tab=equipment&category=craft-manufacture$/);
+  await expect(
+    page.getByRole('heading', { name: 'Craft & manufacture', exact: true }),
+  ).toBeVisible();
+  const back = page.getByRole('button', { name: 'Back to Equipment' });
+  await expect(back).toBeFocused();
+  await expect(page.locator('.mitori-equipment-detail')).toHaveCSS('animation-name', 'none');
+  const mitsuboshi = page.getByRole('checkbox', {
+    name: 'Seen: Inside the Mitsuboshi Kuji Factory',
+  });
+  await mitsuboshi.check();
+  const mitsuboshiVideo = page.getByRole('button', { name: /Inside the Mitsuboshi Kuji Factory/ });
+  await page.screenshot({ path: testInfo.outputPath('equipment-craft-1440.png'), fullPage: true });
+  await mitsuboshiVideo.click();
+  await expect(page.locator('iframe')).toHaveAttribute(
+    'src',
+    'https://www.youtube-nocookie.com/embed/3MuXjrp6xhc',
+  );
+  const axe = await new AxeBuilder({ page }).analyze();
+  expect(
+    axe.violations.filter(({ impact }) => impact === 'critical' || impact === 'serious'),
+  ).toEqual([]);
+
+  await back.click();
+  await expect(page.locator('iframe')).toHaveCount(0);
+  const restoredCategories = page.getByRole('navigation', { name: 'Equipment categories' });
+  const restoredCraft = restoredCategories.getByRole('link', { name: 'Craft & manufacture' });
+  await expect(restoredCraft).toBeFocused();
+  await restoredCraft.click();
+  await expect(mitsuboshi).toBeChecked();
+  await page.getByRole('button', { name: 'Back to Equipment' }).click();
+  const afterSeenCheck = page.getByRole('navigation', { name: 'Equipment categories' });
+  await afterSeenCheck.getByRole('link', { name: 'Care & cleaning' }).click();
+  await expect(page).toHaveURL(/tab=equipment&category=care-cleaning$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/tab=equipment$/);
+  await expect(page.getByRole('navigation', { name: 'Equipment categories' })).toBeVisible();
+
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: testInfo.outputPath('equipment-chooser-320.png') });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+  const mobileCategories = page.getByRole('navigation', { name: 'Equipment categories' });
+  const mobileCareBox = await mobileCategories
+    .getByRole('link', { name: 'Care & cleaning' })
+    .boundingBox();
+  const mobileCraftBox = await mobileCategories
+    .getByRole('link', { name: 'Craft & manufacture' })
+    .boundingBox();
+  if (mobileCareBox === null || mobileCraftBox === null) {
+    throw new Error('Expected the lower equipment bubbles at mobile width.');
+  }
+  expect(mobileCareBox.x + mobileCareBox.width).toBeLessThanOrEqual(mobileCraftBox.x);
+  await mobileCategories.getByRole('link', { name: 'Wear & fold' }).click();
+  await expect(page.getByRole('heading', { name: 'Wear & fold', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('checkbox', { name: 'Seen: How to Wear a Kendo Uniform (Kendogi & Hakama)' }),
+  ).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('equipment-wear-320.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+
+  await page.goto('/app/guest/mitori-room?tab=equipment&category=care-cleaning');
+  await expect(page.getByRole('heading', { name: 'Care & cleaning', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('checkbox', { name: 'Seen: How to Take Care of Your Kendo Bogu' }),
+  ).toBeVisible();
+  await page.goto('/app/guest/mitori-room?tab=equipment&category=unknown');
+  await expect(page.getByRole('navigation', { name: 'Equipment categories' })).toBeVisible();
+});
+
 test('signed-in navigation and guest deep links reach the account Mitori room without saving', async ({
   page,
 }) => {
@@ -122,6 +226,7 @@ test('competition collections support keyboard navigation, history, playlists an
     'Competitions',
     'Documentaries',
     'Kata',
+    'Equipment',
     'Resources',
     'Glossary',
   ]);
