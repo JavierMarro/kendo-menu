@@ -19,7 +19,15 @@ describe('Mitori room', () => {
       within(sections)
         .getAllByRole('link')
         .map((link) => link.textContent),
-    ).toEqual(['General', 'Competitions', 'Documentaries', 'Kata', 'Resources', 'Glossary']);
+    ).toEqual([
+      'General',
+      'Competitions',
+      'Documentaries',
+      'Kata',
+      'Equipment',
+      'Resources',
+      'Glossary',
+    ]);
     expect(document.querySelector('iframe')).toBeNull();
     const first = screen.getByRole('button', { name: /Oikomi/ });
     await user.click(first);
@@ -70,6 +78,59 @@ describe('Mitori room', () => {
   it('falls back to General for an unknown section', () => {
     renderApp(createTestStore(), { initialEntries: ['/app/guest/mitori-room?tab=unknown'] });
     expect(screen.getByRole('heading', { name: 'General', level: 2 })).toBeVisible();
+  });
+
+  it('opens equipment categories, restores keyboard focus, and retains seen marks', async () => {
+    const user = userEvent.setup();
+    renderApp(createTestStore(), {
+      initialEntries: ['/app/guest/mitori-room?tab=equipment'],
+    });
+    const categories = screen.getByRole('navigation', { name: 'Equipment categories' });
+    const wear = within(categories).getByRole('link', { name: 'Wear & fold' });
+    expect(within(categories).getAllByRole('link')).toHaveLength(3);
+
+    wear.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('heading', { name: 'Wear & fold', level: 2 })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Back to Equipment' })).toHaveFocus();
+    const hakama = screen.getByRole('checkbox', { name: 'Seen: How to Fold a Hakama' });
+    await user.click(hakama);
+    const foldHakama = screen.getByRole('button', { name: /How to Fold a Hakama/ });
+    await user.click(foldHakama);
+    expect(document.querySelector('iframe')).toHaveAttribute(
+      'src',
+      'https://www.youtube-nocookie.com/embed/emNrE_zpaLs',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Back to Equipment' }));
+    expect(document.querySelector('iframe')).toBeNull();
+    const restoredCategories = screen.getByRole('navigation', { name: 'Equipment categories' });
+    const restoredWear = within(restoredCategories).getByRole('link', { name: 'Wear & fold' });
+    expect(restoredWear).toHaveFocus();
+    await user.click(within(restoredCategories).getByRole('link', { name: 'Care & cleaning' }));
+    expect(screen.getByRole('heading', { name: 'Care & cleaning', level: 2 })).toBeVisible();
+    expect(
+      screen.getByRole('checkbox', { name: 'Seen: How to Wash Your Hakama' }),
+    ).not.toBeChecked();
+    expect(window.localStorage.getItem(MITORI_SEEN_STORAGE_KEY)).toContain('emNrE_zpaLs');
+  });
+
+  it('opens an equipment category directly and treats an unknown category as the chooser', () => {
+    const app = renderApp(createTestStore(), {
+      initialEntries: ['/app/guest/mitori-room?tab=equipment&category=craft-manufacture'],
+    });
+    expect(screen.getByRole('heading', { name: 'Craft & manufacture', level: 2 })).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: /Inside the Mitsuboshi Kuji Factory/ }),
+    ).toBeVisible();
+
+    app.unmount();
+    renderApp(createTestStore(), {
+      initialEntries: ['/app/guest/mitori-room?tab=equipment&category=unknown'],
+    });
+    expect(screen.getByRole('navigation', { name: 'Equipment categories' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Wear & fold' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: /Inside the Mitsuboshi Kuji Factory/ })).toBeNull();
   });
 
   it('remembers Seen marks across video sections and lets the user clear them', async () => {

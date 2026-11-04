@@ -86,23 +86,26 @@ authentication, account saves, guest persistence or one-time guest-copy decision
 
 ### Mitori room
 
-“Learn through observation.” The guest and account `/mitori-room` routes share six URL-addressable
-sections: General (default), Competitions, Documentaries, Kata, Resources and Glossary. The sprout
+“Learn through observation.” The guest and account `/mitori-room` routes share seven URL-addressable
+sections: General (default), Competitions, Documentaries, Kata, Equipment, Resources and Glossary. The sprout
 navigation item sits after Library on desktop and between Library and User on mobile. Sections
 replace only the page content and use ordinary page scrolling; section links scroll horizontally
 when needed. Existing `tab=techniques` links continue to select General.
 
-General, Documentaries, Kata and Competitions use an owner-curated local video list. Competitions
-contains the 2026, AJKC finals (mens) and AJKC finals (womens) collections, with 2026 selected by
-default. Existing `collection=ajkc-finals` links select the men’s collection. Videos and playlists
-share one row pattern with YouTube player controls. Documentaries omit uploader credits. Opening a
-title loads one privacy-enhanced YouTube embed without autoplay; closing it or changing sections or
-collections removes the player. A YouTube fallback link remains available for restricted or
-unavailable playback. Videos require internet access and may contain YouTube adverts; no YouTube API
-key or automatic live detection is used. Resources and Glossary reuse the public pages’ content,
-retaining glossary search. Public Sources and Glossary routes remain available. Practitioners can
-mark any listed video Seen; these marks use separate browser local storage on guest and account pages
-and do not sync across devices or change training data or saves.
+General, Documentaries, Kata, Equipment and Competitions use owner-curated local video lists.
+Equipment opens a triangular category picker for Wear & fold, Care & cleaning, and Craft &
+manufacture; choosing one updates the URL and reveals its video list, while Back to Equipment returns
+to the picker and restores keyboard focus. Competitions contains the 2026, AJKC finals (mens) and
+AJKC finals (womens) collections, with 2026 selected by default. Existing `collection=ajkc-finals`
+links select the men’s collection. Videos and playlists share one row pattern with YouTube player
+controls. Documentaries omit uploader credits. Opening a title loads one privacy-enhanced YouTube
+embed without autoplay; closing it or changing sections or collections removes the player. A YouTube
+fallback link remains available for restricted or unavailable playback. Videos require internet
+access and may contain YouTube adverts; no YouTube API key or automatic live detection is used.
+Resources and Glossary reuse the public pages’ content, retaining glossary search. Public Sources
+and Glossary routes remain available. Practitioners can mark any listed video Seen; these marks use
+separate browser local storage on guest and account pages and do not sync across devices or change
+training data or saves.
 
 ## Online account journey
 
