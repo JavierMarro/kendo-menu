@@ -1,4 +1,3 @@
-import { createServer as createNetServer } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createAccountAuthorization } from '../auth/account-authorization.js';
@@ -11,6 +10,7 @@ import type {
 } from '../persistence/managed-account-contracts.js';
 import { createAccount } from './account.js';
 import { createNodeApp } from '../node-app.js';
+import { withNodeListener } from '../test-node-listener.js';
 
 const ORIGIN = 'https://app.example.test';
 const TOKEN = 'header.payload.signature';
@@ -81,38 +81,15 @@ function initialized(account: ManagedAccountInitialization): AccountInitializati
   return { status: 'initialized', account };
 }
 
-async function withNodeListener<T>(
+async function withAccountListener<T>(
   account: ReturnType<typeof createAccount>,
   operation: (url: string) => Promise<T>,
 ): Promise<T> {
-  const reservation = createNetServer();
-  await new Promise<void>((resolve, reject) => {
-    reservation.once('error', reject);
-    reservation.listen(0, '127.0.0.1', resolve);
-  });
-  const address = reservation.address();
-  if (address === null || typeof address === 'string') throw new Error('TEST_PORT_UNAVAILABLE');
-  await new Promise<void>((resolve, reject) =>
-    reservation.close((error) => (error === undefined ? resolve() : reject(error))),
-  );
   const unused = { handle: () => Promise.resolve(new Response(null, { status: 404 })) };
-  const app = createNodeApp({ account, dashboard: unused, adoption: unused });
-  let listener: unknown;
-  await new Promise<void>((resolve) => {
-    app.listen({ hostname: '127.0.0.1', port: address.port }, (server) => {
-      listener = server;
-      resolve();
-    });
-  });
-  if (typeof listener !== 'object' || listener === null)
-    throw new Error('TEST_LISTENER_UNAVAILABLE');
-  const stop: unknown = Reflect.get(listener, 'stop');
-  if (typeof stop !== 'function') throw new Error('TEST_LISTENER_STOP_UNAVAILABLE');
-  try {
-    return await operation(`http://127.0.0.1:${address.port}/api/account`);
-  } finally {
-    Reflect.apply(stop, listener, [true]);
-  }
+  return withNodeListener(
+    createNodeApp({ account, dashboard: unused, adoption: unused }),
+    (baseUrl) => operation(`${baseUrl}/api/account`),
+  );
 }
 
 describe('managed account endpoint', () => {
@@ -318,7 +295,7 @@ describe('managed account initialization through Node HTTP', () => {
     const h = harness(
       initialized({ ...ACCOUNT, created: true, copyOpportunityId: OPPORTUNITY_ID }),
     );
-    await withNodeListener(h.account, async (url) => {
+    await withAccountListener(h.account, async (url) => {
       const response = await fetch(url, {
         method: 'POST',
         headers: { authorization: `Bearer ${TOKEN}`, origin: ORIGIN },
@@ -337,7 +314,7 @@ describe('managed account initialization through Node HTTP', () => {
 
   it('rejects a non-empty POST without creating an account', async () => {
     const h = harness(initialized({ ...ACCOUNT, created: false }));
-    await withNodeListener(h.account, async (url) => {
+    await withAccountListener(h.account, async (url) => {
       const response = await fetch(url, {
         method: 'POST',
         headers: { authorization: `Bearer ${TOKEN}`, origin: ORIGIN },
@@ -357,7 +334,7 @@ describe('managed account initialization through Node HTTP', () => {
     },
   ])('authorizes before inspecting a Node POST body: $status', async ({ headers, status }) => {
     const h = harness(initialized({ ...ACCOUNT, created: false }));
-    await withNodeListener(h.account, async (url) => {
+    await withAccountListener(h.account, async (url) => {
       const response = await fetch(url, { method: 'POST', headers, body: '{}' });
       expect(response.status).toBe(status);
       expect(h.initializeManagedAccount).not.toHaveBeenCalled();

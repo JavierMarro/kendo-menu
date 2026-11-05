@@ -1,11 +1,11 @@
 import { createServer as createHttpServer } from 'node:http';
-import { createServer as createNetServer } from 'node:net';
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 
 import vercelHandler from '../../../api/[...path].js';
 import { createNodeApp } from './node-app.js';
+import { withNodeListener } from './test-node-listener.js';
 import { createManagedIdentityVerifier } from './auth/managed-identity.js';
 
 const TEST_ISSUER = 'http://127.0.0.1:44001';
@@ -69,51 +69,6 @@ const CREDENTIAL_SCENARIOS: readonly CredentialScenario[] = [
     expected: 'unverified-email',
   },
 ];
-
-function stopNodeListener(server: unknown): void {
-  if (typeof server !== 'object' || server === null) throw new Error('NODE_LISTENER_UNAVAILABLE');
-  const stop: unknown = Reflect.get(server, 'stop');
-  if (typeof stop !== 'function') throw new Error('NODE_LISTENER_STOP_UNAVAILABLE');
-  Reflect.apply(stop, server, [true]);
-}
-
-async function reserveLoopbackPort(): Promise<number> {
-  const server = createNetServer();
-  return new Promise<number>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (address === null || typeof address === 'string') {
-        server.close();
-        reject(new Error('LOOPBACK_PORT_UNAVAILABLE'));
-        return;
-      }
-      server.close((error) => {
-        if (error === undefined) resolve(address.port);
-        else reject(error);
-      });
-    });
-  });
-}
-
-async function withNodeListener<T>(
-  app: ReturnType<typeof createNodeApp>,
-  operation: (baseUrl: string) => Promise<T>,
-): Promise<T> {
-  const port = await reserveLoopbackPort();
-  let listener: unknown;
-  await new Promise<void>((resolve) => {
-    app.listen({ hostname: '127.0.0.1', port }, (server) => {
-      listener = server;
-      resolve();
-    });
-  });
-  try {
-    return await operation(`http://127.0.0.1:${port}`);
-  } finally {
-    stopNodeListener(listener);
-  }
-}
 
 describe('isolated managed identity proof route', () => {
   afterEach(async () => {
