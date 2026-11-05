@@ -1,3 +1,5 @@
+import { readFile, writeFile } from 'node:fs/promises';
+
 import { expect, type Page } from '@playwright/test';
 
 import { test } from './guest-test';
@@ -35,6 +37,56 @@ async function establishServiceWorkerControl(page: Page): Promise<void> {
 }
 
 test.describe('production PWA shell', () => {
+  test('offers a waiting update, lets visitors defer it, and activates it on request', async ({
+    page,
+  }, testInfo) => {
+    await page.goto('/app');
+    await establishServiceWorkerControl(page);
+    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+      key: STORAGE_KEY,
+      value: OFFLINE_STORAGE_RAW,
+    });
+    const workerPath = new URL('../dist/sw.js', import.meta.url);
+    const originalWorker = await readFile(workerPath, 'utf8');
+    try {
+      // A byte change simulates a deployment using the real generated worker and update lifecycle.
+      await writeFile(workerPath, `${originalWorker}\n// PWA update lifecycle test\n`);
+      await page.evaluate(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      const prompt = page.getByRole('region', { name: 'Update available' });
+      await expect(prompt).toBeVisible();
+      await page.setViewportSize({ width: 320, height: 720 });
+      await expect(prompt.getByRole('button', { name: 'Update', exact: true })).toBeInViewport();
+      await expect(prompt.getByRole('button', { name: 'Later', exact: true })).toBeInViewport();
+      await page.screenshot({ path: testInfo.outputPath('update-prompt-mobile.png') });
+      await prompt.getByRole('button', { name: 'Later', exact: true }).click();
+      await expect(prompt).toBeHidden();
+      expect(
+        await page.evaluate(async () => Boolean((await navigator.serviceWorker.ready).waiting)),
+      ).toBe(true);
+
+      await page.reload();
+      await expect(prompt).toBeVisible();
+      await Promise.all([
+        page.waitForEvent('domcontentloaded'),
+        prompt.getByRole('button', { name: 'Update', exact: true }).click(),
+      ]);
+      await expect(prompt).toBeHidden();
+      await expect(
+        page.getByRole('heading', { name: 'Plan the keiko you need today' }),
+      ).toBeVisible();
+      expect(
+        await page.evaluate(async () => (await navigator.serviceWorker.ready).waiting),
+      ).toBeNull();
+      expect(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)).toBe(
+        OFFLINE_STORAGE_RAW,
+      );
+    } finally {
+      await writeFile(workerPath, originalWorker);
+    }
+  });
+
   test('serves the required manifest fields and PNG icon sizes', async ({ page, request }) => {
     const manifestResponse = await request.get('/manifest.webmanifest');
     expect(manifestResponse.ok()).toBe(true);

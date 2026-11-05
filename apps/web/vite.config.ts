@@ -10,7 +10,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'prompt',
-      injectRegister: 'script-defer',
+      injectRegister: false,
       scope: '/',
       includeAssets: ['icons/kendo-menu-favicon.png', 'icons/kendo-menu-apple-touch-icon.png'],
       manifest: {

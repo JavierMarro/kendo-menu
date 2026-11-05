@@ -684,6 +684,42 @@ a {
   box-shadow: 0 1rem 3rem rgba(3, 10, 22, 0.42);
 }
 
+.service-worker-update {
+  position: fixed;
+  z-index: 40;
+  top: max(var(--space-4), env(safe-area-inset-top));
+  right: max(var(--space-4), env(safe-area-inset-right));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: center;
+  width: min(38rem, calc(100vw - var(--space-8)));
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid rgba(200, 155, 60, 0.72);
+  border-radius: var(--radius-lg);
+  color: var(--muted-strong);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow);
+}
+
+.service-worker-update p {
+  margin: 0;
+  font-size: var(--type-14);
+  line-height: 1.5;
+}
+
+.service-worker-update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+@media (max-width: 600px) {
+  .service-worker-update {
+    grid-template-columns: 1fr;
+  }
+}
+
 body:has(.cookie-notice) .install-promo {
   bottom: calc(var(--space-4) + 6.5rem);
 }

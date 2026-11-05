@@ -121,7 +121,7 @@ describe('Mitori room', () => {
     });
     expect(screen.getByRole('heading', { name: 'Craft & manufacture', level: 2 })).toBeVisible();
     expect(
-      screen.getByRole('button', { name: /Inside the Mitsuboshi Kuji Factory/ }),
+      screen.getByRole('button', { name: /Inside the Kuji Factory — Mitsuboshi/ }),
     ).toBeVisible();
 
     app.unmount();
@@ -130,7 +130,9 @@ describe('Mitori room', () => {
     });
     expect(screen.getByRole('navigation', { name: 'Equipment categories' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Wear & fold' })).toBeVisible();
-    expect(screen.queryByRole('button', { name: /Inside the Mitsuboshi Kuji Factory/ })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /Inside the Kuji Factory — Mitsuboshi/ }),
+    ).toBeNull();
   });
 
   it('remembers Seen marks across video sections and lets the user clear them', async () => {
