@@ -190,6 +190,11 @@ Workbox navigation fallback is limited to the app's supported document paths and
 independent of LocalStorage. Installation is prompt-based; the service worker is an asset/navigation
 boundary, not a data-sync or backup system.
 
+The browser registers the worker through the PWA virtual module. A waiting version shows an
+Update/Later prompt in ordinary tabs and installed windows. Update activates it and reloads the
+page; Later leaves the current page running. The prompt reminds visitors to save first and does
+not save or recover in-memory drafts automatically.
+
 The browser analytics gate sends one GoatCounter image request per document only after managed
 identity checking confirms signed out. Verified accounts, unresolved identity and offline state
 send no analytics. Its `/count?p=...` request uses a static route allow-list, drops query strings

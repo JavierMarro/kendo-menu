@@ -98,10 +98,12 @@ test('Equipment categories animate accessibly, restore focus and support direct 
   await expect(back).toBeFocused();
   await expect(page.locator('.mitori-equipment-detail')).toHaveCSS('animation-name', 'none');
   const mitsuboshi = page.getByRole('checkbox', {
-    name: 'Seen: Inside the Mitsuboshi Kuji Factory',
+    name: 'Seen: Inside the Kuji Factory — Mitsuboshi',
   });
   await mitsuboshi.check();
-  const mitsuboshiVideo = page.getByRole('button', { name: /Inside the Mitsuboshi Kuji Factory/ });
+  const mitsuboshiVideo = page.getByRole('button', {
+    name: /Inside the Kuji Factory — Mitsuboshi/,
+  });
   await page.screenshot({ path: testInfo.outputPath('equipment-craft-1440.png'), fullPage: true });
   await mitsuboshiVideo.click();
   await expect(page.locator('iframe')).toHaveAttribute(

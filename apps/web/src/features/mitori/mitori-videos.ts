@@ -60,6 +60,11 @@ export const MITORI_EQUIPMENT_VIDEOS: Readonly<
       author: 'Shogun Kendogu',
     },
     {
+      id: 'sjBw1eDa5_c',
+      title: 'How to Tie a Shinai’s Tsuru and Nakayui',
+      author: 'Eiko Budogu',
+    },
+    {
       id: 'x_wdTWBMSEM',
       title: 'How to Take Care of Your Kendo Bogu',
       author: 'Paul Shin',
@@ -73,32 +78,37 @@ export const MITORI_EQUIPMENT_VIDEOS: Readonly<
   'craft-manufacture': [
     {
       id: 'Lp3q9jxvH7c',
-      title: 'How Bushu-Ichi Kendogi and Hakama Are Made',
+      title: 'How Bushu-Ichi Kendogi and Hakama Are Made — Nogawa Dyeing & Weaving',
       author: 'Kendo Nippon',
     },
     {
       id: 'fil2vMZ6Vd4',
-      title: 'How Kendo Bogu Is Made',
+      title: 'How Kendo Bogu Is Made — Nihon Kendogu Seisakusho (NKS)',
       author: 'Process X',
     },
     {
+      id: '3d7Xeslaec8',
+      title: 'Crafting Bogu in Miyazaki — Nihon Kendogu Seisakusho (NKS) / All Japan Budogu',
+      author: 'AJB TV — All Japan Budogu',
+    },
+    {
       id: 'oyxUrPb_Fqw',
-      title: 'Inside a Bogu Factory with Yuta Esaki',
+      title: 'Inside a Bogu Factory with Yuta Esaki — Philippine Budogu / Kendogu Esaki',
       author: 'BUSHIDO',
     },
     {
       id: '3VHGGHrdruc',
-      title: 'Exploring Kendo Equipment: Materials & Process',
+      title: 'Exploring Kendo Equipment: Materials & Process — Tokyo Shobudo',
       author: 'Japanese Academy of Budo',
     },
     {
       id: 'mL8uxqjL5aU',
-      title: 'THE MAKING: How Kendo Equipment Is Made',
+      title: 'THE MAKING: How Kendo Equipment Is Made — Tokyo Shobudo',
       author: 'JST Science Channel',
     },
     {
       id: '3MuXjrp6xhc',
-      title: 'Inside the Mitsuboshi Kuji Factory',
+      title: 'Inside the Kuji Factory — Mitsuboshi',
       author: 'LET’S KENDO',
     },
   ],
@@ -137,6 +147,11 @@ export const MITORI_VIDEOS: Readonly<
       title: 'DO KENDO — ArigaToKendo video series',
       author: 'Taro Ariga',
       playlistId: 'PLo-0mQzBLAedFJd50atliNPH3F7pZyLIx',
+    },
+    {
+      id: 'oZ3M3mbWZ9A',
+      title: 'Kendo Techniques — Part 1',
+      author: 'White belt',
     },
     {
       id: 'aulhj0doWUc',
@@ -219,11 +234,6 @@ export const MITORI_VIDEOS: Readonly<
     },
   ],
   'ajkc-finals': [
-    {
-      id: 'i3MxJ_ohA9Q',
-      title: '74th All Japan Kendo Championship',
-      author: 'All Japan Kendo Federation',
-    },
     {
       id: 'qYfR983_KwU',
       title: '73rd All Japan Kendo Championship',
