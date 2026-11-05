@@ -7,10 +7,10 @@ import { App } from '../app/App';
 import {
   PersistenceContext,
   type PersistenceContextValue,
-} from '../features/persistence/PersistenceGate';
+} from '../features/persistence/persistence-context';
 import { TrainingStoreProvider } from '../lib/training-store-context';
 import { ManagedAuthProvider } from '../features/account/ManagedAuthProvider';
-import { WorkspaceContextProvider } from '../lib/workspace-context';
+import { WorkspaceContextProvider } from '../lib/workspace-context-provider';
 
 export const TEST_STORAGE_KEY = 'kendo-menu-test';
 

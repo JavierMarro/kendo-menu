@@ -11,7 +11,7 @@ import {
   type ManagedIdentityState,
 } from '../../lib/managed-auth-context';
 import { TrainingStoreProvider } from '../../lib/training-store-context';
-import { WorkspaceContextProvider } from '../../lib/workspace-context';
+import { WorkspaceContextProvider } from '../../lib/workspace-context-provider';
 import { GuestWorkspaceRoute } from './GuestWorkspaceRoute';
 import { PersistenceContext, type PersistenceContextValue } from './persistence-context';
 

@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { asTrainingSetId, type DashboardEntry, type TrainingSet } from '@kendo-menu/domain';
 
 import { DashboardTrainingSet } from '../features/dashboard/DashboardPage';
-import { PersistenceContext } from '../features/persistence/PersistenceGate';
-import { WorkspaceContextProvider } from '../lib/workspace-context';
+import { PersistenceContext } from '../features/persistence/persistence-context';
+import { WorkspaceContextProvider } from '../lib/workspace-context-provider';
 import { renderApp, createTestStore, TestMemoryStorage } from './test-utils';
 
 const INTERNATIONAL_DOJO_ID = asTrainingSetId('international-dojo-2-hour-session');

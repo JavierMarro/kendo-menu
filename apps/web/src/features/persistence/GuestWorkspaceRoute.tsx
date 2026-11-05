@@ -8,11 +8,8 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { WorkspaceShell } from '../../components/WorkspaceShell';
 import { GuestApplicationRecovery } from '../errors/ApplicationRecovery';
 import { useOptionalTrainingStoreApi } from '../../lib/training-store-context';
-import {
-  useOptionalWorkspace,
-  WorkspaceContextProvider,
-  type WorkspaceContextValue,
-} from '../../lib/workspace-context';
+import { useOptionalWorkspace, type WorkspaceContextValue } from '../../lib/workspace-context';
+import { WorkspaceContextProvider } from '../../lib/workspace-context-provider';
 import { useManagedAuth } from '../../lib/managed-auth-context';
 import { getPersistenceStatusLabel, usePersistenceStatus } from './persistence-context';
 

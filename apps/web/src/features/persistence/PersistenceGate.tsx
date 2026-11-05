@@ -37,11 +37,6 @@ import { createWorkspaceCoordinator } from '../../lib/workspace-coordination';
 import { TrainingStoreProvider } from '../../lib/training-store-provider';
 import { useDataRouterMode } from '../../lib/router-context';
 
-// Compatibility exports keep existing provider test utilities stable while the context lives separately.
-/* eslint-disable-next-line react-refresh/only-export-components */
-export { PersistenceContext, usePersistenceStatus } from './persistence-context';
-export type { PersistenceContextValue } from './persistence-context';
-
 type TrainingStoreHook = ReturnType<typeof createTrainingStore>;
 
 interface TrainingStoreBundle {

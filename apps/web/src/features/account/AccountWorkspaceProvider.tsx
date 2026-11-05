@@ -19,9 +19,10 @@ import { WorkspaceShell } from '../../components/WorkspaceShell';
 import { useManagedAuth } from '../../lib/managed-auth-context';
 import { TrainingStoreProvider } from '../../lib/training-store-provider';
 import { createAccountDraftController } from '../../lib/account-draft';
-import { AccountSetupContext } from './AccountSetupPage';
+import { AccountSetupContext } from './account-setup-context';
 import { AccountSaveStatus, AccountUnsavedWarning } from './AccountUnsavedWarning';
-import { WorkspaceContextProvider, type WorkspaceContextValue } from '../../lib/workspace-context';
+import type { WorkspaceContextValue } from '../../lib/workspace-context';
+import { WorkspaceContextProvider } from '../../lib/workspace-context-provider';
 import type { ManagedAccountInitialization, ManagedAccountRecord } from '../../lib/account-api';
 
 type AccountDraftController = ReturnType<typeof createAccountDraftController>;

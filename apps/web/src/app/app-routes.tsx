@@ -3,7 +3,7 @@
  * different workspace owners. Legacy app paths enter guest routes, while shared document behavior
  * remains with RouteRoot above the tree.
  */
-import { Navigate, useLocation, type RouteObject } from 'react-router-dom';
+import type { RouteObject } from 'react-router-dom';
 
 import { RouteErrorRethrow } from '../features/errors/RouteErrorRethrow';
 import { CreateDrillPage, EditDrillPage } from '../features/custom-sets/CreateDrillPage';
@@ -24,29 +24,14 @@ import {
   AccountWorkspaceIndex,
 } from '../features/account/AccountWorkspaceProvider';
 import { GuestWorkspaceRoute } from '../features/persistence/GuestWorkspaceRoute';
-import { AppLayout, RouteRoot, StandaloneNotFoundPage } from './app-route-components';
-
-function LandingRedirect() {
-  const location = useLocation();
-  return <Navigate replace to={{ pathname: '/app', search: location.search }} />;
-}
-
-function LegacyWorkspaceRedirect({
-  page,
-}: {
-  readonly page: 'dashboard' | 'library' | 'drills/new' | 'library/:trainingSetId';
-}) {
-  const location = useLocation();
-  const pathname =
-    page === 'library/:trainingSetId'
-      ? `/app/guest/library${location.pathname.slice('/app/library'.length)}`
-      : `/app/guest/${page}`;
-  return <Navigate replace to={{ pathname, search: location.search, hash: location.hash }} />;
-}
-
-function WorkspaceIndex() {
-  return <Navigate replace to="dashboard" />;
-}
+import {
+  AppLayout,
+  RouteRoot,
+  StandaloneNotFoundPage,
+  LandingRedirect,
+  LegacyWorkspaceRedirect,
+  WorkspaceIndex,
+} from './app-route-components';
 
 export const appRoutes: RouteObject[] = [
   {

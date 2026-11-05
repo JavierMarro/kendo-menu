@@ -15,11 +15,8 @@ vi.mock('../../lib/account-adoption', () => ({
 }));
 
 import type { AdoptionDecisionRequest } from '../../lib/account-api';
-import {
-  AccountSetupContext,
-  AccountSetupPage,
-  type AccountSetupContextValue,
-} from './AccountSetupPage';
+import { AccountSetupContext, type AccountSetupContextValue } from './account-setup-context';
+import { AccountSetupPage } from './AccountSetupPage';
 
 const ACCOUNT = '01234567-89ab-4cde-8fab-0123456789ab';
 const OPPORTUNITY = '01234567-89ab-4cde-8fab-0123456789ae';

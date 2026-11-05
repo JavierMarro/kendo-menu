@@ -2,8 +2,8 @@ import type { TrainingStoreApi } from '@kendo-menu/store';
 import { MemoryRouter } from 'react-router-dom';
 
 import { DashboardTrainingSet } from '../src/features/dashboard/DashboardPage';
-import { PersistenceContext } from '../src/features/persistence/PersistenceGate';
-import { WorkspaceContextProvider } from '../src/lib/workspace-context';
+import { PersistenceContext } from '../src/features/persistence/persistence-context';
+import { WorkspaceContextProvider } from '../src/lib/workspace-context-provider';
 import { DrillDetailContent } from '../src/features/library/DrillDetailContent';
 import {
   TrainingStoreProvider,
