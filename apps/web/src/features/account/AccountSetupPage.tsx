@@ -2,38 +2,17 @@
  * Presents the one-time guest-copy choice from the account route's in-memory creation handoff.
  * Yes revalidates the guest source before dispatch, and every exit leaves guest storage untouched.
  */
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import {
-  type AdoptionDecisionRequest,
-  type ManagedAccountInitialization,
-} from '../../lib/account-api';
+import type { AdoptionDecisionRequest } from '../../lib/account-api';
+import { AccountSetupContext, type AccountSetupContextValue } from './account-setup-context';
 import {
   createGuestCopyRequest,
   guestCopyFitsRequestLimit,
   readGuestCopySnapshot,
   type GuestCopySnapshot,
 } from '../../lib/account-adoption';
-
-export interface AccountSetupContextValue {
-  readonly accountId: string;
-  readonly handoff: ManagedAccountInitialization | null;
-  readonly revision: string;
-  readonly catalogueVersion: string | null;
-  readonly ready: boolean;
-  readonly identityVerified: boolean;
-  readonly dashboardStatus:
-    'loading' | 'ready' | 'unavailable' | 'auth-hidden' | 'load-error' | 'disposed';
-  readonly dashboardLoaded: boolean;
-  readonly submit: (
-    request: AdoptionDecisionRequest,
-  ) => Promise<'accepted' | 'declined' | 'unconfirmed' | 'abandoned' | 'stale'>;
-  readonly release: () => void;
-  readonly reload: () => Promise<void>;
-}
-
-export const AccountSetupContext = createContext<AccountSetupContextValue | null>(null);
 
 function useSetup(): AccountSetupContextValue {
   const value = useContext(AccountSetupContext);

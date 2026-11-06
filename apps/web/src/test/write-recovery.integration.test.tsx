@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_TRAINING_SETS } from '@kendo-menu/domain';
 import { classifyTrainingStorageValue } from '@kendo-menu/store';
 
-import { PersistenceGate, usePersistenceStatus } from '../features/persistence/PersistenceGate';
+import { PersistenceGate } from '../features/persistence/PersistenceGate';
+import { usePersistenceStatus } from '../features/persistence/persistence-context';
 import { useTrainingStore, useTrainingStoreApi } from '../lib/training-store-context';
 import * as persistence from '../lib/training-persistence';
 

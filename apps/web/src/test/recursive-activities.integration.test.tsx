@@ -9,10 +9,10 @@ import {
   useTrainingStoreApi,
 } from '../lib/training-store-context';
 import { DialogShell } from '../components/DialogShell';
-import { PersistenceContext } from '../features/persistence/PersistenceGate';
+import { PersistenceContext } from '../features/persistence/persistence-context';
 import { DashboardTrainingSet } from '../features/dashboard/DashboardPage';
 import { DrillDetailContent } from '../features/library/DrillDetailContent';
-import { WorkspaceContextProvider } from '../lib/workspace-context';
+import { WorkspaceContextProvider } from '../lib/workspace-context-provider';
 import { createTestStore, TestMemoryStorage } from './test-utils';
 import { RECURSIVE_TRAINING_SET } from './recursive-activity.fixture';
 

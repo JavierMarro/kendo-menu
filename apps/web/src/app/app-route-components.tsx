@@ -6,6 +6,7 @@
 import { Component, useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import {
   NavigationType,
+  Navigate,
   useNavigate,
   Outlet,
   useLocation,
@@ -336,4 +337,26 @@ export function StandaloneNotFoundPage() {
       <NotFoundPage />
     </main>
   );
+}
+
+export function LandingRedirect() {
+  const location = useLocation();
+  return <Navigate replace to={{ pathname: '/app', search: location.search }} />;
+}
+
+export function LegacyWorkspaceRedirect({
+  page,
+}: {
+  readonly page: 'dashboard' | 'library' | 'drills/new' | 'library/:trainingSetId';
+}) {
+  const location = useLocation();
+  const pathname =
+    page === 'library/:trainingSetId'
+      ? `/app/guest/library${location.pathname.slice('/app/library'.length)}`
+      : `/app/guest/${page}`;
+  return <Navigate replace to={{ pathname, search: location.search, hash: location.hash }} />;
+}
+
+export function WorkspaceIndex() {
+  return <Navigate replace to="dashboard" />;
 }

@@ -3,7 +3,7 @@
  * pages. It is UI coordination only: identity proof, persistence, and authorization remain with
  * the account and guest providers.
  */
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext } from 'react';
 
 export type WorkspaceKind = 'guest' | 'account';
 
@@ -34,16 +34,6 @@ export function useWorkspace(): WorkspaceContextValue {
   const value = useOptionalWorkspace();
   if (value === null) throw new Error('This page must be inside a workspace route.');
   return value;
-}
-
-export function WorkspaceContextProvider({
-  value,
-  children,
-}: {
-  readonly value: WorkspaceContextValue;
-  readonly children: ReactNode;
-}) {
-  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 
 export function workspacePath(

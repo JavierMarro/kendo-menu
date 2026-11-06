@@ -9,7 +9,7 @@ import { asTrainingSetId } from '@kendo-menu/domain';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { PersistenceContext } from '../features/persistence/persistence-context';
 import { TrainingStoreProvider } from '../lib/training-store-context';
-import { WorkspaceContextProvider } from '../lib/workspace-context';
+import { WorkspaceContextProvider } from '../lib/workspace-context-provider';
 import { createTestStore } from './test-utils';
 
 const INTERNATIONAL_DOJO_ID = asTrainingSetId('international-dojo-2-hour-session');

@@ -7,8 +7,9 @@ import { TRAINING_STORE_PERSISTENCE_VERSION } from '@kendo-menu/store';
 
 import { App } from '../app/App';
 import { ManagedAuthProvider } from '../features/account/ManagedAuthProvider';
-import { PersistenceGate, usePersistenceStatus } from '../features/persistence/PersistenceGate';
-import { WorkspaceContextProvider } from '../lib/workspace-context';
+import { PersistenceGate } from '../features/persistence/PersistenceGate';
+import { usePersistenceStatus } from '../features/persistence/persistence-context';
+import { WorkspaceContextProvider } from '../lib/workspace-context-provider';
 import {
   inspectBrowserTrainingStorage,
   resetBrowserTrainingStorage,
