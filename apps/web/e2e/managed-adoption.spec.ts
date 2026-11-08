@@ -28,7 +28,12 @@ async function createGuestAndStartAccount(
     .getByRole('link', { name: /Create (new menu|a training session)/i })
     .click();
   await page.getByLabel('Session name').fill('Guest copy source');
+  await page.getByRole('button', { name: 'Add activity' }).click();
   await page.getByLabel('Activity name').fill('Kamae');
+  await page
+    .getByRole('group', { name: 'Exercises' })
+    .getByRole('button', { name: 'Add exercise' })
+    .click();
   await page.getByLabel('Exercise name').fill('Suburi');
   await page.getByLabel('Repetitions').fill('12');
   await page.getByRole('button', { name: 'Save session to dashboard' }).click();

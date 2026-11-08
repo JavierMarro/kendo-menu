@@ -994,17 +994,10 @@ describe('KendoMenu application flows', () => {
     expect(document.title).toBe('Create session · KendoMenu');
     expect(screen.getByLabelText('Session name')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Session details' })).toBeVisible();
-    expect(screen.getByRole('heading', { name: 'Activities' })).toBeVisible();
-    const firstActivity = screen.getByRole('group', { name: 'Activity 1' });
-    expect(firstActivity).toBeVisible();
-    expect(within(firstActivity).getByRole('group', { name: 'Exercises' })).toBeVisible();
-    const activityHeader = firstActivity.querySelector<HTMLElement>('.builder-activity-header');
-    if (activityHeader === null) {
-      throw new Error('Expected the activity card header.');
-    }
-    expect(within(activityHeader).getByRole('heading', { name: 'Activity 1' })).toBeVisible();
-    expect(within(activityHeader).getByRole('button', { name: 'Remove activity' })).toBeDisabled();
-    expect(activityHeader.parentElement).toBe(firstActivity);
+    expect(screen.getByRole('heading', { name: 'Your keiko' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Add activity' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Add exercise' })).toBeVisible();
+    expect(screen.queryByRole('group', { name: 'Activity 1' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save session to dashboard' })).toBeVisible();
     const backLink = screen.getByRole('link', { name: 'Back to keiko library' });
     expect(backLink).toBeVisible();
@@ -1883,16 +1876,18 @@ describe('KendoMenu application flows', () => {
       await user.type(screen.getByLabelText('Session name'), 'Monday footwork');
       await user.type(screen.getByLabelText('Description (optional)'), 'A short solo session.');
       await user.selectOptions(screen.getByLabelText('Intensity (optional)'), 'intense-drill');
+      await user.click(screen.getByRole('button', { name: 'Add activity' }));
       const activity = screen.getByRole('group', { name: 'Activity 1' });
       await user.type(within(activity).getByLabelText('Activity name'), 'Footwork');
       const exercises = within(activity).getByRole('group', { name: 'Exercises' });
+      await user.click(within(exercises).getByRole('button', { name: /Add exercise/ }));
       await user.type(
         within(exercises).getByLabelText('Exercise name'),
         'Big step forward and back',
       );
       await user.type(within(exercises).getByLabelText('Repetitions'), '24');
 
-      await user.click(within(exercises).getByRole('button', { name: 'Add exercise' }));
+      await user.click(within(exercises).getByRole('button', { name: /Add exercise/ }));
       const exerciseNames = within(exercises).getAllByLabelText('Exercise name');
       const measurements = within(exercises).getAllByLabelText('Measurement');
       const secondExerciseName = exerciseNames[1];
@@ -1946,19 +1941,19 @@ describe('KendoMenu application flows', () => {
     renderApp(createTestStore(), { initialEntries: ['/app/drills/new'] });
 
     await user.type(screen.getByLabelText('Session name'), 'Tuesday basics');
+    await user.click(screen.getByRole('button', { name: 'Add activity' }));
     const firstActivity = screen.getByRole('group', { name: 'Activity 1' });
-    expect(within(firstActivity).getByRole('button', { name: 'Remove activity' })).toBeDisabled();
+    expect(within(firstActivity).getByRole('button', { name: 'Remove activity' })).toBeEnabled();
     await user.type(within(firstActivity).getByLabelText('Activity name'), 'Basics');
 
     const firstExerciseGroup = within(firstActivity).getByRole('group', {
       name: 'Exercises',
     });
-    expect(
-      within(firstExerciseGroup).getByRole('button', { name: 'Remove exercise' }),
-    ).toBeDisabled();
+    expect(within(firstExerciseGroup).getByRole('button', { name: /Add exercise/ })).toBeVisible();
+    await user.click(within(firstExerciseGroup).getByRole('button', { name: /Add exercise/ }));
     await user.type(within(firstExerciseGroup).getByLabelText('Exercise name'), 'Suburi');
     await user.type(within(firstExerciseGroup).getByLabelText('Repetitions'), '30');
-    await user.click(within(firstExerciseGroup).getByRole('button', { name: 'Add exercise' }));
+    await user.click(within(firstExerciseGroup).getByRole('button', { name: /Add exercise/ }));
 
     const expandedFirstActivity = screen.getByRole('group', { name: 'Activity 1' });
     const expandedExerciseGroup = within(expandedFirstActivity).getByRole('group', {
@@ -1988,6 +1983,7 @@ describe('KendoMenu application flows', () => {
     await user.click(screen.getByRole('button', { name: 'Add activity' }));
     const secondActivity = screen.getByRole('group', { name: 'Activity 2' });
     await user.type(within(secondActivity).getByLabelText('Activity name'), 'Finish');
+    await user.click(within(secondActivity).getByRole('button', { name: /Add exercise/ }));
     await user.type(within(secondActivity).getByLabelText('Exercise name'), 'Kirikaeshi');
     await user.type(within(secondActivity).getByLabelText('Repetitions'), '8');
 
@@ -2015,7 +2011,7 @@ describe('KendoMenu application flows', () => {
     expect(within(remainingFirstActivity).getByLabelText('Duration unit')).toHaveValue('seconds');
     expect(
       within(remainingFirstActivity).getByRole('button', { name: 'Remove exercise' }),
-    ).toBeDisabled();
+    ).toBeEnabled();
 
     await user.click(within(secondActivity).getByRole('button', { name: 'Remove activity' }));
     expect(screen.queryByRole('group', { name: 'Activity 2' })).not.toBeInTheDocument();
@@ -2026,7 +2022,7 @@ describe('KendoMenu application flows', () => {
     );
     expect(
       within(remainingFirstActivity).getByRole('button', { name: 'Remove activity' }),
-    ).toBeDisabled();
+    ).toBeEnabled();
   });
 
   it('does not partially create a custom drill when a repetition is outside the allowed range', async () => {
@@ -2035,7 +2031,13 @@ describe('KendoMenu application flows', () => {
     renderApp(store, { initialEntries: ['/app/drills/new'] });
 
     await user.type(screen.getByLabelText('Session name'), 'Invalid repetitions');
+    await user.click(screen.getByRole('button', { name: 'Add activity' }));
     await user.type(screen.getByLabelText('Activity name'), 'Footwork');
+    await user.click(
+      within(screen.getByRole('group', { name: 'Exercises' })).getByRole('button', {
+        name: /Add exercise/,
+      }),
+    );
     await user.type(screen.getByLabelText('Exercise name'), 'Too many steps');
     await user.type(screen.getByLabelText('Repetitions', { exact: true }), '501');
     await user.click(screen.getByRole('button', { name: 'Save session to dashboard' }));
@@ -2067,7 +2069,13 @@ describe('KendoMenu application flows', () => {
     renderApp(store, { initialEntries: ['/app/drills/new'] });
 
     await user.type(screen.getByLabelText('Session name'), 'Measurement checks');
+    await user.click(screen.getByRole('button', { name: 'Add activity' }));
     await user.type(screen.getByLabelText('Activity name'), 'Timing');
+    await user.click(
+      within(screen.getByRole('group', { name: 'Exercises' })).getByRole('button', {
+        name: /Add exercise/,
+      }),
+    );
     await user.type(screen.getByLabelText('Exercise name'), 'Jigeiko');
 
     const measurement = screen.getByLabelText('Measurement');
@@ -2078,6 +2086,8 @@ describe('KendoMenu application flows', () => {
     expect(repetitions).toHaveAttribute('inputmode', 'numeric');
 
     await user.type(repetitions, '501');
+    expect(repetitions).toHaveAttribute('aria-invalid', 'false');
+    expect(screen.queryByText('Enter a whole number from 0 to 500.')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Save session to dashboard' }));
     expect(repetitions).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getAllByText('Enter a whole number from 0 to 500.')).toHaveLength(2);

@@ -148,7 +148,7 @@ test.describe('accessibility and responsive layout', () => {
     const notice = page.getByRole('complementary', { name: 'Cookie notice' });
     if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
     await expect(page.getByRole('heading', { name: 'Session details' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Activities' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your keiko' })).toBeVisible();
 
     const backLink = page.getByRole('link', { name: 'Back to keiko library' });
     await expect(backLink).toHaveText('← Back to keiko library');
@@ -161,9 +161,11 @@ test.describe('accessibility and responsive layout', () => {
     await expectNoBlockingAxeViolations(page);
 
     await page.getByLabel('Session name').fill('Accessible mixed session');
+    await page.getByRole('button', { name: 'Add activity' }).click();
     const firstActivity = page.getByRole('group', { name: 'Activity 1' });
     await firstActivity.getByLabel('Activity name').fill('Main practice');
     const firstExercises = firstActivity.getByRole('group', { name: 'Exercises' });
+    await firstExercises.getByRole('button', { name: 'Add exercise' }).click();
     await firstExercises.getByLabel('Exercise name').fill('Suburi');
     await firstExercises.getByLabel('Repetitions', { exact: true }).fill('30');
     await firstExercises.getByRole('button', { name: 'Add exercise' }).click();
@@ -175,6 +177,7 @@ test.describe('accessibility and responsive layout', () => {
     await page.getByRole('button', { name: 'Add activity' }).click();
     const secondActivity = page.getByRole('group', { name: 'Activity 2' });
     await secondActivity.getByLabel('Activity name').fill('Finish');
+    await secondActivity.getByRole('button', { name: 'Add exercise' }).click();
     await secondActivity.getByLabel('Exercise name').fill('Kirikaeshi');
     await secondActivity.getByLabel('Repetitions', { exact: true }).fill('8');
     await expectNoBlockingAxeViolations(page);
@@ -204,10 +207,12 @@ test.describe('accessibility and responsive layout', () => {
     await expect(page.getByRole('button', { name: 'Add activity' })).toBeFocused();
 
     await page.getByLabel('Session name').fill('Long zoomed session name for keyboard practice');
+    await page.getByRole('button', { name: 'Add activity' }).click();
     const activity = page.getByRole('group', { name: 'Activity 1' });
     await activity
       .getByLabel('Activity name')
       .fill('Warm-up and jigeiko preparation with a deliberately long name');
+    await activity.getByRole('button', { name: 'Add exercise' }).click();
     await activity
       .getByLabel('Exercise name')
       .fill('Continuous jigeiko with rotating partners and deliberate recovery');
@@ -470,11 +475,13 @@ test.describe('accessibility and responsive layout', () => {
       await page
         .getByLabel('Session name')
         .fill('A deliberately long session name for responsive builder verification');
+      await page.getByRole('button', { name: 'Add activity' }).click();
       const firstActivity = page.getByRole('group', { name: 'Activity 1' });
       await firstActivity
         .getByLabel('Activity name')
         .fill('Warm-up, suburi, footwork, and partner preparation');
       const firstExercises = firstActivity.getByRole('group', { name: 'Exercises' });
+      await firstExercises.getByRole('button', { name: 'Add exercise' }).click();
       await firstExercises
         .getByLabel('Exercise name')
         .fill('A very long exercise name that must remain within the activity card');
@@ -486,6 +493,7 @@ test.describe('accessibility and responsive layout', () => {
       await page.getByRole('button', { name: 'Add activity' }).click();
       const secondActivity = page.getByRole('group', { name: 'Activity 2' });
       await secondActivity.getByLabel('Activity name').fill('Closing practice');
+      await secondActivity.getByRole('button', { name: 'Add exercise' }).click();
       await secondActivity.getByLabel('Exercise name').fill('Kirikaeshi');
       await secondActivity.getByLabel('Repetitions', { exact: true }).fill('8');
       await page.getByRole('button', { name: 'Save session to dashboard' }).click();

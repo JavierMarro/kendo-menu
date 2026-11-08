@@ -2926,22 +2926,6 @@ textarea[aria-invalid='true'] {
   line-height: 1.5;
 }
 
-.builder-activities-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
-.builder-activities-heading > div {
-  min-width: 0;
-}
-
-.builder-activities-heading > .secondary-button {
-  flex: 0 0 auto;
-}
-
 .builder-basic-fields {
   display: grid;
   grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
@@ -3029,11 +3013,6 @@ textarea[aria-invalid='true'] {
   font-weight: 700;
 }
 
-.builder-exercise-group > .field-hint {
-  max-width: 60ch;
-  margin: var(--space-1) 0 0;
-}
-
 .builder-step-list {
   margin-top: var(--space-2);
 }
@@ -3045,6 +3024,12 @@ textarea[aria-invalid='true'] {
   gap: var(--space-2);
   align-items: start;
   padding-block: var(--space-2);
+}
+
+.builder-step--standalone {
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 0.85fr) minmax(0, 1fr) minmax(0, 0.85fr);
+  margin-top: var(--space-2);
+  padding-bottom: 0;
 }
 
 .builder-step .step-number {
@@ -3080,7 +3065,7 @@ textarea[aria-invalid='true'] {
 }
 
 .builder-actions {
-  padding-top: 0;
+  justify-content: flex-end;
 }
 
 .field-hint {
@@ -3857,6 +3842,23 @@ textarea[aria-invalid='true'] {
     display: none;
   }
 
+  .builder-step--standalone {
+    grid-template-columns: minmax(0, 1fr) minmax(9rem, 11rem);
+  }
+
+  .builder-step--standalone .builder-step-name-field {
+    grid-column: 1 / -1;
+  }
+
+  .builder-step--standalone .builder-measurement-field,
+  .builder-step--standalone .builder-duration-unit-field {
+    grid-column: 1;
+  }
+
+  .builder-step--standalone .builder-quantity-field {
+    grid-column: 2;
+  }
+
   .builder-step > .text-button {
     align-self: end;
     justify-self: start;
@@ -3907,15 +3909,12 @@ textarea[aria-invalid='true'] {
 
   .empty-state--dashboard .primary-button,
   .empty-state--dashboard .secondary-button,
-  .builder-activities-heading > .secondary-button,
   .builder-actions > .primary-button {
     width: 100%;
   }
 
-  .builder-activities-heading {
-    align-items: stretch;
-    flex-direction: column;
-    gap: var(--space-2);
+  .builder-actions > .secondary-button {
+    flex: 1 0 auto;
   }
 
   .builder-basic-fields {
@@ -3937,6 +3936,14 @@ textarea[aria-invalid='true'] {
 
   .builder-step > .text-button {
     align-self: start;
+  }
+
+  .builder-step--standalone {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .builder-step--standalone .field-group {
+    grid-column: 1;
   }
 
   .drill-dialog-layer {

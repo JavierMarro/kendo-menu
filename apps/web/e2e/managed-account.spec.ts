@@ -165,7 +165,12 @@ async function createBuilderMenu(page: Page, name: string): Promise<void> {
     .getByRole('link', { name: /Create (new menu|a training session)/i })
     .click();
   await page.getByLabel('Session name').fill(name);
+  await page.getByRole('button', { name: 'Add activity' }).click();
   await page.getByLabel('Activity name').fill('Footwork');
+  await page
+    .getByRole('group', { name: 'Exercises' })
+    .getByRole('button', { name: 'Add exercise' })
+    .click();
   await page.getByLabel('Exercise name').fill('Suburi');
   await page.getByLabel('Repetitions').fill('10');
   await expect(page.locator('form.builder-form')).not.toHaveAttribute('inert', '');
@@ -632,7 +637,12 @@ test('an offline account builder stays read-only until Retry connection confirms
     .click();
   const sessionName = page.getByLabel('Session name');
   await sessionName.fill('Offline account builder draft');
+  await page.getByRole('button', { name: 'Add activity' }).click();
   await page.getByLabel('Activity name').fill('Offline activity');
+  await page
+    .getByRole('group', { name: 'Exercises' })
+    .getByRole('button', { name: 'Add exercise' })
+    .click();
   await page.getByLabel('Exercise name').fill('Offline exercise');
   const initialDashboardReads = harness.apiCalls.filter(
     (call) =>
@@ -843,7 +853,12 @@ test('the guest builder remains usable and locally saved while offline', async (
   if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
   await context.setOffline(true);
   await page.getByLabel('Session name').fill('Offline guest session');
+  await page.getByRole('button', { name: 'Add activity' }).click();
   await page.getByLabel('Activity name').fill('Guest footwork');
+  await page
+    .getByRole('group', { name: 'Exercises' })
+    .getByRole('button', { name: 'Add exercise' })
+    .click();
   await page.getByLabel('Exercise name').fill('Suburi');
   await page.getByLabel('Repetitions').fill('10');
   await page.getByRole('button', { name: 'Save session to dashboard' }).click();
