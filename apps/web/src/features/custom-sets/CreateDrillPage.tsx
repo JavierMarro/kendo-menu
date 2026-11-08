@@ -4,20 +4,13 @@
  * account submission adds to the in-memory draft for its separate explicit save flow.
  * Workspace dirty-state callbacks keep an unfinished builder draft visible to transition guards.
  */
-import {
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-  type FocusEvent,
-  type FormEvent,
-} from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { flushSync } from 'react-dom';
 
 import {
   isCustomTrainingIntensity,
+  MAX_REPETITIONS,
   TRAINING_DATA_LIMITS,
   type DashboardEntry,
 } from '@kendo-menu/domain';
@@ -27,9 +20,13 @@ import {
   createEditBuilderState,
   createInitialBuilderState,
   getBuilderEditIdentities,
+  getDraftActivityCount,
   parseBuilderState,
+  type BuilderAction,
   type BuilderErrors,
   type BuilderState,
+  type StepDraft,
+  type StepMeasurement,
 } from './builder-state';
 import { useTrainingStore } from '../../lib/training-store-context';
 import { createSavedMenuNavigationState } from '../../lib/navigation-state';
@@ -38,6 +35,11 @@ import { useWorkspace, workspacePath } from '../../lib/workspace-context';
 import { getDashboardTrainingSet } from '../../lib/training-data';
 
 const EMPTY_BUILDER_ERRORS: BuilderErrors = {};
+const MEASUREMENT_LABELS: Record<StepMeasurement, string> = {
+  repetitions: 'Repetitions',
+  sets: 'Sets',
+  duration: 'Duration',
+};
 
 function getErrorTargetId(key: string): string {
   if (key === 'name') {
@@ -116,15 +118,12 @@ function BuilderForm({
   const isEditing = entry !== undefined;
   const [state, dispatch] = useReducer(builderReducer, initialState);
   const [isDirty, setIsDirty] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [submitRequest, setSubmitRequest] = useState(0);
-  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
   const [submitError, setSubmitError] = useState('');
   const errorSummaryRef = useRef<HTMLDivElement>(null);
   const lastFocusedSubmitRequest = useRef(0);
   const isDirtyRef = useRef(false);
-  const isPointerInteractionRef = useRef(false);
-  const pendingTouchedRef = useRef<Set<string>>(new Set());
+  const addedItemRef = useRef<true | string | null>(null);
   const navigate = useNavigate();
   const createCustomTrainingSet = useTrainingStore(
     (store) => store.createCustomTrainingSetAndAddToDashboard,
@@ -135,14 +134,12 @@ function BuilderForm({
   const workspace = useWorkspace();
   const [isSaving, setIsSaving] = useState(false);
   const parseResult = useMemo(() => parseBuilderState(state), [state]);
-  const errors: BuilderErrors = parseResult.success ? EMPTY_BUILDER_ERRORS : parseResult.errors;
-  const draftActivityCount = state.sections.reduce(
-    (total, section) => total + 1 + section.steps.length,
-    0,
-  );
-  const canAddSection =
+  const errors =
+    submitRequest === 0 || parseResult.success ? EMPTY_BUILDER_ERRORS : parseResult.errors;
+  const draftActivityCount = getDraftActivityCount(state);
+  const canAddItem =
     state.sections.length < TRAINING_DATA_LIMITS.customSections &&
-    draftActivityCount + 2 <= TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet;
+    draftActivityCount < TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet;
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -164,41 +161,41 @@ function BuilderForm({
     }
 
     lastFocusedSubmitRequest.current = submitRequest;
-    if (submitted && Object.keys(errors).length > 0) {
+    if (Object.keys(errors).length > 0) {
       errorSummaryRef.current?.focus();
     }
-  }, [errors, submitted, submitRequest]);
+  }, [errors, submitRequest]);
 
-  const update = (action: Parameters<typeof builderReducer>[1]) => {
+  useEffect(() => {
+    const addedTo = addedItemRef.current;
+    if (addedTo === null) return;
+    addedItemRef.current = null;
+
+    const item =
+      addedTo === true
+        ? state.sections.at(-1)
+        : state.sections.find((candidate) => candidate.id === addedTo);
+    if (item === undefined) return;
+    const fieldId =
+      'steps' in item
+        ? addedTo === true
+          ? `section-label-${item.id}`
+          : `step-label-${item.steps.at(-1)?.id}`
+        : `step-label-${item.id}`;
+    document.getElementById(fieldId)?.focus();
+  }, [state.sections]);
+
+  const update = (action: BuilderAction) => {
+    if (action.type === 'add-section' || action.type === 'add-standalone-exercise') {
+      addedItemRef.current = true;
+    } else if (action.type === 'add-step') {
+      addedItemRef.current = action.sectionId;
+    }
     dispatch(action);
     isDirtyRef.current = true;
     setIsDirty(true);
     workspace.builderDirty?.(true);
   };
-
-  const commitPendingTouched = () => {
-    if (pendingTouchedRef.current.size === 0) {
-      return;
-    }
-
-    const pendingFields = [...pendingTouchedRef.current];
-    pendingTouchedRef.current.clear();
-    setTouched((current) => new Set([...current, ...pendingFields]));
-  };
-
-  const markTouched = (event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const fieldName = event.currentTarget.name;
-    if (isPointerInteractionRef.current) {
-      pendingTouchedRef.current.add(fieldName);
-      return;
-    }
-
-    const pendingFields = [...pendingTouchedRef.current, fieldName];
-    pendingTouchedRef.current.clear();
-    setTouched((current) => new Set([...current, ...pendingFields]));
-  };
-
-  const showError = (key: string): boolean => submitted || touched.has(key);
 
   const setBuilderDirtyState = (dirty: boolean) => {
     isDirtyRef.current = dirty;
@@ -211,7 +208,6 @@ function BuilderForm({
     if (isSaving) {
       return;
     }
-    setSubmitted(true);
     setSubmitRequest((request) => request + 1);
     setSubmitError('');
 
@@ -278,24 +274,7 @@ function BuilderForm({
   };
 
   return (
-    <div
-      className="builder-page"
-      onPointerDownCapture={() => {
-        isPointerInteractionRef.current = true;
-      }}
-      onPointerUpCapture={() => {
-        isPointerInteractionRef.current = false;
-      }}
-      onPointerCancelCapture={() => {
-        isPointerInteractionRef.current = false;
-        commitPendingTouched();
-      }}
-      onPointerLeave={() => {
-        isPointerInteractionRef.current = false;
-        commitPendingTouched();
-      }}
-      onClick={commitPendingTouched}
-    >
+    <div className="builder-page">
       <DirtyNavigationBlocker isDirty={isDirty} />
       <header className="page-header builder-header">
         <Link
@@ -319,7 +298,7 @@ function BuilderForm({
       <form className="builder-form" onSubmit={handleSubmit} noValidate inert={!workspace.canEdit}>
         <fieldset className="builder-editable-fields" disabled={!workspace.canEdit}>
           <legend className="sr-only">Session draft fields</legend>
-          {submitted && Object.keys(errors).length > 0 ? (
+          {Object.keys(errors).length > 0 ? (
             <div
               ref={errorSummaryRef}
               className="error-summary"
@@ -362,16 +341,11 @@ function BuilderForm({
                   type="text"
                   maxLength={TRAINING_DATA_LIMITS.nameCharacters}
                   value={state.name}
-                  aria-invalid={showError('name') && errors['name'] !== undefined}
-                  aria-describedby={
-                    showError('name') && errors['name'] !== undefined
-                      ? 'drill-name-error'
-                      : undefined
-                  }
-                  onBlur={markTouched}
+                  aria-invalid={errors['name'] !== undefined}
+                  aria-describedby={errors['name'] !== undefined ? 'drill-name-error' : undefined}
                   onChange={(event) => update({ type: 'set-name', value: event.target.value })}
                 />
-                {showError('name') && errors['name'] !== undefined ? (
+                {errors['name'] !== undefined ? (
                   <span id="drill-name-error" className="form-error">
                     {errors['name']}
                   </span>
@@ -385,18 +359,15 @@ function BuilderForm({
                   value={state.description}
                   rows={2}
                   maxLength={TRAINING_DATA_LIMITS.descriptionCharacters}
-                  aria-invalid={showError('description') && errors['description'] !== undefined}
+                  aria-invalid={errors['description'] !== undefined}
                   aria-describedby={
-                    showError('description') && errors['description'] !== undefined
-                      ? 'drill-description-error'
-                      : undefined
+                    errors['description'] !== undefined ? 'drill-description-error' : undefined
                   }
-                  onBlur={markTouched}
                   onChange={(event) =>
                     update({ type: 'set-description', value: event.target.value })
                   }
                 />
-                {showError('description') && errors['description'] !== undefined ? (
+                {errors['description'] !== undefined ? (
                   <span id="drill-description-error" className="form-error">
                     {errors['description']}
                   </span>
@@ -428,278 +399,124 @@ function BuilderForm({
           </section>
 
           <section className="builder-form-section" aria-labelledby="activities-title">
-            <div className="builder-form-section-heading builder-activities-heading">
-              <div>
-                <h2 id="activities-title">Activities</h2>
-                <p>Add activities and exercises in the order you plan to practise them.</p>
-              </div>
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={!canAddSection}
-                aria-describedby="activities-limit-hint"
-                title={
-                  canAddSection ? undefined : 'The activity limit for this session is reached.'
-                }
-                onClick={() => update({ type: 'add-section' })}
-              >
-                Add activity
-              </button>
-              <span id="activities-limit-hint" className="field-hint">
-                Up to {TRAINING_DATA_LIMITS.customSections} top-level activities,{' '}
-                {TRAINING_DATA_LIMITS.exercisesPerSection} exercises per activity, and{' '}
-                {TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet} activities in total.
-              </span>
+            <div className="builder-form-section-heading">
+              <h2 id="activities-title" tabIndex={-1}>
+                Your keiko
+              </h2>
+              <p>Group related exercises in an activity, or add an exercise on its own.</p>
             </div>
 
+            {state.sections.length === 0 ? (
+              <p className="field-hint">Add your first activity or exercise below.</p>
+            ) : null}
             <div className="builder-sections">
-              {state.sections.map((section, sectionIndex) => {
-                const sectionErrorKey = `section-${section.id}`;
-                const activityTitleId = `activity-title-${section.id}`;
-                const exercisesTitleId = `exercises-title-${section.id}`;
+              {state.sections.map((item, index) => {
+                const isActivity = 'steps' in item;
+                const itemKind = isActivity ? 'Activity' : 'Exercise';
+                const itemTitleId = `builder-item-title-${item.id}`;
+                const sectionErrorKey = `section-${item.id}`;
+                const exercisesErrorKey = `section-steps-${item.id}`;
+                const exercisesTitleId = `exercises-title-${item.id}`;
                 return (
-                  <fieldset
-                    className="builder-section"
-                    key={section.id}
-                    aria-labelledby={activityTitleId}
-                  >
-                    <legend className="sr-only">Activity {sectionIndex + 1}</legend>
+                  <fieldset className="builder-section" key={item.id} aria-labelledby={itemTitleId}>
+                    <legend className="sr-only">
+                      {itemKind} {index + 1}
+                    </legend>
                     <div className="builder-activity-header">
-                      <h3 id={activityTitleId}>Activity {sectionIndex + 1}</h3>
+                      <h3 id={itemTitleId}>
+                        {itemKind} {index + 1}
+                      </h3>
                       <button
                         className="text-button destructive-button"
                         type="button"
-                        disabled={state.sections.length <= 1}
-                        onClick={() => update({ type: 'remove-section', sectionId: section.id })}
+                        onClick={() => update({ type: 'remove-section', sectionId: item.id })}
                       >
-                        Remove activity
+                        Remove {itemKind.toLowerCase()}
                       </button>
                     </div>
-                    <div className="field-group builder-activity-name-field">
-                      <label htmlFor={`section-label-${section.id}`}>Activity name</label>
-                      <input
-                        id={`section-label-${section.id}`}
-                        name={sectionErrorKey}
-                        type="text"
-                        maxLength={TRAINING_DATA_LIMITS.nameCharacters}
-                        value={section.label}
-                        aria-invalid={
-                          showError(sectionErrorKey) && errors[sectionErrorKey] !== undefined
-                        }
-                        aria-describedby={
-                          showError(sectionErrorKey) && errors[sectionErrorKey] !== undefined
-                            ? `${sectionErrorKey}-error`
-                            : undefined
-                        }
-                        onBlur={markTouched}
-                        onChange={(event) =>
-                          update({
-                            type: 'set-section-label',
-                            sectionId: section.id,
-                            value: event.target.value,
-                          })
-                        }
-                      />
-                      {showError(sectionErrorKey) && errors[sectionErrorKey] !== undefined ? (
-                        <span id={`${sectionErrorKey}-error`} className="form-error">
-                          {errors[sectionErrorKey]}
-                        </span>
-                      ) : null}
-                    </div>
+                    {isActivity ? (
+                      <>
+                        <div className="field-group builder-activity-name-field">
+                          <label htmlFor={`section-label-${item.id}`}>Activity name</label>
+                          <input
+                            id={`section-label-${item.id}`}
+                            name={sectionErrorKey}
+                            type="text"
+                            maxLength={TRAINING_DATA_LIMITS.nameCharacters}
+                            value={item.label}
+                            aria-invalid={errors[sectionErrorKey] !== undefined}
+                            aria-describedby={
+                              errors[sectionErrorKey] !== undefined
+                                ? `${sectionErrorKey}-error`
+                                : undefined
+                            }
+                            onChange={(event) =>
+                              update({
+                                type: 'set-section-label',
+                                sectionId: item.id,
+                                value: event.target.value,
+                              })
+                            }
+                          />
+                          {errors[sectionErrorKey] !== undefined ? (
+                            <span id={`${sectionErrorKey}-error`} className="form-error">
+                              {errors[sectionErrorKey]}
+                            </span>
+                          ) : null}
+                        </div>
 
-                    <fieldset className="builder-exercise-group" aria-labelledby={exercisesTitleId}>
-                      <legend id={exercisesTitleId}>Exercises</legend>
-                      <p className="field-hint">
-                        Measure each exercise by repetitions or duration.
-                      </p>
-                      {showError(`section-steps-${section.id}`) &&
-                      errors[`section-steps-${section.id}`] !== undefined ? (
-                        <span
-                          id={`section-steps-${section.id}-error`}
-                          className="form-error"
-                          role="alert"
+                        <fieldset
+                          className="builder-exercise-group"
+                          aria-labelledby={exercisesTitleId}
                         >
-                          {errors[`section-steps-${section.id}`]}
-                        </span>
-                      ) : null}
-                      <ol className="builder-step-list">
-                        {section.steps.map((step, stepIndex) => {
-                          const labelErrorKey = `step-label-${step.id}`;
-                          const repsErrorKey = `step-reps-${step.id}`;
-                          const quantityHintId = `quantity-hint-${step.id}`;
-                          const hasRepsError =
-                            showError(repsErrorKey) && errors[repsErrorKey] !== undefined;
-                          const keepExistingQuantity =
-                            step.activityId !== undefined &&
-                            step.quantityChanged !== true &&
-                            step.reps.length === 0;
-                          const quantityHint = keepExistingQuantity
-                            ? 'Leave blank to keep the existing quantity, including a duration range.'
-                            : step.measurement === 'repetitions'
-                              ? 'Use a whole number from 0 to 500.'
-                              : `Use ${step.durationUnit}; zero and decimal values are supported.`;
-                          return (
-                            <li className="builder-step" key={step.id}>
-                              <span className="step-number" aria-hidden="true">
-                                {stepIndex + 1}
-                              </span>
-                              <div className="field-group builder-step-name-field">
-                                <label htmlFor={`step-label-${step.id}`}>Exercise name</label>
-                                <input
-                                  id={`step-label-${step.id}`}
-                                  name={labelErrorKey}
-                                  type="text"
-                                  maxLength={TRAINING_DATA_LIMITS.nameCharacters}
-                                  value={step.label}
-                                  aria-invalid={
-                                    showError(labelErrorKey) && errors[labelErrorKey] !== undefined
-                                  }
-                                  aria-describedby={
-                                    showError(labelErrorKey) && errors[labelErrorKey] !== undefined
-                                      ? `${labelErrorKey}-error`
-                                      : undefined
-                                  }
-                                  onBlur={markTouched}
-                                  onChange={(event) =>
-                                    update({
-                                      type: 'set-step-label',
-                                      stepId: step.id,
-                                      value: event.target.value,
-                                    })
-                                  }
-                                />
-                                {showError(labelErrorKey) && errors[labelErrorKey] !== undefined ? (
-                                  <span id={`${labelErrorKey}-error`} className="form-error">
-                                    {errors[labelErrorKey]}
+                          <legend id={exercisesTitleId}>Exercises</legend>
+                          {errors[exercisesErrorKey] !== undefined ? (
+                            <span className="form-error">{errors[exercisesErrorKey]}</span>
+                          ) : null}
+                          {item.steps.length > 0 ? (
+                            <ol className="builder-step-list">
+                              {item.steps.map((step, stepIndex) => (
+                                <li className="builder-step" key={step.id}>
+                                  <span className="step-number" aria-hidden="true">
+                                    {stepIndex + 1}
                                   </span>
-                                ) : null}
-                              </div>
-                              <div className="field-group builder-measurement-field">
-                                <label htmlFor={`step-measurement-${step.id}`}>Measurement</label>
-                                <select
-                                  id={`step-measurement-${step.id}`}
-                                  value={step.measurement}
-                                  onChange={(event) =>
-                                    update({
-                                      type: 'set-step-measurement',
-                                      stepId: step.id,
-                                      value:
-                                        event.target.value === 'duration'
-                                          ? 'duration'
-                                          : 'repetitions',
-                                    })
-                                  }
-                                >
-                                  <option value="repetitions">Repetitions</option>
-                                  <option value="duration">Duration</option>
-                                </select>
-                              </div>
-                              <div className="field-group builder-quantity-field">
-                                <label htmlFor={`step-reps-${step.id}`}>
-                                  {step.measurement === 'repetitions' ? 'Repetitions' : 'Duration'}
-                                </label>
-                                <input
-                                  id={`step-reps-${step.id}`}
-                                  name={repsErrorKey}
-                                  type="number"
-                                  min={0}
-                                  max={step.measurement === 'repetitions' ? 500 : undefined}
-                                  step={step.measurement === 'repetitions' ? 1 : 'any'}
-                                  inputMode={
-                                    step.measurement === 'repetitions' ? 'numeric' : 'decimal'
-                                  }
-                                  value={step.reps}
-                                  aria-invalid={hasRepsError}
-                                  aria-describedby={
-                                    hasRepsError
-                                      ? `${quantityHintId} ${repsErrorKey}-error`
-                                      : quantityHintId
-                                  }
-                                  onBlur={markTouched}
-                                  onChange={(event) =>
-                                    update({
-                                      type: 'set-step-reps',
-                                      stepId: step.id,
-                                      value: event.target.value,
-                                    })
-                                  }
-                                />
-                                <span id={quantityHintId} className="field-hint">
-                                  {quantityHint}
-                                </span>
-                                {hasRepsError ? (
-                                  <span id={`${repsErrorKey}-error`} className="form-error">
-                                    {errors[repsErrorKey]}
-                                  </span>
-                                ) : null}
-                              </div>
-                              {step.measurement === 'duration' ? (
-                                <div className="field-group builder-duration-unit-field">
-                                  <label htmlFor={`step-duration-unit-${step.id}`}>
-                                    Duration unit
-                                  </label>
-                                  <select
-                                    id={`step-duration-unit-${step.id}`}
-                                    value={step.durationUnit}
-                                    onChange={(event) =>
+                                  <ExerciseFields step={step} errors={errors} update={update} />
+                                  <button
+                                    className="text-button destructive-button"
+                                    type="button"
+                                    onClick={() =>
                                       update({
-                                        type: 'set-step-duration-unit',
+                                        type: 'remove-step',
+                                        sectionId: item.id,
                                         stepId: step.id,
-                                        value:
-                                          event.target.value === 'seconds' ? 'seconds' : 'minutes',
                                       })
                                     }
                                   >
-                                    <option value="minutes">Minutes</option>
-                                    <option value="seconds">Seconds</option>
-                                  </select>
-                                </div>
-                              ) : (
-                                <div
-                                  className="builder-duration-unit-placeholder"
-                                  aria-hidden="true"
-                                />
-                              )}
-                              <button
-                                className="text-button destructive-button"
-                                type="button"
-                                disabled={
-                                  section.steps.length <=
-                                  (state.allowEmptyExercises === true ? 0 : 1)
-                                }
-                                onClick={() =>
-                                  update({
-                                    type: 'remove-step',
-                                    sectionId: section.id,
-                                    stepId: step.id,
-                                  })
-                                }
-                              >
-                                Remove exercise
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ol>
-                      <button
-                        className="text-button builder-add-exercise"
-                        type="button"
-                        disabled={
-                          section.steps.length >= TRAINING_DATA_LIMITS.exercisesPerSection ||
-                          draftActivityCount >= TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet
-                        }
-                        aria-describedby="activities-limit-hint"
-                        title={
-                          section.steps.length >= TRAINING_DATA_LIMITS.exercisesPerSection ||
-                          draftActivityCount >= TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet
-                            ? 'The exercise limit for this activity or session is reached.'
-                            : undefined
-                        }
-                        onClick={() => update({ type: 'add-step', sectionId: section.id })}
-                      >
-                        Add exercise
-                      </button>
-                    </fieldset>
+                                    Remove exercise
+                                  </button>
+                                </li>
+                              ))}
+                            </ol>
+                          ) : null}
+                          <button
+                            className="text-button builder-add-exercise"
+                            type="button"
+                            disabled={
+                              item.steps.length >= TRAINING_DATA_LIMITS.exercisesPerSection ||
+                              draftActivityCount >=
+                                TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet
+                            }
+                            onClick={() => update({ type: 'add-step', sectionId: item.id })}
+                          >
+                            Add exercise to activity
+                          </button>
+                        </fieldset>
+                      </>
+                    ) : (
+                      <div className="builder-step builder-step--standalone">
+                        <ExerciseFields step={item} errors={errors} update={update} />
+                      </div>
+                    )}
                   </fieldset>
                 );
               })}
@@ -716,6 +533,22 @@ function BuilderForm({
               </Link>
             ) : null}
             <button
+              className="secondary-button"
+              type="button"
+              disabled={!canAddItem}
+              onClick={() => update({ type: 'add-section' })}
+            >
+              Add activity
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={!canAddItem}
+              onClick={() => update({ type: 'add-standalone-exercise' })}
+            >
+              Add exercise
+            </button>
+            <button
               className="primary-button"
               type="submit"
               disabled={isSaving}
@@ -727,5 +560,122 @@ function BuilderForm({
         </fieldset>
       </form>
     </div>
+  );
+}
+
+function ExerciseFields({
+  step,
+  errors,
+  update,
+}: {
+  readonly step: StepDraft;
+  readonly errors: BuilderErrors;
+  readonly update: (action: BuilderAction) => void;
+}) {
+  const labelKey = `step-label-${step.id}`;
+  const quantityKey = `step-reps-${step.id}`;
+  const quantityHintId = `quantity-hint-${step.id}`;
+  const labelError = errors[labelKey];
+  const quantityError = errors[quantityKey];
+  const isDuration = step.measurement === 'duration';
+  const keepExistingQuantity =
+    step.activityId !== undefined && step.quantityChanged !== true && step.reps.length === 0;
+  const quantityHint = keepExistingQuantity
+    ? 'Leave blank to keep the existing quantity, including a duration range.'
+    : isDuration
+      ? `Use ${step.durationUnit}; zero and decimal values are supported.`
+      : step.measurement === 'sets'
+        ? 'Use a whole number, 0 or more.'
+        : `Use a whole number from 0 to ${MAX_REPETITIONS}.`;
+
+  return (
+    <>
+      <div className="field-group builder-step-name-field">
+        <label htmlFor={labelKey}>Exercise name</label>
+        <input
+          id={labelKey}
+          name={labelKey}
+          type="text"
+          maxLength={TRAINING_DATA_LIMITS.nameCharacters}
+          value={step.label}
+          aria-invalid={labelError !== undefined}
+          aria-describedby={labelError === undefined ? undefined : `${labelKey}-error`}
+          onChange={(event) =>
+            update({ type: 'set-step-label', stepId: step.id, value: event.target.value })
+          }
+        />
+        {labelError === undefined ? null : (
+          <span id={`${labelKey}-error`} className="form-error">
+            {labelError}
+          </span>
+        )}
+      </div>
+      <div className="field-group builder-measurement-field">
+        <label htmlFor={`step-measurement-${step.id}`}>Measurement</label>
+        <select
+          id={`step-measurement-${step.id}`}
+          value={step.measurement}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (value === 'repetitions' || value === 'sets' || value === 'duration') {
+              update({ type: 'set-step-measurement', stepId: step.id, value });
+            }
+          }}
+        >
+          <option value="repetitions">Repetitions</option>
+          <option value="sets">Sets</option>
+          <option value="duration">Duration</option>
+        </select>
+      </div>
+      <div className="field-group builder-quantity-field">
+        <label htmlFor={quantityKey}>{MEASUREMENT_LABELS[step.measurement]}</label>
+        <input
+          id={quantityKey}
+          name={quantityKey}
+          type="number"
+          min={0}
+          max={step.measurement === 'repetitions' ? MAX_REPETITIONS : undefined}
+          step={isDuration ? 'any' : 1}
+          inputMode={isDuration ? 'decimal' : 'numeric'}
+          value={step.reps}
+          aria-invalid={quantityError !== undefined}
+          aria-describedby={
+            quantityError === undefined ? quantityHintId : `${quantityHintId} ${quantityKey}-error`
+          }
+          onChange={(event) =>
+            update({ type: 'set-step-reps', stepId: step.id, value: event.target.value })
+          }
+        />
+        <span id={quantityHintId} className="field-hint">
+          {quantityHint}
+        </span>
+        {quantityError === undefined ? null : (
+          <span id={`${quantityKey}-error`} className="form-error">
+            {quantityError}
+          </span>
+        )}
+      </div>
+      {isDuration ? (
+        <div className="field-group builder-duration-unit-field">
+          <label htmlFor={`step-duration-unit-${step.id}`}>Duration unit</label>
+          <select
+            id={`step-duration-unit-${step.id}`}
+            value={step.durationUnit}
+            onChange={(event) =>
+              update({
+                type: 'set-step-duration-unit',
+                stepId: step.id,
+                value: event.target.value === 'seconds' ? 'seconds' : 'minutes',
+              })
+            }
+          >
+            <option value="minutes">Minutes</option>
+            <option value="seconds">Seconds</option>
+          </select>
+        </div>
+      ) : (
+        <div className="builder-duration-unit-placeholder" aria-hidden="true" />
+      )}
+    </>
   );
 }

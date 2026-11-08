@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -101,6 +101,8 @@ describe('custom menu editing', () => {
     const addedActivityName = requireItem(activityNames, 1);
     await user.clear(addedActivityName);
     await user.type(addedActivityName, 'Footwork');
+    const activityFields = screen.getByRole('group', { name: 'Activity 2' });
+    await user.click(within(activityFields).getByRole('button', { name: /Add exercise/ }));
     const exerciseNames = screen.getAllByRole('textbox', { name: 'Exercise name' });
     const addedExerciseName = requireItem(exerciseNames, 1);
     await user.clear(addedExerciseName);

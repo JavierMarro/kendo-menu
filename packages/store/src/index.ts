@@ -507,12 +507,14 @@ function getBuilderQuantityUnit(activity: TrainingActivity, overrides: TrainingQ
   }
   if (overrides.seconds !== undefined) return 'seconds';
   if (overrides.minutes !== undefined) return 'minutes';
+  if (activity.quantities?.sets !== undefined || overrides.sets !== undefined) return 'sets';
   return undefined;
 }
 
 function getInputQuantityUnit(quantities: TrainingQuantities | undefined) {
   if (quantities?.repetitions !== undefined) return 'repetitions';
-  return quantities?.duration?.unit;
+  if (quantities?.duration !== undefined) return quantities.duration.unit;
+  return quantities?.sets === undefined ? undefined : 'sets';
 }
 
 function removeQuantityUnit(
@@ -524,13 +526,47 @@ function removeQuantityUnit(
     ...(unit === 'repetitions' || quantities.repetitions === undefined
       ? {}
       : { repetitions: quantities.repetitions }),
-    ...(quantities.sets === undefined ? {} : { sets: quantities.sets }),
+    ...(unit === 'sets' || quantities.sets === undefined ? {} : { sets: quantities.sets }),
     ...(quantities.rounds === undefined ? {} : { rounds: quantities.rounds }),
     ...(quantities.duration === undefined || quantities.duration.unit === unit
       ? {}
       : { duration: quantities.duration }),
   };
   return Object.keys(result).length === 0 ? undefined : result;
+}
+
+function updateExistingActivity(
+  activity: TrainingActivity,
+  name: string,
+  quantities: TrainingQuantities | undefined,
+  quantityOverrides: DashboardQuantityOverrides,
+): { readonly activity: TrainingActivity; readonly quantityOverrides: DashboardQuantityOverrides } {
+  const oldUnit = getBuilderQuantityUnit(activity, quantityOverrides[activity.id] ?? {});
+  const newUnit = getInputQuantityUnit(quantities);
+  const baseQuantities =
+    oldUnit !== undefined && newUnit !== undefined && oldUnit !== newUnit
+      ? removeQuantityUnit(activity.quantities, oldUnit)
+      : activity.quantities;
+  const nextQuantities =
+    quantities === undefined
+      ? baseQuantities
+      : { ...(baseQuantities ?? {}), ...copyQuantities(quantities) };
+
+  if (quantities !== undefined) {
+    if (oldUnit !== undefined && oldUnit !== newUnit) {
+      quantityOverrides = clearDashboardQuantityOverride(quantityOverrides, activity.id, oldUnit);
+    }
+    if (newUnit !== undefined) {
+      quantityOverrides = clearDashboardQuantityOverride(quantityOverrides, activity.id, newUnit);
+    }
+  }
+
+  const updatedActivity = { ...activity, name };
+  if (nextQuantities === undefined) {
+    delete updatedActivity.quantities;
+    return { activity: updatedActivity, quantityOverrides };
+  }
+  return { activity: { ...updatedActivity, quantities: nextQuantities }, quantityOverrides };
 }
 
 function validateCustomTrainingSetEditIdentities(
@@ -631,59 +667,39 @@ function buildEditedCustomTrainingSet(
         } satisfies TrainingActivity;
       }
 
-      const oldUnit = getBuilderQuantityUnit(
+      const updated = updateExistingActivity(
         originalExercise,
-        quantityOverrides[originalExercise.id] ?? {},
+        exerciseInput.name,
+        exerciseInput.quantities,
+        quantityOverrides,
       );
-      const newUnit = getInputQuantityUnit(exerciseInput.quantities);
-      const baseQuantities =
-        oldUnit !== undefined && newUnit !== undefined && oldUnit !== newUnit
-          ? removeQuantityUnit(originalExercise.quantities, oldUnit)
-          : originalExercise.quantities;
-      const nextQuantities =
-        exerciseInput.quantities === undefined
-          ? baseQuantities
-          : { ...(baseQuantities ?? {}), ...copyQuantities(exerciseInput.quantities) };
-
-      if (exerciseInput.quantities !== undefined) {
-        if (oldUnit !== undefined && oldUnit !== newUnit) {
-          quantityOverrides = clearDashboardQuantityOverride(
-            quantityOverrides,
-            originalExercise.id,
-            oldUnit,
-          );
-        }
-        if (newUnit !== undefined) {
-          quantityOverrides = clearDashboardQuantityOverride(
-            quantityOverrides,
-            originalExercise.id,
-            newUnit,
-          );
-        }
-      }
-
-      const updatedExercise = {
-        ...originalExercise,
-        name: exerciseInput.name,
-      };
-      if (nextQuantities === undefined) {
-        delete updatedExercise.quantities;
-        return updatedExercise;
-      }
-      return { ...updatedExercise, quantities: nextQuantities };
+      quantityOverrides = updated.quantityOverrides;
+      return updated.activity;
     });
 
-    return originalSection === undefined
-      ? {
-          id: sectionId,
-          name: sectionInput.name,
-          ...(sectionInput.quantities === undefined
-            ? {}
-            : { quantities: copyQuantities(sectionInput.quantities) }),
-          ...(sectionInput.notes === undefined ? {} : { notes: sectionInput.notes }),
-          children,
-        }
-      : { ...originalSection, name: sectionInput.name, children };
+    if (originalSection === undefined) {
+      return {
+        id: sectionId,
+        name: sectionInput.name,
+        ...(sectionInput.quantities === undefined
+          ? {}
+          : { quantities: copyQuantities(sectionInput.quantities) }),
+        ...(sectionInput.notes === undefined ? {} : { notes: sectionInput.notes }),
+        children,
+      };
+    }
+
+    if (originalSection.children.length === 0 && children.length === 0) {
+      const updatedSection = updateExistingActivity(
+        originalSection,
+        sectionInput.name,
+        sectionInput.quantities,
+        quantityOverrides,
+      );
+      quantityOverrides = updatedSection.quantityOverrides;
+      return { ...updatedSection.activity, children };
+    }
+    return { ...originalSection, name: sectionInput.name, children };
   });
 
   const trainingSetResult = validateTrainingSet({

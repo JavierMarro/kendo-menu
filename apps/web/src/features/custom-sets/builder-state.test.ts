@@ -6,6 +6,7 @@ import {
   builderReducer,
   createEditBuilderState,
   createInitialBuilderState,
+  getDraftActivityCount,
   getBuilderEditIdentities,
   parseBuilderState,
   type BuilderState,
@@ -14,11 +15,15 @@ import {
 } from './builder-state';
 
 function requireSection(state: BuilderState, index = 0): SectionDraft {
-  const section = state.sections[index];
+  const section = state.sections.filter(isSectionDraft)[index];
   if (section === undefined) {
     throw new Error(`Expected activity draft ${index + 1}.`);
   }
   return section;
+}
+
+function isSectionDraft(draft: BuilderState['sections'][number]): draft is SectionDraft {
+  return 'steps' in draft;
 }
 
 function requireStep(section: SectionDraft, index = 0): StepDraft {
@@ -99,10 +104,19 @@ function customEntry(): DashboardEntry {
             { id: 'quantity-free-exercise', name: 'Footwork', children: [] },
           ],
         },
+        {
+          id: 'standalone-sets',
+          name: 'Long kirikaeshi',
+          quantities: { sets: 2, rounds: 3 },
+          children: [],
+        },
       ],
       isBuiltIn: false,
     },
-    quantityOverrides: { 'overridden-exercise': { repetitions: 24 } },
+    quantityOverrides: {
+      'overridden-exercise': { repetitions: 24 },
+      'standalone-sets': { sets: 4 },
+    },
     activityNotes: { 'main-activity': 'Dashboard activity note.' },
     notes: 'Practice note.',
     createdAt: '2026-08-19T10:00:00.000Z',
@@ -121,7 +135,13 @@ describe('session builder state', () => {
       description: 'Personal practice',
       customIntensity: 'high-intensity-drill',
       sections: [
-        { activityId: 'empty-activity', steps: [] },
+        {
+          activityId: 'empty-activity',
+          label: 'Empty activity',
+          reps: '',
+          measurement: 'duration',
+          durationUnit: 'seconds',
+        },
         {
           activityId: 'main-activity',
           steps: [
@@ -129,6 +149,12 @@ describe('session builder state', () => {
             { activityId: 'ranged-exercise', label: 'Jigeiko', reps: '' },
             { activityId: 'quantity-free-exercise', label: 'Footwork', reps: '' },
           ],
+        },
+        {
+          activityId: 'standalone-sets',
+          label: 'Long kirikaeshi',
+          reps: '4',
+          measurement: 'sets',
         },
       ],
     });
@@ -143,6 +169,7 @@ describe('session builder state', () => {
             { id: 'quantity-free-exercise' },
           ],
         },
+        { id: 'standalone-sets', exercises: [] },
       ],
     });
 
@@ -156,19 +183,21 @@ describe('session builder state', () => {
             name: 'Main practice',
             exercises: [{ name: 'Men' }, { name: 'Jigeiko' }, { name: 'Footwork' }],
           },
+          { name: 'Long kirikaeshi', exercises: [] },
         ],
       },
     });
     if (!parsed.success) throw new Error('Expected a valid edit draft.');
+    expect(parsed.value.sections[0]?.quantities).toBeUndefined();
     expect(parsed.value.sections[1]?.exercises[0]?.quantities).toBeUndefined();
     expect(parsed.value.sections[1]?.exercises[1]?.quantities).toBeUndefined();
-    expect(parsed.value.sections[1]?.exercises[2]?.quantities).toBeUndefined();
+    expect(parsed.value.sections[2]?.quantities).toBeUndefined();
   });
 
   it('includes a quantity when an existing exercise quantity is deliberately changed', () => {
     const initial = createEditBuilderState(customEntry());
     if (initial === null) throw new Error('Expected a supported custom menu.');
-    const section = requireSection(initial, 1);
+    const section = requireSection(initial);
     const step = requireStep(section, 0);
     const changed = builderReducer(initial, {
       type: 'set-step-reps',
@@ -183,7 +212,7 @@ describe('session builder state', () => {
   it('allows an edited activity to remove its last exercise and add one back', () => {
     const initial = createEditBuilderState(customEntry());
     if (initial === null) throw new Error('Expected a supported custom menu.');
-    const section = requireSection(initial, 1);
+    const section = requireSection(initial);
     let emptySection = initial;
     for (const step of section.steps) {
       emptySection = builderReducer(emptySection, {
@@ -192,9 +221,10 @@ describe('session builder state', () => {
         stepId: step.id,
       });
     }
-    expect(requireSection(emptySection, 1).steps).toHaveLength(0);
+    expect(requireSection(emptySection).steps).toHaveLength(0);
     expect(
-      builderReducer(emptySection, { type: 'add-step', sectionId: section.id }).sections[1]?.steps,
+      requireSection(builderReducer(emptySection, { type: 'add-step', sectionId: section.id }))
+        .steps,
     ).toHaveLength(1);
   });
 
@@ -228,6 +258,9 @@ describe('session builder state', () => {
     });
 
     const exactTotal = builderStateWithShape(4, TRAINING_DATA_LIMITS.exercisesPerSection - 1);
+    expect(getDraftActivityCount(exactTotal)).toBe(
+      TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet,
+    );
     expect(parseBuilderState(exactTotal).success).toBe(true);
     expect(builderReducer(exactTotal, { type: 'add-section' })).toBe(exactTotal);
     const exactTotalSection = requireSection(exactTotal);
@@ -342,6 +375,13 @@ describe('session builder state', () => {
           ],
         },
         {
+          id: 'standalone-sets',
+          label: '  Long kirikaeshi  ',
+          reps: '2',
+          measurement: 'sets',
+          durationUnit: 'minutes',
+        },
+        {
           id: 'activity-second',
           label: '  Finish  ',
           steps: [
@@ -375,6 +415,7 @@ describe('session builder state', () => {
               },
             ],
           },
+          { name: 'Long kirikaeshi', quantities: { sets: 2 }, exercises: [] },
           {
             name: 'Finish',
             exercises: [
@@ -457,25 +498,58 @@ describe('session builder state', () => {
 
   it('defaults existing and newly added exercise rows to repetitions', () => {
     const initial = createInitialBuilderState();
-    const firstSection = requireSection(initial);
-    expect(requireStep(firstSection)).toMatchObject({
+    expect(initial.sections).toEqual([]);
+    const withSection = builderReducer(initial, { type: 'add-section' });
+    const firstSection = requireSection(withSection);
+    expect(firstSection.steps).toEqual([]);
+    const withExercise = builderReducer(withSection, {
+      type: 'add-step',
+      sectionId: firstSection.id,
+    });
+    expect(requireStep(requireSection(withExercise))).toMatchObject({
       measurement: 'repetitions',
       durationUnit: 'minutes',
       reps: '',
     });
 
-    const expanded = builderReducer(initial, { type: 'add-step', sectionId: firstSection.id });
+    const expanded = builderReducer(withExercise, { type: 'add-step', sectionId: firstSection.id });
     expect(requireStep(requireSection(expanded), 1)).toMatchObject({
       measurement: 'repetitions',
       durationUnit: 'minutes',
       reps: '',
     });
-    expect(initial.sections).toHaveLength(1);
-    expect(firstSection.steps).toHaveLength(1);
+    expect(withSection.sections).toHaveLength(1);
+    expect(firstSection.steps).toHaveLength(0);
+  });
+
+  it('adds and removes standalone exercises in the same ordered activity list', () => {
+    const initial = createInitialBuilderState();
+    const group = builderReducer(initial, { type: 'add-section' });
+    const withStandalone = builderReducer(group, { type: 'add-standalone-exercise' });
+    expect(withStandalone.sections).toHaveLength(2);
+    expect(withStandalone.sections[0]).toMatchObject({ steps: [] });
+    expect(withStandalone.sections[1]).toMatchObject({ measurement: 'repetitions', reps: '' });
+    expect(getDraftActivityCount(withStandalone)).toBe(2);
+
+    const standalone = withStandalone.sections[1];
+    if (standalone === undefined) throw new Error('Expected a standalone exercise draft.');
+    expect(
+      builderReducer(withStandalone, { type: 'remove-section', sectionId: standalone.id }).sections,
+    ).toEqual(group.sections);
+    expect(
+      builderReducer(group, {
+        type: 'remove-section',
+        sectionId: requireSection(group).id,
+      }).sections,
+    ).toEqual([]);
   });
 
   it('validates and converts repetitions and duration through the existing quantity model', () => {
-    const initial = createInitialBuilderState();
+    const withSection = builderReducer(createInitialBuilderState(), { type: 'add-section' });
+    const initial = builderReducer(withSection, {
+      type: 'add-step',
+      sectionId: requireSection(withSection).id,
+    });
     const section = requireSection(initial);
     const step = requireStep(section);
     let state = builderReducer(initial, { type: 'set-name', value: 'Mixed keiko' });
@@ -524,11 +598,51 @@ describe('session builder state', () => {
     expect(requireStep(requireSection(state)).measurement).toBe('duration');
   });
 
+  it('validates standalone set counts and normalizes negative zero', () => {
+    const initial = builderReducer(createInitialBuilderState(), {
+      type: 'add-standalone-exercise',
+    });
+    const standalone = initial.sections[0];
+    if (standalone === undefined || isSectionDraft(standalone)) {
+      throw new Error('Expected a standalone exercise draft.');
+    }
+    let state = builderReducer(initial, { type: 'set-name', value: 'Kirikaeshi' });
+    state = builderReducer(state, {
+      type: 'set-step-label',
+      stepId: standalone.id,
+      value: 'Long kirikaeshi',
+    });
+    state = builderReducer(state, {
+      type: 'set-step-measurement',
+      stepId: standalone.id,
+      value: 'sets',
+    });
+    state = builderReducer(state, { type: 'set-step-reps', stepId: standalone.id, value: '-0' });
+
+    expect(parseBuilderState(state)).toMatchObject({
+      success: true,
+      value: {
+        sections: [{ name: 'Long kirikaeshi', exercises: [], quantities: { sets: 0 } }],
+      },
+    });
+
+    const invalid = builderReducer(state, {
+      type: 'set-step-reps',
+      stepId: standalone.id,
+      value: '1.5',
+    });
+    expect(parseBuilderState(invalid)).toMatchObject({
+      success: false,
+      errors: { [`step-reps-${standalone.id}`]: 'Enter a whole number of sets, 0 or more.' },
+    });
+  });
+
   it('keeps one optional intensity choice in the typed authored input', () => {
-    const initial = createInitialBuilderState();
+    const initial = builderReducer(createInitialBuilderState(), { type: 'add-section' });
     const section = requireSection(initial);
-    const step = requireStep(section);
-    let valid = builderReducer(initial, { type: 'set-name', value: 'Tagged keiko' });
+    const withStep = builderReducer(initial, { type: 'add-step', sectionId: section.id });
+    const step = requireStep(requireSection(withStep));
+    let valid = builderReducer(withStep, { type: 'set-name', value: 'Tagged keiko' });
     valid = builderReducer(valid, {
       type: 'set-section-label',
       sectionId: section.id,

@@ -149,6 +149,16 @@ export const MITORI_VIDEOS: Readonly<
       playlistId: 'PLo-0mQzBLAedFJd50atliNPH3F7pZyLIx',
     },
     {
+      id: 'aNPp3ciM7zc',
+      title: 'Myth Busted: Fumikomi, Fumikiri and Hikitsuke in Kendo',
+      author: 'Kendo Guide (Hiro)',
+    },
+    {
+      id: 'nzf6SQhYEr8',
+      title: 'Kendo Basics — Fumikomi with Kouda Kunihide (8th Dan)',
+      author: 'Kendo Jidai International',
+    },
+    {
       id: 'oZ3M3mbWZ9A',
       title: 'Kendo Techniques — Part 1',
       author: 'White belt',
@@ -349,6 +359,11 @@ export const MITORI_VIDEOS: Readonly<
     {
       id: 'WeS8rmOTBIM',
       title: 'Bokuto ni yoru kendo kihon-waza keiko-ho (Japanese version)',
+      author: 'All Japan Kendo Federation',
+    },
+    {
+      id: 'sd3QD8B4bzI',
+      title: 'Kendo Kata Demonstration — 74th All Japan and 65th All Japan Women’s Championships',
       author: 'All Japan Kendo Federation',
     },
   ],

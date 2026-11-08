@@ -11,10 +11,11 @@ import {
   type CustomTrainingIntensity,
   type DurationUnit,
   type TrainingActivity,
+  type TrainingQuantities,
   type TrainingSetInput,
 } from '@kendo-menu/domain';
 
-export type StepMeasurement = 'repetitions' | 'duration';
+export type StepMeasurement = 'repetitions' | 'sets' | 'duration';
 
 export interface StepDraft {
   readonly id: string;
@@ -33,12 +34,13 @@ export interface SectionDraft {
   readonly steps: readonly StepDraft[];
 }
 
+export type BuilderItemDraft = SectionDraft | StepDraft;
+
 export interface BuilderState {
   readonly name: string;
   readonly description: string;
   readonly customIntensity?: CustomTrainingIntensity;
-  readonly allowEmptyExercises?: boolean;
-  readonly sections: readonly SectionDraft[];
+  readonly sections: readonly BuilderItemDraft[];
 }
 
 export type BuilderAction =
@@ -62,6 +64,7 @@ export type BuilderAction =
       readonly value: DurationUnit;
     }
   | { readonly type: 'add-section' }
+  | { readonly type: 'add-standalone-exercise' }
   | { readonly type: 'remove-section'; readonly sectionId: string }
   | { readonly type: 'add-step'; readonly sectionId: string }
   | { readonly type: 'remove-step'; readonly sectionId: string; readonly stepId: string };
@@ -84,17 +87,21 @@ function createStepDraft(): StepDraft {
 }
 
 function createSectionDraft(): SectionDraft {
-  return { id: createDraftId('draft-section'), label: '', steps: [createStepDraft()] };
+  return { id: createDraftId('draft-section'), label: '', steps: [] };
+}
+
+function isSectionDraft(draft: BuilderItemDraft): draft is SectionDraft {
+  return 'steps' in draft;
 }
 
 export function createInitialBuilderState(): BuilderState {
-  return { name: '', description: '', sections: [createSectionDraft()] };
+  return { name: '', description: '', sections: [] };
 }
 
 function getBuilderQuantityUnit(
   activity: TrainingActivity,
   entry: DashboardEntry,
-): 'repetitions' | DurationUnit | undefined {
+): 'repetitions' | 'sets' | DurationUnit | undefined {
   const overrides = entry.quantityOverrides[activity.id];
   if (activity.quantities?.repetitions !== undefined || overrides?.repetitions !== undefined) {
     return 'repetitions';
@@ -102,6 +109,7 @@ function getBuilderQuantityUnit(
   if (activity.quantities?.duration !== undefined) return activity.quantities.duration.unit;
   if (overrides?.seconds !== undefined) return 'seconds';
   if (overrides?.minutes !== undefined) return 'minutes';
+  if (activity.quantities?.sets !== undefined || overrides?.sets !== undefined) return 'sets';
   return undefined;
 }
 
@@ -116,7 +124,7 @@ function createStepDraftFromActivity(activity: TrainingActivity, entry: Dashboar
     activityId: activity.id,
     label: activity.name,
     reps: typeof quantity === 'number' ? String(quantity) : '',
-    measurement: unit === 'seconds' || unit === 'minutes' ? 'duration' : 'repetitions',
+    measurement: unit === 'seconds' || unit === 'minutes' ? 'duration' : (unit ?? 'repetitions'),
     durationUnit: unit === 'seconds' ? 'seconds' : 'minutes',
   };
 }
@@ -137,28 +145,46 @@ export function createEditBuilderState(entry: DashboardEntry): BuilderState | nu
   return {
     name: trainingSet.name,
     description: trainingSet.description ?? '',
-    allowEmptyExercises: true,
     ...(trainingSet.customIntensity === undefined
       ? {}
       : { customIntensity: trainingSet.customIntensity }),
-    sections: trainingSet.activities.map((section) => ({
-      id: createDraftId('draft-section'),
-      activityId: section.id,
-      label: section.name,
-      steps: section.children.map((exercise) => createStepDraftFromActivity(exercise, entry)),
-    })),
+    sections: trainingSet.activities.flatMap<BuilderItemDraft>((section) => {
+      if (section.children.length === 0) {
+        const step = createStepDraftFromActivity(section, entry);
+        if (getBuilderQuantityUnit(section, entry) !== undefined) return [step];
+      }
+      return [
+        {
+          id: createDraftId('draft-section'),
+          activityId: section.id,
+          label: section.name,
+          steps: section.children.map((exercise) => createStepDraftFromActivity(exercise, entry)),
+        },
+      ];
+    }),
   };
 }
 
 export function getBuilderEditIdentities(state: BuilderState) {
   return {
-    sections: state.sections.map((section) => ({
-      ...(section.activityId === undefined ? {} : { id: section.activityId }),
-      exercises: section.steps.map((step) =>
-        step.activityId === undefined ? {} : { id: step.activityId },
-      ),
-    })),
+    sections: state.sections.map((draft) =>
+      isSectionDraft(draft)
+        ? {
+            ...(draft.activityId === undefined ? {} : { id: draft.activityId }),
+            exercises: draft.steps.map((step) =>
+              step.activityId === undefined ? {} : { id: step.activityId },
+            ),
+          }
+        : { ...(draft.activityId === undefined ? {} : { id: draft.activityId }), exercises: [] },
+    ),
   };
+}
+
+export function getDraftActivityCount(state: BuilderState): number {
+  return state.sections.reduce(
+    (total, draft) => total + 1 + (isSectionDraft(draft) ? draft.steps.length : 0),
+    0,
+  );
 }
 
 export function builderReducer(state: BuilderState, action: BuilderAction): BuilderState {
@@ -176,98 +202,76 @@ export function builderReducer(state: BuilderState, action: BuilderAction): Buil
     case 'set-section-label':
       return {
         ...state,
-        sections: state.sections.map((section) =>
-          section.id === action.sectionId ? { ...section, label: action.value } : section,
+        sections: state.sections.map((draft) =>
+          isSectionDraft(draft) && draft.id === action.sectionId
+            ? { ...draft, label: action.value }
+            : draft,
         ),
       };
     case 'set-step-label':
-      return {
-        ...state,
-        sections: state.sections.map((section) => ({
-          ...section,
-          steps: section.steps.map((step) =>
-            step.id === action.stepId ? { ...step, label: action.value } : step,
-          ),
-        })),
-      };
     case 'set-step-reps':
-      return {
-        ...state,
-        sections: state.sections.map((section) => ({
-          ...section,
-          steps: section.steps.map((step) =>
-            step.id === action.stepId
-              ? { ...step, reps: action.value, quantityChanged: true }
-              : step,
-          ),
-        })),
-      };
     case 'set-step-measurement':
-      return {
-        ...state,
-        sections: state.sections.map((section) => ({
-          ...section,
-          steps: section.steps.map((step) =>
-            step.id === action.stepId
-              ? { ...step, measurement: action.value, quantityChanged: true }
-              : step,
-          ),
-        })),
-      };
     case 'set-step-duration-unit':
       return {
         ...state,
-        sections: state.sections.map((section) => ({
-          ...section,
-          steps: section.steps.map((step) =>
-            step.id === action.stepId
-              ? { ...step, durationUnit: action.value, quantityChanged: true }
-              : step,
-          ),
-        })),
+        sections: state.sections.map((draft) => {
+          const updateStep = (step: StepDraft): StepDraft => {
+            if (step.id !== action.stepId) return step;
+            if (action.type === 'set-step-label') return { ...step, label: action.value };
+            if (action.type === 'set-step-reps') {
+              return { ...step, reps: action.value, quantityChanged: true };
+            }
+            if (action.type === 'set-step-measurement') {
+              return { ...step, measurement: action.value, quantityChanged: true };
+            }
+            return { ...step, durationUnit: action.value, quantityChanged: true };
+          };
+          return isSectionDraft(draft)
+            ? { ...draft, steps: draft.steps.map(updateStep) }
+            : updateStep(draft);
+        }),
       };
     case 'add-section':
+    case 'add-standalone-exercise': {
       if (
         state.sections.length >= TRAINING_DATA_LIMITS.customSections ||
-        getDraftActivityCount(state) + 2 > TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet
+        getDraftActivityCount(state) >= TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet
       ) {
         return state;
       }
-      return { ...state, sections: [...state.sections, createSectionDraft()] };
+      const draft = action.type === 'add-section' ? createSectionDraft() : createStepDraft();
+      return { ...state, sections: [...state.sections, draft] };
+    }
     case 'remove-section':
-      return state.sections.length <= 1
-        ? state
-        : {
-            ...state,
-            sections: state.sections.filter((section) => section.id !== action.sectionId),
-          };
+      return {
+        ...state,
+        sections: state.sections.filter((draft) => draft.id !== action.sectionId),
+      };
     case 'add-step':
       return {
         ...state,
-        sections: state.sections.map((section) =>
-          section.id === action.sectionId
-            ? section.steps.length >= TRAINING_DATA_LIMITS.exercisesPerSection ||
+        sections: state.sections.map((draft) =>
+          isSectionDraft(draft) && draft.id === action.sectionId
+            ? draft.steps.length >= TRAINING_DATA_LIMITS.exercisesPerSection ||
               getDraftActivityCount(state) >= TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet
-              ? section
-              : { ...section, steps: [...section.steps, createStepDraft()] }
-            : section,
+              ? draft
+              : { ...draft, steps: [...draft.steps, createStepDraft()] }
+            : draft,
         ),
       };
     case 'remove-step':
       return {
         ...state,
-        sections: state.sections.map((section) =>
-          section.id === action.sectionId &&
-          section.steps.length > (state.allowEmptyExercises === true ? 0 : 1)
-            ? { ...section, steps: section.steps.filter((step) => step.id !== action.stepId) }
-            : section,
+        sections: state.sections.map((draft) =>
+          isSectionDraft(draft) && draft.id === action.sectionId
+            ? {
+                ...draft,
+                steps: draft.steps.filter((step) => step.id !== action.stepId),
+              }
+            : draft,
         ),
       };
   }
-}
-
-function getDraftActivityCount(state: BuilderState): number {
-  return state.sections.reduce((total, section) => total + 1 + section.steps.length, 0);
 }
 
 export type BuilderErrors = Readonly<Record<string, string>>;
@@ -275,6 +279,53 @@ export type BuilderErrors = Readonly<Record<string, string>>;
 export type BuilderParseResult =
   | { readonly success: true; readonly value: TrainingSetInput }
   | { readonly success: false; readonly errors: BuilderErrors };
+
+function getStepQuantities(step: StepDraft): TrainingQuantities {
+  const value = Number(step.reps);
+  const normalizedValue = Object.is(value, -0) ? 0 : value;
+  if (step.measurement === 'sets') return { sets: normalizedValue };
+  if (step.measurement === 'repetitions') return { repetitions: normalizedValue };
+  return { duration: { unit: step.durationUnit, value: normalizedValue } };
+}
+
+function validateStep(step: StepDraft, errors: Record<string, string>): void {
+  if (step.label.trim().length === 0) {
+    errors[`step-label-${step.id}`] = 'Name this exercise.';
+  } else if (step.label.length > TRAINING_DATA_LIMITS.nameCharacters) {
+    errors[`step-label-${step.id}`] =
+      `Keep the exercise name to ${TRAINING_DATA_LIMITS.nameCharacters} characters or fewer.`;
+  }
+
+  if (step.activityId === undefined || step.quantityChanged === true) {
+    const quantityValue = step.reps.trim();
+    const quantityUnit =
+      step.measurement === 'repetitions'
+        ? 'repetitions'
+        : step.measurement === 'sets'
+          ? 'sets'
+          : step.durationUnit;
+    if (
+      quantityValue.length === 0 ||
+      !isValidTrainingQuantityValue(quantityUnit, Number(quantityValue))
+    ) {
+      errors[`step-reps-${step.id}`] =
+        step.measurement === 'repetitions'
+          ? 'Enter a whole number from 0 to 500.'
+          : step.measurement === 'sets'
+            ? 'Enter a whole number of sets, 0 or more.'
+            : `Enter a number of ${step.durationUnit}, 0 or more.`;
+    }
+  }
+}
+
+function getExerciseInput(step: StepDraft) {
+  return {
+    name: step.label.trim(),
+    ...(step.activityId !== undefined && step.quantityChanged !== true
+      ? {}
+      : { quantities: getStepQuantities(step) }),
+  };
+}
 
 export function parseBuilderState(state: BuilderState): BuilderParseResult {
   const errors: Record<string, string> = {};
@@ -291,7 +342,7 @@ export function parseBuilderState(state: BuilderState): BuilderParseResult {
   }
 
   if (state.sections.length < 1) {
-    errors['sections'] = 'Add at least one activity.';
+    errors['sections'] = 'Add at least one activity or exercise.';
   } else if (state.sections.length > TRAINING_DATA_LIMITS.customSections) {
     errors['sections'] = `Use no more than ${TRAINING_DATA_LIMITS.customSections} activities.`;
   } else if (getDraftActivityCount(state) > TRAINING_DATA_LIMITS.totalActivitiesPerTrainingSet) {
@@ -303,41 +354,26 @@ export function parseBuilderState(state: BuilderState): BuilderParseResult {
     return { success: false, errors };
   }
 
-  state.sections.forEach((section) => {
-    if (section.label.trim().length === 0) {
-      errors[`section-${section.id}`] = 'Name this activity.';
-    } else if (section.label.length > TRAINING_DATA_LIMITS.nameCharacters) {
-      errors[`section-${section.id}`] =
+  state.sections.forEach((draft) => {
+    if (!isSectionDraft(draft)) {
+      validateStep(draft, errors);
+      return;
+    }
+
+    if (draft.label.trim().length === 0) {
+      errors[`section-${draft.id}`] = 'Name this activity.';
+    } else if (draft.label.length > TRAINING_DATA_LIMITS.nameCharacters) {
+      errors[`section-${draft.id}`] =
         `Keep the activity name to ${TRAINING_DATA_LIMITS.nameCharacters} characters or fewer.`;
     }
 
-    if (section.steps.length > TRAINING_DATA_LIMITS.exercisesPerSection) {
-      errors[`section-steps-${section.id}`] =
+    if (draft.steps.length > TRAINING_DATA_LIMITS.exercisesPerSection) {
+      errors[`section-steps-${draft.id}`] =
         `Use no more than ${TRAINING_DATA_LIMITS.exercisesPerSection} exercises per activity.`;
     }
-
-    section.steps.slice(0, TRAINING_DATA_LIMITS.exercisesPerSection + 1).forEach((step) => {
-      if (step.label.trim().length === 0) {
-        errors[`step-label-${step.id}`] = 'Name this exercise.';
-      } else if (step.label.length > TRAINING_DATA_LIMITS.nameCharacters) {
-        errors[`step-label-${step.id}`] =
-          `Keep the exercise name to ${TRAINING_DATA_LIMITS.nameCharacters} characters or fewer.`;
-      }
-
-      if (step.activityId === undefined || step.quantityChanged === true) {
-        const quantityValue = step.reps.trim();
-        const quantityUnit = step.measurement === 'repetitions' ? 'repetitions' : step.durationUnit;
-        if (
-          quantityValue.length === 0 ||
-          !isValidTrainingQuantityValue(quantityUnit, Number(quantityValue))
-        ) {
-          errors[`step-reps-${step.id}`] =
-            step.measurement === 'repetitions'
-              ? 'Enter a whole number from 0 to 500.'
-              : `Enter a number of ${step.durationUnit}, 0 or more.`;
-        }
-      }
-    });
+    draft.steps
+      .slice(0, TRAINING_DATA_LIMITS.exercisesPerSection + 1)
+      .forEach((step) => validateStep(step, errors));
   });
 
   return Object.keys(errors).length > 0
@@ -351,20 +387,20 @@ export function parseBuilderState(state: BuilderState): BuilderParseResult {
           ...(state.customIntensity === undefined
             ? {}
             : { customIntensity: state.customIntensity }),
-          sections: state.sections.map((section) => ({
-            name: section.label.trim(),
-            exercises: section.steps.map((step) => ({
-              name: step.label.trim(),
-              ...(step.activityId !== undefined && step.quantityChanged !== true
-                ? {}
-                : {
-                    quantities:
-                      step.measurement === 'repetitions'
-                        ? { repetitions: Number(step.reps) }
-                        : { duration: { unit: step.durationUnit, value: Number(step.reps) } },
-                  }),
-            })),
-          })),
+          sections: state.sections.map((draft) =>
+            isSectionDraft(draft)
+              ? {
+                  name: draft.label.trim(),
+                  exercises: draft.steps.map(getExerciseInput),
+                }
+              : {
+                  name: draft.label.trim(),
+                  exercises: [],
+                  ...(draft.activityId !== undefined && draft.quantityChanged !== true
+                    ? {}
+                    : { quantities: getStepQuantities(draft) }),
+                },
+          ),
         },
       };
 }

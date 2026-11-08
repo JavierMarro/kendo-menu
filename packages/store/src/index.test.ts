@@ -624,6 +624,64 @@ describe('custom training sets', () => {
     );
   });
 
+  it('updates quantities on a retained standalone exercise and preserves unrelated overrides', () => {
+    const store = createTrainingStore({ storage: new MemoryStorage(), storageKey: STORAGE_KEY });
+    const created = store.getState().createCustomTrainingSetAndAddToDashboard({
+      name: 'Monday keiko',
+      category: 'custom',
+      sections: [
+        {
+          name: 'Long kihon kirikaeshi',
+          quantities: {
+            repetitions: 10,
+            rounds: 2,
+            duration: { unit: 'minutes', value: 1 },
+          },
+          notes: 'Keep this activity note.',
+          exercises: [],
+        },
+      ],
+    });
+    const original = created.trainingSet.activities[0];
+    if (original === undefined) throw new Error('Expected the standalone activity fixture.');
+
+    store.getState().setQuantityOverride(created.dashboardEntryId, original.id, 'repetitions', 24);
+    store.getState().setQuantityOverride(created.dashboardEntryId, original.id, 'minutes', 3);
+    store.getState().updateCustomTrainingSet(
+      created.dashboardEntryId,
+      {
+        name: 'Monday keiko',
+        category: 'custom',
+        sections: [
+          {
+            name: 'Long kihon kirikaeshi',
+            quantities: { sets: 3 },
+            exercises: [],
+          },
+        ],
+      },
+      { sections: [{ id: original.id, exercises: [] }] },
+    );
+
+    const updatedEntry = store.getState().dashboardEntries[0];
+    const updatedActivity = updatedEntry?.trainingSet?.activities[0];
+    expect(updatedActivity).toMatchObject({
+      id: original.id,
+      quantities: {
+        sets: 3,
+        rounds: 2,
+        duration: { unit: 'minutes', value: 1 },
+      },
+      notes: 'Keep this activity note.',
+    });
+    expect(updatedEntry?.quantityOverrides[original.id]).toEqual({ minutes: 3 });
+    if (updatedEntry === undefined || updatedActivity === undefined) {
+      throw new Error('Expected the edited standalone exercise.');
+    }
+    expect(getDashboardEffectiveTrainingQuantity(updatedEntry, updatedActivity, 'sets')).toBe(3);
+    expect(getDashboardEffectiveTrainingQuantity(updatedEntry, updatedActivity, 'minutes')).toBe(3);
+  });
+
   it('preserves untouched ranges, zero and decimal quantities, and hidden activity metadata', () => {
     const storage = new MemoryStorage();
     const store = createTrainingStore({ storage, storageKey: STORAGE_KEY });

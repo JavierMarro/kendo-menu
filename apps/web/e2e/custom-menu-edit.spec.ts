@@ -90,6 +90,7 @@ for (const kind of ['guest', 'account'] as const) {
     await page.getByRole('button', { name: 'Add activity', exact: true }).click();
     const secondActivity = page.getByRole('group', { name: 'Activity 2', exact: true });
     await secondActivity.getByLabel('Activity name').fill('Keiko');
+    await secondActivity.getByRole('button', { name: 'Add exercise' }).click();
     await secondActivity.getByLabel('Exercise name').fill('Kirikaeshi');
     await secondActivity.getByLabel('Measurement').selectOption('duration');
     await secondActivity.getByLabel('Duration', { exact: true }).fill('3.5');

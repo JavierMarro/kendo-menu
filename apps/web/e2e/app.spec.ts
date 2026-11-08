@@ -958,9 +958,11 @@ test.describe('routed training flows', () => {
     await page.getByLabel('Session name').fill('Monday footwork');
     await page.getByLabel('Description (optional)').fill('A short solo session.');
     await page.getByLabel('Intensity (optional)').selectOption('high-intensity-drill');
+    await page.getByRole('button', { name: 'Add activity' }).click();
     const activity = page.getByRole('group', { name: 'Activity 1' });
     await activity.getByLabel('Activity name').fill('Footwork');
     const exercises = activity.getByRole('group', { name: 'Exercises' });
+    await exercises.getByRole('button', { name: 'Add exercise' }).click();
     await exercises.getByLabel('Exercise name').fill('Big step forward and back');
     await exercises.getByLabel('Repetitions', { exact: true }).fill('24');
     await exercises.getByRole('button', { name: 'Add exercise' }).click();
@@ -1029,6 +1031,78 @@ test.describe('routed training flows', () => {
     expect(persisted).not.toBeNull();
   });
 
+  test('saves and edits standalone exercises in order alongside grouped activities', async ({
+    page,
+  }) => {
+    await page.goto('/app/guest/drills/new');
+    await page.getByRole('button', { name: 'Got it', exact: true }).click();
+    await page.getByLabel('Session name').fill('Dojo keiko');
+
+    const actions = page.locator('.builder-actions');
+    const addActivity = actions.getByRole('button', { name: 'Add activity', exact: true });
+    const addExercise = actions.getByRole('button', { name: 'Add exercise', exact: true });
+    const save = actions.getByRole('button', { name: 'Save session to dashboard' });
+    await addActivity.click();
+    const warmUp = page.getByRole('group', { name: 'Activity 1', exact: true });
+    const activityName = warmUp.getByLabel('Activity name');
+    await expect(activityName).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(activityName).toHaveAttribute('aria-invalid', 'false');
+    await activityName.fill('Warm-up');
+    await warmUp.getByRole('button', { name: 'Add exercise to activity' }).click();
+    await expect(warmUp.getByLabel('Exercise name')).toBeFocused();
+    await warmUp.getByLabel('Exercise name').fill('Stretch');
+    await warmUp.getByLabel('Measurement').selectOption('duration');
+    await warmUp.getByLabel('Duration', { exact: true }).fill('5');
+
+    await addExercise.click();
+    const kirikaeshi = page.getByRole('group', { name: 'Exercise 2', exact: true });
+    const exerciseName = kirikaeshi.getByLabel('Exercise name');
+    await expect(exerciseName).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(exerciseName).toHaveAttribute('aria-invalid', 'false');
+    await expect(kirikaeshi.getByLabel('Activity name')).toHaveCount(0);
+    await kirikaeshi.getByLabel('Measurement').selectOption('sets');
+
+    await addActivity.click();
+    const closing = page.getByRole('group', { name: 'Activity 3', exact: true });
+    await closing.getByLabel('Activity name').fill('Closing bow');
+    await expect(closing.getByLabel('Exercise name')).toHaveCount(0);
+
+    await save.click();
+    const summary = page.getByRole('alert', { name: 'Check the highlighted fields.' });
+    await expect(summary).toBeFocused();
+    await expect(exerciseName).toHaveAttribute('aria-invalid', 'true');
+    await expect(kirikaeshi.getByLabel('Sets', { exact: true })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    await exerciseName.fill('Long kihon kirikaeshi');
+    await kirikaeshi.getByLabel('Sets', { exact: true }).fill('2');
+    await expect(summary).toHaveCount(0);
+    await save.click();
+    await expect(page).toHaveURL('/app/guest/dashboard');
+
+    await page.reload();
+    const menu = await openDashboardMenu(page, 'Dojo keiko');
+    await expect(menu.locator('.dashboard-sections .detail-section-label')).toHaveText([
+      'Warm-up',
+      'Long kihon kirikaeshi',
+      'Closing bow',
+    ]);
+    await expect(menu.getByLabel('Sets for Long kihon kirikaeshi')).toHaveValue('2');
+    await menu.locator('summary').filter({ hasText: 'Warm-up' }).click();
+    await expect(menu.getByLabel('Minutes for Stretch')).toHaveValue('5');
+    await menu.getByRole('link', { name: 'Edit menu' }).click();
+    await expect(exerciseName).toHaveValue('Long kihon kirikaeshi');
+    await expect(kirikaeshi.getByLabel('Sets', { exact: true })).toHaveValue('2');
+    await kirikaeshi.getByLabel('Sets', { exact: true }).fill('3');
+    await actions.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page).toHaveURL('/app/guest/dashboard');
+    const editedMenu = await openDashboardMenu(page, 'Dojo keiko');
+    await expect(editedMenu.getByLabel('Sets for Long kihon kirikaeshi')).toHaveValue('3');
+  });
+
   test('filters populated dashboard sessions by tags and resets an empty result', async ({
     page,
   }) => {
@@ -1051,9 +1125,11 @@ test.describe('routed training flows', () => {
     await expect(page).toHaveURL(/\/app\/guest\/drills\/new$/);
     await page.getByLabel('Session name').fill('High intensity custom menu');
     await page.getByLabel('Intensity (optional)').selectOption('high-intensity-drill');
+    await page.getByRole('button', { name: 'Add activity' }).click();
     const customActivity = page.getByRole('group', { name: 'Activity 1' });
     await customActivity.getByLabel('Activity name').fill('Practice');
     const customExercises = customActivity.getByRole('group', { name: 'Exercises' });
+    await customExercises.getByRole('button', { name: 'Add exercise' }).click();
     await customExercises.getByLabel('Exercise name').fill('Men');
     await customExercises.getByLabel('Repetitions', { exact: true }).fill('24');
     await page.getByRole('button', { name: 'Save session to dashboard' }).click();
