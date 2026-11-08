@@ -195,6 +195,9 @@ test.describe('accessibility and responsive layout', () => {
 
   test('keeps the builder keyboard order and layout usable at 200% text size', async ({ page }) => {
     await page.goto('/app/guest/drills/new');
+    const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+    await notice.getByRole('button', { name: 'Got it' }).click();
+    await expect(notice).toBeHidden();
     const backLink = page.getByRole('link', { name: 'Back to keiko library' });
     await backLink.focus();
     await page.keyboard.press('Tab');
