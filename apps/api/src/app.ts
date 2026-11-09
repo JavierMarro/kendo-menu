@@ -11,6 +11,7 @@ import type { Account } from './account/account.js';
 import type { Adoption } from './adoption/adoption.js';
 import type { Dashboard } from './dashboard/dashboard.js';
 import type { ManagedIdentityVerifier } from './auth/managed-identity.js';
+import type { Shares } from './shares/shares.js';
 import { createRuntimeServices } from './runtime.js';
 
 const CACHE_CONTROL = 'private, no-store';
@@ -20,6 +21,7 @@ export interface AppOptions {
   readonly account?: Account;
   readonly dashboard?: Dashboard;
   readonly adoption?: Adoption;
+  readonly shares?: Shares;
   /** Isolated development proof only; ordinary composition does not inject it. */
   readonly managedIdentity?: ManagedIdentityVerifier;
 }
@@ -28,17 +30,24 @@ export const createApp = (options: AppOptions = {}) => {
   const runtime =
     options.account === undefined ||
     options.dashboard === undefined ||
-    options.adoption === undefined
+    options.adoption === undefined ||
+    options.shares === undefined
       ? createRuntimeServices()
       : undefined;
   const account = options.account ?? runtime?.account;
   const dashboard = options.dashboard ?? runtime?.dashboard;
   const adoption = options.adoption ?? runtime?.adoption;
-  if (account === undefined || dashboard === undefined || adoption === undefined) {
+  const shares = options.shares ?? runtime?.shares;
+  if (
+    account === undefined ||
+    dashboard === undefined ||
+    adoption === undefined ||
+    shares === undefined
+  ) {
     throw new Error('RUNTIME_SERVICES_NOT_COMPOSED');
   }
   // This route table is the single ordering point shared by both runtime adapters.
-  // Dashboard PUT and adoption POST opt out of framework parsing so their bounded
+  // Dashboard PUT, adoption POST, and share routes opt out of framework parsing so bounded
   // handlers see raw bodies and can authenticate before reading them.
   const app = new Elysia({ adapter: WebStandardAdapter })
     .onRequest(({ request: _request, set }) => {
@@ -69,6 +78,11 @@ export const createApp = (options: AppOptions = {}) => {
     .get('/api/dashboard', ({ request }) => dashboard.handle(request))
     .put('/api/dashboard', ({ request }) => dashboard.handle(request), { parse: 'none' })
     .head('/api/dashboard', ({ request }) => dashboard.handle(request))
+    .all('/api/shares/:token/recipient', ({ request }) => shares.handle(request), {
+      parse: 'none',
+    })
+    .all('/api/shares/:token', ({ request }) => shares.handle(request), { parse: 'none' })
+    .all('/api/shares', ({ request }) => shares.handle(request), { parse: 'none' })
     .post('/api/dashboard/adoption', ({ request }) => adoption.handle(request), { parse: 'none' })
     .head('/api/dashboard/adoption', ({ request }) => adoption.handle(request), { parse: 'none' })
     .all('/api/dashboard/adoption', ({ request }) => adoption.handle(request), { parse: 'none' })

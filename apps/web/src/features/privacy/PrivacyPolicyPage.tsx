@@ -41,6 +41,20 @@ export function PrivacyPolicyPage() {
           </p>
         </section>
 
+        <section className="policy-section" aria-labelledby="sharing-data-title">
+          <h2 id="sharing-data-title">Menus you choose to share</h2>
+          <p>
+            Sharing a custom account menu stores a snapshot of its last saved name, intensity,
+            activities, exercises and quantities. Anyone with the link can view and forward it.
+            Descriptions, notes and your account identity are not included in the snapshot.
+          </p>
+          <p>
+            Editing or removing the original menu does not remove a shared snapshot. Recipients can
+            save independent copies to their accounts and edit them. Removing your hosted shares as
+            part of account deletion does not remove copies already saved by recipients.
+          </p>
+        </section>
+
         <section className="policy-section" aria-labelledby="google-sign-in-title">
           <h2 id="google-sign-in-title">Google sign-in</h2>
           <p>

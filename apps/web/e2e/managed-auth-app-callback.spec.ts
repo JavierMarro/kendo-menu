@@ -20,12 +20,24 @@ test('an unmarked root verifier fails closed with a clean URL and no ordinary ac
 test('an explicit application cancellation is sanitized and cleans provider error parameters', async ({
   page,
 }) => {
+  await page.addInitScript(() => {
+    if (window.location.search.includes('error=access_denied'))
+      sessionStorage.setItem(
+        'kendomenu:share-return-v1',
+        JSON.stringify({
+          version: 1,
+          token: 's'.repeat(43),
+          expiresAt: Date.now() + 60_000,
+        }),
+      );
+  });
   await page.goto(
     '/app/auth/callback?error=access_denied&error_description=synthetic-private-error',
   );
   await expect(page.getByRole('heading', { name: 'Sign-in could not be completed' })).toBeVisible();
   await expect(page.getByText('synthetic-private-error')).toHaveCount(0);
   await expect(page).toHaveURL(/\/app\/auth\/callback$/);
+  expect(await page.evaluate(() => sessionStorage.getItem('kendomenu:share-return-v1'))).toBeNull();
 });
 
 for (const callback of ['root', 'explicit'] as const) {

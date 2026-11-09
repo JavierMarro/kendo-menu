@@ -185,6 +185,8 @@ export function createDashboard(dependencies: DashboardDependencies): Dashboard 
             return json(409, { error: 'REQUEST_ID_REUSED' });
           case 'catalogue-incompatible':
             return json(422, { error: 'CATALOGUE_INCOMPATIBLE' });
+          case 'unsupported-client-version':
+            return json(409, { error: 'DASHBOARD_VERSION_UPGRADE_REQUIRED' });
           case 'unauthenticated':
           case 'auth-unavailable':
           case 'workspace-mismatch':

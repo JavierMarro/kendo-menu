@@ -3,7 +3,10 @@
  * Validated strings are branded to keep untrusted input out of trusted call sites; revisions
  * remain decimal strings so JavaScript never narrows PostgreSQL bigint values.
  */
-import type { PersistedTrainingWireStateV10 } from '@kendo-menu/domain/dashboard-persistence';
+import type {
+  PersistedTrainingWireStateV10,
+  PersistedTrainingWireStateV11,
+} from '@kendo-menu/domain/dashboard-persistence';
 
 declare const accountWorkspaceIdBrand: unique symbol;
 declare const requestIdBrand: unique symbol;
@@ -19,10 +22,9 @@ export type NonZeroRevision = Revision & { readonly [nonZeroRevisionBrand]: true
 export type CatalogueVersion = string & { readonly [catalogueVersionBrand]: true };
 export type Timestamp = string & { readonly [timestampBrand]: true };
 
-export interface DashboardSnapshot {
-  readonly version: 10;
-  readonly state: PersistedTrainingWireStateV10;
-}
+export type DashboardSnapshot =
+  | { readonly version: 10; readonly state: PersistedTrainingWireStateV10 }
+  | { readonly version: 11; readonly state: PersistedTrainingWireStateV11 };
 
 export interface DashboardWriteRequest {
   readonly transportVersion: 1;

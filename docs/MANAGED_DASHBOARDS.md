@@ -170,3 +170,13 @@ failures and later owner-reported single-account passes remain historical eviden
 mobile-browser failure also remains historical: `account-persistence.spec.ts:273`, View dashboard
 click at line 283, detached-element timeout after 30 seconds, 57/58 passed. B's API/database checks
 do not erase it or establish whole-branch release readiness.
+
+## Sharing compatibility extension
+
+The sharing branch adds strict v11 dashboard snapshots containing optional `receivedViaShare: true`
+on custom entries. Reads retain the actual stored v10/v11 version and canonical representation;
+new clients save v11. A new v10 write against stored v11 returns
+`422 UNSUPPORTED_DASHBOARD_VERSION`. A matching retained request receipt is replayed first.
+There is no bulk row rewrite or revision bump on read. Guest-copy Yes accepts either strictly
+validated format and never rewrites the guest source. Current branch verification is recorded in
+[CUSTOM_MENU_SHARING_PROGRESS.md](CUSTOM_MENU_SHARING_PROGRESS.md).

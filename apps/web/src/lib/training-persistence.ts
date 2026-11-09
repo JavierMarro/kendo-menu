@@ -6,7 +6,7 @@
  */
 import {
   classifyTrainingStorageValue,
-  serializePersistedTrainingStateV10,
+  serializePersistedTrainingStateV11,
   type StateStorage,
   type TrainingStorageInspection,
 } from '@kendo-menu/store';
@@ -540,7 +540,7 @@ export function downloadRawTrainingBackup(raw: string): void {
  * always carries the current persistence version and never reads stale or failed storage bytes.
  */
 export function downloadCurrentTrainingBackup(dashboardEntries: unknown): void {
-  const raw = serializePersistedTrainingStateV10({ dashboardEntries });
+  const raw = serializePersistedTrainingStateV11({ dashboardEntries });
   downloadTrainingBackupPayload(
     raw,
     `kendomenu-current-backup-${new Date().toISOString().slice(0, 10)}.json`,

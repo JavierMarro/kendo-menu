@@ -30,7 +30,10 @@ import {
 import { canonicalizeJson } from '../../dashboard/canonicalization.js';
 import { parseStrictJsonText } from '../../dashboard/request-body.js';
 import type { ValidatedDashboardWrite } from '../../dashboard/validation.js';
-import { parseDashboardPersistenceV10 } from '@kendo-menu/domain/dashboard-persistence';
+import {
+  parseDashboardPersistenceV10,
+  parseDashboardPersistenceV11,
+} from '@kendo-menu/domain/dashboard-persistence';
 import { PersistenceError, type PersistenceClock } from '../contracts.js';
 import type {
   DashboardPersistence,
@@ -123,10 +126,14 @@ function storedSnapshot(value: string): DashboardSnapshot {
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
     throw new PersistenceError('FAILED');
   const row = parsed as Record<string, unknown>;
-  if (row['version'] !== 10 || !Object.hasOwn(row, 'state')) throw new PersistenceError('FAILED');
-  const state = parseDashboardPersistenceV10(row['state']);
+  if ((row['version'] !== 10 && row['version'] !== 11) || !Object.hasOwn(row, 'state'))
+    throw new PersistenceError('FAILED');
+  const state =
+    row['version'] === 10
+      ? parseDashboardPersistenceV10(row['state'])
+      : parseDashboardPersistenceV11(row['state']);
   if (state === null) throw new PersistenceError('FAILED');
-  const snapshot: DashboardSnapshot = Object.freeze({ version: 10, state });
+  const snapshot: DashboardSnapshot = Object.freeze({ version: row['version'], state });
   if (canonicalizeJson(snapshot) !== value) throw new PersistenceError('FAILED');
   return snapshot;
 }
@@ -322,7 +329,13 @@ export function createPostgresManagedDashboardPersistence(dependencies: {
             const stored = dashboardRows[0];
             const current = stored?.revision ?? 0n;
             if (stored !== undefined) {
-              readResponse(values.accountId, stored);
+              const currentResponse = readResponse(values.accountId, stored);
+              if (
+                currentResponse.dashboard?.version === 11 &&
+                intent.request.dashboard.version === 10
+              ) {
+                return { status: 'unsupported-client-version' };
+              }
             }
             const expected = BigInt(intent.request.expectedRevision);
             if (current !== expected) {

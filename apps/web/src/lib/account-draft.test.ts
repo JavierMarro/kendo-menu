@@ -1,3 +1,4 @@
+import { createSharedMenuV1 } from '@kendo-menu/domain/menu-sharing';
 import { DEFAULT_TRAINING_SETS } from '@kendo-menu/domain';
 import { encodeDashboardPersistenceV10 } from '@kendo-menu/domain/dashboard-persistence';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -33,6 +34,9 @@ function deferred<T>() {
 }
 function fixture() {
   const api = {
+    getSharedMenu: vi.fn<AccountApiClient['getSharedMenu']>(),
+    getSharedMenuForRecipient: vi.fn<AccountApiClient['getSharedMenuForRecipient']>(),
+    createMenuShare: vi.fn<AccountApiClient['createMenuShare']>(),
     getAccount: vi.fn<AccountApiClient['getAccount']>().mockResolvedValue(account),
     initializeAccount: vi
       .fn<AccountApiClient['initializeAccount']>()
@@ -728,6 +732,170 @@ describe('memory-only account draft lifecycle', () => {
     expect(request?.expectedRevision).toBe('1');
     expect(request?.dashboard.state.dashboardEntries).toEqual([]);
     expect(controller.getSnapshot().dirty).toBe(false);
+    controller.dispose();
+  });
+});
+
+describe('saved-only menu sharing', () => {
+  it('shares the acknowledged version while later draft edits stay unsaved', async () => {
+    const { controller, api } = fixture();
+    await controller.load();
+    const store = controller.getSnapshot().store;
+    if (store === null) throw new Error('Missing store');
+    const created = store.getState().createCustomTrainingSetAndAddToDashboard({
+      name: 'Saved menu',
+      category: 'custom',
+      sections: [
+        { name: 'Section', exercises: [{ name: 'Men', quantities: { repetitions: 20 } }] },
+      ],
+    });
+    expect(controller.getSavedEntry(created.dashboardEntryId)).toBeNull();
+    await expect(controller.createMenuShare(created.dashboardEntryId)).rejects.toThrow();
+    await controller.save();
+    const saved = controller.getSavedEntry(created.dashboardEntryId);
+    expect(saved?.trainingSet?.name).toBe('Saved menu');
+    store
+      .getState()
+      .updateDashboardEntry(created.dashboardEntryId, { notes: 'Unsaved private note' });
+    expect(controller.getSavedEntry(created.dashboardEntryId)?.notes).toBe('');
+    api.createMenuShare.mockResolvedValue({
+      token: 's'.repeat(43),
+      sourceRevision: '1',
+      accountWorkspaceId: ACCOUNT,
+    });
+    await controller.createMenuShare(created.dashboardEntryId);
+    expect(api.createMenuShare).toHaveBeenCalledWith(
+      ACCOUNT,
+      '1',
+      created.dashboardEntryId,
+      undefined,
+    );
+    expect(controller.getSnapshot().dirty).toBe(true);
+    expect(api.putDashboard).toHaveBeenCalledTimes(1);
+    controller.dispose();
+  });
+  it('fences a share response if identity becomes unavailable', async () => {
+    const { controller, api } = fixture();
+    await controller.load();
+    const store = controller.getSnapshot().store;
+    if (store === null) throw new Error('Missing store');
+    const created = store.getState().createCustomTrainingSetAndAddToDashboard({
+      name: 'Menu',
+      category: 'custom',
+      sections: [{ name: 'Section', exercises: [] }],
+    });
+    await controller.save();
+    const response = deferred<Awaited<ReturnType<AccountApiClient['createMenuShare']>>>();
+    api.createMenuShare.mockReturnValue(response.promise);
+    const pending = controller.createMenuShare(created.dashboardEntryId);
+    controller.hideForIdentityUncertainty();
+    response.resolve({ token: 's'.repeat(43), sourceRevision: '1', accountWorkspaceId: ACCOUNT });
+    await expect(pending).rejects.toThrow('cancelled');
+    expect(controller.getSavedEntry(created.dashboardEntryId)).toBeNull();
+    controller.dispose();
+  });
+});
+
+describe('atomic shared-menu account import', () => {
+  it('preserves both duration units with fresh IDs and retains origin through save', async () => {
+    const { controller, api } = fixture();
+    await controller.load();
+    const menu = {
+      version: 1 as const,
+      name: 'Shared',
+      sections: [
+        {
+          name: 'Main',
+          exercises: [
+            {
+              name: 'Men',
+              quantities: { duration: { unit: 'seconds' as const, value: 30 } },
+              additionalDuration: { unit: 'minutes' as const, value: 2 },
+            },
+          ],
+        },
+      ],
+    };
+    const id = controller.importSharedMenu(menu, false);
+    const entry = controller
+      .getSnapshot()
+      .store?.getState()
+      .dashboardEntries.find((item) => item.id === id);
+    if (entry === undefined) throw new Error('Missing received entry');
+    expect(createSharedMenuV1(entry)).toEqual(menu);
+    expect(entry.receivedViaShare).toBe(true);
+    expect(api.putDashboard).not.toHaveBeenCalled();
+    await controller.save();
+    expect(
+      api.putDashboard.mock.calls[0]?.[1].dashboard.state.dashboardEntries[0]?.receivedViaShare,
+    ).toBe(true);
+    controller.dispose();
+  });
+  it('rejects an import that exceeds full UTF-8 Save size before changing the live draft', async () => {
+    const { controller } = fixture();
+    await controller.load();
+    const store = controller.getSnapshot().store;
+    const builtIn = DEFAULT_TRAINING_SETS[0];
+    if (store === null || builtIn === undefined) throw new Error('Missing fixture');
+    const entries = Array.from({ length: 80 }, (_, index) => ({
+      id: `entry-${index}`,
+      trainingSetId: builtIn.id,
+      trainingSet: builtIn,
+      quantityOverrides: {},
+      activityNotes: {},
+      notes: '界'.repeat(8000),
+      createdAt: '2026-11-09T00:00:00.000Z',
+    }));
+    store.setState({ dashboardEntries: entries });
+    const before = store.getState().dashboardEntries;
+    const large = {
+      version: 1 as const,
+      name: 'Large shared menu',
+      sections: Array.from({ length: 4 }, () => ({
+        name: '界'.repeat(200),
+        exercises: Array.from({ length: 120 }, () => ({ name: '界'.repeat(200) })),
+      })),
+    };
+    expect(() => controller.importSharedMenu(large, false)).toThrow(/size limit/);
+    expect(store.getState().dashboardEntries).toBe(before);
+    controller.dispose();
+  });
+  it('offers existing conflict recovery when sharing', async () => {
+    const { controller, api, rejected } = fixture();
+    await controller.load();
+    const store = controller.getSnapshot().store;
+    if (store === null) throw new Error('Missing store');
+    const created = store.getState().createCustomTrainingSetAndAddToDashboard({
+      name: 'Menu',
+      category: 'custom',
+      sections: [{ name: 'Main', exercises: [] }],
+    });
+    await controller.save();
+    api.createMenuShare.mockRejectedValueOnce(
+      new AccountApiError('http', 'Conflict', { status: 409, code: 'REVISION_CONFLICT' }),
+    );
+    await expect(controller.createMenuShare(created.dashboardEntryId)).rejects.toThrow();
+    expect(controller.getSnapshot().saveState).toBe('conflict');
+    controller.dispose();
+    expect(rejected).not.toHaveBeenCalled();
+  });
+  it('hides the draft when sharing reports a different account workspace', async () => {
+    const { controller, api, rejected } = fixture();
+    await controller.load();
+    const store = controller.getSnapshot().store;
+    if (store === null) throw new Error('Missing store');
+    const created = store.getState().createCustomTrainingSetAndAddToDashboard({
+      name: 'Menu',
+      category: 'custom',
+      sections: [{ name: 'Main', exercises: [] }],
+    });
+    await controller.save();
+    api.createMenuShare.mockRejectedValueOnce(
+      new AccountApiError('http', 'Mismatch', { status: 403, code: 'ACCOUNT_WORKSPACE_MISMATCH' }),
+    );
+    await expect(controller.createMenuShare(created.dashboardEntryId)).rejects.toThrow();
+    expect(controller.getSnapshot().status).toBe('auth-hidden');
+    expect(rejected).toHaveBeenCalledOnce();
     controller.dispose();
   });
 });

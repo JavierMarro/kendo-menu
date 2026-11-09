@@ -600,3 +600,61 @@ describe('managed bearer account API boundary', () => {
     expect(fresh).not.toHaveBeenCalled();
   });
 });
+
+describe('sharing API boundary', () => {
+  const shareToken = 's'.repeat(43);
+  const snapshot = {
+    version: 1,
+    name: 'Shared practice',
+    sections: [{ name: 'Main', exercises: [{ name: 'Men', quantities: { repetitions: 20 } }] }],
+  };
+  it('reads public previews without requesting identity or sending bearer credentials', async () => {
+    const getToken = vi.fn(token);
+    const transport = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ snapshot }));
+    const api = createAccountApiClient({ fetch: transport, getToken });
+    expect(await api.getSharedMenu(shareToken)).toEqual({ snapshot });
+    expect(getToken).not.toHaveBeenCalled();
+    expect(transport).toHaveBeenCalledWith(
+      `/api/shares/${shareToken}`,
+      expect.objectContaining({ cache: 'no-store', redirect: 'error' }),
+    );
+    expect(new Headers(transport.mock.calls[0]?.[1]?.headers).has('authorization')).toBe(false);
+  });
+  it('binds recipient responses and create acknowledgements to the expected account and revision', async () => {
+    const recipient = client({ snapshot, isSender: false, accountWorkspaceId: ACCOUNT });
+    expect(await recipient.api.getSharedMenuForRecipient(ACCOUNT, shareToken)).toMatchObject({
+      isSender: false,
+    });
+    const foreign = client({ snapshot, isSender: false, accountWorkspaceId: OTHER });
+    await expect(foreign.api.getSharedMenuForRecipient(ACCOUNT, shareToken)).rejects.toMatchObject({
+      kind: 'invalid-response',
+    });
+    const created = client({ token: shareToken, sourceRevision: '3', accountWorkspaceId: ACCOUNT });
+    await expect(created.api.createMenuShare(ACCOUNT, '3', 'entry')).resolves.toMatchObject({
+      token: shareToken,
+    });
+    const stale = client({ token: shareToken, sourceRevision: '4', accountWorkspaceId: ACCOUNT });
+    await expect(stale.api.createMenuShare(ACCOUNT, '3', 'entry')).rejects.toMatchObject({
+      kind: 'invalid-response',
+    });
+  });
+  it('rejects malformed links and public content with private fields', async () => {
+    const invalid = client({ snapshot });
+    await expect(invalid.api.getSharedMenu('../account')).rejects.toMatchObject({
+      kind: 'request-invalid',
+    });
+    expect(invalid.transport).not.toHaveBeenCalled();
+    const leaked = client({ snapshot: { ...snapshot, notes: 'private' } });
+    await expect(leaked.api.getSharedMenu(shareToken)).rejects.toMatchObject({
+      kind: 'invalid-response',
+    });
+  });
+  it('times out public reads without depending on auth availability', async () => {
+    const api = createAccountApiClient({
+      fetch: vi.fn<typeof fetch>(() => new Promise(() => undefined)),
+      getToken: token,
+      requestTimeoutMs: 5,
+    });
+    await expect(api.getSharedMenu(shareToken)).rejects.toMatchObject({ kind: 'network' });
+  });
+});

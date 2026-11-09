@@ -69,6 +69,8 @@ function intent(
   expectedRevision = '0',
   requestId: string = randomUUID(),
   note?: string,
+  dashboardVersion: 10 | 11 = 10,
+  dashboardEntries?: readonly unknown[],
 ) {
   const result = validateDashboardWrite(
     {
@@ -78,10 +80,11 @@ function intent(
       requestId,
       catalogueVersion: catalogue.version,
       dashboard: {
-        version: 10,
+        version: dashboardVersion,
         state: {
           dashboardEntries:
-            note === undefined
+            dashboardEntries ??
+            (note === undefined
               ? []
               : [
                   {
@@ -92,7 +95,7 @@ function intent(
                     notes: note,
                     createdAt: initialTime.toISOString(),
                   },
-                ],
+                ]),
         },
       },
     },
@@ -220,6 +223,62 @@ describe('managed PostgreSQL dashboard ownership and Save receipts', () => {
       ),
     ).toEqual({ status: 'request-id-reused' });
     expect(await snapshot(user)).toEqual(before);
+  });
+
+  it('preserves v11 provenance, replays old receipts, and rejects new v10 writes', async () => {
+    const user = await fixture();
+    const oldRequest = intent(user);
+    const oldWrite = await db.persistence.dashboards.compareAndWrite(
+      user.proof,
+      oldRequest,
+      () => true,
+    );
+    if (oldWrite.status !== 'written') throw new Error('TEST_V10_WRITE_FAILED');
+
+    const sharedEntry = {
+      id: 'received-entry',
+      trainingSetId: 'received-custom-set',
+      trainingSet: {
+        id: 'received-custom-set',
+        name: 'Shared menu',
+        category: 'custom',
+        sections: [{ id: 'received-section', name: 'Warm up', exercises: [] }],
+        isBuiltIn: false,
+      },
+      quantityOverrides: {},
+      activityNotes: {},
+      notes: '',
+      createdAt: initialTime.toISOString(),
+      receivedViaShare: true,
+    };
+    const newRequest = intent(user, '1', randomUUID(), undefined, 11, [sharedEntry]);
+    const newWrite = await db.persistence.dashboards.compareAndWrite(
+      user.proof,
+      newRequest,
+      () => true,
+    );
+    expect(newWrite.status).toBe('written');
+
+    const replay = await db.persistence.dashboards.compareAndWrite(
+      user.proof,
+      oldRequest,
+      () => false,
+    );
+    expect(replay).toEqual({ status: 'replayed', acknowledgement: oldWrite.acknowledgement });
+
+    const downgrade = await db.persistence.dashboards.compareAndWrite(
+      user.proof,
+      intent(user, '2'),
+      () => true,
+    );
+    expect(downgrade).toEqual({ status: 'unsupported-client-version' });
+
+    const read = await db.persistence.dashboards.read(user.proof);
+    expect(read.status).toBe('read');
+    if (read.status !== 'read' || read.response.dashboard?.version !== 11) {
+      throw new Error('TEST_V11_READ_FAILED');
+    }
+    expect(read.response.dashboard.state.dashboardEntries[0]?.receivedViaShare).toBe(true);
   });
 
   it('does not consume opportunity or mutate storage on catalogue rejection and stale revisions', async () => {

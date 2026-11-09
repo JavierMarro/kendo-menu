@@ -354,6 +354,35 @@ export const dashboardWriteReceipts = pgTable(
   ],
 );
 
+/** Public note-free menu copies; ownership is independent from source dashboard-entry lifetime. */
+export const menuShares = pgTable(
+  'menu_shares',
+  {
+    token: varchar('token', { length: 43 }).primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    sourceEntryId: varchar('source_entry_id', { length: 256 }).notNull(),
+    payloadVersion: integer('payload_version').notNull(),
+    snapshotJson: text('snapshot_json').notNull(),
+    snapshotDigest: varchar('snapshot_digest', { length: 64 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('menu_shares_source_snapshot_key').on(
+      table.ownerId,
+      table.sourceEntryId,
+      table.payloadVersion,
+      table.snapshotDigest,
+    ),
+    check('menu_shares_token_format', sql`(${table.token} ~ '^[A-Za-z0-9_-]{43}$')`),
+    check('menu_shares_payload_version', sql`(${table.payloadVersion} = 1)`),
+    check('menu_shares_snapshot_digest_format', sql`(${table.snapshotDigest} ${SHA256_HEX_CHECK})`),
+    check('menu_shares_snapshot_json_bytes', sql`(octet_length(${table.snapshotJson}) <= 2097152)`),
+    check('menu_shares_finite_created_at', sql`(isfinite(${table.createdAt}))`),
+  ],
+);
+
 /** One schema object is shared by every Drizzle database bound to a checked-out client. */
 export const persistenceSchema = {
   accountCopyOpportunities,
@@ -362,5 +391,6 @@ export const persistenceSchema = {
   cloudDashboards,
   dashboardWriteReceipts,
   loginTransactions,
+  menuShares,
   users,
 };

@@ -1,3 +1,6 @@
+import type { SharedMenuV1 } from '@kendo-menu/domain/menu-sharing';
+import type { DashboardEntry } from '@kendo-menu/domain';
+import type { CreatedMenuShare } from './account-api';
 /**
  * Carries the route owner's workspace kind, path, editability, and transition callbacks to shared
  * pages. It is UI coordination only: identity proof, persistence, and authorization remain with
@@ -11,6 +14,10 @@ export interface WorkspaceContextValue {
   readonly kind: WorkspaceKind;
   readonly basePath: '/app/guest' | '/app/account';
   readonly canEdit: boolean;
+  readonly canShare?: boolean;
+  readonly importSharedMenu?: (menu: SharedMenuV1, isSender: boolean) => string;
+  readonly getSavedEntry?: (entryId: string) => DashboardEntry | null;
+  readonly createMenuShare?: (entryId: string, signal?: AbortSignal) => Promise<CreatedMenuShare>;
   readonly accountEmail: string | null;
   readonly saveToAccount?: () => Promise<void>;
   readonly retrySave?: () => Promise<void>;

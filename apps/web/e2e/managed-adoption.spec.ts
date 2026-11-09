@@ -113,11 +113,11 @@ test('a new account confirms one complete guest copy and keeps later edits separ
     copyOpportunityId: COPY_OPPORTUNITY_ID,
     expectedRevision: '0',
     catalogueVersion: 'a'.repeat(64),
-    dashboard: { version: 10 },
+    dashboard: { version: 11 },
   });
   expect(typeof request['requestId']).toBe('string');
   const guest = JSON.parse(guestBytes) as { readonly state: unknown };
-  expect(request['dashboard']).toEqual({ version: 10, state: guest.state });
+  expect(request['dashboard']).toEqual({ version: 11, state: guest.state });
   await continueToAccount(page);
   await expect(page.getByRole('heading', { name: 'Guest copy source', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'View more', exact: true }).click();

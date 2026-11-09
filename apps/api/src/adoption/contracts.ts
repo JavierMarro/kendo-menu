@@ -29,7 +29,7 @@ export interface AdoptionYesRequest {
   readonly requestId: RequestId;
   readonly catalogueVersion: CatalogueVersion;
   readonly dashboard: {
-    readonly version: 10;
+    readonly version: 10 | 11;
     readonly state: unknown;
   };
 }

@@ -13,6 +13,7 @@ import {
   writeAuthReturnMarker,
 } from './auth-return';
 import type { AuthFlow } from './auth-return';
+import { clearShareReturnMarker, consumeShareReturnMarker } from './share-return';
 
 export type ManagedTokenResult =
   | { readonly status: 'token'; readonly token: string }
@@ -79,6 +80,8 @@ export function createManagedAuthClient(
       const resetAfterBfCache = (event: PageTransitionEvent) => {
         if (!event.persisted || attempt !== signInAttempt) return;
         signInAttempt += 1;
+        clearAuthReturnMarker();
+        clearShareReturnMarker();
         signInInProgress = false;
         removeAttemptListeners();
         window.dispatchEvent(new Event('kendomenu:sign-in-cancelled'));
@@ -93,6 +96,7 @@ export function createManagedAuthClient(
         if (attempt !== signInAttempt) return;
         signInInProgress = false;
         clearAuthReturnMarker();
+        clearShareReturnMarker();
       };
       window.addEventListener('pageshow', resetAfterBfCache);
       window.navigation?.addEventListener('navigateerror', resetAfterCanceledNavigation);
@@ -156,7 +160,10 @@ export function createManagedAuthClient(
       if (reloadRequested) return { status: 'reloading' };
       try {
         clearAuthReturnMarker();
-        const destination = flow === 'proof' ? callbackDestination(flow) : '/app/account/dashboard';
+        const destination =
+          flow === 'proof'
+            ? callbackDestination(flow)
+            : (consumeShareReturnMarker() ?? '/app/account/dashboard');
         (navigation.replaceDocument ?? ((path: string) => window.location.replace(path)))(
           destination,
         );
@@ -175,6 +182,7 @@ export function createManagedAuthClient(
         if (success) {
           callbackBootstrap = undefined;
           clearAuthReturnMarker();
+          clearShareReturnMarker();
         }
         return success;
       } catch {

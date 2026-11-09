@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./dashboard-persistence": "./src/dashboard-persistence.ts"
+    "./dashboard-persistence": "./src/dashboard-persistence.ts",
+    "./menu-sharing": "./src/menu-sharing.ts"
   },
   "scripts": {
     "test": "vitest run",

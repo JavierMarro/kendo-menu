@@ -32,7 +32,7 @@ metadata. Inspection creates nothing and never reissues an opportunity.
 
 Protected dashboard and adoption operations carry an internally branded account proof. Missing
 mapping returns `409 ACCOUNT_NOT_INITIALIZED`. Mutation authorization checks exact configured
-Origin before reading a body. Complete bounded v10 validation, workspace mismatch guards,
+Origin before reading a body. Complete bounded v10/v11 validation, workspace mismatch guards,
 optimistic revisions and ordinary Save receipts remain. SQL mutations serialize on the account
 first and recheck JWT expiry after waits and before completion; no custom session locks, activity
 updates, CSRF cookies or application-token issuance remain in runtime composition.
@@ -79,7 +79,7 @@ library.
 A [`DashboardEntry`](../packages/domain/src/types.ts) is the selected session plus dashboard-owned
 adaptation. Quantity overrides are keyed by activity ID and then unit; activity notes are keyed by
 activity ID. Dashboard actions therefore change the entry, not a curated default. Custom sessions
-are stored as dashboard-owned snapshots: the v10 wire format embeds the custom snapshot with the
+are stored as dashboard-owned snapshots: the v11 wire format embeds the custom snapshot with the
 entry, so entries do not depend on a shared mutable custom-set collection. Built-in entries are
 canonicalized from the immutable defaults when loaded.
 
@@ -87,8 +87,7 @@ Only custom dashboard snapshots can be structurally edited. The shared builder a
 `/app/guest/drills/:entryId/edit` and `/app/account/drills/:entryId/edit` keeps form changes outside
 the store until submission. The store validates the replacement and its serialized size before
 updating one entry, retaining existing node IDs, hidden authored metadata and practice notes, and
-removing overrides belonging to deleted nodes or replaced quantity units. The wire format remains
-v10. Guest writes use the existing local flush; account edits stay in memory until an explicit
+removing overrides belonging to deleted nodes or replaced quantity units. The v11 wire format retains received-copy provenance. Guest writes use the existing local flush; account edits stay in memory until an explicit
 whole-dashboard Save is acknowledged.
 
 ## Curated data and validation
@@ -110,13 +109,13 @@ validates the resulting runtime set before it is exposed.
 
 [`packages/store/src/index.ts`](../packages/store/src/index.ts) creates a Zustand store with
 `createTrainingStore({ storage, storageKey, onHydrationError })`. Zustand `persist` is configured
-with the injected `StateStorage`, a custom JSON storage adapter, the migration function, a v10
+with the injected `StateStorage`, a custom JSON storage adapter, the migration function, a v11
 partialized state, and a merge that accepts only validated current state. Sync and async injected
 storage are supported by the corresponding store factories.
 
 [`packages/store/src/persistence.ts`](../packages/store/src/persistence.ts) treats persisted JSON as
 untrusted. The current persisted version is **10**. It parses an envelope, validates bounded state,
-migrates older versions in order, and serializes the same v10 representation used by storage writes.
+migrates older versions in order, and serializes the same v11 representation used by storage writes.
 
 The 2026-09-02 hardening is part of this boundary:
 
@@ -126,32 +125,33 @@ The 2026-09-02 hardening is part of this boundary:
 - Public validators, parsers, classifiers, and storage inspection are exception-safe at hostile
   getter/proxy, malformed-input, and browser-availability boundaries; migration and action APIs
   reject invalid input explicitly rather than returning partial state.
-- Encoding and storage use the same v10 validation and serialization path, including a raw-size
+- Encoding and storage use the same v11 validation and serialization path, including a raw-size
   preflight. Store actions preflight the candidate before returning a new state, so rejected
   validation/size actions leave the in-memory state and storage unchanged.
 - Custom snapshots retain a two-level wire shape (`sections` containing `exercises`) even though
   the runtime contract is recursive. Unsupported custom nesting is rejected with an exception;
   it is never silently truncated. Browser write failures are surfaced to the web persistence UI,
   and the adapter stops further writes after a failure. The live state remains usable for the
-  session and can be explicitly downloaded through the same validated v10 serializer.
+  session and can be explicitly downloaded through the same validated v11 serializer.
 
 ### Ordered migration chain
 
 `migratePersistedTrainingState` composes every applicable step; it does not jump directly from an
-old shape to v10:
+old shape to v11:
 
-| Step     | Migration purpose                                                                                                                |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| v0 → v1  | Validate the original legacy state shape.                                                                                        |
-| v1 → v2  | Wrap legacy flat steps in a generated section.                                                                                   |
-| v2 → v3  | Add the legacy quantity collection to each step.                                                                                 |
-| v3 → v4  | Convert `repOverrides` to activity/unit-keyed quantity overrides.                                                                |
-| v4 → v5  | Adapt legacy sections/steps into recursive runtime activities.                                                                   |
-| v5 → v6  | Merge the corrected International Uchikomi overrides and convert the known seconds-to-minutes duration; conflicting values fail. |
-| v6 → v7  | Remove obsolete activity overrides and normalize the affected Police dojo activity.                                              |
-| v7 → v8  | Normalize the corrected Top University activity and its seconds-only overrides.                                                  |
-| v8 → v9  | Add activity-note maps to dashboard entries.                                                                                     |
-| v9 → v10 | Move shared custom sets into dashboard-owned snapshots and canonicalize referenced built-ins.                                    |
+| Step      | Migration purpose                                                                                                                |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| v0 → v1   | Validate the original legacy state shape.                                                                                        |
+| v1 → v2   | Wrap legacy flat steps in a generated section.                                                                                   |
+| v2 → v3   | Add the legacy quantity collection to each step.                                                                                 |
+| v3 → v4   | Convert `repOverrides` to activity/unit-keyed quantity overrides.                                                                |
+| v4 → v5   | Adapt legacy sections/steps into recursive runtime activities.                                                                   |
+| v5 → v6   | Merge the corrected International Uchikomi overrides and convert the known seconds-to-minutes duration; conflicting values fail. |
+| v6 → v7   | Remove obsolete activity overrides and normalize the affected Police dojo activity.                                              |
+| v7 → v8   | Normalize the corrected Top University activity and its seconds-only overrides.                                                  |
+| v8 → v9   | Add activity-note maps to dashboard entries.                                                                                     |
+| v9 → v10  | Move shared custom sets into dashboard-owned snapshots and canonicalize referenced built-ins.                                    |
+| v10 → v11 | Preserve received-copy provenance on custom entries; existing entries keep their original unmarked origin.                       |
 
 The exact legacy IDs and conflict rules remain in the migration source of truth above; future
 shape changes must add a new ordered migration rather than rewriting historical steps.
@@ -231,7 +231,7 @@ guarded schema-isolated local PostgreSQL tests remain separate commands. Node 24
 ### Dashboard transport and storage
 
 The platform-neutral [domain codec](../packages/domain/src/dashboard-persistence.ts) owns strict
-v10 dashboard wire DTOs. Store aliases preserve existing imports, local migrations and serialization.
+v10 and v11 dashboard wire DTOs. Store aliases preserve existing imports, local migrations and serialization.
 Node-compatible relative imports and JSON import attributes support both API NodeNext and web
 bundler configurations. Neither React nor Zustand enters the API.
 
@@ -290,3 +290,23 @@ A fresh validated cloud load precedes editing after either decision or uncertain
 visits do not replace existing drafts. A committed ordinary Save also releases the handoff.
 See [Migration C](MANAGED_ACCOUNT_WEB.md) for the state/event table, local startup, retirement and
 verification limits. Historical synchronization ADRs/handoffs retain predecessor evidence.
+
+## Custom-menu sharing
+
+The sharing feature uses strict domain v11 dashboard codecs with an optional `receivedViaShare`
+marker on custom entries. Strict v10 parsing remains available for stored rows and retained write
+receipts. New account saves use v11; a fresh v10 write cannot replace a v11 dashboard. Exact retained
+retries still replay before version transition checks. Guest migrations preserve existing contents.
+
+Public snapshots use the separate note-free `SharedMenuV1` domain DTO. They have no source IDs or
+identity fields. Effective quantity overrides become content; when both duration units exist, an
+additional fixed duration preserves the second unit. Import builds fresh IDs in a temporary memory
+store, checks the complete account Save UTF-8 limit, then changes the live account draft once.
+Received copies have no dependency on the hosted snapshot or sender account.
+
+Sharing creation is a managed-authorized operation on a saved dashboard entry/revision. Public
+preview and verified recipient reads are separate from dashboard saves. Per-tab sign-in continuation
+stores only a bounded, expiring share token and resolves only to a fixed local route. The account
+provider retains the intended shared route through guest-copy setup without discarding its draft.
+See the [plan](CUSTOM_MENU_SHARING_PLAN.md) and [progress record](CUSTOM_MENU_SHARING_PROGRESS.md)
+for completion and test evidence; these changes do not claim production deployment.

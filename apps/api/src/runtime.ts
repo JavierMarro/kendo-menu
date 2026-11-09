@@ -13,6 +13,7 @@ import { createAccount } from './account/account.js';
 import { createAdoption } from './adoption/adoption.js';
 import { createDashboard } from './dashboard/dashboard.js';
 import { createDashboardCatalogue } from './dashboard/validation.js';
+import { createShares } from './shares/shares.js';
 import { createRuntimePersistence, type RuntimePersistenceOptions } from './persistence/runtime.js';
 
 /** Bind managed verification configuration and compose lazy services without opening sockets. */
@@ -56,9 +57,13 @@ export function createRuntimeServices(
     persistence: async () => (await persistence.get()).managedCopy,
     catalogue,
   });
+  const shares = createShares({
+    authorization,
+    persistence: async () => (await persistence.get()).shares,
+  });
   const account = createAccount({
     authorization,
     persistence: async () => (await persistence.get()).managedAccounts,
   });
-  return { account, authorization, dashboard, adoption };
+  return { account, authorization, dashboard, adoption, shares };
 }

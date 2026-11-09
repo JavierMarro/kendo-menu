@@ -99,7 +99,7 @@ describe('write validation and canonical intent', () => {
     [{ ...envelope(), requestId: 'bad' }, 'INVALID_DASHBOARD_REQUEST'],
     [{ ...envelope(), catalogueVersion: 'bad' }, 'INVALID_DASHBOARD_REQUEST'],
     [{ ...envelope(), dashboard: { version: 9, state: {} } }, 'UNSUPPORTED_DASHBOARD_VERSION'],
-    [{ ...envelope(), dashboard: { version: 11, state: {} } }, 'UNSUPPORTED_DASHBOARD_VERSION'],
+    [{ ...envelope(), dashboard: { version: 12, state: {} } }, 'UNSUPPORTED_DASHBOARD_VERSION'],
     [
       { ...envelope(), dashboard: { version: 10, state: {}, extra: 1 } },
       'INVALID_DASHBOARD_REQUEST',
@@ -139,6 +139,58 @@ describe('write validation and canonical intent', () => {
     expect(catalogue.version).toBe(
       '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945',
     );
+  });
+
+  it('preserves received provenance in v11 intents and keeps the v10 boundary strict', () => {
+    const state = {
+      dashboardEntries: [
+        {
+          id: 'entry-1',
+          trainingSetId: 'custom-set-1',
+          trainingSet: {
+            id: 'custom-set-1',
+            name: 'Shared menu',
+            category: 'custom',
+            sections: [{ id: 'section-1', name: 'Warm up', exercises: [] }],
+            isBuiltIn: false,
+          },
+          quantityOverrides: {},
+          activityNotes: {},
+          notes: '',
+          createdAt: TIMESTAMP,
+          receivedViaShare: true,
+        },
+      ],
+    };
+    const validV11 = intent({
+      ...envelope(),
+      dashboard: { version: 11, state },
+    });
+    if (validV11.request.dashboard.version !== 11) throw new Error('TEST_V11_INTENT_MISSING');
+    expect(validV11.request.dashboard.state.dashboardEntries[0]?.receivedViaShare).toBe(true);
+    expect(validate({ ...envelope(), dashboard: { version: 10, state } })).toEqual({
+      status: 'invalid',
+      error: 'INVALID_DASHBOARD',
+    });
+
+    const catalogue = createDashboardCatalogue();
+    if (!isAccountWorkspaceId(USER_ID)) throw new Error('BAD_FIXTURE');
+    const current = intent({
+      ...envelope(),
+      catalogueVersion: catalogue.version,
+      dashboard: { version: 11, state },
+    });
+    if (current.request.dashboard.version !== 11) throw new Error('TEST_V11_INTENT_MISSING');
+    expect(catalogue.isCompatible(current)).toBe(true);
+    const saved = {
+      transportVersion: 1,
+      accountWorkspaceId: USER_ID,
+      catalogueVersion: catalogue.version,
+      revision: '1',
+      dashboard: current.request.dashboard,
+      updatedAt: TIMESTAMP,
+    };
+    expect(catalogue.validateRead(saved, USER_ID)).toEqual(saved);
   });
 });
 

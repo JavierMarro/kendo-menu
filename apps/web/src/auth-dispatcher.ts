@@ -11,6 +11,8 @@ import {
   resolveAuthReturn,
 } from './lib/auth-return';
 
+import { clearShareReturnMarker } from './lib/share-return';
+
 const pathname = window.location.pathname;
 const resolution = resolveAuthReturn(pathname, window.location.search);
 
@@ -20,6 +22,7 @@ if (pathname === APPLICATION_CALLBACK_PATH) {
   const destination = callbackDestination(resolution.flow);
   const cleanUrl = new URL(destination, window.location.origin);
   clearAuthReturnMarker();
+  clearShareReturnMarker();
   window.location.replace(`${cleanUrl.pathname}`);
 } else if (resolution.kind === 'callback') {
   if (pathname === '/') {
@@ -35,6 +38,7 @@ if (pathname === APPLICATION_CALLBACK_PATH) {
   }
 } else if (resolution.kind === 'invalid') {
   clearAuthReturnMarker();
+  clearShareReturnMarker();
   void import('./features/auth-callback/entry');
 } else {
   void import('./app-entry');

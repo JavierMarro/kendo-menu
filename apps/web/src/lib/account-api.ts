@@ -1,3 +1,5 @@
+import { TRAINING_DATA_LIMITS } from '@kendo-menu/domain';
+import { parseSharedMenuV1, type SharedMenuV1 } from '@kendo-menu/domain/menu-sharing';
 /**
  * Keeps account API access behind a strict browser boundary for the managed bearer contract.
  * Each request sends a transient bearer; same-origin cookies only support hosting access controls.
@@ -6,7 +8,8 @@
 import {
   isDashboardCatalogueCompatible,
   parseDashboardPersistenceV10,
-  type PersistedTrainingWireStateV10,
+  parseDashboardPersistenceV11,
+  type PersistedTrainingWireStateV11,
 } from '@kendo-menu/domain/dashboard-persistence';
 
 export const ACCOUNT_ENDPOINT = '/api/account';
@@ -28,7 +31,7 @@ const MAX_ACCOUNT_WORKSPACE_ID_CHARACTERS = 36;
 const MAX_CATALOGUE_VERSION_CHARACTERS = 64;
 const MAX_REVISION_CHARACTERS = MAX_REVISION.length;
 const MAX_TIMESTAMP_CHARACTERS = 24;
-const EMPTY_DASHBOARD_SNAPSHOT = { version: 10, state: { dashboardEntries: [] } } as const;
+const EMPTY_DASHBOARD_SNAPSHOT = { version: 11, state: { dashboardEntries: [] } } as const;
 
 function utf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
@@ -97,8 +100,8 @@ export class AccountApiError extends Error {
 }
 
 export interface DashboardSnapshot {
-  readonly version: 10;
-  readonly state: PersistedTrainingWireStateV10;
+  readonly version: 10 | 11;
+  readonly state: PersistedTrainingWireStateV11;
 }
 
 export interface DashboardReadResponse {
@@ -164,7 +167,32 @@ export interface ManagedAccountInitialization extends ManagedAccountRecord {
   readonly copyOpportunityId?: string;
 }
 
+export interface SharedMenuResponse {
+  readonly snapshot: SharedMenuV1;
+}
+export interface ReceivedMenuResponse extends SharedMenuResponse {
+  readonly accountWorkspaceId: string;
+  readonly isSender: boolean;
+}
+export interface CreatedMenuShare {
+  readonly token: string;
+  readonly sourceRevision: string;
+  readonly accountWorkspaceId: string;
+}
 export interface AccountApiClient {
+  getSharedMenu(token: string, signal?: AbortSignal): Promise<SharedMenuResponse>;
+  getSharedMenuForRecipient(
+    accountId: string,
+    token: string,
+    signal?: AbortSignal,
+  ): Promise<ReceivedMenuResponse>;
+  createMenuShare(
+    accountId: string,
+    revision: string,
+    entryId: string,
+    signal?: AbortSignal,
+  ): Promise<CreatedMenuShare>;
+
   getAccount(signal?: AbortSignal): Promise<ManagedAccountRecord>;
   initializeAccount(signal?: AbortSignal): Promise<ManagedAccountInitialization>;
   getDashboard(accountWorkspaceId: string, signal?: AbortSignal): Promise<DashboardReadResponse>;
@@ -267,14 +295,18 @@ function parseDashboardSnapshot(value: unknown): DashboardSnapshot | null {
   if (
     !isStrictJsonObject(value) ||
     !hasExactKeys(value, ['version', 'state']) ||
-    value['version'] !== 10
+    (value['version'] !== 10 && value['version'] !== 11)
   ) {
     return null;
   }
-  const state = parseDashboardPersistenceV10(value['state']);
+  const version = value['version'];
+  const state =
+    version === 10
+      ? parseDashboardPersistenceV10(value['state'])
+      : parseDashboardPersistenceV11(value['state']);
   return state === null || !isDashboardCatalogueCompatible(state)
     ? null
-    : Object.freeze({ version: 10, state });
+    : Object.freeze({ version, state });
 }
 
 function parseDashboardRead(
@@ -909,6 +941,7 @@ export function createAccountApiClient(dependencies: AccountApiDependencies): Ac
   async function run<T>(
     caller: AbortSignal | undefined,
     operation: (signal: AbortSignal, token: string) => Promise<T>,
+    authenticated = true,
   ): Promise<T> {
     // Install cancellation before token retrieval so abandoned work cannot later reach the endpoint.
     const controller = new AbortController();
@@ -931,6 +964,7 @@ export function createAccountApiClient(dependencies: AccountApiDependencies): Ac
     const work = async () => {
       if (controller.signal.aborted)
         throw new AccountApiError('aborted', 'The account request was cancelled.');
+      if (!authenticated) return operation(controller.signal, '');
       const result = await dependencies.getToken(controller.signal);
       if (controller.signal.aborted)
         throw new AccountApiError('aborted', 'The account request was cancelled.');
@@ -962,7 +996,7 @@ export function createAccountApiClient(dependencies: AccountApiDependencies): Ac
         method,
         headers: {
           accept: 'application/json',
-          authorization: `Bearer ${token}`,
+          ...(token.length === 0 ? {} : { authorization: `Bearer ${token}` }),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         credentials: 'same-origin',
@@ -986,7 +1020,89 @@ export function createAccountApiClient(dependencies: AccountApiDependencies): Ac
     return response;
   }
 
+  const shareEndpoint = (token: string) => {
+    if (!/^[A-Za-z0-9_-]{43}$/u.test(token))
+      throw new AccountApiError('request-invalid', 'The share link is invalid.');
+    return `/api/shares/${token}`;
+  };
+  const parseSharedResponse = (value: unknown): SharedMenuV1 => {
+    const snapshot = isStrictJsonObject(value) ? parseSharedMenuV1(value['snapshot']) : null;
+    if (snapshot === null)
+      throw new AccountApiError('invalid-response', 'The shared menu is invalid.');
+    return snapshot;
+  };
   return {
+    getSharedMenu: (shareToken, signal) =>
+      run(
+        signal,
+        async (requestSignal) => {
+          const response = await request(shareEndpoint(shareToken), 'GET', requestSignal, '');
+          const value = await readJsonBody(response, MAX_DASHBOARD_REQUEST_BYTES);
+          if (!isStrictJsonObject(value) || !hasExactKeys(value, ['snapshot']))
+            throw new AccountApiError('invalid-response', 'The shared menu response is invalid.');
+          return { snapshot: parseSharedResponse(value) };
+        },
+        false,
+      ),
+    getSharedMenuForRecipient: (accountId, shareToken, signal) =>
+      run(signal, async (requestSignal, token) => {
+        if (!isAccountWorkspaceId(accountId))
+          throw new AccountApiError('request-invalid', 'The account identifier is invalid.');
+        const response = await request(
+          `${shareEndpoint(shareToken)}/recipient`,
+          'GET',
+          requestSignal,
+          token,
+        );
+        const value = await readJsonBody(response, MAX_DASHBOARD_REQUEST_BYTES);
+        if (
+          !isStrictJsonObject(value) ||
+          !hasExactKeys(value, ['snapshot', 'isSender', 'accountWorkspaceId']) ||
+          value['accountWorkspaceId'] !== accountId ||
+          typeof value['isSender'] !== 'boolean'
+        )
+          throw new AccountApiError(
+            'invalid-response',
+            'The shared menu account response is invalid.',
+          );
+        return {
+          snapshot: parseSharedResponse(value),
+          isSender: value['isSender'],
+          accountWorkspaceId: accountId,
+        };
+      }),
+    createMenuShare: (accountId, revision, entryId, signal) =>
+      run(signal, async (requestSignal, token) => {
+        if (
+          !isAccountWorkspaceId(accountId) ||
+          !isRevision(revision) ||
+          entryId.trim().length === 0 ||
+          entryId.length > TRAINING_DATA_LIMITS.identifierCharacters
+        )
+          throw new AccountApiError('request-invalid', 'The sharing request is invalid.');
+        const response = await request(
+          '/api/shares',
+          'POST',
+          requestSignal,
+          token,
+          JSON.stringify({
+            expectedAccountWorkspaceId: accountId,
+            expectedRevision: revision,
+            entryId,
+          }),
+        );
+        const value = await readJsonBody(response, MAX_ERROR_RESPONSE_BYTES);
+        if (
+          !isStrictJsonObject(value) ||
+          !hasExactKeys(value, ['token', 'sourceRevision', 'accountWorkspaceId']) ||
+          value['accountWorkspaceId'] !== accountId ||
+          value['sourceRevision'] !== revision ||
+          typeof value['token'] !== 'string' ||
+          !/^[A-Za-z0-9_-]{43}$/u.test(value['token'])
+        )
+          throw new AccountApiError('invalid-response', 'The sharing acknowledgement is invalid.');
+        return { token: value['token'], sourceRevision: revision, accountWorkspaceId: accountId };
+      }),
     getAccount: (signal) =>
       run(signal, async (requestSignal, token) => {
         const response = await request(ACCOUNT_ENDPOINT, 'GET', requestSignal, token);

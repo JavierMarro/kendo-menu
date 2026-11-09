@@ -12,7 +12,7 @@ import {
 
 const STORAGE_KEY = 'kendo-menu';
 const OFFLINE_PATHS = ['/app', '/app/guest/dashboard', '/app/guest/library', '/privacy'] as const;
-const OFFLINE_STORAGE_RAW = JSON.stringify({
+const OFFLINE_STORAGE = {
   state: {
     dashboardEntries: [
       {
@@ -26,7 +26,9 @@ const OFFLINE_STORAGE_RAW = JSON.stringify({
     ],
   },
   version: 10,
-});
+};
+const OFFLINE_STORAGE_RAW = JSON.stringify(OFFLINE_STORAGE);
+const MIGRATED_OFFLINE_STORAGE_RAW = JSON.stringify({ ...OFFLINE_STORAGE, version: 11 });
 
 async function establishServiceWorkerControl(page: Page): Promise<void> {
   await page.evaluate(async () => {
@@ -37,6 +39,48 @@ async function establishServiceWorkerControl(page: Page): Promise<void> {
 }
 
 test.describe('production PWA shell', () => {
+  test('does not retain public shared menu snapshots for offline preview', async ({
+    page,
+    context,
+  }) => {
+    const token = 's'.repeat(43);
+    const endpoint = `**/api/shares/${token}`;
+    await page.route(endpoint, (route) =>
+      route.fulfill({
+        headers: { 'cache-control': 'private, no-store' },
+        json: {
+          snapshot: {
+            version: 1,
+            name: 'Online shared keiko',
+            sections: [{ name: 'Main', exercises: [{ name: 'Men' }] }],
+          },
+        },
+      }),
+    );
+    await page.goto(`/app/shared/${token}`);
+    await establishServiceWorkerControl(page);
+    await expect(page.getByRole('heading', { name: 'Online shared keiko' })).toBeVisible();
+    const cachedShare = await page.evaluate(async () => {
+      for (const key of await caches.keys()) {
+        const cache = await caches.open(key);
+        if (
+          (await cache.keys()).some((request) =>
+            new URL(request.url).pathname.startsWith('/api/shares/'),
+          )
+        )
+          return true;
+      }
+      return false;
+    });
+    expect(cachedShare).toBe(false);
+    await page.unroute(endpoint);
+    await context.setOffline(true);
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Shared menu unavailable' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Online shared keiko' })).toHaveCount(0);
+    await context.setOffline(false);
+  });
+
   test('offers a waiting update, lets visitors defer it, and activates it on request', async ({
     page,
   }, testInfo) => {
@@ -280,7 +324,7 @@ test.describe('production PWA shell', () => {
 
         await expect(
           page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY),
-        ).resolves.toBe(OFFLINE_STORAGE_RAW);
+        ).resolves.toBe(path === '/app' ? OFFLINE_STORAGE_RAW : MIGRATED_OFFLINE_STORAGE_RAW);
       }
       expect(analyticsRequests).toEqual([]);
     } finally {

@@ -210,7 +210,7 @@ test.describe('local persistence recovery', () => {
     const backup = JSON.parse(await readFile(downloadPath, 'utf8')) as unknown;
     expect(backup).toEqual(
       expect.objectContaining({
-        version: 10,
+        version: 11,
         state: expect.objectContaining({
           dashboardEntries: expect.arrayContaining([
             expect.objectContaining({ notes: 'Latest notes kept in memory.' }),

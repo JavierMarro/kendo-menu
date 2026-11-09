@@ -9,7 +9,7 @@ export function createDevelopmentProxyRules(
   proofRequestAllowed: (request: IncomingMessage) => boolean,
 ): Record<string, ProxyOptions> {
   return {
-    '^/api/(?:account|dashboard(?:/adoption)?)(?:\\?.*)?$': {
+    '^/api/(?:account|dashboard(?:/adoption)?|shares(?:/[^?]+)?)(?:\\?.*)?$': {
       target: 'http://127.0.0.1:3000',
       changeOrigin: false,
     },

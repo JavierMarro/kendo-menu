@@ -1,3 +1,4 @@
+import { ShareMenuButton } from '../sharing/ShareMenuButton';
 /**
  * Renders and edits the current workspace's dashboard entries and per-activity details.
  * Guest edits are confirmed through browser persistence; account edits remain in an in-memory
@@ -818,7 +819,10 @@ function DashboardTrainingSetCard({
   return (
     <article className="dashboard-card dashboard-card--compact">
       <div className="library-card-topline">
-        <TrainingSetTags trainingSet={trainingSet} />
+        <TrainingSetTags
+          trainingSet={trainingSet}
+          receivedViaShare={entry.receivedViaShare === true}
+        />
         <span className="step-count">{activityCount} activities</span>
       </div>
       <h2>{trainingSet.name}</h2>
@@ -838,6 +842,7 @@ function DashboardTrainingSetCard({
         <button className="text-button destructive-button" type="button" onClick={onRemove}>
           Remove
         </button>
+        {!trainingSet.isBuiltIn ? <ShareMenuButton entry={entry} /> : null}
       </div>
     </article>
   );
