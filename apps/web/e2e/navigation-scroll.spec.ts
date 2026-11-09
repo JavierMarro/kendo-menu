@@ -57,6 +57,42 @@ async function expectHashTarget(page: Page, id: string): Promise<void> {
 }
 
 test.describe('navigation scroll behavior', () => {
+  test('opens the same landing demonstration from the introduction and FAQ', async ({ page }) => {
+    await page.goto('/app');
+    await dismissCookieNotice(page);
+
+    const trigger = page.getByText('See a demonstration video here', { exact: true });
+    const video = page.getByLabel('KendoMenu demonstration', { exact: true });
+    await expect(video).toHaveCount(0);
+    await trigger.focus();
+    await trigger.press('Enter');
+    await expect(video).toBeVisible();
+    await expect(video).toHaveAttribute('preload', 'none');
+    await expect(video).toHaveJSProperty('paused', true);
+    await page.getByText('Read the video walkthrough', { exact: true }).click();
+    await expect(page.getByText(/Visit the Mitori room to watch kendo videos/)).toBeVisible();
+    const duration = await video.evaluate(async (element) => {
+      if (!(element instanceof HTMLVideoElement)) throw new Error('Expected a video player.');
+      if (element.canPlayType('video/mp4; codecs="avc1.42C01F, mp4a.40.2"') === '') return null;
+      element.muted = true;
+      await element.play();
+      return element.duration;
+    });
+    if (duration !== null) {
+      expect(duration).toBeGreaterThanOrEqual(25);
+      expect(duration).toBeLessThanOrEqual(30);
+    }
+    await trigger.press('Enter');
+    await expect(video).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'What is KendoMenu?' }).click();
+    await page.getByRole('link', { name: 'Watch the demonstration video.' }).click();
+    await expect(page).toHaveURL(/#kendo-menu-demonstration$/);
+    await expect(trigger).toBeInViewport();
+    await expect(video).toBeVisible();
+    await expect(video).toHaveJSProperty('paused', true);
+  });
+
   test('returns a scrolled landing page to the top from the header logo by pointer and keyboard', async ({
     page,
   }) => {

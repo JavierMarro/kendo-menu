@@ -1053,6 +1053,26 @@ body:has(.cookie-notice) .install-promo {
   margin-top: var(--space-4);
 }
 
+.landing-demo {
+  margin-top: var(--space-3);
+}
+
+.landing-demo summary {
+  width: fit-content;
+  padding-block: var(--space-2);
+  cursor: pointer;
+}
+
+.landing-demo video {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-block: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+}
+
 .landing-menu-preview {
   margin-top: var(--space-8);
   padding-top: var(--space-6);
@@ -5164,6 +5184,8 @@ textarea[aria-invalid='true'] {
 }
 
 .share-menu-trigger {
+  --accent: #ef6a48;
+  --accent-hover: #ff896c;
   margin-inline-start: auto;
 }
 

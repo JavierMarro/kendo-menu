@@ -46,12 +46,15 @@ export function ShareMenuButton({ entry }: { readonly entry: DashboardEntry }) {
         setLink(new URL(`/app/shared/${result.token}`, window.location.origin).href);
       }
     } catch (error) {
-      if (!controller.signal.aborted) {
+      if (controller.signal.aborted) return;
+      if (error instanceof AccountApiError && error.status === 409) {
         setMessage(
-          error instanceof AccountApiError && error.status === 409
-            ? 'Your saved dashboard changed. Resolve your account save or reload before sharing again.'
-            : 'The sharing link could not be created. Check your connection and try again.',
+          'Your saved dashboard changed. Resolve your account save or reload before sharing again.',
         );
+      } else if (error instanceof AccountApiError && error.code === 'SHARE_UNAVAILABLE') {
+        setMessage('Sharing is temporarily unavailable. Try again later.');
+      } else {
+        setMessage('The sharing link could not be created. Try again.');
       }
     } finally {
       if (!controller.signal.aborted) setPending(false);
@@ -71,7 +74,7 @@ export function ShareMenuButton({ entry }: { readonly entry: DashboardEntry }) {
       <button
         ref={trigger}
         type="button"
-        className="text-button share-menu-trigger"
+        className="primary-button share-menu-trigger"
         disabled={!workspace.canShare && workspace.saveLabel !== 'conflict'}
         onClick={() => {
           setLink('');
