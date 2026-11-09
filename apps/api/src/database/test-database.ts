@@ -31,6 +31,8 @@ export interface TestDatabaseOptions {
   readonly afterCopyOpportunityConsumed?: () => Promise<void>;
   readonly afterCopyWriteBeforeCommit?: () => Promise<void>;
   readonly afterCopyCommitResponseLost?: () => Promise<void>;
+  readonly afterShareWriteBeforeCommit?: () => Promise<void>;
+  readonly afterShareCommitResponseLost?: () => Promise<void>;
 }
 
 export interface TestDatabase {
@@ -182,6 +184,12 @@ export async function createTestDatabase(options: TestDatabaseOptions = {}): Pro
       ...(options.afterCopyCommitResponseLost === undefined
         ? {}
         : { afterCopyCommitResponseLost: options.afterCopyCommitResponseLost }),
+      ...(options.afterShareWriteBeforeCommit === undefined
+        ? {}
+        : { afterShareWriteBeforeCommit: options.afterShareWriteBeforeCommit }),
+      ...(options.afterShareCommitResponseLost === undefined
+        ? {}
+        : { afterShareCommitResponseLost: options.afterShareCommitResponseLost }),
     });
     let closed = false;
     return {

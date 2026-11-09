@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createAccountApiClient } from '../../lib/account-api';
 import { ManagedAuthContext, type ManagedAuthContextValue } from '../../lib/managed-auth-context';
+import { writeShareReturnMarker } from '../../lib/share-return';
 import { SignInPage } from './SignInPage';
 
 function deferred<T>() {
@@ -20,8 +21,10 @@ function deferred<T>() {
   };
 }
 
-function signInApp(startGoogleSignIn: () => Promise<boolean>) {
-  const identity = { status: 'signed-out' } as const;
+function signInApp(
+  startGoogleSignIn: () => Promise<boolean>,
+  identity: ManagedAuthContextValue['identity'] = { status: 'signed-out' },
+) {
   const value: ManagedAuthContextValue = {
     client: undefined,
     api: createAccountApiClient({
@@ -41,6 +44,8 @@ function signInApp(startGoogleSignIn: () => Promise<boolean>) {
         <Routes>
           <Route path="/app/sign-in" element={<SignInPage />} />
           <Route path="/app/guest/dashboard" element={<p>Guest dashboard opened</p>} />
+          <Route path="/app/account/dashboard" element={<p>Account dashboard opened</p>} />
+          <Route path="/app/account/shared/:token" element={<p>Shared menu reopened</p>} />
         </Routes>
       </MemoryRouter>
     </ManagedAuthContext.Provider>,
@@ -48,6 +53,20 @@ function signInApp(startGoogleSignIn: () => Promise<boolean>) {
 }
 
 describe('SignInPage', () => {
+  it('returns a signed-in visitor to the shared menu they chose', async () => {
+    const token = 'A'.repeat(43);
+    expect(writeShareReturnMarker(token)).toBe(true);
+    signInApp(vi.fn().mockResolvedValue(true), {
+      status: 'verified',
+      account: {
+        accountId: '01234567-89ab-4cde-8fab-0123456789ab',
+        email: null,
+      },
+    });
+    expect(await screen.findByText('Shared menu reopened')).toBeVisible();
+    expect(window.sessionStorage.length).toBe(0);
+  });
+
   it('reports a failed Google start and permits retry', async () => {
     const startGoogleSignIn = vi
       .fn<() => Promise<boolean>>()

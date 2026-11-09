@@ -234,7 +234,7 @@ export function getTrainingSetTagLabels(
   return getTrainingSetTags(trainingSet).map(formatTrainingSetTag);
 }
 
-export type DashboardFilter = 'all' | TrainingSetTag;
+export type DashboardFilter = 'all' | 'shared' | TrainingSetTag;
 
 export const DASHBOARD_FILTER_OPTIONS: readonly {
   readonly value: DashboardFilter;
@@ -242,11 +242,14 @@ export const DASHBOARD_FILTER_OPTIONS: readonly {
 }[] = [
   { value: 'all', label: 'All' },
   { value: 'custom', label: 'Custom' },
+  { value: 'shared', label: 'Shared' },
   { value: 'intense-drill', label: 'Intense session' },
   { value: 'high-intensity-drill', label: 'High intensity session' },
 ];
 
 export function matchesDashboardFilter(entry: DashboardEntry, filter: DashboardFilter): boolean {
+  if (filter === 'shared')
+    return entry.receivedViaShare === true && entry.trainingSet?.isBuiltIn === false;
   if (filter === 'all') {
     return true;
   }

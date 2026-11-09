@@ -14,16 +14,23 @@ import {
 import { createManagedAuthClient } from '../../lib/managed-auth';
 import { AuthCallbackFailure } from './AuthCallbackFailure';
 
+import { clearShareReturnMarker } from '../../lib/share-return';
+
+function clearContinuation() {
+  clearAuthReturnMarker();
+  clearShareReturnMarker();
+}
+
 const root = document.getElementById('root');
 if (root !== null) {
   const reactRoot = createRoot(root);
   const resolution = resolveAuthReturn(window.location.pathname, window.location.search);
   if (resolution.kind !== 'callback' || resolution.flow !== 'application') {
     if (resolution.kind === 'invalid' || resolution.kind === 'cancelled') {
-      clearAuthReturnMarker();
+      clearContinuation();
       window.history.replaceState(null, '', APPLICATION_CALLBACK_PATH);
     }
-    reactRoot.render(<AuthCallbackFailure onHome={clearAuthReturnMarker} retryAvailable={false} />);
+    reactRoot.render(<AuthCallbackFailure onHome={clearContinuation} retryAvailable={false} />);
   } else {
     const configuredUrl: unknown = import.meta.env['VITE_NEON_AUTH_URL'];
     const client =
@@ -31,11 +38,9 @@ if (root !== null) {
         ? createManagedAuthClient(configuredUrl, 'application')
         : undefined;
     if (client === undefined) {
-      clearAuthReturnMarker();
+      clearContinuation();
       window.history.replaceState(null, '', APPLICATION_CALLBACK_PATH);
-      reactRoot.render(
-        <AuthCallbackFailure onHome={clearAuthReturnMarker} retryAvailable={false} />,
-      );
+      reactRoot.render(<AuthCallbackFailure onHome={clearContinuation} retryAvailable={false} />);
     } else {
       const controller = new AbortController();
       window.addEventListener('pagehide', () => controller.abort(), { once: true });
@@ -47,7 +52,7 @@ if (root !== null) {
               retryAvailable = false;
               void bootstrap();
             }}
-            onHome={clearAuthReturnMarker}
+            onHome={clearContinuation}
             retryAvailable={retryAvailable}
           />,
         );
@@ -66,7 +71,7 @@ if (root !== null) {
           retryAvailable = true;
           renderFailure();
         } else if (result.status === 'unavailable') {
-          clearAuthReturnMarker();
+          clearContinuation();
           window.history.replaceState(null, '', APPLICATION_CALLBACK_PATH);
           renderFailure();
         }

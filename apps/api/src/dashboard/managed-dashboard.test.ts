@@ -163,6 +163,14 @@ describe('managed dashboard HTTP boundary', () => {
     });
   });
 
+  it('returns an explicit upgrade response when persistence rejects a stale client version', async () => {
+    const h = fixture();
+    h.compareAndWrite.mockResolvedValue({ status: 'unsupported-client-version' });
+    const response = await h.dashboard.handle(request());
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: 'DASHBOARD_VERSION_UPGRADE_REQUIRED' });
+  });
+
   it('registered Elysia route preserves authorization before parsing malformed JSON', async () => {
     const h = fixture({ status: 'invalid' });
     const unused = {

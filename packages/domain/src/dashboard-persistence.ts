@@ -1,5 +1,5 @@
 /**
- * Platform-neutral v10 dashboard codec shared by browser storage and the cloud API.
+ * Platform-neutral v10/v11 dashboard codecs shared by browser storage and the cloud API.
  * Parsing establishes strict bounded structure without silently repairing data; catalogue checks
  * stay separate so idempotent retries can be resolved before today's built-ins are consulted.
  */
@@ -69,6 +69,15 @@ export interface PersistedDashboardEntryV10 {
   readonly createdAt: string;
 }
 
+/** v11 preserves received-copy provenance without tying a copy to a live share. */
+export interface PersistedDashboardEntryV11 extends PersistedDashboardEntryV10 {
+  readonly receivedViaShare?: true;
+}
+
+export interface PersistedTrainingWireStateV11 {
+  readonly dashboardEntries: readonly PersistedDashboardEntryV11[];
+}
+
 const DASHBOARD_STATE_PROPERTIES = new Set(['dashboardEntries']);
 const DASHBOARD_ENTRY_PROPERTIES = new Set([
   'id',
@@ -79,6 +88,7 @@ const DASHBOARD_ENTRY_PROPERTIES = new Set([
   'notes',
   'createdAt',
 ]);
+const DASHBOARD_ENTRY_V11_PROPERTIES = new Set([...DASHBOARD_ENTRY_PROPERTIES, 'receivedViaShare']);
 const CUSTOM_SET_PROPERTIES = new Set([
   'id',
   'name',
@@ -404,10 +414,13 @@ function isCustomEntryReferenceCompatible(
   return Object.keys(activityNotes).length === 0;
 }
 
-function parseEntry(value: unknown): PersistedDashboardEntryV10 | null {
+function parseEntry(value: unknown, version: 10 | 11): PersistedDashboardEntryV11 | null {
   if (
     !isRecord(value) ||
-    !hasOnlyProperties(value, DASHBOARD_ENTRY_PROPERTIES) ||
+    !hasOnlyProperties(
+      value,
+      version === 10 ? DASHBOARD_ENTRY_PROPERTIES : DASHBOARD_ENTRY_V11_PROPERTIES,
+    ) ||
     !hasOwnProperties(value, [
       'id',
       'trainingSetId',
@@ -440,7 +453,14 @@ function parseEntry(value: unknown): PersistedDashboardEntryV10 | null {
     }
     trainingSet = parsedTrainingSet;
   }
+  const receivedViaShare = Object.hasOwn(value, 'receivedViaShare');
+  if (
+    receivedViaShare &&
+    (version !== 11 || value['receivedViaShare'] !== true || trainingSet === undefined)
+  )
+    return null;
   return Object.freeze({
+    ...(receivedViaShare ? { receivedViaShare: true as const } : {}),
     id: value['id'],
     trainingSetId: asTrainingSetId(value['trainingSetId']),
     ...(trainingSet === undefined ? {} : { trainingSet }),
@@ -462,7 +482,7 @@ function validateUniqueEntryIds(entries: readonly PersistedDashboardEntryV10[]):
   return true;
 }
 
-function parseWireState(value: unknown): PersistedTrainingWireStateV10 | null {
+function parseWireState(value: unknown, version: 10 | 11): PersistedTrainingWireStateV11 | null {
   if (
     !isRecord(value) ||
     !hasOnlyProperties(value, DASHBOARD_STATE_PROPERTIES) ||
@@ -472,9 +492,9 @@ function parseWireState(value: unknown): PersistedTrainingWireStateV10 | null {
   ) {
     return null;
   }
-  const dashboardEntries: PersistedDashboardEntryV10[] = [];
+  const dashboardEntries: PersistedDashboardEntryV11[] = [];
   for (const entry of value['dashboardEntries']) {
-    const parsedEntry = parseEntry(entry);
+    const parsedEntry = parseEntry(entry, version);
     if (parsedEntry === null) {
       return null;
     }
@@ -492,7 +512,16 @@ function parseWireState(value: unknown): PersistedTrainingWireStateV10 | null {
  */
 export function parseDashboardPersistenceV10(value: unknown): PersistedTrainingWireStateV10 | null {
   try {
-    return parseWireState(value);
+    return parseWireState(value, 10);
+  } catch {
+    return null;
+  }
+}
+
+/** Parse v11 without accepting provenance on a built-in or unresolved entry. */
+export function parseDashboardPersistenceV11(value: unknown): PersistedTrainingWireStateV11 | null {
+  try {
+    return parseWireState(value, 11);
   } catch {
     return null;
   }
@@ -590,7 +619,7 @@ function areValuesStructurallyEqual(left: unknown, right: unknown): boolean {
   );
 }
 
-function encodeEntry(value: unknown): PersistedDashboardEntryV10 {
+function encodeEntry(value: unknown, version: 10 | 11): PersistedDashboardEntryV11 {
   if (
     !isRecord(value) ||
     !hasOwnProperties(value, [
@@ -606,7 +635,12 @@ function encodeEntry(value: unknown): PersistedDashboardEntryV10 {
   ) {
     throw new Error('Dashboard persistence entry is invalid.');
   }
-  if (!hasOnlyProperties(value, DASHBOARD_ENTRY_PROPERTIES)) {
+  if (
+    !hasOnlyProperties(
+      value,
+      version === 10 ? DASHBOARD_ENTRY_PROPERTIES : DASHBOARD_ENTRY_V11_PROPERTIES,
+    )
+  ) {
     throw new Error('Dashboard persistence entry contains unsupported properties.');
   }
   const quantityOverrides = parseDashboardQuantityOverrides(value['quantityOverrides']);
@@ -645,6 +679,9 @@ function encodeEntry(value: unknown): PersistedDashboardEntryV10 {
     }
   }
   const wire: Record<string, unknown> = {
+    ...(Object.hasOwn(value, 'receivedViaShare')
+      ? { receivedViaShare: value['receivedViaShare'] }
+      : {}),
     id: value['id'],
     trainingSetId: value['trainingSetId'],
     ...(trainingSet === undefined ? {} : { trainingSet }),
@@ -653,15 +690,18 @@ function encodeEntry(value: unknown): PersistedDashboardEntryV10 {
     notes: value['notes'],
     createdAt: value['createdAt'],
   };
-  const parsed = parseEntry(wire);
+  const parsed = parseEntry(wire, version);
   if (parsed === null) {
     throw new Error('Dashboard persistence entry is invalid.');
   }
   return parsed;
 }
 
-/** Encode a validated runtime v10 state into the strict two-level cloud wire representation. */
-export function encodeDashboardPersistenceV10(value: unknown): PersistedTrainingWireStateV10 {
+/** Encode the requested version without silently dropping unsupported entry fields. */
+function encodeDashboardPersistence(
+  value: unknown,
+  version: 10 | 11,
+): PersistedTrainingWireStateV11 {
   if (
     !isRecord(value) ||
     !hasOnlyProperties(value, DASHBOARD_STATE_PROPERTIES) ||
@@ -671,7 +711,7 @@ export function encodeDashboardPersistenceV10(value: unknown): PersistedTraining
     throw new Error('Dashboard persistence state is invalid.');
   }
   try {
-    const dashboardEntries = value['dashboardEntries'].map(encodeEntry);
+    const dashboardEntries = value['dashboardEntries'].map((entry) => encodeEntry(entry, version));
     if (!validateUniqueEntryIds(dashboardEntries)) {
       throw new Error('Dashboard persistence state contains duplicate entry IDs.');
     }
@@ -682,6 +722,15 @@ export function encodeDashboardPersistenceV10(value: unknown): PersistedTraining
     }
     throw new Error('Dashboard persistence state is invalid.', { cause: error });
   }
+}
+
+/** Legacy encoding rejects v11 provenance instead of silently discarding it. */
+export function encodeDashboardPersistenceV10(value: unknown): PersistedTrainingWireStateV10 {
+  return encodeDashboardPersistence(value, 10);
+}
+
+export function encodeDashboardPersistenceV11(value: unknown): PersistedTrainingWireStateV11 {
+  return encodeDashboardPersistence(value, 11);
 }
 
 function decodeCustomTrainingSet(wire: PersistedCustomTrainingSet): TrainingSet | null {
@@ -741,7 +790,7 @@ export function isDashboardCatalogueCompatible(
   catalogue: readonly TrainingSet[] = DEFAULT_TRAINING_SETS,
 ): boolean {
   try {
-    const state = parseDashboardPersistenceV10(value);
+    const state = parseDashboardPersistenceV11(value);
     if (state === null || !isCatalogueValid(catalogue)) {
       return false;
     }

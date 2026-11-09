@@ -13,6 +13,12 @@ export {
 export { getTrainingQuantityPolicy } from './training-quantity-policy.js';
 export type { TrainingQuantityPolicy } from './training-quantity-policy.js';
 export {
+  createSharedMenuV1,
+  parseSharedMenuV1,
+  sharedMenuV1ToTrainingSetInput,
+} from './menu-sharing.js';
+export type { SharedMenuExerciseV1, SharedMenuSectionV1, SharedMenuV1 } from './menu-sharing.js';
+export {
   DURATION_UNITS,
   MAX_REPETITIONS,
   MIN_REPETITIONS,

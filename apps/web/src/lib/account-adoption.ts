@@ -4,9 +4,10 @@
  * mutates guest storage.
  */
 import {
-  encodeDashboardPersistenceV10,
+  encodeDashboardPersistenceV11,
   isDashboardCatalogueCompatible,
   parseDashboardPersistenceV10,
+  parseDashboardPersistenceV11,
 } from '@kendo-menu/domain/dashboard-persistence';
 import { classifyTrainingStorageValue, TRAINING_STORE_RAW_JSON_LIMIT } from '@kendo-menu/store';
 
@@ -52,21 +53,31 @@ export async function readGuestCopySnapshot(): Promise<GuestCopySnapshot | null>
         envelope !== null &&
         !Array.isArray(envelope) &&
         Object.hasOwn(envelope, 'version') &&
-        Reflect.get(envelope, 'version') === 10
-          ? parseDashboardPersistenceV10(Reflect.get(envelope, 'state'))
+        (Reflect.get(envelope, 'version') === 10 || Reflect.get(envelope, 'version') === 11)
+          ? Reflect.get(envelope, 'version') === 10
+            ? parseDashboardPersistenceV10(Reflect.get(envelope, 'state'))
+            : parseDashboardPersistenceV11(Reflect.get(envelope, 'state'))
           : null;
+      // v10/v11 cloud-compatible sources must pass strict validation, never a sanitizing migration.
+      if (
+        typeof envelope === 'object' &&
+        envelope !== null &&
+        (Reflect.get(envelope, 'version') === 10 || Reflect.get(envelope, 'version') === 11) &&
+        currentWireState === null
+      )
+        return null;
       const state =
         currentWireState !== null
           ? isDashboardCatalogueCompatible(currentWireState)
             ? currentWireState
             : null
           : inspection.status === 'migrated'
-            ? encodeDashboardPersistenceV10(inspection.state)
+            ? encodeDashboardPersistenceV11(inspection.state)
             : null;
       if (state === null || state.dashboardEntries.length === 0) return null;
       return {
         raw,
-        dashboard: { version: 10, state },
+        dashboard: { version: 11, state },
         entryCount: inspection.state.dashboardEntries.length,
       };
     });

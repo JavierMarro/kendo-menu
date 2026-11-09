@@ -13,6 +13,7 @@ vi.mock('@neondatabase/auth/vanilla', () => ({
 
 import { createManagedAuthClient } from './managed-auth';
 import { AUTH_RETURN_KEY, readAuthReturnMarker } from './auth-return';
+import { writeShareReturnMarker, readShareReturnMarker } from './share-return';
 
 describe('managed Google sign-in initiation', () => {
   beforeEach(() => {
@@ -46,9 +47,11 @@ describe('managed Google sign-in initiation', () => {
 
     expect(await client.signIn()).toBe(true);
     expect(authMocks.social).toHaveBeenCalledOnce();
+    writeShareReturnMarker('s'.repeat(43));
     const pageShow = new Event('pageshow');
     Object.defineProperty(pageShow, 'persisted', { value: true });
     window.dispatchEvent(pageShow);
+    expect(readShareReturnMarker()).toBeNull();
     expect(await client.signIn()).toBe(true);
     expect(authMocks.social).toHaveBeenCalledTimes(2);
   });
@@ -122,9 +125,11 @@ describe('managed Google sign-in initiation', () => {
     );
     if (client === undefined) throw new Error('Expected a configured synthetic auth client.');
     const firstAttempt = client.signIn();
+    writeShareReturnMarker('s'.repeat(43));
     const pageShow = new Event('pageshow');
     Object.defineProperty(pageShow, 'persisted', { value: true });
     window.dispatchEvent(pageShow);
+    expect(readShareReturnMarker()).toBeNull();
     const secondAttempt = client.signIn();
     const secondMarker = window.sessionStorage.getItem(AUTH_RETURN_KEY);
     expect(readAuthReturnMarker()?.flow).toBe('application');
@@ -139,5 +144,6 @@ describe('managed Google sign-in initiation', () => {
     finishSecond?.({ error: null });
     await expect(secondAttempt).resolves.toBe(true);
     window.dispatchEvent(pageShow);
+    expect(readShareReturnMarker()).toBeNull();
   });
 });

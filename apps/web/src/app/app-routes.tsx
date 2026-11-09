@@ -19,6 +19,7 @@ import { PrivacyPolicyPage } from '../features/privacy/PrivacyPolicyPage';
 import { GlossaryPage } from '../features/glossary/GlossaryPage';
 import { SourcesPage } from '../features/sources/SourcesPage';
 import { MitoriRoomPage } from '../features/mitori/MitoriRoomPage';
+import { SharedMenuPage } from '../features/sharing/SharedMenuPage';
 import {
   AccountWorkspaceRoute,
   AccountWorkspaceIndex,
@@ -45,6 +46,7 @@ export const appRoutes: RouteObject[] = [
         children: [
           { index: true, element: <LandingPage /> },
           { path: 'sign-in', element: <SignInPage /> },
+          { path: 'shared/:token', element: <SharedMenuPage /> },
           { path: 'dashboard', element: <LegacyWorkspaceRedirect page="dashboard" /> },
           { path: 'library', element: <LegacyWorkspaceRedirect page="library" /> },
           {
@@ -73,6 +75,7 @@ export const appRoutes: RouteObject[] = [
               { index: true, element: <AccountWorkspaceIndex /> },
               { path: 'setup', element: <AccountSetupPage /> },
               { path: 'dashboard', element: <DashboardPage /> },
+              { path: 'shared/:token', element: <SharedMenuPage recipient /> },
               { path: 'library', element: <LibraryPage /> },
               { path: 'library/:trainingSetId', element: <TrainingSetDetailPage /> },
               { path: 'mitori-room', element: <MitoriRoomPage /> },

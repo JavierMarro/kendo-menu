@@ -88,6 +88,7 @@ async function oldRows() {
 
 async function restoreJob5B() {
   await seedPreviousData();
+  await database.client.query('DROP TABLE menu_shares');
   await database.client.query('DROP TABLE account_copy_opportunities');
   await database.client.query('DROP TRIGGER users_managed_identity_immutable ON users');
   await database.client.query('DROP FUNCTION reject_managed_identity_change()');

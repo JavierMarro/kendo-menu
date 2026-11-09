@@ -140,8 +140,28 @@ consumes an unused opportunity. [ADR 0007](docs/adr/0007-managed-auth-online-acc
 supersedes offline account caching, custom sessions and interrupted-copy recovery. Current release
 status is recorded in the deployment runbook.
 
-Realtime connections, CRDTs, automatic field merging, collaboration, paid tiers and public sharing
-remain excluded. See the [managed-auth contract](docs/MANAGED_AUTH_TRANSITION.md) for scope and
+### Custom-menu sharing
+
+Signed-in users can share the last saved version of a custom dashboard menu. Guest menus and
+curated/library menus have no sharing action. A new menu must be saved first; unsaved changes are
+excluded with an explicit explanation. A sharing link exposes only the name, intensity, ordered
+activities/exercises and effective quantities, including all supported duration units. Descriptions
+and all notes stay private.
+
+Anyone with the link can preview it. Sign in to add returns to the same menu after Google sign-in
+and any new-account guest-copy setup. Adding creates an independent, editable account draft;
+Save to account persists it. There is no guest import. Received menus retain a Shared badge alongside
+Custom and intensity, and appear under the dashboard Shared filter. Sending a menu does not mark
+its source Shared. Later edits to either copy never change the other.
+
+Unchanged content from the same source menu reuses its link. Changed content creates a new frozen
+snapshot; old links remain valid after source edits/removal. No snapshot-count cap, expiry or
+link-disable UI is included. Deleting the local owning account must remove its hosted shares while
+recipient copies survive; a full account-deletion workflow remains outside this feature.
+The [implementation plan](docs/CUSTOM_MENU_SHARING_PLAN.md) and
+[progress record](docs/CUSTOM_MENU_SHARING_PROGRESS.md) distinguish branch work from verified release.
+
+Realtime connections, CRDTs, automatic field merging, collaboration and paid tiers remain excluded. See the [managed-auth contract](docs/MANAGED_AUTH_TRANSITION.md) for scope and
 the [account API contract](docs/MANAGED_DASHBOARDS.md) for the backend boundary.
 
 ## Brand Commitments

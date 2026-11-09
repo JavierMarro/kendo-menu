@@ -142,6 +142,7 @@ summary:focus-visible {
 }
 
 button:disabled,
+.share-menu-content button[aria-disabled='true'],
 input:disabled,
 textarea:disabled,
 select:disabled {
@@ -5160,4 +5161,58 @@ textarea[aria-invalid='true'] {
   .auth-panel {
     padding: var(--space-5);
   }
+}
+
+.share-menu-trigger {
+  margin-inline-start: auto;
+}
+
+.share-menu-content {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.share-menu-content p {
+  margin: 0;
+}
+
+.share-menu-link {
+  width: 100%;
+  min-width: 0;
+}
+
+.shared-menu-page {
+  width: min(100%, 50rem);
+  margin-inline: auto;
+  overflow-wrap: anywhere;
+}
+
+.shared-menu-page > button,
+.shared-menu-page > a {
+  margin-block-start: var(--space-5);
+  margin-inline-end: var(--space-3);
+}
+
+.shared-menu-page .training-activity-list {
+  display: grid;
+  gap: var(--space-6);
+  padding-inline-start: var(--space-6);
+  margin-block: var(--space-6);
+}
+
+.shared-menu-page .training-activity-list > li + li {
+  padding-block-start: var(--space-5);
+  border-top: 1px solid var(--line);
+}
+
+.shared-menu-page .training-activity-list ul {
+  display: grid;
+  gap: var(--space-3);
+  padding-inline-start: var(--space-5);
+}
+
+.shared-menu-page .training-activity-list p {
+  margin-block: var(--space-2);
+  color: var(--muted-strong);
 }

@@ -1,11 +1,18 @@
+import {
+  parseSharedMenuV1,
+  sharedMenuV1ToTrainingSetInput,
+  type SharedMenuV1,
+} from '@kendo-menu/domain/menu-sharing';
+import type { DashboardEntry, TrainingQuantityOverrides } from '@kendo-menu/domain';
 /**
  * Owns one verified account draft and its store for a route lifetime, using memory-only storage.
  * Frozen pending requests and identity fencing keep stale responses from replacing the draft.
  */
-import { encodeDashboardPersistenceV10 } from '@kendo-menu/domain/dashboard-persistence';
+import { encodeDashboardPersistenceV11 } from '@kendo-menu/domain/dashboard-persistence';
 import {
   createTrainingStore,
-  serializePersistedTrainingStateV10,
+  classifyTrainingStorageValue,
+  serializePersistedTrainingStateV11,
   type TrainingStoreApi,
 } from '@kendo-menu/store';
 
@@ -16,6 +23,7 @@ import {
   type AdoptionAcknowledgement,
   type AdoptionDecisionRequest,
   type AccountApiClient,
+  type CreatedMenuShare,
   type DashboardWriteRequest,
   type ManagedAccountInitialization,
   type ManagedAccountRecord,
@@ -37,6 +45,9 @@ export interface AccountDraftSnapshot {
 
 export interface AccountDraftController {
   getSnapshot(): AccountDraftSnapshot;
+  importSharedMenu(menu: SharedMenuV1, isSender: boolean): string;
+  getSavedEntry(entryId: string): DashboardEntry | null;
+  createMenuShare(entryId: string, signal?: AbortSignal): Promise<CreatedMenuShare>;
   subscribe(listener: () => void): () => void;
   load(): Promise<void>;
   save(): Promise<void>;
@@ -83,6 +94,8 @@ export function createAccountDraftController(options: {
   let store: TrainingStoreApi | null = null;
   let unsubscribeStore: (() => void) | undefined;
   let baseline: string | null = null;
+  let cachedBaseline: string | null = null;
+  let savedEntries: readonly DashboardEntry[] = [];
   let pending: FrozenSave | null = null;
   let handoff = options.initialization ?? null;
   let editingBlocked = false;
@@ -109,7 +122,25 @@ export function createAccountDraftController(options: {
   const currentRaw = () =>
     store === null
       ? null
-      : serializePersistedTrainingStateV10({ dashboardEntries: store.getState().dashboardEntries });
+      : serializePersistedTrainingStateV11({ dashboardEntries: store.getState().dashboardEntries });
+
+  function getSavedEntry(entryId: string): DashboardEntry | null {
+    if (snapshot.status !== 'ready' || baseline === null) return null;
+    if (baseline !== cachedBaseline) {
+      const parsed = classifyTrainingStorageValue(baseline);
+      savedEntries =
+        parsed.status === 'ready' || parsed.status === 'migrated'
+          ? parsed.state.dashboardEntries
+          : [];
+      freezeSnapshot(savedEntries);
+      cachedBaseline = baseline;
+    }
+    return (
+      savedEntries.find(
+        (entry) => entry.id === entryId && entry.trainingSet?.isBuiltIn === false,
+      ) ?? null
+    );
+  }
 
   function update(patch: Partial<AccountDraftSnapshot> = {}): void {
     const next = { ...snapshot, ...patch };
@@ -259,7 +290,7 @@ export function createAccountDraftController(options: {
       const raw =
         cloud.dashboard === null
           ? null
-          : JSON.stringify({ state: cloud.dashboard.state, version: 10 });
+          : JSON.stringify({ state: cloud.dashboard.state, version: cloud.dashboard.version });
       installStore(raw);
       pending = null;
       if (cloud.revision !== '0') releaseHandoff();
@@ -421,6 +452,8 @@ export function createAccountDraftController(options: {
     unsubscribeStore = undefined;
     store = null;
     baseline = null;
+    cachedBaseline = null;
+    savedEntries = [];
     pending = null;
     releaseHandoff();
     update({ status: 'disposed', saveState: 'idle', error: null });
@@ -428,6 +461,96 @@ export function createAccountDraftController(options: {
 
   return {
     getSnapshot: () => snapshot,
+    getSavedEntry,
+    importSharedMenu: (menu, isSender) => {
+      assertWritable();
+      if (store === null || snapshot.catalogueVersion === null)
+        throw new Error('Your account dashboard is unavailable.');
+      const parsed = parseSharedMenuV1(menu);
+      const input = sharedMenuV1ToTrainingSetInput(parsed);
+      if (parsed === null || input === null) throw new Error('The shared menu is invalid.');
+      // Build privately and preflight the complete UTF-8 Save before changing the live draft.
+      const memory = createMemoryTrainingStorage();
+      const raw = currentRaw();
+      if (raw !== null) memory.setItem('shared-import', raw);
+      const candidate = createTrainingStore({ storage: memory, storageKey: 'shared-import' });
+      const created = candidate
+        .getState()
+        .createCustomTrainingSetAndAddToDashboard(input, isSender ? undefined : true);
+      const quantityOverrides: Record<string, TrainingQuantityOverrides> = {};
+      parsed.sections.forEach((section, index) => {
+        const activity = created.trainingSet.activities[index];
+        if (activity === undefined) throw new Error('The shared menu activities are invalid.');
+        if (section.additionalDuration !== undefined)
+          quantityOverrides[activity.id] = {
+            [section.additionalDuration.unit]: section.additionalDuration.value,
+          };
+        section.exercises.forEach((exercise, childIndex) => {
+          const child = activity.children[childIndex];
+          if (child === undefined) throw new Error('The shared menu exercises are invalid.');
+          if (exercise.additionalDuration !== undefined)
+            quantityOverrides[child.id] = {
+              [exercise.additionalDuration.unit]: exercise.additionalDuration.value,
+            };
+        });
+      });
+      candidate.getState().updateDashboardEntry(created.dashboardEntryId, { quantityOverrides });
+      const dashboardEntries = candidate.getState().dashboardEntries;
+      serializeDashboardWriteRequest(account.accountId, {
+        transportVersion: 1,
+        expectedAccountWorkspaceId: account.accountId,
+        expectedRevision: snapshot.revision,
+        requestId: '00000000-0000-4000-8000-000000000000',
+        catalogueVersion: snapshot.catalogueVersion,
+        dashboard: { version: 11, state: encodeDashboardPersistenceV11({ dashboardEntries }) },
+      });
+      store.setState({ dashboardEntries });
+      return created.dashboardEntryId;
+    },
+    createMenuShare: async (entryId, signal) => {
+      const saved = getSavedEntry(entryId);
+      if (
+        !snapshot.canEdit ||
+        pending !== null ||
+        activeRequest !== null ||
+        saved === null ||
+        snapshot.saveState === 'conflict' ||
+        snapshot.saveState === 'blocked'
+      )
+        throw new Error('Save this menu to your account before sharing.');
+      const generation = epoch;
+      const revision = snapshot.revision;
+      const accountId = account.accountId;
+      try {
+        const result = await options.api.createMenuShare(accountId, revision, entryId, signal);
+        if (
+          generation !== epoch ||
+          account.accountId !== accountId ||
+          snapshot.status !== 'ready' ||
+          signal?.aborted
+        )
+          throw new Error('Sharing was cancelled.');
+        return result;
+      } catch (error) {
+        if (
+          generation === epoch &&
+          !signal?.aborted &&
+          !authenticationFailure(error) &&
+          error instanceof AccountApiError &&
+          error.code === 'REVISION_CONFLICT' &&
+          snapshot.revision === revision &&
+          pending === null &&
+          activeRequest === null
+        ) {
+          update({
+            saveState: 'conflict',
+            error:
+              'The account changed elsewhere. Download your draft or explicitly reload the account before sharing. Nothing was overwritten.',
+          });
+        }
+        throw error;
+      }
+    },
     subscribe: (listener) => {
       listeners.add(listener);
       return () => {
@@ -454,8 +577,8 @@ export function createAccountDraftController(options: {
           requestId: options.createRequestId?.() ?? crypto.randomUUID(),
           catalogueVersion: snapshot.catalogueVersion,
           dashboard: {
-            version: 10,
-            state: encodeDashboardPersistenceV10({
+            version: 11,
+            state: encodeDashboardPersistenceV11({
               dashboardEntries: store.getState().dashboardEntries,
             }),
           },
@@ -525,6 +648,8 @@ export function createAccountDraftController(options: {
       unsubscribeStore = undefined;
       store = null;
       baseline = null;
+      cachedBaseline = null;
+      savedEntries = [];
       pending = null;
       handoff = null;
       update({ status: 'disposed', saveState: 'idle', error: null });

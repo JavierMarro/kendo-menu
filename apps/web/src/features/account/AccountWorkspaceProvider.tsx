@@ -25,6 +25,8 @@ import type { WorkspaceContextValue } from '../../lib/workspace-context';
 import { WorkspaceContextProvider } from '../../lib/workspace-context-provider';
 import type { ManagedAccountInitialization, ManagedAccountRecord } from '../../lib/account-api';
 
+import { isShareToken } from '../../lib/share-return';
+
 type AccountDraftController = ReturnType<typeof createAccountDraftController>;
 type AccountDraftSnapshot = ReturnType<AccountDraftController['getSnapshot']>;
 
@@ -38,6 +40,7 @@ function LoadingStatus({ children }: { readonly children: ReactNode }) {
 }
 
 export function AccountWorkspaceRoute() {
+  const location = useLocation();
   const { api, identity, verifyIdentity, setVerifiedAccount, signOutProvider } = useManagedAuth();
   const [account, setAccount] = useState<ManagedAccountRecord | null>(null);
   const [initialization, setInitialization] = useState<ManagedAccountInitialization | undefined>();
@@ -118,6 +121,10 @@ export function AccountWorkspaceRoute() {
     );
   }
   if (identity.status === 'signed-out') {
+    const shareToken = location.pathname.startsWith('/app/account/shared/')
+      ? location.pathname.slice('/app/account/shared/'.length)
+      : null;
+    if (isShareToken(shareToken)) return <Navigate replace to={`/app/shared/${shareToken}`} />;
     if (account !== null) return <Navigate replace to="/app" />;
     return <Navigate replace to="/app/sign-in" />;
   }
@@ -300,6 +307,7 @@ function LoadedAccountWorkspaceView({
     [navigate],
   );
   const previousPath = useRef(location.pathname);
+  const setupReturnPath = useRef<string | null>(null);
   if (snapshot.status === 'disposed' && lastVisibleStore !== null) {
     setLastVisibleStore(() => null);
   } else if (snapshot.store !== null && snapshot.store !== lastVisibleStore) {
@@ -411,6 +419,13 @@ function LoadedAccountWorkspaceView({
       basePath: '/app/account',
       canEdit: snapshot.canEdit && isVerifiedAccount,
       accountEmail: account.email,
+      canShare:
+        snapshot.canEdit &&
+        isVerifiedAccount &&
+        !['saving', 'uncertain', 'conflict', 'blocked'].includes(snapshot.saveState),
+      getSavedEntry: (entryId) => controller.getSavedEntry(entryId),
+      importSharedMenu: (menu, isSender) => controller.importSharedMenu(menu, isSender),
+      createMenuShare: (entryId, signal) => controller.createMenuShare(entryId, signal),
       saveToAccount: () => controller.save(),
       retrySave: () => controller.retrySave(),
       reloadAccount,
@@ -496,10 +511,20 @@ function LoadedAccountWorkspaceView({
     previousPath.current = location.pathname;
     if (leftSetup) {
       controller.releaseCreationHandoff();
+      const resumePath = setupReturnPath.current;
+      setupReturnPath.current = null;
+      if (resumePath !== null && location.pathname === '/app/account/dashboard') {
+        void navigate(resumePath, { replace: true });
+      }
       return;
     }
-    if (shouldOpenSetup) void navigateToSetup();
-  }, [controller, location.pathname, navigateToSetup, shouldOpenSetup]);
+    if (shouldOpenSetup) {
+      if (/^\/app\/account\/shared\/[A-Za-z0-9_-]{43}$/u.test(location.pathname)) {
+        setupReturnPath.current = location.pathname;
+      }
+      void navigateToSetup();
+    }
+  }, [controller, location.pathname, navigate, navigateToSetup, shouldOpenSetup]);
 
   const setupValue = useMemo(
     () => ({

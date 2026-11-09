@@ -7,6 +7,7 @@ import { DEFAULT_TRAINING_SETS, type TrainingSet } from '@kendo-menu/domain';
 import {
   isDashboardCatalogueCompatible,
   parseDashboardPersistenceV10,
+  parseDashboardPersistenceV11,
 } from '@kendo-menu/domain/dashboard-persistence';
 
 import { canonicalizeJson, hashCanonicalJson } from './canonicalization.js';
@@ -156,10 +157,14 @@ export function validateDashboardWrite(
       dashboard['version'] < 0
     )
       return invalid('INVALID_DASHBOARD_REQUEST');
-    if (dashboard['version'] !== 10) return invalid('UNSUPPORTED_DASHBOARD_VERSION');
+    if (dashboard['version'] !== 10 && dashboard['version'] !== 11)
+      return invalid('UNSUPPORTED_DASHBOARD_VERSION');
     if (expectedAccountWorkspaceId !== accountWorkspaceId)
       return invalid('ACCOUNT_WORKSPACE_MISMATCH');
-    const state = parseDashboardPersistenceV10(dashboard['state']);
+    const state =
+      dashboard['version'] === 10
+        ? parseDashboardPersistenceV10(dashboard['state'])
+        : parseDashboardPersistenceV11(dashboard['state']);
     if (state === null) return invalid('INVALID_DASHBOARD');
     const request: DashboardWriteRequest = Object.freeze({
       transportVersion: 1,
@@ -167,7 +172,7 @@ export function validateDashboardWrite(
       expectedRevision,
       requestId,
       catalogueVersion,
-      dashboard: Object.freeze({ version: 10, state }),
+      dashboard: Object.freeze({ version: dashboard['version'], state }),
     });
     return { status: 'valid', intent: new ValidatedWrite(request) };
   } catch {
@@ -236,10 +241,13 @@ export function createDashboardCatalogue(
           !isTimestamp(updatedAt) ||
           !isRecord(dashboard) ||
           !hasExactKeys(dashboard, ['version', 'state']) ||
-          dashboard['version'] !== 10
+          (dashboard['version'] !== 10 && dashboard['version'] !== 11)
         )
           return null;
-        const state = parseDashboardPersistenceV10(dashboard['state']);
+        const state =
+          dashboard['version'] === 10
+            ? parseDashboardPersistenceV10(dashboard['state'])
+            : parseDashboardPersistenceV11(dashboard['state']);
         if (state === null || !isDashboardCatalogueCompatible(state, catalogue)) return null;
         return {
           transportVersion: 1,
@@ -247,7 +255,7 @@ export function createDashboardCatalogue(
           catalogueVersion: version,
           revision,
           updatedAt,
-          dashboard: { version: 10, state },
+          dashboard: { version: dashboard['version'], state },
         };
       } catch {
         return null;

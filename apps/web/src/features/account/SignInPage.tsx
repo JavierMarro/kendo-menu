@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { BrandLockup } from '../../components/BrandLockup';
 import { useManagedAuth } from '../../lib/managed-auth-context';
+import { consumeShareReturnMarker } from '../../lib/share-return';
 
 const ALTERNATIVE_SIGN_IN_MESSAGE =
   'Option to sign in with a different email provider and your own password to be implemented soon';
@@ -17,7 +18,7 @@ export function SignInPage(): ReactElement {
 
   useEffect(() => {
     if (identity.status === 'verified' || identity.status === 'uninitialized') {
-      void navigate('/app/account/dashboard', { replace: true });
+      void navigate(consumeShareReturnMarker() ?? '/app/account/dashboard', { replace: true });
     }
   }, [identity.status, navigate]);
 

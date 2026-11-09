@@ -29,6 +29,7 @@ export type DashboardWriteOutcome =
   | { readonly status: 'revision-conflict'; readonly currentRevision: Revision }
   | { readonly status: 'request-id-reused' }
   | { readonly status: 'catalogue-incompatible' }
+  | { readonly status: 'unsupported-client-version' }
   | DashboardPersistenceFailure;
 
 /**

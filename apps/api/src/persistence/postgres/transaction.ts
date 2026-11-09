@@ -1,6 +1,6 @@
 /**
  * Drizzle database and transaction-runner types shared by PostgreSQL adapters.
- * Dashboard and guest-copy mutations opt into bounded lock and statement timeouts; the post-commit
+ * Dashboard, guest-copy, and share mutations opt into bounded lock and statement timeouts; the post-commit
  * hook models an ambiguous response in focused persistence tests.
  */
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';

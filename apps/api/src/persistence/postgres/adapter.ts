@@ -12,6 +12,7 @@ import { persistenceSchema } from '../schema.js';
 import { createPostgresManagedAccountPersistence } from './managed-account-adapter.js';
 import { createPostgresManagedCopyPersistence } from './managed-copy-adapter.js';
 import { createPostgresManagedDashboardPersistence } from './managed-dashboard-adapter.js';
+import { createPostgresManagedSharesPersistence } from './managed-shares-adapter.js';
 import type { PersistenceDatabase, PersistenceTransactionOptions } from './transaction.js';
 
 export interface PostgresPersistence {
@@ -19,6 +20,7 @@ export interface PostgresPersistence {
   readonly dashboards: ReturnType<typeof createPostgresManagedDashboardPersistence>;
   readonly managedAccounts: ReturnType<typeof createPostgresManagedAccountPersistence>;
   readonly managedCopy: ReturnType<typeof createPostgresManagedCopyPersistence>;
+  readonly shares: ReturnType<typeof createPostgresManagedSharesPersistence>;
   close(): Promise<void>;
 }
 
@@ -30,6 +32,8 @@ export interface PostgresPersistenceOptions {
   readonly afterCopyOpportunityConsumed?: () => Promise<void>;
   readonly afterCopyWriteBeforeCommit?: () => Promise<void>;
   readonly afterCopyCommitResponseLost?: () => Promise<void>;
+  readonly afterShareWriteBeforeCommit?: () => Promise<void>;
+  readonly afterShareCommitResponseLost?: () => Promise<void>;
 }
 
 const DASHBOARD_LOCK_TIMEOUT = '5s';
@@ -113,12 +117,24 @@ export function createPostgresPersistence(
       ? {}
       : { afterCopyCommitResponseLost: options.afterCopyCommitResponseLost }),
   });
+  const shares = createPostgresManagedSharesPersistence({
+    database,
+    clock,
+    runTransaction,
+    ...(options.afterShareWriteBeforeCommit === undefined
+      ? {}
+      : { afterShareWriteBeforeCommit: options.afterShareWriteBeforeCommit }),
+    ...(options.afterShareCommitResponseLost === undefined
+      ? {}
+      : { afterShareCommitResponseLost: options.afterShareCommitResponseLost }),
+  });
   let closePromise: Promise<void> | undefined;
   return {
     pool,
     dashboards,
     managedAccounts,
     managedCopy,
+    shares,
     close: () => {
       closePromise ??= pool.end().catch(() => {
         throw new PersistenceError('UNAVAILABLE');

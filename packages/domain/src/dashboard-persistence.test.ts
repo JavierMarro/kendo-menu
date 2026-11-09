@@ -4,8 +4,10 @@ import { DEFAULT_TRAINING_SETS } from './default-training-sets';
 import { asTrainingSetId, TRAINING_DATA_LIMITS, type TrainingSet } from './types';
 import {
   encodeDashboardPersistenceV10,
+  encodeDashboardPersistenceV11,
   isDashboardCatalogueCompatible,
   parseDashboardPersistenceV10,
+  parseDashboardPersistenceV11,
   type PersistedDashboardEntryV10,
   type PersistedTrainingWireStateV10,
 } from './dashboard-persistence';
@@ -712,4 +714,126 @@ describe('strict dashboard persistence codec', () => {
       ),
     ).toBeNull();
   });
+});
+
+describe('v11 received-menu provenance', () => {
+  it('preserves received custom copies and rejects a v10 downgrade', () => {
+    const wire = customState(customSnapshot, 'custom-set', { receivedViaShare: true });
+    const parsed = parseDashboardPersistenceV11(wire);
+    expect(parsed).toEqual(wire);
+    expect(Object.isFrozen(parsed?.dashboardEntries[0])).toBe(true);
+    expect(parseDashboardPersistenceV10(wire)).toBeNull();
+    expect(isDashboardCatalogueCompatible(wire, catalogue)).toBe(true);
+
+    const runtime = customState(
+      {
+        id: 'custom-set',
+        name: 'Shared practice',
+        category: 'custom',
+        isBuiltIn: false,
+        activities: [
+          { id: 'custom-section', name: 'Section', children: [], quantities: { repetitions: 0 } },
+        ],
+      },
+      'custom-set',
+      { receivedViaShare: true },
+    );
+    const encoded = encodeDashboardPersistenceV11(runtime);
+    expect(encoded.dashboardEntries[0]?.receivedViaShare).toBe(true);
+    expect(parseDashboardPersistenceV11(encoded)).toEqual(encoded);
+    expect(() => encodeDashboardPersistenceV10(runtime)).toThrow('unsupported properties');
+  });
+
+  it('keeps v10 content unchanged without inventing received provenance', () => {
+    const wire = customState(customSnapshot);
+    expect(parseDashboardPersistenceV11(wire)).toEqual(parseDashboardPersistenceV10(wire));
+    expect(parseDashboardPersistenceV11(wire)?.dashboardEntries[0]).not.toHaveProperty(
+      'receivedViaShare',
+    );
+  });
+
+  it.each([false, undefined, null, 'true', 1])(
+    'rejects invalid provenance %s',
+    (receivedViaShare) => {
+      expect(
+        parseDashboardPersistenceV11(
+          customState(customSnapshot, 'custom-set', { receivedViaShare }),
+        ),
+      ).toBeNull();
+    },
+  );
+
+  it('rejects provenance on library and unresolved entries', () => {
+    for (const trainingSetId of ['catalogue-set', 'missing-set']) {
+      expect(
+        parseDashboardPersistenceV11({
+          dashboardEntries: [
+            {
+              ...builtInEntry().dashboardEntries[0],
+              trainingSetId,
+              receivedViaShare: true,
+            },
+          ],
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it('retains strict validation of unknown fields, bounds and references', () => {
+    expect(
+      parseDashboardPersistenceV11(
+        customState(customSnapshot, 'custom-set', {
+          receivedViaShare: true,
+          unknown: 'must not be dropped',
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      parseDashboardPersistenceV11(
+        customState(customSnapshot, 'custom-set', {
+          receivedViaShare: true,
+          quantityOverrides: { missing: { repetitions: 1 } },
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      parseDashboardPersistenceV11(
+        customState(customSnapshot, 'custom-set', {
+          receivedViaShare: true,
+          notes: 'x'.repeat(TRAINING_DATA_LIMITS.noteCharacters + 1),
+        }),
+      ),
+    ).toBeNull();
+  });
+});
+
+it('does not invent provenance from inherited properties or accept a hidden v10 marker', () => {
+  const wire = {
+    dashboardEntries: [
+      {
+        id: 'entry',
+        trainingSetId: asTrainingSetId('custom-set'),
+        trainingSet: customSnapshot,
+        quantityOverrides: {},
+        activityNotes: {},
+        notes: '',
+        createdAt: '',
+      },
+    ],
+  };
+  const entry = wire.dashboardEntries[0];
+  if (entry === undefined) throw new Error('Missing fixture');
+  Object.defineProperty(entry, 'receivedViaShare', { value: true });
+  expect(parseDashboardPersistenceV10(wire)).toBeNull();
+  expect(parseDashboardPersistenceV11(wire)?.dashboardEntries[0]?.receivedViaShare).toBe(true);
+  Object.defineProperty(Object.prototype, 'receivedViaShare', { value: true, configurable: true });
+  try {
+    for (const parse of [parseDashboardPersistenceV10, parseDashboardPersistenceV11]) {
+      const parsed = parse(builtInEntry());
+      expect(parsed).not.toBeNull();
+      expect(Object.hasOwn(parsed?.dashboardEntries[0] ?? {}, 'receivedViaShare')).toBe(false);
+    }
+  } finally {
+    Reflect.deleteProperty(Object.prototype, 'receivedViaShare');
+  }
 });

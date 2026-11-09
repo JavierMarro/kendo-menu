@@ -13,6 +13,10 @@ import {
   encodePersistedTrainingStateV10,
   migratePersistedTrainingStateV9ToV10,
   parsePersistedTrainingStateV10,
+  parsePersistedTrainingStateV11,
+  serializePersistedTrainingStateV10,
+  serializePersistedTrainingStateV11,
+  classifyTrainingStorageValue,
   type StateStorage,
 } from './index';
 
@@ -332,5 +336,64 @@ describe('dashboard-owned training-set snapshots', () => {
     expect(() => encodePersistedTrainingStateV10(metadataState)).toThrow(
       'activity metadata unsupported by custom-set storage',
     );
+  });
+});
+
+describe('received-menu storage v11', () => {
+  it('atomically creates an independent received copy and preserves its origin through reload and undo', () => {
+    const storage = new MemoryStorage();
+    const store = createTrainingStore({ storage });
+    const original = store.getState().createCustomTrainingSetAndAddToDashboard(CUSTOM_INPUT);
+    const received = store.getState().createCustomTrainingSetAndAddToDashboard(CUSTOM_INPUT, true);
+    expect(received.dashboardEntry.receivedViaShare).toBe(true);
+    expect(original.dashboardEntry).not.toHaveProperty('receivedViaShare');
+    expect(received.trainingSetId).not.toBe(original.trainingSetId);
+    expect(received.trainingSet.activities[0]?.id).not.toBe(original.trainingSet.activities[0]?.id);
+    store
+      .getState()
+      .updateDashboardEntry(received.dashboardEntryId, { notes: 'Private recipient note' });
+    const removed = store.getState().removeFromDashboard(received.dashboardEntryId);
+    if (removed === null) throw new Error('Missing removed entry');
+    store.getState().undoRemoveFromDashboard(removed);
+    const reloaded = createTrainingStore({ storage });
+    const entry = reloaded
+      .getState()
+      .dashboardEntries.find(({ id }) => id === received.dashboardEntryId);
+    expect(entry?.receivedViaShare).toBe(true);
+    expect(entry?.notes).toBe('Private recipient note');
+    expect(() => serializePersistedTrainingStateV10({ dashboardEntries: [entry] })).toThrow();
+    expect(
+      JSON.parse(serializePersistedTrainingStateV11({ dashboardEntries: [entry] })),
+    ).toMatchObject({ version: 11 });
+  });
+
+  it('migrates v10 without adding origin and rejects unsupported future formats', () => {
+    const raw = serializePersistedTrainingStateV10({ dashboardEntries: [] });
+    expect(classifyTrainingStorageValue(raw)).toMatchObject({
+      status: 'migrated',
+      fromVersion: 10,
+      version: 11,
+    });
+    expect(
+      classifyTrainingStorageValue(
+        JSON.stringify({ version: 12, state: { dashboardEntries: [] } }),
+      ),
+    ).toMatchObject({ status: 'unsupported-future' });
+  });
+
+  it('rejects origin on library entries and malformed custom origins without changing the store', () => {
+    const wire = { dashboardEntries: [{ ...entryFor('missing'), receivedViaShare: true }] };
+    expect(parsePersistedTrainingStateV11(wire)).toBeNull();
+    const storage = new MemoryStorage();
+    const store = createTrainingStore({ storage });
+    const created = store.getState().createCustomTrainingSetAndAddToDashboard(CUSTOM_INPUT, true);
+    expect(
+      parsePersistedTrainingStateV10({ dashboardEntries: [created.dashboardEntry] }),
+    ).toBeNull();
+    expect(
+      parsePersistedTrainingStateV11({
+        dashboardEntries: [{ ...created.dashboardEntry, receivedViaShare: false }],
+      }),
+    ).toBeNull();
   });
 });

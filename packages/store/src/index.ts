@@ -1,7 +1,7 @@
 /**
  * Builds the dashboard's Zustand actions and delegates persistence to caller-supplied StateStorage.
  * Guest callers can inject browser storage; account drafts use memory-only storage and the same
- * bounded v10 validation.
+ * bounded v11 validation.
  * This module owns neither authentication credentials nor managed-session cookies.
  */
 import { create, type StoreApi, type UseBoundStore } from 'zustand';
@@ -36,10 +36,10 @@ import {
   createTrainingJSONStorage,
   inspectTrainingStorage,
   migratePersistedTrainingState,
-  parsePersistedTrainingStateV10,
-  serializePersistedTrainingStateV10,
+  parsePersistedTrainingStateV11,
+  serializePersistedTrainingStateV11,
   TRAINING_STORE_PERSISTENCE_VERSION,
-  type PersistedTrainingStateV10,
+  type PersistedTrainingStateV11,
   type TrainingStorageInspection,
 } from './persistence';
 
@@ -52,6 +52,7 @@ export {
   createTrainingJSONStorage,
   encodePersistedTrainingState,
   encodePersistedTrainingStateV10,
+  encodePersistedTrainingStateV11,
   inspectTrainingRawValue,
   inspectPersistedTrainingStorage,
   inspectTrainingStorage,
@@ -85,8 +86,10 @@ export {
   parsePersistedTrainingStateV8,
   parsePersistedTrainingStateV9,
   parsePersistedTrainingStateV10,
+  parsePersistedTrainingStateV11,
   parsePersistedTrainingWireStateV9,
   serializePersistedTrainingStateV10,
+  serializePersistedTrainingStateV11,
   TrainingDurationOverrideMigrationConflictError,
   TrainingOverrideMigrationConflictError,
   MAX_PERSISTED_JSON_CHARACTERS,
@@ -118,6 +121,9 @@ export type {
   PersistedDashboardEntryV8,
   PersistedTrainingStateV8,
   PersistedTrainingStateV10,
+  PersistedTrainingStateV11,
+  PersistedDashboardEntryV11,
+  PersistedTrainingWireStateV11,
   PersistedDashboardEntryV10,
   PersistedTrainingWireStateV10,
   PersistedTrainingWireStateV8,
@@ -171,6 +177,7 @@ export interface TrainingStore {
   readonly undoRemoveFromDashboard: (removed: RemovedDashboardEntry) => void;
   readonly createCustomTrainingSetAndAddToDashboard: (
     input: TrainingSetInput,
+    receivedViaShare?: true,
   ) => CustomTrainingSetCreationResult;
   readonly updateCustomTrainingSet: (
     entryId: string,
@@ -235,7 +242,7 @@ function isBoundedString(value: unknown, maximumLength: number): value is string
 }
 
 function assertDashboardEntryWithinLimits(value: unknown): asserts value is DashboardEntry {
-  if (parsePersistedTrainingStateV10({ dashboardEntries: [value] }) === null) {
+  if (parsePersistedTrainingStateV11({ dashboardEntries: [value] }) === null) {
     throw new Error('Dashboard entry is invalid or exceeds a supported limit.');
   }
 }
@@ -243,7 +250,7 @@ function assertDashboardEntryWithinLimits(value: unknown): asserts value is Dash
 function assertPersistedDashboardEntriesWithinLimits(
   dashboardEntries: readonly DashboardEntry[],
 ): void {
-  serializePersistedTrainingStateV10({ dashboardEntries });
+  serializePersistedTrainingStateV11({ dashboardEntries });
 }
 
 function ensureWritableInspection(
@@ -944,7 +951,9 @@ function createValidatedTrainingStore(
             return { dashboardEntries };
           });
         },
-        createCustomTrainingSetAndAddToDashboard: (input) => {
+        createCustomTrainingSetAndAddToDashboard: (input, receivedViaShare) => {
+          if (receivedViaShare !== undefined && receivedViaShare !== true)
+            throw new Error('Invalid shared-menu origin.');
           let result: CustomTrainingSetCreationResult | null = null;
           set((state) => {
             if (state.dashboardEntries.length >= TRAINING_DATA_LIMITS.dashboardEntries) {
@@ -954,7 +963,10 @@ function createValidatedTrainingStore(
             }
             const usedIds = collectUsedIds(state);
             const trainingSet = buildCustomTrainingSet(input, usedIds);
-            const dashboardEntry = createDashboardEntry(trainingSet.id, usedIds, trainingSet);
+            const dashboardEntry: DashboardEntry = {
+              ...createDashboardEntry(trainingSet.id, usedIds, trainingSet),
+              ...(receivedViaShare === true ? { receivedViaShare: true } : {}),
+            };
             const dashboardEntries = [...state.dashboardEntries, dashboardEntry];
             assertPersistedDashboardEntriesWithinLimits(dashboardEntries);
             result = {
@@ -1040,7 +1052,7 @@ function createValidatedTrainingStore(
         migrate: migratePersistedTrainingState,
         // Hydration uses the current parser; invalid input leaves live state intact.
         merge: (persistedState, currentState) => {
-          const parsedState = parsePersistedTrainingStateV10(persistedState);
+          const parsedState = parsePersistedTrainingStateV11(persistedState);
           return parsedState === null
             ? currentState
             : {
@@ -1048,7 +1060,7 @@ function createValidatedTrainingStore(
                 dashboardEntries: parsedState.dashboardEntries,
               };
         },
-        partialize: (state): PersistedTrainingStateV10 => ({
+        partialize: (state): PersistedTrainingStateV11 => ({
           dashboardEntries: state.dashboardEntries,
         }),
         onRehydrateStorage: () => (_state, error) => {

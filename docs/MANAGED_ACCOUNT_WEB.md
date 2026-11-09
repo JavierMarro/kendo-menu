@@ -170,3 +170,16 @@ same-account verification or connectivity changes. Load/availability retries mus
 validated current-account response, including a valid empty revision-zero result. Ordinary C
 availability probes for an existing dirty draft or uncertain Save still retain that draft,
 expected revision and pending Save request. See [Migration D](MANAGED_GUEST_COPY.md).
+
+## Shared menus
+
+The sharing branch supports public previews and an account-only import route. Google return and
+new-account setup preserve a short-lived per-tab share-token continuation. Import never writes
+LocalStorage or implicitly saves the dashboard: the recipient gets an editable memory draft, with
+fresh identifiers and a Shared origin marker, and must choose Save to account. The controller checks
+the candidate complete UTF-8 save envelope before committing the import to the live store.
+
+Share creation uses a saved-entry selector from the acknowledged baseline and sends only the account,
+revision and entry ID. It does not send unsaved content or include notes. Sharing revision conflicts
+reuse the guarded reload/download path. Identity failures fence sharing just like ordinary saves.
+See [the implementation progress](CUSTOM_MENU_SHARING_PROGRESS.md) for the verification boundary.

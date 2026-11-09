@@ -1,7 +1,7 @@
 /**
  * Versioned, bounded persistence boundary for the local-first Zustand dashboard store.
  * Every stored value is treated as untrusted and must pass its historical parser/migration chain;
- * the current v10 wire DTO is shared with the domain cloud codec to prevent format drift.
+ * the current v11 wire DTO is shared with the domain cloud codec to prevent format drift.
  */
 import {
   DEFAULT_TRAINING_SETS,
@@ -28,13 +28,15 @@ import {
 import type {
   PersistedCustomTrainingSet as DomainPersistedCustomTrainingSet,
   PersistedDashboardEntryV10 as DomainPersistedDashboardEntryV10,
+  PersistedDashboardEntryV11 as DomainPersistedDashboardEntryV11,
   PersistedTrainingExercise as DomainPersistedTrainingExercise,
   PersistedTrainingSection as DomainPersistedTrainingSection,
   PersistedTrainingWireStateV10 as DomainPersistedTrainingWireStateV10,
+  PersistedTrainingWireStateV11 as DomainPersistedTrainingWireStateV11,
 } from '@kendo-menu/domain/dashboard-persistence';
 import { type PersistStorage, type StateStorage, type StorageValue } from 'zustand/middleware';
 
-export const TRAINING_STORE_PERSISTENCE_VERSION = 10;
+export const TRAINING_STORE_PERSISTENCE_VERSION = 11;
 
 /** Maximum serialized storage value. Keep local-first persistence bounded before parsing JSON. */
 export const TRAINING_STORE_RAW_JSON_LIMIT = 2 * 1024 * 1024;
@@ -53,6 +55,10 @@ export type PersistedTrainingState = PersistedTrainingStateV9;
 export interface PersistedTrainingStateV10 {
   readonly dashboardEntries: readonly DashboardEntry[];
 }
+
+export type PersistedTrainingStateV11 = PersistedTrainingStateV10;
+export type PersistedDashboardEntryV11 = DomainPersistedDashboardEntryV11;
+export type PersistedTrainingWireStateV11 = DomainPersistedTrainingWireStateV11;
 
 /** Compatibility aliases for the domain-owned two-level wire DTO. */
 export type PersistedTrainingExercise = DomainPersistedTrainingExercise;
@@ -254,7 +260,7 @@ export type TrainingStorageInspection =
   | {
       readonly status: 'migrated';
       readonly kind: 'migrated';
-      readonly fromVersion: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+      readonly fromVersion: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
       readonly version: typeof TRAINING_STORE_PERSISTENCE_VERSION;
       readonly state: PersistedTrainingStateV10;
     }
@@ -1329,7 +1335,7 @@ export function parsePersistedTrainingStateV8(value: unknown): PersistedTraining
   }
 }
 
-function parsePersistedDashboardEntryV10(value: unknown): DashboardEntry | null {
+function parsePersistedDashboardEntry(value: unknown, version: 10 | 11): DashboardEntry | null {
   if (
     !isRecord(value) ||
     !hasOnlyProperties(
@@ -1342,6 +1348,7 @@ function parsePersistedDashboardEntryV10(value: unknown): DashboardEntry | null 
         'activityNotes',
         'notes',
         'createdAt',
+        ...(version === 11 ? ['receivedViaShare'] : []),
       ]),
     )
   ) {
@@ -1415,7 +1422,17 @@ function parsePersistedDashboardEntryV10(value: unknown): DashboardEntry | null 
     }
   }
 
+  const receivedViaShare = Object.hasOwn(value, 'receivedViaShare');
+  if (
+    receivedViaShare &&
+    (version !== 11 ||
+      value['receivedViaShare'] !== true ||
+      ownedTrainingSet === undefined ||
+      ownedTrainingSet.isBuiltIn)
+  )
+    return null;
   const entry: DashboardEntry = {
+    ...(receivedViaShare ? { receivedViaShare: true as const } : {}),
     id,
     trainingSetId: asTrainingSetId(trainingSetId),
     ...(ownedTrainingSet === undefined ? {} : { trainingSet: ownedTrainingSet }),
@@ -1452,13 +1469,16 @@ function sanitizeDashboardActivityNotesForTrainingSet(
 }
 
 /** Parse the current v10 runtime state from an untrusted wire value. */
-function parsePersistedTrainingStateV10Unchecked(value: unknown): PersistedTrainingStateV10 | null {
+function parsePersistedTrainingStateV10Unchecked(
+  value: unknown,
+  version: 10 | 11 = 10,
+): PersistedTrainingStateV11 | null {
   if (!isRecord(value) || !hasOnlyProperties(value, new Set(['dashboardEntries']))) {
     return null;
   }
   const dashboardEntries = parseArray(
     value['dashboardEntries'],
-    parsePersistedDashboardEntryV10,
+    (entry) => parsePersistedDashboardEntry(entry, version),
     TRAINING_DATA_LIMITS.dashboardEntries,
   );
   if (dashboardEntries === null || !validateUniqueEntryIds(dashboardEntries)) {
@@ -1470,6 +1490,14 @@ function parsePersistedTrainingStateV10Unchecked(value: unknown): PersistedTrain
 export function parsePersistedTrainingStateV10(value: unknown): PersistedTrainingStateV10 | null {
   try {
     return parsePersistedTrainingStateV10Unchecked(value);
+  } catch {
+    return null;
+  }
+}
+
+export function parsePersistedTrainingStateV11(value: unknown): PersistedTrainingStateV11 | null {
+  try {
+    return parsePersistedTrainingStateV10Unchecked(value, 11);
   } catch {
     return null;
   }
@@ -2319,8 +2347,9 @@ export function migratePersistedTrainingState(
       );
     case 9:
       return migratePersistedTrainingStateV9ToV10(persistedState);
+    case 10:
     case TRAINING_STORE_PERSISTENCE_VERSION: {
-      const stateV10 = parsePersistedTrainingStateV10Unchecked(persistedState);
+      const stateV10 = parsePersistedTrainingStateV10Unchecked(persistedState, version);
       if (stateV10 === null) {
         throw new Error('Training-store version 10 state is invalid.');
       }
@@ -2410,7 +2439,7 @@ export function encodePersistedTrainingState(value: unknown): PersistedTrainingW
   };
 }
 
-function parseRuntimeDashboardEntry(value: unknown): DashboardEntry | null {
+function parseRuntimeDashboardEntry(value: unknown, version: 10 | 11): DashboardEntry | null {
   if (
     !isRecord(value) ||
     !hasOnlyProperties(
@@ -2423,6 +2452,7 @@ function parseRuntimeDashboardEntry(value: unknown): DashboardEntry | null {
         'activityNotes',
         'notes',
         'createdAt',
+        ...(version === 11 ? ['receivedViaShare'] : []),
       ]),
     )
   ) {
@@ -2472,8 +2502,18 @@ function parseRuntimeDashboardEntry(value: unknown): DashboardEntry | null {
       trainingSet = validation.value;
     }
   }
+  const receivedViaShare = Object.hasOwn(value, 'receivedViaShare');
+  if (
+    receivedViaShare &&
+    (version !== 11 ||
+      value['receivedViaShare'] !== true ||
+      trainingSet === undefined ||
+      trainingSet.isBuiltIn)
+  )
+    return null;
   return sanitizeDashboardActivityNotesForTrainingSet(
     {
+      ...(receivedViaShare ? { receivedViaShare: true as const } : {}),
       id,
       trainingSetId: asTrainingSetId(trainingSetId),
       ...(trainingSet === undefined ? {} : { trainingSet }),
@@ -2487,13 +2527,16 @@ function parseRuntimeDashboardEntry(value: unknown): DashboardEntry | null {
 }
 
 /** Encode the current v10 runtime state, embedding only custom dashboard snapshots. */
-export function encodePersistedTrainingStateV10(value: unknown): PersistedTrainingWireStateV10 {
+function encodeEmbeddedTrainingState(
+  value: unknown,
+  version: 10 | 11,
+): PersistedTrainingWireStateV11 {
   if (!isRecord(value) || !hasOnlyProperties(value, new Set(['dashboardEntries']))) {
     throw new Error('Training-store state is invalid and cannot be encoded.');
   }
   const dashboardEntries = parseArray(
     value['dashboardEntries'],
-    parseRuntimeDashboardEntry,
+    (entry) => parseRuntimeDashboardEntry(entry, version),
     TRAINING_DATA_LIMITS.dashboardEntries,
   );
   if (dashboardEntries === null || !validateUniqueEntryIds(dashboardEntries)) {
@@ -2519,6 +2562,7 @@ export function encodePersistedTrainingStateV10(value: unknown): PersistedTraini
         id: entry.id,
         trainingSetId: entry.trainingSetId,
         trainingSet: encodePersistedCustomTrainingSet(trainingSet, index),
+        ...(entry.receivedViaShare === true ? { receivedViaShare: true as const } : {}),
         quantityOverrides: entry.quantityOverrides,
         activityNotes: entry.activityNotes,
         notes: entry.notes,
@@ -2528,18 +2572,26 @@ export function encodePersistedTrainingStateV10(value: unknown): PersistedTraini
   };
 }
 
+export function encodePersistedTrainingStateV10(value: unknown): PersistedTrainingWireStateV10 {
+  return encodeEmbeddedTrainingState(value, 10);
+}
+
+export function encodePersistedTrainingStateV11(value: unknown): PersistedTrainingWireStateV11 {
+  return encodeEmbeddedTrainingState(value, 11);
+}
+
 /**
  * Encode a v10 state exactly as the storage adapter does and enforce its serialized size.
  * Callers can use this pure preflight before committing a candidate to an in-memory store.
  */
-export function serializePersistedTrainingStateV10(value: unknown): string {
-  const state = encodePersistedTrainingStateV10(value);
-  if (parsePersistedTrainingStateV10Unchecked(state) === null) {
+function serializeEmbeddedTrainingState(value: unknown, version: 10 | 11): string {
+  const state = encodeEmbeddedTrainingState(value, version);
+  if (parsePersistedTrainingStateV10Unchecked(state, version) === null) {
     throw new Error('Training-store encoder produced invalid version 10 state.');
   }
   const rawValue = JSON.stringify({
     state,
-    version: TRAINING_STORE_PERSISTENCE_VERSION,
+    version,
   });
   if (rawValue.length > TRAINING_STORE_RAW_JSON_LIMIT) {
     throw new Error(
@@ -2547,6 +2599,14 @@ export function serializePersistedTrainingStateV10(value: unknown): string {
     );
   }
   return rawValue;
+}
+
+export function serializePersistedTrainingStateV10(value: unknown): string {
+  return serializeEmbeddedTrainingState(value, 10);
+}
+
+export function serializePersistedTrainingStateV11(value: unknown): string {
+  return serializeEmbeddedTrainingState(value, 11);
 }
 
 function parseStorageValue(value: unknown): StorageValue<PersistedStorageState> | null {
@@ -2569,7 +2629,7 @@ function parseStorageValue(value: unknown): StorageValue<PersistedStorageState> 
     throw new Error(`Unsupported training-store persistence version: ${String(version)}`);
   }
   if (version === TRAINING_STORE_PERSISTENCE_VERSION) {
-    const state = parsePersistedTrainingStateV10Unchecked(value['state']);
+    const state = parsePersistedTrainingStateV10Unchecked(value['state'], 11);
     if (state === null) {
       throw new Error('Training-store persistence data is invalid.');
     }
@@ -2616,6 +2676,11 @@ function parseStorageValue(value: unknown): StorageValue<PersistedStorageState> 
       }
       return { state, version };
     }
+    case 10: {
+      const state = parsePersistedTrainingStateV10(value['state']);
+      if (state === null) throw new Error('Training-store version 10 persistence data is invalid.');
+      return { state, version };
+    }
     case 9: {
       const state = parsePersistedTrainingWireState(value['state']);
       if (state === null) {
@@ -2656,7 +2721,7 @@ export function createTrainingJSONStorage(
           `Training-store persistence version must be ${String(TRAINING_STORE_PERSISTENCE_VERSION)}.`,
         );
       }
-      return storage.setItem(name, serializePersistedTrainingStateV10(value.state));
+      return storage.setItem(name, serializePersistedTrainingStateV11(value.state));
     },
     removeItem: (name) => storage.removeItem(name),
   };
@@ -2679,7 +2744,7 @@ function classifyParsedEnvelopeUnchecked(value: unknown): TrainingStorageInspect
     return { status: 'unsupported-future', kind: 'unsupported-future', version };
   }
   if (version === TRAINING_STORE_PERSISTENCE_VERSION) {
-    const state = parsePersistedTrainingStateV10Unchecked(value['state']);
+    const state = parsePersistedTrainingStateV10Unchecked(value['state'], 11);
     return state === null
       ? { status: 'corrupt', kind: 'corrupt', reason: 'invalid-domain' }
       : { status: 'ready', kind: 'ready', version, state };
@@ -2707,6 +2772,7 @@ function classifyParsedEnvelopeUnchecked(value: unknown): TrainingStorageInspect
       case 7:
       case 8:
       case 9:
+      case 10:
         return {
           status: 'migrated',
           kind: 'migrated',

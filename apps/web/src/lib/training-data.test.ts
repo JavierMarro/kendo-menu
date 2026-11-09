@@ -219,6 +219,15 @@ describe('training-data presentation helpers', () => {
       { ...EMPTY_ENTRY, id: 'unknown-entry', trainingSetId: asTrainingSetId('unknown') },
     ];
 
+    expect(
+      filterDashboardEntries(
+        [
+          ...entries,
+          { ...EMPTY_ENTRY, id: 'received-entry', trainingSet: custom, receivedViaShare: true },
+        ],
+        'shared',
+      ).map((entry) => entry.id),
+    ).toEqual(['received-entry']);
     expect(getTrainingSetTagLabels(custom)).toEqual(['Custom', 'Intense session']);
     expect(filterDashboardEntries(entries, 'all').map((entry) => entry.id)).toEqual([
       'custom-entry',

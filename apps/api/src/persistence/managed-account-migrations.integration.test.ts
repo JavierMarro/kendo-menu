@@ -97,6 +97,7 @@ async function legacyRows() {
 
 async function restorePredecessor() {
   await seedLegacyData();
+  await database.client.query('DROP TABLE menu_shares');
   await database.client.query('DROP TABLE account_copy_opportunities');
   await database.client.query('DROP TRIGGER IF EXISTS users_managed_identity_immutable ON users');
   await database.client.query('DROP FUNCTION IF EXISTS reject_managed_identity_change()');

@@ -192,6 +192,8 @@ export type CustomTrainingSectionInput = TrainingSectionInput;
 export type CustomTrainingSetInput = TrainingSetInput;
 
 export interface DashboardEntry {
+  /** Independent custom copy received through sharing; not an authorship claim. */
+  readonly receivedViaShare?: true;
   readonly id: string;
   readonly trainingSetId: TrainingSetId;
   /** Dashboard-owned snapshot; absent only for unknown legacy entries. */
