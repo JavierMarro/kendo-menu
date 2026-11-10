@@ -92,6 +92,7 @@ const FAQ_ITEMS: readonly FaqItem[] = [
 ];
 
 const LANDING_REVEAL_SELECTOR = '[data-landing-reveal]';
+const DEMONSTRATION_ID = 'kendo-menu-demonstration';
 const LANDING_TEASER_IDS = [
   'international-dojo-2-hour-session',
   'university-high-school',
@@ -181,6 +182,8 @@ export function LandingPage(): ReactElement {
   const { identity } = useManagedAuth();
   const isVerified = identity.status === 'verified';
   const [openFaqId, setOpenFaqId] = useState<string | null>(null);
+  const [isDemoOpen, setIsDemoOpen] = useState(false);
+  const demoRef = useRef<HTMLDetailsElement>(null);
   const sectionsRef = useLandingScrollReveal();
 
   return (
@@ -258,6 +261,54 @@ export function LandingPage(): ReactElement {
                   <strong>Start with a curated practice plan or build from scratch.</strong> Shape
                   it around the people, time, and goals in front of you.
                 </p>
+                <details
+                  ref={demoRef}
+                  className="landing-demo"
+                  onToggle={(event) => setIsDemoOpen(event.currentTarget.open)}
+                >
+                  <summary id={DEMONSTRATION_ID} className="landing-faq-source-link">
+                    See a demonstration video here
+                  </summary>
+                  {isDemoOpen ? (
+                    <>
+                      <video
+                        aria-label="KendoMenu demonstration"
+                        controls
+                        playsInline
+                        preload="none"
+                        poster="/assets/kendomenu-demo-poster.webp"
+                        width="1280"
+                        height="720"
+                      >
+                        <source src="/assets/kendomenu-demo.mp4" type="video/mp4" />
+                        <track
+                          kind="captions"
+                          label="English"
+                          src="/assets/kendomenu-demo.en.vtt"
+                          srcLang="en"
+                        />
+                      </video>
+                      <details>
+                        <summary>Read the video walkthrough</summary>
+                        <p>
+                          KendoMenu is a free web app for planning kendo practice. Start with an
+                          empty guest dashboard. Open the Keiko library, view a curated menu and add
+                          it to your dashboard. To make your own, create a training session, add
+                          activities and set repetitions or duration.
+                        </p>
+                        <p>
+                          Sign in with Google and select Save to account to use your menus on other
+                          devices. Use Share it! on a saved custom menu to create a link. Open a
+                          friend’s link, select Add to my dashboard and save your copy.
+                        </p>
+                        <p>
+                          Visit the Mitori room to watch kendo videos, browse resources and look up
+                          terms in the glossary.
+                        </p>
+                      </details>
+                    </>
+                  ) : null}
+                </details>
               </div>
             </div>
 
@@ -447,7 +498,23 @@ export function LandingPage(): ReactElement {
                       aria-labelledby={questionId}
                       hidden={!isOpen}
                     >
-                      <p>{item.answer}</p>
+                      <p>
+                        {item.answer}
+                        {item.id === 'what-is-kendomenu' ? (
+                          <>
+                            {' '}
+                            <a
+                              className="landing-faq-source-link"
+                              href={`#${DEMONSTRATION_ID}`}
+                              onClick={() => {
+                                if (demoRef.current !== null) demoRef.current.open = true;
+                              }}
+                            >
+                              Watch the demonstration video.
+                            </a>
+                          </>
+                        ) : null}
+                      </p>
                     </div>
                   </article>
                 );

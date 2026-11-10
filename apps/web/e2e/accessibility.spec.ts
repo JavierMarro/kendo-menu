@@ -734,6 +734,8 @@ test.describe('accessibility and responsive layout', () => {
     await page.keyboard.press('Tab');
     await expect(page.getByRole('link', { name: 'Sign up here' })).toBeFocused();
     await page.keyboard.press('Tab');
+    await expect(page.getByText('See a demonstration video here', { exact: true })).toBeFocused();
+    await page.keyboard.press('Tab');
 
     const firstMenuTeaser = page.getByRole('link', { name: /International dojo menu/ });
     const menuPreview = page.locator('.landing-menu-preview[data-landing-reveal]');

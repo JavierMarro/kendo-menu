@@ -337,6 +337,20 @@ these settings is enabled, and no setting should be changed as part of this docu
       equivalent secure record. Do not put credentials, recovery codes, tokens, or secrets in this
       repository.
 
+## Sharing release check
+
+Apply the reviewed [sharing migration](../../apps/api/drizzle/0004_solid_zaladane.sql) to the
+production database through the explicit migration command before releasing sharing. The site
+build and API health check do not apply or verify database migrations.
+
+After deployment, request `/api/shares/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA` on the canonical
+host. The unused token should return `404 SHARE_NOT_FOUND`. A `503 SHARE_UNAVAILABLE` indicates
+sharing storage could not be reached. Check that `public.menu_shares` exists on the database used
+by the deployed API and that its runtime role can access it.
+
+Then sign in with a test account, save a custom menu, create its sharing link, and open the link in
+a signed-out browser. Confirm the menu preview loads and omits any notes.
+
 ## Post-deploy smoke checklist
 
 - [ ] Use a dedicated clean browser profile for state-changing smoke checks. If a profile contains
