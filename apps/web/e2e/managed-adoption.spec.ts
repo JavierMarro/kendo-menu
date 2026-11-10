@@ -367,6 +367,63 @@ test('a BFCache departure abandons an unused offer without an adoption request',
   await expectGuestBytesUnchanged(page, guestBytes);
 });
 
+for (const departure of ['dashboard navigation', 'pagehide'] as const) {
+  test(`${departure} cancels a choice still awaiting identity verification`, async ({ page }) => {
+    const harness = await SyntheticManagedHarness.install(page, { initiallyUninitialized: true });
+    const guestBytes = await createGuestAndStartAccount(page, harness);
+    let resumeVerification: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      resumeVerification = resolve;
+    });
+    await page.route(
+      '**/api/account',
+      async (route) => {
+        await held;
+        await route.fallback();
+      },
+      { times: 1 },
+    );
+
+    try {
+      const [verification] = await Promise.all([
+        page.waitForRequest(
+          (request) =>
+            new URL(request.url()).pathname === '/api/account' && request.method() === 'GET',
+        ),
+        page
+          .getByRole('button', {
+            name: departure === 'pagehide' ? 'No, thanks' : 'Copy menus',
+            exact: true,
+          })
+          .click(),
+      ]);
+      expect(adoptionCalls(harness)).toEqual([]);
+      const cancelled = page.waitForEvent('requestfailed', (request) => request === verification);
+      if (departure === 'pagehide') {
+        await page.evaluate(() =>
+          window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })),
+        );
+        await cancelled;
+        await expect(page.getByRole('heading', { name: 'Setup interrupted' })).toBeVisible();
+        await expect(
+          page.getByText(/setup was interrupted before your choice was sent/i),
+        ).toBeVisible();
+        await continueToAccount(page);
+      } else {
+        await workspaceLink(page, 'Dashboard').click();
+        await cancelled;
+        await expect(page).toHaveURL(/\/app\/account\/dashboard$/);
+      }
+    } finally {
+      resumeVerification?.();
+    }
+    await expect(page.getByRole('heading', { name: 'Your dashboard is ready.' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Copy menus', exact: true })).toHaveCount(0);
+    expect(adoptionCalls(harness)).toEqual([]);
+    await expectGuestBytesUnchanged(page, guestBytes);
+  });
+}
+
 for (const outcome of ['confirmed', 'unconfirmed'] as const) {
   test(`a ${outcome} decision requires a fresh dashboard after failed load and same-account verification`, async ({
     page,
@@ -385,6 +442,9 @@ for (const outcome of ['confirmed', 'unconfirmed'] as const) {
       exact: true,
     });
     await expect(loadError).toBeVisible();
+    await expect(page.getByRole('alert').filter({ has: loadError })).toContainText(
+      'The account dashboard could not be loaded.',
+    );
     harness.setAccountUnavailable(true);
     await Promise.all([
       page.waitForResponse(

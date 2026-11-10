@@ -16,9 +16,10 @@ and complete valid non-empty guest data that fits the complete request's 2,097,1
 An empty returning account is not eligible merely because it is empty. Callback parameters and
 Google email never establish eligibility.
 
-The browser handoff exists only in memory. A setup-scoped `pagehide` listener releases it on
-full-document departure, including BFCache, and prevents pending preflight reads from submitting. It is released before dispatching either decision, or
-when setup is skipped or abandoned, the identity changes, sign-out starts, or its lifetime ends.
+The browser handoff exists only in memory. Leaving setup, including a `pagehide` event when the
+page enters BFCache, releases it and cancels any decision still awaiting identity verification.
+The handoff is also released before either decision is dispatched, when setup is skipped, when
+identity changes or sign-out starts, and when the handoff's lifetime ends.
 Back navigation and route remount cannot recreate the choice from the original creation response,
 including after an unsuccessful or unconfirmed attempt. Strict Mode's unused effect setup is not
 user abandonment. There is no decision journal, background copy, implicit No or import replay.
@@ -52,8 +53,9 @@ same-count changes. Changed valid data refreshes the offer and requires another 
 unusable data skips setup. No path clears, rewrites, migrates or removes guest LocalStorage.
 Supported legacy decoding happens only in memory.
 
-Yes freezes one complete v10 request: decision, transport version, verified account mismatch guard,
-existing opportunity, revision `"0"`, current catalogue, a fresh request ID and complete dashboard.
+Yes freezes one request with the decision, transport version, verified account mismatch guard,
+existing opportunity, revision `"0"`, current catalogue, a fresh request ID and a complete v11
+dashboard. The server accepts strictly validated v10 and v11 dashboards.
 Validation includes the full envelope's UTF-8 size. Notes, activity IDs and quantity overrides use
 the existing domain codec. No sends only the strict decline envelope. Duplicate submissions are
 coalesced in memory, and the existing API client supplies transient bearer authorization.
