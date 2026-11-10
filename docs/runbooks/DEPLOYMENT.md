@@ -16,10 +16,12 @@ The checked-in settings are the source of truth for the build:
 | Build command            | `pnpm build`                                                | [`vercel.json`](../../vercel.json)        |
 | Build implementation     | `pnpm build:api` then `pnpm --filter @kendo-menu/web build` | root [`package.json`](../../package.json) |
 | Output directory         | `apps/web/dist`                                             | [`vercel.json`](../../vercel.json)        |
-| SPA rewrite              | Non-API paths → `/index.html`                               | [`vercel.json`](../../vercel.json)        |
+| SPA rewrite              | Shared links → HTML handler; fallback → `/index.html`       | [`vercel.json`](../../vercel.json)        |
 
 The root lockfile is `pnpm-lock.yaml`; no alternate package manager or lockfile is declared. The root
-API function dispatches API requests ahead of the SPA fallback. `pnpm build:api` reuses the installed
+API function dispatches API requests and serves the share document ahead of the SPA fallback.
+The share document uses the bundled web shell to emit the actual share URL and a generic title
+without loading any menu data. `pnpm build:api` reuses the installed
 web Vite toolchain with `apps/web/vite.api.config.ts` to emit `apps/api/dist/index.js`, bundling the
 API, domain workspace code and curated JSON while leaving third-party server dependencies external.
 This server build does not load private env files; credentials remain runtime configuration. The API
@@ -349,7 +351,8 @@ sharing storage could not be reached. Check that `public.menu_shares` exists on 
 by the deployed API and that its runtime role can access it.
 
 Then sign in with a test account, save a custom menu, create its sharing link, and open the link in
-a signed-out browser. Confirm the menu preview loads and omits any notes.
+a signed-out browser. Confirm the menu preview loads and omits any notes. Fetch the share URL as
+HTML and check that its Open Graph title says “Check my custom menu out!” before JavaScript runs.
 
 ## Post-deploy smoke checklist
 

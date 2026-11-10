@@ -44,6 +44,9 @@
   --badge-high-intensity-background: #501f1a;
   --badge-high-intensity-border: #ff785a;
   --badge-high-intensity-text: #ffd5cb;
+  --share-border: #ef6a48;
+  --share-surface: #fac9ba;
+  --share-surface-hover: #ffdbcf;
   --focus: #f3c95e;
   --shadow: 0 6px 18px rgba(3, 10, 22, 0.22);
   --type-12: 0.75rem;
@@ -2681,6 +2684,12 @@ textarea[aria-invalid='true'] {
   background: var(--badge-high-intensity-background);
 }
 
+.category-pill[data-category-variant='shared'] {
+  border-color: var(--share-border);
+  color: var(--accent-ink);
+  background: var(--share-surface);
+}
+
 .dashboard-filter-empty {
   width: min(100%, 46rem);
   margin-inline: auto;
@@ -5184,9 +5193,14 @@ textarea[aria-invalid='true'] {
 }
 
 .share-menu-trigger {
-  --accent: #ef6a48;
-  --accent-hover: #ff896c;
+  --accent: var(--share-surface);
+  --accent-hover: var(--share-surface-hover);
   margin-inline-start: auto;
+}
+
+.primary-button.share-menu-trigger,
+.primary-button.share-menu-trigger:hover:not(:disabled) {
+  border-color: var(--share-border);
 }
 
 .share-menu-content {
@@ -5210,31 +5224,20 @@ textarea[aria-invalid='true'] {
   overflow-wrap: anywhere;
 }
 
-.shared-menu-page > button,
 .shared-menu-page > a {
   margin-block-start: var(--space-5);
   margin-inline-end: var(--space-3);
 }
 
-.shared-menu-page .training-activity-list {
-  display: grid;
-  gap: var(--space-6);
-  padding-inline-start: var(--space-6);
-  margin-block: var(--space-6);
-}
-
-.shared-menu-page .training-activity-list > li + li {
-  padding-block-start: var(--space-5);
-  border-top: 1px solid var(--line);
-}
-
-.shared-menu-page .training-activity-list ul {
-  display: grid;
+.shared-menu-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-3);
-  padding-inline-start: var(--space-5);
+  margin-top: var(--space-4);
 }
 
-.shared-menu-page .training-activity-list p {
-  margin-block: var(--space-2);
-  color: var(--muted-strong);
+.shared-menu-actions > [role='status'] {
+  flex-basis: 100%;
+  margin: 0;
 }

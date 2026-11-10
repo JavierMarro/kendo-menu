@@ -30,7 +30,7 @@ export function TrainingSetTags({
             {formatTrainingSetTag(tag)}
           </span>
           {receivedViaShare && tag === 'custom' ? (
-            <span className="category-pill" data-category-variant="custom">
+            <span className="category-pill" data-category-variant="shared">
               Shared
             </span>
           ) : null}

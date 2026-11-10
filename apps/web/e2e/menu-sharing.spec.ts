@@ -39,6 +39,11 @@ async function dismissNotice(page: Page) {
 }
 
 async function installShareRoutes(page: Page) {
+  // Mirror the hosting rewrite while keeping the real shared URL in the browser.
+  await page.route(`**/app/shared/${TOKEN}`, async (route) => {
+    const url = new URL('/shared-menu.html', route.request().url()).href;
+    await route.fulfill({ response: await route.fetch({ url }) });
+  });
   await page.route(`**/api/shares/${TOKEN}`, (route) =>
     route.fulfill({ json: { snapshot: SHARED } }),
   );
@@ -63,7 +68,24 @@ for (const setup of ['existing', 'decline', 'copy'] as const) {
     await page.goto(`/app/shared/${TOKEN}`);
     await dismissNotice(page);
     await expect(page.getByRole('heading', { name: SHARED.name, exact: true })).toBeVisible();
-    await expect(page.getByText('30 seconds · 2 minutes')).toBeVisible();
+    const preview = page.getByRole('article', { name: SHARED.name });
+    await preview.getByText('Main practice', { exact: true }).click();
+    const quantities = preview.getByRole('list', { name: 'Quantities for Men' });
+    await expect(quantities.getByRole('listitem')).toHaveText([
+      '24 repetitions',
+      '30 seconds',
+      '2 minutes',
+    ]);
+    if (setup === 'existing') {
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        page.viewportSize()?.width ?? 0,
+      );
+      const scan = await new AxeBuilder({ page }).analyze();
+      expect(
+        scan.violations.filter(({ impact }) => impact === 'serious' || impact === 'critical'),
+      ).toEqual([]);
+      await preview.screenshot({ path: testInfo.outputPath('shared-preview.png') });
+    }
     await expect(
       page.getByRole('button', { name: 'Add to my dashboard', exact: true }),
     ).toHaveCount(0);

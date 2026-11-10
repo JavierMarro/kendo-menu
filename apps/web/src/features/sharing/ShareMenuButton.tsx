@@ -132,7 +132,7 @@ export function ShareMenuButton({ entry }: { readonly entry: DashboardEntry }) {
                         type="button"
                         onClick={() => {
                           void navigator
-                            .share({ url: link, title: saved.trainingSet?.name ?? 'Keiko menu' })
+                            .share({ url: link, text: 'Check my custom menu out!' })
                             .catch(() =>
                               setMessage(
                                 'Sharing was cancelled or unavailable. You can copy the link instead.',

@@ -2,6 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm build",
   "outputDirectory": "apps/web/dist",
+  "functions": {
+    "api/*.ts": {
+      "includeFiles": "apps/web/dist/shared-menu.html"
+    }
+  },
   "rewrites": [
     {
       "source": "/api",
@@ -9,6 +14,10 @@
     },
     {
       "source": "/api/(.*)",
+      "destination": "/api/[...path]"
+    },
+    {
+      "source": "/app/shared/([A-Za-z0-9_-]{43})",
       "destination": "/api/[...path]"
     },
     {

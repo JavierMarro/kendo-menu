@@ -177,6 +177,15 @@ test.describe('production metadata and crawl boundaries', () => {
     expect(dimensions).toEqual({ width: 1200, height: 630 });
   });
 
+  test('serves the custom-menu link card before client rendering', async ({ request }) => {
+    const response = await request.get('/shared-menu.html');
+    expect(response.ok()).toBe(true);
+    const html = await response.text();
+    expect(html).toContain('property="og:title" content="Check my custom menu out!"');
+    expect(html).toContain(`property="og:image" content="${SOCIAL_IMAGE_URL}"`);
+    expect(html).toContain('name="robots" content="noindex, nofollow"');
+  });
+
   test('noindexes the client recovery state', async ({ page }) => {
     await page.goto('/e2e/error-fixture.html');
     await page.getByRole('button', { name: 'Throw render error' }).click();
