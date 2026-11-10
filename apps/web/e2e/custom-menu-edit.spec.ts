@@ -1,4 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
+import { TRAINING_DATA_LIMITS } from '@kendo-menu/domain';
+import { TRAINING_STORE_RAW_JSON_LIMIT } from '@kendo-menu/store';
 import { expect, type Locator, type Page } from '@playwright/test';
 
 import { test } from './guest-test';
@@ -166,6 +168,109 @@ for (const kind of ['guest', 'account'] as const) {
     expect(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)).toBe(before);
   });
 }
+
+test('guest detail Save reports rejected edits until they fit the dashboard limit', async ({
+  page,
+}) => {
+  const sections = Array.from({ length: 3 }, (_, group) => ({
+    id: `group-${group}`,
+    name: `Group ${group}`,
+    exercises: Array.from({ length: 88 }, (_, exercise) => ({
+      id: `exercise-${group}-${exercise}`,
+      name: `Exercise ${exercise}`,
+      notes: '',
+    })),
+  }));
+  const envelope = {
+    version: 11,
+    state: {
+      dashboardEntries: [
+        {
+          id: 'editable',
+          trainingSetId: 'international-dojo-2-hour-session',
+          notes: '',
+          quantityOverrides: {},
+          activityNotes: {},
+          createdAt: '2026-10-22T12:00:00.000Z',
+        },
+        {
+          id: 'filler',
+          trainingSetId: 'custom-filler',
+          trainingSet: {
+            id: 'custom-filler',
+            name: 'Audit 稽古',
+            category: 'custom',
+            isBuiltIn: false,
+            sections,
+          },
+          notes: '',
+          quantityOverrides: {},
+          activityNotes: {},
+          createdAt: '2026-10-22T12:00:00.000Z',
+        },
+      ],
+    },
+  };
+  const targetLength = TRAINING_STORE_RAW_JSON_LIMIT - 8;
+  let remaining = targetLength - JSON.stringify(envelope).length;
+  for (const exercise of sections.flatMap((section) => section.exercises)) {
+    const length = Math.min(remaining, TRAINING_DATA_LIMITS.noteCharacters);
+    exercise.notes = 'x'.repeat(length);
+    remaining -= length;
+  }
+  const raw = JSON.stringify(envelope);
+  expect(raw.length).toBe(targetLength);
+  const pageErrors: Error[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error));
+  await page.goto('/app/guest/dashboard');
+  await page.evaluate(({ key, raw }) => localStorage.setItem(key, raw), { key: STORAGE_KEY, raw });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+  const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+  if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
+
+  const dialog = await openMenu(page, 'International dojo menu');
+  const notes = dialog.getByLabel('Practice notes');
+  const save = dialog.getByRole('button', { name: 'Save your changes' });
+  const error = dialog.getByRole('alert').filter({ hasText: 'A change could not be saved.' });
+  const saved = dialog.getByText('Changes saved on this device.', { exact: true });
+  await notes.fill('A note that does not fit.');
+  await save.click();
+  await expect(error).toBeVisible();
+  await expect(saved).toHaveCount(0);
+  await expect(notes).toHaveValue('A note that does not fit.');
+  expect(
+    await page.evaluate(({ key, raw }) => localStorage.getItem(key) === raw, {
+      key: STORAGE_KEY,
+      raw,
+    }),
+  ).toBe(true);
+
+  const minutes = dialog.getByLabel('Minutes for Warm-up', { exact: true });
+  await minutes.fill('12');
+  const warmUp = dialog.getByRole('region', { name: 'Warm-up', exact: true });
+  await warmUp.getByRole('button', { name: 'Any extra details?' }).click();
+  const activityNotes = warmUp.getByLabel('Extra notes for Warm-up');
+  await activityNotes.fill('This activity note does not fit either.');
+  await notes.fill('OK');
+  await save.click();
+  await expect(error).toBeVisible();
+  await expect(saved).toHaveCount(0);
+  await minutes.fill('10');
+  await save.click();
+  await expect(error).toBeVisible();
+  await expect(saved).toHaveCount(0);
+  await activityNotes.fill('');
+  await save.click();
+  await expect(error).toHaveCount(0);
+  await expect(saved).toBeVisible();
+
+  await page.reload();
+  const reloaded = await openMenu(page, 'International dojo menu');
+  await expect(reloaded.getByLabel('Practice notes')).toHaveValue('OK');
+  await expect(reloaded.getByLabel('Minutes for Warm-up', { exact: true })).toHaveValue('10');
+  expect(pageErrors).toEqual([]);
+});
 
 test('an unfinished account menu edit survives offline and reconnect without saving', async ({
   page,

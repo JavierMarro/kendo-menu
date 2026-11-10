@@ -596,6 +596,8 @@ function UnknownDashboardEntry({ entry, onRemove }: UnknownDashboardEntryProps) 
   );
 }
 
+type CommitEditorChange = (fieldId: string, update: () => void) => void;
+
 interface DashboardTrainingSetProps {
   readonly entry: DashboardEntry;
   readonly index: number;
@@ -627,6 +629,8 @@ export function DashboardTrainingSet({
 }: DashboardTrainingSetProps) {
   const [notesDraft, setNotesDraft] = useState(entry.notes);
   const [notesStatus, setNotesStatus] = useState<'idle' | 'updated'>('idle');
+  const rejectedEdits = useRef(new Set<string>());
+  const [showEditError, setShowEditError] = useState(false);
   const [saveConfirmationVersion, setSaveConfirmationVersion] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const persistenceStatus = usePersistenceStatus();
@@ -636,7 +640,25 @@ export function DashboardTrainingSet({
   const activityCount = getTrainingSetActivityCount(trainingSet);
   const description = getTrainingSetDescription(trainingSet);
   const headingId = titleId ?? `dashboard-entry-title-${entry.id}`;
+  const notesId = `notes-${entry.id}`;
+  const saveErrorId = `save-error-${entry.id}`;
   const saveStatusId = `save-status-${entry.id}`;
+
+  const commitEditorChange: CommitEditorChange = (fieldId, update) => {
+    if (workspace.kind === 'account') {
+      update();
+      return;
+    }
+
+    try {
+      update();
+      rejectedEdits.current.delete(fieldId);
+    } catch {
+      rejectedEdits.current.add(fieldId);
+      setShowEditError(true);
+      setSaveConfirmationVersion(0);
+    }
+  };
 
   const handleNotesChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setNotesDraft(event.target.value);
@@ -668,7 +690,10 @@ export function DashboardTrainingSet({
     if (activeElement instanceof HTMLElement && event.currentTarget.contains(activeElement)) {
       activeElement.blur();
     }
+    if (rejectedEdits.current.size > 0) return;
 
+    // Keep the feedback in place until submit so blur cannot move the Save button mid-click.
+    setShowEditError(false);
     let saveWasStarted = false;
     setIsSaving(true);
     try {
@@ -681,7 +706,9 @@ export function DashboardTrainingSet({
     } catch {
       // The persistence context exposes the typed failure state and the feedback label reflects it.
     } finally {
-      if (saveWasStarted) setSaveConfirmationVersion((version) => version + 1);
+      if (saveWasStarted && rejectedEdits.current.size === 0) {
+        setSaveConfirmationVersion((version) => version + 1);
+      }
       setIsSaving(false);
     }
   };
@@ -727,6 +754,7 @@ export function DashboardTrainingSet({
                 onSetQuantity,
                 onClearQuantity,
                 onSetActivityNote,
+                commitEditorChange,
                 quantityDrafts,
                 ...(onQuantityDraftChange === undefined ? {} : { onQuantityDraftChange }),
               })
@@ -735,14 +763,14 @@ export function DashboardTrainingSet({
         </div>
 
         <div className="notes-field">
-          <label htmlFor={`notes-${entry.id}`}>Practice notes</label>
+          <label htmlFor={notesId}>Practice notes</label>
           <textarea
-            id={`notes-${entry.id}`}
+            id={notesId}
             value={notesDraft}
             placeholder="What do you want to remember for this session?"
             rows={3}
             maxLength={TRAINING_DATA_LIMITS.noteCharacters}
-            onBlur={handleNotesBlur}
+            onBlur={(event) => commitEditorChange(notesId, () => handleNotesBlur(event))}
             onChange={handleNotesChange}
           />
           <span className="field-status" role="status" aria-live="polite">
@@ -757,11 +785,17 @@ export function DashboardTrainingSet({
               type="submit"
               disabled={isSaving || accountSaveDisabled}
               aria-busy={isSaving}
-              aria-describedby={saveStatusId}
+              aria-describedby={showEditError ? saveErrorId : saveStatusId}
             >
               Save your changes
             </button>
             <div className="dashboard-save-feedback">
+              {showEditError ? (
+                <p id={saveErrorId} className="form-error" role="alert">
+                  A change could not be saved. Shorten a note or remove a menu to free up space,
+                  then try again.
+                </p>
+              ) : null}
               <span id={saveStatusId} className="field-status" role="status" aria-live="polite">
                 {saveConfirmationVersion > 0 ? (
                   <span key={saveConfirmationVersion}>
@@ -853,6 +887,7 @@ interface DashboardActivityRenderOptions {
   readonly onSetQuantity: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
   readonly onClearQuantity: (activityId: string, unit: TrainingQuantityUnit) => void;
   readonly onSetActivityNote: (activityId: string, note: string) => void;
+  readonly commitEditorChange: CommitEditorChange;
   readonly quantityDrafts: Readonly<Record<string, string>>;
   readonly onQuantityDraftChange?: (key: string, value: string | null) => void;
 }
@@ -867,13 +902,19 @@ function renderDashboardActivity(
     onSetQuantity,
     onClearQuantity,
     onSetActivityNote,
+    commitEditorChange,
     quantityDrafts,
     onQuantityDraftChange,
   } = options;
   const activityUnits = getEditableTrainingQuantityUnits(entry, activity, parentActivity);
   const activityNoteEditor =
     activity.allowsSessionNotes === true ? (
-      <ActivityNotesEditor entry={entry} activity={activity} onSet={onSetActivityNote} />
+      <ActivityNotesEditor
+        entry={entry}
+        activity={activity}
+        onSet={onSetActivityNote}
+        commitEditorChange={commitEditorChange}
+      />
     ) : null;
   const editors =
     activityUnits.length === 0 ? null : (
@@ -883,6 +924,7 @@ function renderDashboardActivity(
         {...(parentActivity === undefined ? {} : { parentActivity })}
         onSet={onSetQuantity}
         onClear={onClearQuantity}
+        commitEditorChange={commitEditorChange}
         quantityDrafts={quantityDrafts}
         {...(onQuantityDraftChange === undefined ? {} : { onQuantityDraftChange })}
       />
@@ -899,9 +941,15 @@ interface ActivityNotesEditorProps {
   readonly entry: DashboardEntry;
   readonly activity: TrainingActivity;
   readonly onSet: (activityId: string, note: string) => void;
+  readonly commitEditorChange: CommitEditorChange;
 }
 
-function ActivityNotesEditor({ entry, activity, onSet }: ActivityNotesEditorProps) {
+function ActivityNotesEditor({
+  entry,
+  activity,
+  onSet,
+  commitEditorChange,
+}: ActivityNotesEditorProps) {
   const savedNote = entry.activityNotes[activity.id] ?? '';
   const [draft, setDraft] = useState(savedNote);
   const [isOpen, setIsOpen] = useState(savedNote.trim().length > 0);
@@ -967,7 +1015,7 @@ function ActivityNotesEditor({ entry, activity, onSet }: ActivityNotesEditorProp
               setNoteStatus('updated');
             }
           }}
-          onBlur={commit}
+          onBlur={(event) => commitEditorChange(textareaId, () => commit(event))}
         />
         <span id={statusId} className="field-status" role="status" aria-live="polite">
           {statusMessage}
@@ -983,6 +1031,7 @@ interface QuantityEditorsProps {
   readonly parentActivity?: TrainingActivity;
   readonly onSet: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
   readonly onClear: (activityId: string, unit: TrainingQuantityUnit) => void;
+  readonly commitEditorChange: CommitEditorChange;
   readonly quantityDrafts: Readonly<Record<string, string>>;
   readonly onQuantityDraftChange?: (key: string, value: string | null) => void;
 }
@@ -993,6 +1042,7 @@ function QuantityEditors({
   parentActivity,
   onSet,
   onClear,
+  commitEditorChange,
   quantityDrafts,
   onQuantityDraftChange,
 }: QuantityEditorsProps) {
@@ -1012,6 +1062,7 @@ function QuantityEditors({
           unit={unit}
           onSet={onSet}
           onClear={onClear}
+          commitEditorChange={commitEditorChange}
           quantityDrafts={quantityDrafts}
           {...(onQuantityDraftChange === undefined ? {} : { onQuantityDraftChange })}
         />
@@ -1030,6 +1081,7 @@ function QuantityEditor({
   unit,
   onSet,
   onClear,
+  commitEditorChange,
   quantityDrafts,
   onQuantityDraftChange,
 }: QuantityEditorProps) {
@@ -1158,7 +1210,7 @@ function QuantityEditor({
               event.currentTarget.blur();
             }
           }}
-          onBlur={commit}
+          onBlur={(event) => commitEditorChange(inputId, () => commit(event))}
         />
         <span aria-hidden="true">{unitLabel}</span>
       </div>
