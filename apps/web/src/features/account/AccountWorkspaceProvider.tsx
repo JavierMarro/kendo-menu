@@ -563,10 +563,7 @@ function LoadedAccountWorkspaceView({
                 </h1>
                 {snapshot.status === 'load-error' ? (
                   <>
-                    <p>
-                      {snapshot.error ??
-                        'The account service is unavailable. Your account was not changed.'}
-                    </p>
+                    <p>{snapshot.error ?? 'Retry to load the current dashboard.'}</p>
                     <button
                       className="primary-button"
                       type="button"

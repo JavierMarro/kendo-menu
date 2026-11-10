@@ -23,6 +23,9 @@ function useSetup(): AccountSetupContextValue {
 type SetupPhase =
   'checking' | 'choice' | 'submitting' | 'accepted' | 'declined' | 'unconfirmed' | 'abandoned';
 
+const INTERRUPTED_MESSAGE =
+  'Setup was interrupted before your choice was sent. The one-time opportunity may be lost. Your guest menus remain on this device.';
+
 export function AccountSetupPage() {
   const setup = useSetup();
   const navigate = useNavigate();
@@ -51,9 +54,7 @@ export function AccountSetupPage() {
       choicePending.current = true;
       setAttempted(true);
       setPhase('abandoned');
-      setMessage(
-        'Setup was interrupted before your choice was sent. The one-time opportunity may be lost. Your guest menus remain on this device.',
-      );
+      setMessage(INTERRUPTED_MESSAGE);
     };
     window.addEventListener('pagehide', abandonOnPageHide);
     return () => window.removeEventListener('pagehide', abandonOnPageHide);
@@ -231,6 +232,11 @@ export function AccountSetupPage() {
       return;
     }
     if (outcome === 'abandoned') {
+      if (pageHidden.current) {
+        setPhase('abandoned');
+        setMessage(INTERRUPTED_MESSAGE);
+        return;
+      }
       recoveryPhase.current = 'abandoned';
       recoveryNeeded.current = true;
       return;
