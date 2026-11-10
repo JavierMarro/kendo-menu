@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -5,6 +6,14 @@ import { isLoopbackProofRequest, managedAuthProofPlugin } from './dev/managed-au
 import { createDevelopmentProxyRules } from './src/lib/dev-proxy-rules.ts';
 
 export default defineConfig({
+  build: {
+    rolldownOptions: {
+      input: {
+        app: fileURLToPath(new URL('./index.html', import.meta.url)),
+        sharedMenu: fileURLToPath(new URL('./shared-menu.html', import.meta.url)),
+      },
+    },
+  },
   plugins: [
     managedAuthProofPlugin(),
     react(),
@@ -48,7 +57,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,svg,jpg,jpeg,avif,webp}'],
-        globIgnores: ['**/kendo-menu-social.jpg'],
+        globIgnores: ['**/kendo-menu-social.jpg', '**/shared-menu.html'],
         navigateFallback: 'index.html',
         navigateFallbackAllowlist: [/^\/(?:app(?:\/|$)|cookies(?:\/|$)|privacy(?:\/|$)|$)/],
         cleanupOutdatedCaches: true,

@@ -34,7 +34,7 @@
     "verify:full": "pnpm check && pnpm test:e2e:preview && pnpm test:e2e:pwa",
     "dev:api": "pnpm --filter @kendo-menu/api dev",
     "test:api:persistence": "pnpm --filter @kendo-menu/api test:persistence",
-    "test:api:package": "pnpm build:api && pnpm --filter @kendo-menu/api test:package",
+    "test:api:package": "pnpm build && pnpm --filter @kendo-menu/api test:package",
     "test:api:integration": "pnpm --filter @kendo-menu/api test:integration",
     "db:generate": "pnpm --filter @kendo-menu/api db:generate",
     "db:check": "pnpm --filter @kendo-menu/api db:check",

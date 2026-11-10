@@ -1,9 +1,20 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
-import { parseSharedMenuV1, type SharedMenuV1 } from '@kendo-menu/domain/menu-sharing';
+import type { TrainingActivity } from '@kendo-menu/domain';
+import {
+  parseSharedMenuV1,
+  type SharedMenuExerciseV1,
+  type SharedMenuV1,
+} from '@kendo-menu/domain/menu-sharing';
+import { TrainingActivityList } from '../../components/TrainingActivityList';
 import { TrainingSetTags } from '../../components/TrainingSetTags';
 import { useManagedAuth } from '../../lib/managed-auth-context';
+import {
+  formatTrainingQuantity,
+  getSpecifiedTrainingQuantities,
+  type DisplayTrainingQuantity,
+} from '../../lib/training-data';
 import { useOptionalWorkspace } from '../../lib/workspace-context';
 import {
   consumeShareReturnMarker,
@@ -21,71 +32,76 @@ type ShareLoadResult =
     }
   | { readonly token: string; readonly accountId: string | null; readonly status: 'unavailable' };
 
-function SharedMenuContent({ snapshot }: { readonly snapshot: SharedMenuV1 }) {
-  return (
-    <section aria-labelledby="shared-menu-name" className="training-detail">
-      <TrainingSetTags
-        trainingSet={{
-          category: 'custom',
-          ...(snapshot.customIntensity === undefined
-            ? {}
-            : { customIntensity: snapshot.customIntensity }),
-        }}
-        receivedViaShare
-      />
-      <h1 id="shared-menu-name">{snapshot.name}</h1>
-      <p>A custom keiko menu shared with you.</p>
-      <ol className="training-activity-list">
-        {snapshot.sections.map((section, sectionIndex) => (
-          <li key={`${sectionIndex}-${section.name}`}>
-            <h2>{section.name}</h2>
-            {section.quantities === undefined ? null : (
-              <QuantitySummary
-                quantities={section.quantities}
-                additionalDuration={section.additionalDuration}
-              />
-            )}
-            <ul>
-              {section.exercises.map((exercise, exerciseIndex) => (
-                <li key={`${exerciseIndex}-${exercise.name}`}>
-                  {exercise.name}
-                  {exercise.quantities === undefined ? null : (
-                    <QuantitySummary
-                      quantities={exercise.quantities}
-                      additionalDuration={exercise.additionalDuration}
-                    />
-                  )}
-                </li>
-              ))}
-            </ul>
-          </li>
-        ))}
-      </ol>
-    </section>
+function getPreviewActivities(snapshot: SharedMenuV1) {
+  const extraDurations = new Map<string, DisplayTrainingQuantity>();
+
+  function toActivity(
+    { name, quantities, additionalDuration }: SharedMenuExerciseV1,
+    id: string,
+    children: readonly TrainingActivity[] = [],
+  ): TrainingActivity {
+    if (additionalDuration !== undefined) extraDurations.set(id, additionalDuration);
+    return { id, name, children, ...(quantities === undefined ? {} : { quantities }) };
+  }
+
+  const activities = snapshot.sections.map((section, index) =>
+    toActivity(
+      section,
+      String(index),
+      section.exercises.map((exercise, childIndex) =>
+        toActivity(exercise, `${index}-${childIndex}`),
+      ),
+    ),
   );
+  return { activities, extraDurations };
 }
 
-function QuantitySummary({
-  quantities,
-  additionalDuration,
+function SharedMenuContent({
+  snapshot,
+  children,
 }: {
-  readonly quantities: NonNullable<SharedMenuV1['sections'][number]['quantities']>;
-  readonly additionalDuration?: SharedMenuV1['sections'][number]['additionalDuration'];
+  readonly snapshot: SharedMenuV1;
+  readonly children: ReactNode;
 }) {
-  const parts = [
-    quantities.repetitions === undefined ? null : `${quantities.repetitions} repetitions`,
-    quantities.sets === undefined ? null : `${quantities.sets} sets`,
-    quantities.rounds === undefined ? null : `${quantities.rounds} rounds`,
-    quantities.duration === undefined
-      ? null
-      : 'value' in quantities.duration
-        ? `${quantities.duration.value} ${quantities.duration.unit}`
-        : `${quantities.duration.min}–${quantities.duration.max} ${quantities.duration.unit}`,
-    additionalDuration === undefined
-      ? null
-      : `${additionalDuration.value} ${additionalDuration.unit}`,
-  ].filter((part): part is string => part !== null);
-  return parts.length === 0 ? null : <p>{parts.join(' · ')}</p>;
+  const { activities, extraDurations } = getPreviewActivities(snapshot);
+
+  return (
+    <article aria-labelledby="shared-menu-name" className="dashboard-card drill-detail-content">
+      <header>
+        <TrainingSetTags
+          trainingSet={{
+            category: 'custom',
+            ...(snapshot.customIntensity === undefined
+              ? {}
+              : { customIntensity: snapshot.customIntensity }),
+          }}
+          className="drill-detail-category"
+          receivedViaShare
+        />
+        <h1 id="shared-menu-name">{snapshot.name}</h1>
+        <p className="page-intro">A custom keiko menu shared with you.</p>
+        {children}
+      </header>
+      <div className="detail-sections">
+        <TrainingActivityList
+          activities={activities}
+          titleId="shared-menu-name"
+          renderActivityAside={({ activity }) => {
+            const extra = extraDurations.get(activity.id);
+            const specified = getSpecifiedTrainingQuantities(activity);
+            const quantities = extra === undefined ? specified : [...specified, extra];
+            return quantities.length === 0 ? null : (
+              <ul className="quantity-list" aria-label={`Quantities for ${activity.name}`}>
+                {quantities.map((quantity) => (
+                  <li key={quantity.unit}>{formatTrainingQuantity(quantity)}</li>
+                ))}
+              </ul>
+            );
+          }}
+        />
+      </div>
+    </article>
+  );
 }
 
 function SharedMenuBody({ recipient = false }: { readonly recipient?: boolean }): ReactElement {
@@ -260,47 +276,54 @@ function SharedMenuBody({ recipient = false }: { readonly recipient?: boolean })
 
   return (
     <div className="shared-menu-page">
-      <SharedMenuContent snapshot={snapshot} />
-      {recipient ? (
-        <button
-          className="primary-button"
-          type="button"
-          disabled={adding || addedToken === token || workspace?.canEdit !== true}
-          onClick={addToDashboard}
-        >
-          {addedToken === token
-            ? 'Added to dashboard'
-            : adding
-              ? 'Adding…'
-              : isSender
-                ? 'Add a copy to my dashboard'
-                : 'Add to my dashboard'}
-        </button>
-      ) : identity.status === 'verified' || identity.status === 'uninitialized' ? (
-        <Link className="primary-button" to={`/app/account/shared/${token}`}>
-          Continue to add this menu
-        </Link>
-      ) : identity.status === 'signed-out' ? (
-        <button
-          className="primary-button"
-          type="button"
-          disabled={signingIn}
-          onClick={() => void continueToSignIn()}
-        >
-          {signingIn ? 'Opening Google…' : 'Sign in to add'}
-        </button>
-      ) : null}
-      {message === null ? null : <p role="status">{message}</p>}
-      {recipient && addedToken === token ? (
-        <Link className="secondary-button" to="/app/account/dashboard">
-          View dashboard
-        </Link>
-      ) : null}
-      {!recipient && identity.status === 'unavailable' ? (
-        <button className="secondary-button" type="button" onClick={() => void verifyIdentity()}>
-          Retry account check
-        </button>
-      ) : null}
+      <SharedMenuContent snapshot={snapshot}>
+        <div className="shared-menu-actions">
+          {recipient ? (
+            <button
+              className="primary-button"
+              type="button"
+              disabled={adding || addedToken === token || workspace?.canEdit !== true}
+              onClick={addToDashboard}
+            >
+              {addedToken === token
+                ? 'Added to dashboard'
+                : adding
+                  ? 'Adding…'
+                  : isSender
+                    ? 'Add a copy to my dashboard'
+                    : 'Add to my dashboard'}
+            </button>
+          ) : identity.status === 'verified' || identity.status === 'uninitialized' ? (
+            <Link className="primary-button" to={`/app/account/shared/${token}`}>
+              Continue to add this menu
+            </Link>
+          ) : identity.status === 'signed-out' ? (
+            <button
+              className="primary-button"
+              type="button"
+              disabled={signingIn}
+              onClick={() => void continueToSignIn()}
+            >
+              {signingIn ? 'Opening Google…' : 'Sign in to add'}
+            </button>
+          ) : null}
+          {message === null ? null : <p role="status">{message}</p>}
+          {recipient && addedToken === token ? (
+            <Link className="secondary-button" to="/app/account/dashboard">
+              View dashboard
+            </Link>
+          ) : null}
+          {!recipient && identity.status === 'unavailable' ? (
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => void verifyIdentity()}
+            >
+              Retry account check
+            </button>
+          ) : null}
+        </div>
+      </SharedMenuContent>
     </div>
   );
 }
