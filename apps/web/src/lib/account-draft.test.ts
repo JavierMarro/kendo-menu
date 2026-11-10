@@ -168,6 +168,8 @@ describe('memory-only account draft lifecycle', () => {
     });
     expect(await controller.submitAdoption(declineRequest())).toBe('stale');
     expect(api.postAdoption).toHaveBeenCalledTimes(1);
+    controller.releaseCreationHandoff();
+    expect(api.postAdoption.mock.lastCall?.[2]?.aborted).toBe(false);
     controller.hideForIdentityUncertainty();
     response.resolve({
       status: 'declined',
@@ -209,15 +211,42 @@ describe('memory-only account draft lifecycle', () => {
     controller.dispose();
   });
 
+  it('cancels pre-dispatch verification and restores ordinary editing when setup releases the handoff', async () => {
+    const { controller, api } = fixture();
+    await controller.load();
+    const identity = deferred<typeof account>();
+    api.getAccount.mockReturnValueOnce(identity.promise);
+    const attempt = controller.submitAdoption(declineRequest());
+    const signal = api.getAccount.mock.lastCall?.[0];
+    controller.releaseCreationHandoff();
+    expect(signal?.aborted).toBe(true);
+    expect(controller.getSnapshot()).toMatchObject({
+      status: 'ready',
+      canEdit: true,
+      saveState: 'idle',
+    });
+    identity.resolve(account);
+    expect(await attempt).toBe('abandoned');
+    expect(api.postAdoption).not.toHaveBeenCalled();
+    expect(api.getDashboard).toHaveBeenCalledTimes(1);
+    controller.dispose();
+  });
+
   it('keeps editing blocked after authoritative load failure until an ordinary reload succeeds', async () => {
     const { controller, api } = fixture();
     await controller.load();
     controller.setEditingBlocked(true);
     api.getDashboard.mockRejectedValueOnce(new AccountApiError('network', 'Unavailable'));
     expect(await controller.submitAdoption(declineRequest())).toBe('declined');
-    expect(controller.getSnapshot()).toMatchObject({ status: 'load-error', canEdit: false });
+    expect(controller.getSnapshot()).toMatchObject({
+      status: 'load-error',
+      canEdit: false,
+      saveState: 'idle',
+    });
+    expect(controller.getSnapshot().error).toContain('The account dashboard could not be loaded.');
     await controller.loadAuthoritativeDashboard();
     expect(controller.getSnapshot()).toMatchObject({ status: 'ready', canEdit: false });
+    expect(api.postAdoption).toHaveBeenCalledTimes(1);
     controller.setEditingBlocked(false);
     expect(controller.getSnapshot().canEdit).toBe(true);
     controller.dispose();

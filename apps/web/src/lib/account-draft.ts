@@ -169,11 +169,11 @@ export function createAccountDraftController(options: {
     activeRequest = null;
   }
 
-  function releaseHandoff(): void {
+  function releaseHandoff(patch?: Partial<AccountDraftSnapshot>): void {
     if (handoff === null) return;
     handoff = null;
     options.onCreationHandoffReleased?.();
-    update();
+    update(patch);
   }
 
   function hide(): void {
@@ -668,7 +668,16 @@ export function createAccountDraftController(options: {
       snapshot.status !== 'disposed'
         ? handoff
         : null,
-    releaseCreationHandoff: releaseHandoff,
+    releaseCreationHandoff: () => {
+      if (handoff !== null && adoptionPending && !authoritativeLoadRequired) {
+        // Leaving setup can cancel verification before the decision reaches the API.
+        cancel();
+        adoptionPending = false;
+        releaseHandoff({ saveState: 'idle' });
+        return;
+      }
+      releaseHandoff();
+    },
     setEditingBlocked: (blocked) => {
       editingBlocked = blocked;
       update();
@@ -746,7 +755,7 @@ export function createAccountDraftController(options: {
       if (!isActive()) return 'stale';
       await load(true);
       if (!isActive()) return 'stale';
-      update({ saveState: 'idle', error: null });
+      update({ saveState: 'idle' });
       return result;
     },
   };
