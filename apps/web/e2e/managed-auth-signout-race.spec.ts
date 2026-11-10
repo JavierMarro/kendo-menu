@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { SYNTHETIC_AUTH_URL, SyntheticManagedHarness } from './synthetic-managed-harness';
-import { clickWorkspaceSignOut } from './workspace-test-helpers';
+import { clickWorkspaceSignOut, visibleWorkspaceBrandLink } from './workspace-test-helpers';
 
 type ProbeWindow = Window & { __identityChecksStarted?: number };
 
@@ -116,7 +116,7 @@ test('confirmed sign-out fences focus verification, notifies a peer, and keeps g
   expect(Object.keys(signedOutMessage ?? {}).sort()).toEqual(['sender', 'signal']);
 });
 
-test('failed sign-out keeps account hidden through lifecycle checks until retry succeeds', async ({
+test('failed sign-out stays fenced and can be retried after leaving and reopening the account', async ({
   page,
 }) => {
   const harness = await SyntheticManagedHarness.install(page, { initiallySignedIn: true });
@@ -130,12 +130,14 @@ test('failed sign-out keeps account hidden through lifecycle checks until retry 
     observeFailure = resolve;
   });
   await page.route(`${SYNTHETIC_AUTH_URL}/**`, async (route) => {
-    if (route.request().url().includes('/sign-out') && signOutAttempt === 0) {
+    if (route.request().url().includes('/sign-out')) {
       signOutAttempt += 1;
-      observeFailure?.();
-      await failureRelease;
-      await route.fulfill({ status: 503, json: { message: 'synthetic provider unavailable' } });
-      return;
+      if (signOutAttempt === 1) {
+        observeFailure?.();
+        await failureRelease;
+        await route.fulfill({ status: 503, json: { message: 'synthetic provider unavailable' } });
+        return;
+      }
     }
     await route.fallback();
   });
@@ -151,6 +153,7 @@ test('failed sign-out keeps account hidden through lifecycle checks until retry 
     page.getByRole('alertdialog', { name: /Are you sure you want to sign out/i }),
   ).toHaveCount(0);
   await failureSeen;
+  await expect(page.getByRole('button', { name: 'Signing out…' })).toBeDisabled();
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect.poll(() => identityCheckStarts(page)).toBe(0);
   releaseFailure?.();
@@ -171,11 +174,19 @@ test('failed sign-out keeps account hidden through lifecycle checks until retry 
     page.getByRole('heading', { name: /hidden until it can be verified/i }),
   ).toBeVisible();
 
+  await (await visibleWorkspaceBrandLink(page)).click();
+  await expect(page).toHaveURL(/\/app$/u);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/app\/account\/dashboard$/u);
+  await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Retry account check' })).toHaveCount(0);
+  await expect.poll(() => identityCheckStarts(page)).toBe(0);
+
   await page.getByRole('button', { name: 'Retry sign-out' }).click();
   await expect(page).toHaveURL(/\/app$/u);
   await page.getByRole('link', { name: 'Try without an account' }).click();
   await expect(page).toHaveURL(/\/app\/guest\/dashboard$/u);
   await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
-  expect(signOutAttempt).toBe(1);
+  expect(signOutAttempt).toBe(2);
   expect(harness.apiCalls.some((call) => call.method === 'PUT')).toBe(false);
 });

@@ -27,7 +27,7 @@ export function AccountUnsavedWarning({
         {saveState === 'uncertain'
           ? 'Save status is uncertain. Retry the same save.'
           : hasUncommittedEditorDraft
-            ? 'An unfinished quantity field is held only in this tab, not in the account draft. Complete or clear it before leaving; closing or reloading can lose it.'
+            ? 'An unfinished editor field is held only in this tab, not in the account draft. Complete or clear it before leaving; closing or reloading can lose it.'
             : 'Unsaved account changes exist only in this tab; closing or reloading can lose them.'}
       </p>
       {!hasUncommittedEditorDraft ? (
@@ -73,7 +73,7 @@ export function AccountSaveStatus({
         : saveState === 'conflict' || saveState === 'blocked'
           ? 'Save needs attention'
           : hasUncommittedEditorDraft
-            ? 'Quantity field not saved'
+            ? 'Editor field not saved'
             : isDirty || hasUncommittedBuilderDraft
               ? 'Unsaved account changes'
               : isAuthoritative

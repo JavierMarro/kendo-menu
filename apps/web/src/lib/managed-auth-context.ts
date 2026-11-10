@@ -10,7 +10,7 @@ import type { ManagedAuthClient } from './managed-auth';
 export type ManagedIdentityState =
   | { readonly status: 'checking' }
   | { readonly status: 'signed-out' }
-  | { readonly status: 'unavailable' }
+  | { readonly status: 'unavailable'; readonly signOut?: 'pending' | 'failed' }
   | { readonly status: 'uninitialized' }
   | { readonly status: 'verified'; readonly account: ManagedAccountRecord };
 

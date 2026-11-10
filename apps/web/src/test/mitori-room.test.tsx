@@ -312,9 +312,15 @@ describe('Mitori room', () => {
     expect(titles()).toEqual(MITORI_VIDEOS['competition-2026'].map((video) => video.title));
 
     await user.click(screen.getByRole('link', { name: 'AJKC finals (mens)' }));
-    expect(titles()).toEqual(MITORI_VIDEOS['ajkc-finals'].map((video) => video.title));
+    const mensFinals = titles();
+    expect(mensFinals).toHaveLength(10);
+    expect(mensFinals[0]).toBe('74th All Japan Kendo Championship');
+    expect(mensFinals).toEqual(MITORI_VIDEOS['ajkc-finals'].map((video) => video.title));
 
     await user.click(screen.getByRole('link', { name: 'AJKC finals (womens)' }));
-    expect(titles()).toEqual(MITORI_VIDEOS['ajkc-finals-womens'].map((video) => video.title));
+    const womensFinals = titles();
+    expect(womensFinals).toHaveLength(8);
+    expect(womensFinals[0]).toBe('65th All Japan Women’s Kendo Championship');
+    expect(womensFinals).toEqual(MITORI_VIDEOS['ajkc-finals-womens'].map((video) => video.title));
   });
 });

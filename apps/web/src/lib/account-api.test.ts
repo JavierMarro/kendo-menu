@@ -184,17 +184,26 @@ describe('managed bearer account API boundary', () => {
   });
 
   it.each([
-    { accountWorkspaceId: OTHER },
     { revision: '00' },
     { revision: '9223372036854775808' },
     { revision: '1' },
     { updatedAt: '2026-10-07T10:00:00.000Z' },
     { dashboard: { version: 9, state: { dashboardEntries: [] } } },
     { extra: true },
+    { accountWorkspaceId: OTHER, extra: true },
     { catalogueVersion: 'not-a-digest' },
   ])('rejects invalid dashboard envelopes before hydration', async (patch) => {
     await expect(client({ ...read(), ...patch }).api.getDashboard(ACCOUNT)).rejects.toMatchObject({
       kind: 'invalid-response',
+    });
+  });
+
+  it('classifies a structurally valid foreign dashboard response as an identity mismatch', async () => {
+    const { api } = client({ ...read(), accountWorkspaceId: OTHER });
+
+    await expect(api.getDashboard(ACCOUNT)).rejects.toMatchObject({
+      kind: 'invalid-response',
+      code: 'ACCOUNT_WORKSPACE_MISMATCH',
     });
   });
 

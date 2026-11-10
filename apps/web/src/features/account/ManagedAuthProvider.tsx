@@ -102,15 +102,18 @@ export function ManagedAuthProvider({ children }: { readonly children: ReactNode
     signOutPending.current = true;
     signOutFailed.current = true;
     const requestGeneration = ++generation.current;
-    identityRef.current = { status: 'unavailable' };
-    setIdentity({ status: 'unavailable' });
+    const pending: ManagedIdentityState = { status: 'unavailable', signOut: 'pending' };
+    identityRef.current = pending;
+    setIdentity(pending);
     let signedOut: boolean;
     try {
       signedOut = (await client?.signOut()) ?? false;
     } catch {
       signedOut = false;
     }
-    const next = signedOut ? { status: 'signed-out' as const } : { status: 'unavailable' as const };
+    const next: ManagedIdentityState = signedOut
+      ? { status: 'signed-out' }
+      : { status: 'unavailable', signOut: 'failed' };
     identityRef.current = next;
     if (generation.current === requestGeneration) setIdentity(next);
     if (signedOut) {

@@ -536,6 +536,32 @@ describe('memory-only account draft lifecycle', () => {
     controller.dispose();
   });
 
+  it('hides and fences a retained draft when reload returns another workspace', async () => {
+    const { controller, api, add, rejected } = fixture();
+    await controller.load();
+    const entryId = add();
+    controller
+      .getSnapshot()
+      .store?.getState()
+      .updateDashboardEntry(entryId, { notes: 'Account A private draft.' });
+    api.getDashboard.mockRejectedValueOnce(
+      new AccountApiError('invalid-response', 'Foreign workspace.', {
+        code: 'ACCOUNT_WORKSPACE_MISMATCH',
+      }),
+    );
+
+    await controller.reload();
+
+    expect(controller.getSnapshot()).toMatchObject({
+      status: 'auth-hidden',
+      store: null,
+      canEdit: false,
+    });
+    expect(rejected).toHaveBeenCalledOnce();
+    expect(() => controller.download()).toThrow('verified identity');
+    controller.dispose();
+  });
+
   it('hides a 401 draft and reveals only the same verified account with its revision and retry envelope', async () => {
     const { controller, api, add, rejected } = fixture();
     await controller.load();

@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import {
   ACCOUNT_ID,
+  CATALOGUE_VERSION,
   OTHER_ACCOUNT_ID,
   SYNTHETIC_AUTH_URL,
   SYNTHETIC_SESSION_TOKEN,
@@ -54,6 +55,40 @@ function expectCredentialFreeAccountTransport(harness: SyntheticManagedHarness):
       new URL(call.path, 'http://localhost').pathname,
     );
   }
+}
+
+async function installForeignDashboardRead(page: Page): Promise<{
+  readonly arm: () => void;
+  readonly responses: () => number;
+}> {
+  let armed = false;
+  let responses = 0;
+  await page.route('**/api/dashboard', async (route) => {
+    if (armed && route.request().method() === 'GET') {
+      armed = false;
+      responses += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          transportVersion: 1,
+          accountWorkspaceId: OTHER_ACCOUNT_ID,
+          catalogueVersion: CATALOGUE_VERSION,
+          revision: '0',
+          dashboard: null,
+          updatedAt: null,
+        }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  return {
+    arm: () => {
+      armed = true;
+    },
+    responses: () => responses,
+  };
 }
 
 async function seedGuestAndLegacyStorage(page: Page): Promise<void> {
@@ -603,6 +638,34 @@ test('a revision conflict preserves the draft and only an explicit reload discar
   expect(apiCallsFor(harness, 'PUT')).toHaveLength(1);
 });
 
+test('a foreign workspace returned during conflict reload hides the retained account draft', async ({
+  page,
+}) => {
+  const harness = await SyntheticManagedHarness.install(page, { initiallySignedIn: true });
+  await enterAccount(page, harness);
+  await addCuratedMenu(page);
+  harness.conflictOneSave();
+  await page.getByRole('button', { name: 'Save to account' }).click();
+  await expect(page.getByText(/account changed elsewhere|revision conflict/i)).toBeVisible();
+  await expect(page.locator('.dashboard-card--compact')).toHaveCount(1);
+  await expect(
+    page.locator('.account-save-recovery').getByRole('button', { name: 'Download draft' }),
+  ).toBeVisible();
+
+  const foreignRead = await installForeignDashboardRead(page);
+  foreignRead.arm();
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.getByRole('button', { name: /Reload account/i }).click();
+
+  await expect(
+    page.getByRole('heading', { name: 'Your account is hidden until it can be verified.' }),
+  ).toBeVisible();
+  await expect(page.locator('.dashboard-card--compact')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Download draft' })).toHaveCount(0);
+  await expect.poll(foreignRead.responses).toBe(1);
+  expect(apiCallsFor(harness, 'PUT')).toHaveLength(1);
+});
+
 test('network loss leaves a verified account draft visible and read-only', async ({
   page,
   context,
@@ -623,6 +686,45 @@ test('network loss leaves a verified account draft visible and read-only', async
   await page.getByRole('button', { name: 'Retry connection' }).click();
   await expect(page.getByRole('button', { name: 'Save to account' })).toBeEnabled();
   expect(apiCallsFor(harness, 'PUT')).toHaveLength(0);
+});
+
+test('Retry preserves the draft on service failure and hides it on a foreign workspace response', async ({
+  page,
+  context,
+}) => {
+  const harness = await SyntheticManagedHarness.install(page, { initiallySignedIn: true });
+  await enterAccount(page, harness);
+  await addCuratedMenu(page);
+  await context.setOffline(true);
+  await expect(page.getByRole('heading', { name: /Account service unavailable/i })).toBeVisible();
+  await expect(page.locator('.dashboard-card--compact')).toHaveCount(1);
+
+  harness.setDashboardUnavailable(true);
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await page.getByRole('button', { name: 'Retry connection' }).click();
+  const unavailableNotice = page
+    .getByRole('heading', { name: 'Account service unavailable' })
+    .locator('..');
+  await expect(
+    unavailableNotice.getByText(
+      'The dashboard service is still unavailable. Keep this tab open or download your draft.',
+    ),
+  ).toBeVisible();
+  await expect(page.locator('.dashboard-card--compact')).toHaveCount(1);
+  await expect(unavailableNotice.getByRole('button', { name: 'Download draft' })).toBeVisible();
+
+  harness.setDashboardUnavailable(false);
+  const foreignRead = await installForeignDashboardRead(page);
+  foreignRead.arm();
+  await page.getByRole('button', { name: 'Retry connection' }).click();
+
+  await expect(
+    page.getByRole('heading', { name: 'Your account is hidden until it can be verified.' }),
+  ).toBeVisible();
+  await expect(page.locator('.dashboard-card--compact')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Download draft' })).toHaveCount(0);
+  await expect.poll(foreignRead.responses).toBe(1);
 });
 
 test('an offline account builder stays read-only until Retry connection confirms service', async ({

@@ -62,7 +62,6 @@ function AccountDashboardHarness({
             writeFailed: false,
             pending: false,
             flush,
-            save: () => Promise.resolve(),
             downloadAllowed: !editorDraftDirty,
             ...(saveState === undefined ? {} : { saveState }),
             ...(download === undefined ? {} : { download }),
@@ -317,7 +316,7 @@ describe('account dashboard editor drafts', () => {
     const downloadButton = screen.getByRole('button', { name: 'Download draft' });
     expect(downloadButton).toBeDisabled();
     expect(
-      screen.getByText(/complete or clear the unfinished quantity field before downloading/i),
+      screen.getByText(/complete or clear the unfinished editor field before downloading/i),
     ).toBeVisible();
     await user.click(downloadButton);
     expect(download).not.toHaveBeenCalled();

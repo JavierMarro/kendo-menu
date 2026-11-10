@@ -2,18 +2,10 @@ import { ShareMenuButton } from '../sharing/ShareMenuButton';
 /**
  * Renders and edits the current workspace's dashboard entries and per-activity details.
  * Guest edits are confirmed through browser persistence; account edits remain in an in-memory
- * draft until explicit save. Unfinished account quantity text stays outside the store and blocks
+ * draft until explicit save. Unfinished account editor text stays outside the store and blocks
  * saving, while identity and cloud authorization remain with the route provider.
  */
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type FocusEvent,
-  type FormEvent,
-} from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   Link,
   NavigationType,
@@ -80,9 +72,16 @@ function getQuantityEditorKey(
   return JSON.stringify([entry.id, activity.id, unit]);
 }
 
-function getQuantityEditorEntryPrefix(entryId: string): string {
+function getEditorEntryPrefix(entryId: string): string {
   return `${JSON.stringify([entryId]).slice(0, -1)},`;
 }
+
+interface EditorDraft {
+  readonly value: string;
+  readonly rejected?: true;
+}
+
+type EditorDrafts = Readonly<Record<string, EditorDraft>>;
 
 const MAX_QUANTITY_DIGITS = 3;
 
@@ -125,8 +124,8 @@ export function DashboardPage() {
   const [statusMessage, setStatusMessage] = useState('');
   const [dashboardFilter, setDashboardFilter] = useState<DashboardFilter>('all');
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
-  const [quantityDrafts, setQuantityDrafts] = useState<Readonly<Record<string, string>>>({});
-  const quantityDraftsRef = useRef<Readonly<Record<string, string>>>({});
+  const [editorDrafts, setEditorDrafts] = useState<EditorDrafts>({});
+  const editorDraftsRef = useRef<EditorDrafts>({});
   const savedMenuNavigationState = getSavedMenuNavigationState(location.state);
   const [createdName, setCreatedName] = useState<string | null>(
     () => savedMenuNavigationState?.menuName ?? null,
@@ -161,27 +160,34 @@ export function DashboardPage() {
 
   // Invalid or unfinished account text is not canonical dashboard data; retain it at page scope
   // so the workspace can block Save until the editor commits or clears it.
-  const updateQuantityDraft = (key: string, value: string | null) => {
-    const current = quantityDraftsRef.current;
+  const updateEditorDraft = (key: string, draft: EditorDraft | null) => {
+    const current = editorDraftsRef.current;
+    const previous = current[key];
+    if (
+      draft === null
+        ? previous === undefined
+        : previous?.value === draft.value && previous.rejected === draft.rejected
+    )
+      return;
     const next = { ...current };
-    if (value === null) {
+    if (draft === null) {
       delete next[key];
     } else {
-      next[key] = value;
+      next[key] = draft;
     }
-    quantityDraftsRef.current = next;
-    setQuantityDrafts(next);
+    editorDraftsRef.current = next;
+    setEditorDrafts(next);
     workspace.onEditorDraftDirtyChange?.(Object.keys(next).length > 0);
   };
 
-  const clearEntryQuantityDrafts = (entryId: string) => {
-    const prefix = getQuantityEditorEntryPrefix(entryId);
+  const clearEntryEditorDrafts = (entryId: string) => {
+    const prefix = getEditorEntryPrefix(entryId);
     const next = Object.fromEntries(
-      Object.entries(quantityDraftsRef.current).filter(([key]) => !key.startsWith(prefix)),
+      Object.entries(editorDraftsRef.current).filter(([key]) => !key.startsWith(prefix)),
     );
-    if (Object.keys(next).length === Object.keys(quantityDraftsRef.current).length) return;
-    quantityDraftsRef.current = next;
-    setQuantityDrafts(next);
+    if (Object.keys(next).length === Object.keys(editorDraftsRef.current).length) return;
+    editorDraftsRef.current = next;
+    setEditorDrafts(next);
     workspace.onEditorDraftDirtyChange?.(Object.keys(next).length > 0);
   };
 
@@ -295,7 +301,7 @@ export function DashboardPage() {
       return;
     }
 
-    clearEntryQuantityDrafts(entry.id);
+    clearEntryEditorDrafts(entry.id);
     setRemovedEntry(removed);
     setStatusMessage(`${label} was removed from your dashboard.`);
   };
@@ -313,7 +319,7 @@ export function DashboardPage() {
   const saveAccountDashboard = async (): Promise<boolean> => {
     if (
       !workspace.canEdit ||
-      Object.keys(quantityDraftsRef.current).length > 0 ||
+      Object.keys(editorDraftsRef.current).length > 0 ||
       persistenceStatus.pending ||
       persistenceStatus.saveState === 'conflict' ||
       persistenceStatus.saveState === 'blocked' ||
@@ -339,7 +345,7 @@ export function DashboardPage() {
             <button
               className="primary-button"
               type="button"
-              onClick={() => void persistenceStatus.save?.()}
+              onClick={() => void saveAccountDashboard()}
               disabled={
                 !workspace.canEdit ||
                 workspace.hasUncommittedEditorDraft === true ||
@@ -356,7 +362,7 @@ export function DashboardPage() {
               {persistenceStatus.saveState === 'uncertain'
                 ? 'Save status is uncertain.'
                 : workspace.hasUncommittedEditorDraft
-                  ? 'An unfinished quantity field is held in this tab. Complete or clear it before saving.'
+                  ? 'An unfinished editor field is held in this tab. Complete or clear it before saving.'
                   : workspace.isDirty
                     ? 'Unsaved account draft'
                     : persistenceStatus.saveState === 'saved'
@@ -390,8 +396,7 @@ export function DashboardPage() {
               persistenceStatus.saveState === 'blocked') &&
             workspace.hasUncommittedEditorDraft ? (
               <p>
-                Complete or clear the unfinished quantity field before downloading the account
-                draft.
+                Complete or clear the unfinished editor field before downloading the account draft.
               </p>
             ) : null}
             {persistenceStatus.saveState === 'uncertain' ? (
@@ -562,7 +567,7 @@ export function DashboardPage() {
               }}
               {...(workspace.kind === 'account' ? { onAccountSave: saveAccountDashboard } : {})}
               {...(workspace.kind === 'account'
-                ? { quantityDrafts, onQuantityDraftChange: updateQuantityDraft }
+                ? { editorDrafts, onEditorDraftChange: updateEditorDraft }
                 : {})}
             />
           </DialogShell>
@@ -596,6 +601,8 @@ function UnknownDashboardEntry({ entry, onRemove }: UnknownDashboardEntryProps) 
   );
 }
 
+type CommitEditorChange = (key: string, value: string, update: () => false | void) => void;
+
 interface DashboardTrainingSetProps {
   readonly entry: DashboardEntry;
   readonly index: number;
@@ -607,8 +614,8 @@ interface DashboardTrainingSetProps {
   readonly onClearQuantity: (activityId: string, unit: TrainingQuantityUnit) => void;
   readonly onSetActivityNote: (activityId: string, note: string) => void;
   readonly onAccountSave?: () => Promise<boolean>;
-  readonly quantityDrafts?: Readonly<Record<string, string>>;
-  readonly onQuantityDraftChange?: (key: string, value: string | null) => void;
+  readonly editorDrafts?: EditorDrafts;
+  readonly onEditorDraftChange?: (key: string, draft: EditorDraft | null) => void;
 }
 
 export function DashboardTrainingSet({
@@ -622,11 +629,14 @@ export function DashboardTrainingSet({
   onClearQuantity,
   onSetActivityNote,
   onAccountSave,
-  quantityDrafts = {},
-  onQuantityDraftChange,
+  editorDrafts = {},
+  onEditorDraftChange,
 }: DashboardTrainingSetProps) {
-  const [notesDraft, setNotesDraft] = useState(entry.notes);
+  const notesKey = JSON.stringify([entry.id, 'notes']);
+  const [notesDraft, setNotesDraft] = useState(() => editorDrafts[notesKey]?.value ?? entry.notes);
   const [notesStatus, setNotesStatus] = useState<'idle' | 'updated'>('idle');
+  const rejectedEdits = useRef(new Set<string>());
+  const [showGuestEditError, setShowGuestEditError] = useState(false);
   const [saveConfirmationVersion, setSaveConfirmationVersion] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const persistenceStatus = usePersistenceStatus();
@@ -636,24 +646,42 @@ export function DashboardTrainingSet({
   const activityCount = getTrainingSetActivityCount(trainingSet);
   const description = getTrainingSetDescription(trainingSet);
   const headingId = titleId ?? `dashboard-entry-title-${entry.id}`;
+  const notesId = `notes-${entry.id}`;
+  const saveErrorId = `save-error-${entry.id}`;
   const saveStatusId = `save-status-${entry.id}`;
+  const entryPrefix = getEditorEntryPrefix(entry.id);
+  const showEditError =
+    showGuestEditError ||
+    Object.entries(editorDrafts).some(
+      ([key, draft]) => key.startsWith(entryPrefix) && draft.rejected,
+    );
+
+  const commitEditorChange: CommitEditorChange = (key, value, update) => {
+    if (workspace.kind === 'account' && !workspace.canEdit) return;
+    try {
+      const accepted = update();
+      rejectedEdits.current.delete(key);
+      onEditorDraftChange?.(key, accepted === false ? { value } : null);
+    } catch {
+      rejectedEdits.current.add(key);
+      onEditorDraftChange?.(key, { value, rejected: true });
+      if (workspace.kind === 'guest') setShowGuestEditError(true);
+      setSaveConfirmationVersion(0);
+    }
+  };
+
+  const commitNotes = (value: string) =>
+    commitEditorChange(notesKey, value, () => {
+      if (value !== entry.notes) {
+        onUpdate({ notes: value });
+        setNotesStatus('updated');
+      }
+    });
 
   const handleNotesChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setNotesDraft(event.target.value);
     setNotesStatus('idle');
-    if (workspace.kind === 'account' && workspace.canEdit) {
-      onUpdate({ notes: event.target.value });
-      setNotesStatus('updated');
-    }
-  };
-
-  const handleNotesBlur = (event: FocusEvent<HTMLTextAreaElement>) => {
-    const nextNotes = event.currentTarget.value;
-    if (nextNotes !== entry.notes) {
-      setNotesDraft(nextNotes);
-      onUpdate({ notes: nextNotes });
-      setNotesStatus('updated');
-    }
+    if (workspace.kind === 'account') commitNotes(event.target.value);
   };
 
   const handleExplicitSave = async (event: FormEvent<HTMLFormElement>) => {
@@ -668,7 +696,10 @@ export function DashboardTrainingSet({
     if (activeElement instanceof HTMLElement && event.currentTarget.contains(activeElement)) {
       activeElement.blur();
     }
+    if (rejectedEdits.current.size > 0) return;
 
+    // Keep the feedback in place until submit so blur cannot move the Save button mid-click.
+    setShowGuestEditError(false);
     let saveWasStarted = false;
     setIsSaving(true);
     try {
@@ -681,7 +712,9 @@ export function DashboardTrainingSet({
     } catch {
       // The persistence context exposes the typed failure state and the feedback label reflects it.
     } finally {
-      if (saveWasStarted) setSaveConfirmationVersion((version) => version + 1);
+      if (saveWasStarted && rejectedEdits.current.size === 0) {
+        setSaveConfirmationVersion((version) => version + 1);
+      }
       setIsSaving(false);
     }
   };
@@ -727,22 +760,23 @@ export function DashboardTrainingSet({
                 onSetQuantity,
                 onClearQuantity,
                 onSetActivityNote,
-                quantityDrafts,
-                ...(onQuantityDraftChange === undefined ? {} : { onQuantityDraftChange }),
+                commitEditorChange,
+                editorDrafts,
               })
             }
           />
         </div>
 
         <div className="notes-field">
-          <label htmlFor={`notes-${entry.id}`}>Practice notes</label>
+          <label htmlFor={notesId}>Practice notes</label>
           <textarea
-            id={`notes-${entry.id}`}
+            id={notesId}
             value={notesDraft}
             placeholder="What do you want to remember for this session?"
             rows={3}
             maxLength={TRAINING_DATA_LIMITS.noteCharacters}
-            onBlur={handleNotesBlur}
+            aria-invalid={editorDrafts[notesKey]?.rejected === true}
+            onBlur={(event) => commitNotes(event.currentTarget.value)}
             onChange={handleNotesChange}
           />
           <span className="field-status" role="status" aria-live="polite">
@@ -757,17 +791,23 @@ export function DashboardTrainingSet({
               type="submit"
               disabled={isSaving || accountSaveDisabled}
               aria-busy={isSaving}
-              aria-describedby={saveStatusId}
+              aria-describedby={showEditError ? saveErrorId : saveStatusId}
             >
               Save your changes
             </button>
             <div className="dashboard-save-feedback">
+              {showEditError ? (
+                <p id={saveErrorId} className="form-error" role="alert">
+                  A change could not be saved. Shorten a note or remove a menu to free up space,
+                  then try again.
+                </p>
+              ) : null}
               <span id={saveStatusId} className="field-status" role="status" aria-live="polite">
                 {saveConfirmationVersion > 0 ? (
                   <span key={saveConfirmationVersion}>
                     {workspace.kind === 'account'
                       ? persistenceStatus.saveState === 'saved'
-                        ? workspace.isDirty
+                        ? workspace.isDirty || workspace.hasUncommittedEditorDraft
                           ? 'Submitted changes saved to your account. Newer edits remain unsaved.'
                           : 'Changes saved to your account.'
                         : (persistenceStatus.error ?? '')
@@ -853,8 +893,8 @@ interface DashboardActivityRenderOptions {
   readonly onSetQuantity: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
   readonly onClearQuantity: (activityId: string, unit: TrainingQuantityUnit) => void;
   readonly onSetActivityNote: (activityId: string, note: string) => void;
-  readonly quantityDrafts: Readonly<Record<string, string>>;
-  readonly onQuantityDraftChange?: (key: string, value: string | null) => void;
+  readonly commitEditorChange: CommitEditorChange;
+  readonly editorDrafts: EditorDrafts;
 }
 
 function renderDashboardActivity(
@@ -867,13 +907,19 @@ function renderDashboardActivity(
     onSetQuantity,
     onClearQuantity,
     onSetActivityNote,
-    quantityDrafts,
-    onQuantityDraftChange,
+    commitEditorChange,
+    editorDrafts,
   } = options;
   const activityUnits = getEditableTrainingQuantityUnits(entry, activity, parentActivity);
   const activityNoteEditor =
     activity.allowsSessionNotes === true ? (
-      <ActivityNotesEditor entry={entry} activity={activity} onSet={onSetActivityNote} />
+      <ActivityNotesEditor
+        entry={entry}
+        activity={activity}
+        onSet={onSetActivityNote}
+        commitEditorChange={commitEditorChange}
+        editorDrafts={editorDrafts}
+      />
     ) : null;
   const editors =
     activityUnits.length === 0 ? null : (
@@ -883,8 +929,8 @@ function renderDashboardActivity(
         {...(parentActivity === undefined ? {} : { parentActivity })}
         onSet={onSetQuantity}
         onClear={onClearQuantity}
-        quantityDrafts={quantityDrafts}
-        {...(onQuantityDraftChange === undefined ? {} : { onQuantityDraftChange })}
+        commitEditorChange={commitEditorChange}
+        editorDrafts={editorDrafts}
       />
     );
   return editors === null && activityNoteEditor === null ? null : (
@@ -899,12 +945,22 @@ interface ActivityNotesEditorProps {
   readonly entry: DashboardEntry;
   readonly activity: TrainingActivity;
   readonly onSet: (activityId: string, note: string) => void;
+  readonly commitEditorChange: CommitEditorChange;
+  readonly editorDrafts: EditorDrafts;
 }
 
-function ActivityNotesEditor({ entry, activity, onSet }: ActivityNotesEditorProps) {
+function ActivityNotesEditor({
+  entry,
+  activity,
+  onSet,
+  commitEditorChange,
+  editorDrafts,
+}: ActivityNotesEditorProps) {
   const savedNote = entry.activityNotes[activity.id] ?? '';
-  const [draft, setDraft] = useState(savedNote);
-  const [isOpen, setIsOpen] = useState(savedNote.trim().length > 0);
+  const draftKey = JSON.stringify([entry.id, activity.id, 'note']);
+  const preservedDraft = editorDrafts[draftKey];
+  const [draft, setDraft] = useState(() => preservedDraft?.value ?? savedNote);
+  const [isOpen, setIsOpen] = useState(preservedDraft !== undefined || savedNote.trim().length > 0);
   const [noteStatus, setNoteStatus] = useState<'idle' | 'updated'>('idle');
   const persistenceStatus = usePersistenceStatus();
   const workspace = useWorkspace();
@@ -915,18 +971,16 @@ function ActivityNotesEditor({ entry, activity, onSet }: ActivityNotesEditorProp
   const statusId = `${baseId}-status`;
   const hasSavedNote = savedNote.trim().length > 0;
 
-  const commit = (event: FocusEvent<HTMLTextAreaElement>) => {
-    const nextNote = event.currentTarget.value;
-    if (nextNote === savedNote) {
-      setNoteStatus('idle');
-      return;
-    }
-    onSet(activity.id, nextNote);
-    if (nextNote.trim().length === 0) {
-      setDraft('');
-    }
-    setNoteStatus('updated');
-  };
+  const commit = (nextNote: string, onBlur = false) =>
+    commitEditorChange(draftKey, nextNote, () => {
+      if (nextNote === savedNote) {
+        setNoteStatus('idle');
+        return;
+      }
+      onSet(activity.id, nextNote);
+      if (onBlur && nextNote.trim().length === 0) setDraft('');
+      setNoteStatus('updated');
+    });
 
   const statusMessage =
     noteStatus === 'updated' ? getPersistenceUpdateLabel(persistenceStatus) : '';
@@ -958,16 +1012,14 @@ function ActivityNotesEditor({ entry, activity, onSet }: ActivityNotesEditorProp
           rows={2}
           maxLength={TRAINING_DATA_LIMITS.noteCharacters}
           aria-describedby={statusMessage.length > 0 ? statusId : undefined}
+          aria-invalid={preservedDraft?.rejected === true}
           placeholder="Add a note for this activity."
           onChange={(event) => {
             setDraft(event.target.value);
             setNoteStatus('idle');
-            if (workspace.kind === 'account' && workspace.canEdit) {
-              onSet(activity.id, event.target.value);
-              setNoteStatus('updated');
-            }
+            if (workspace.kind === 'account') commit(event.target.value);
           }}
-          onBlur={commit}
+          onBlur={(event) => commit(event.currentTarget.value, true)}
         />
         <span id={statusId} className="field-status" role="status" aria-live="polite">
           {statusMessage}
@@ -983,8 +1035,8 @@ interface QuantityEditorsProps {
   readonly parentActivity?: TrainingActivity;
   readonly onSet: (activityId: string, unit: TrainingQuantityUnit, value: number) => void;
   readonly onClear: (activityId: string, unit: TrainingQuantityUnit) => void;
-  readonly quantityDrafts: Readonly<Record<string, string>>;
-  readonly onQuantityDraftChange?: (key: string, value: string | null) => void;
+  readonly commitEditorChange: CommitEditorChange;
+  readonly editorDrafts: EditorDrafts;
 }
 
 function QuantityEditors({
@@ -993,8 +1045,8 @@ function QuantityEditors({
   parentActivity,
   onSet,
   onClear,
-  quantityDrafts,
-  onQuantityDraftChange,
+  commitEditorChange,
+  editorDrafts,
 }: QuantityEditorsProps) {
   const units = getEditableTrainingQuantityUnits(entry, activity, parentActivity);
 
@@ -1012,8 +1064,8 @@ function QuantityEditors({
           unit={unit}
           onSet={onSet}
           onClear={onClear}
-          quantityDrafts={quantityDrafts}
-          {...(onQuantityDraftChange === undefined ? {} : { onQuantityDraftChange })}
+          commitEditorChange={commitEditorChange}
+          editorDrafts={editorDrafts}
         />
       ))}
     </div>
@@ -1030,18 +1082,18 @@ function QuantityEditor({
   unit,
   onSet,
   onClear,
-  quantityDrafts,
-  onQuantityDraftChange,
+  commitEditorChange,
+  editorDrafts,
 }: QuantityEditorProps) {
   const draftKey = getQuantityEditorKey(entry, activity, unit);
-  const preservedDraft = quantityDrafts[draftKey];
+  const preservedDraft = editorDrafts[draftKey];
   const [draft, setDraft] = useState(
-    () => preservedDraft ?? getQuantityDraftValue(entry, activity, unit),
+    () => preservedDraft?.value ?? getQuantityDraftValue(entry, activity, unit),
   );
   const [feedback, setFeedback] = useState<'idle' | 'updated' | 'invalid'>(() =>
     preservedDraft !== undefined &&
-    preservedDraft.length > 0 &&
-    !isValidQuantityValue(unit, Number(preservedDraft))
+    preservedDraft.value.length > 0 &&
+    !isValidQuantityValue(unit, Number(preservedDraft.value))
       ? 'invalid'
       : 'idle',
   );
@@ -1068,49 +1120,45 @@ function QuantityEditor({
         ? getPersistenceUpdateLabel(persistenceStatus)
         : '';
 
-  const commit = (event: FocusEvent<HTMLInputElement>) => {
-    const rawValue = event.currentTarget.value.trim();
-    const activityOverrides = entry.quantityOverrides[activity.id];
-    const hasOverride = activityOverrides !== undefined && Object.hasOwn(activityOverrides, unit);
+  const commit = (input: string) =>
+    commitEditorChange(draftKey, input, () => {
+      const rawValue = input.trim();
+      const activityOverrides = entry.quantityOverrides[activity.id];
+      const hasOverride = activityOverrides !== undefined && Object.hasOwn(activityOverrides, unit);
 
-    if (rawValue === '') {
-      const defaultValue = getTrainingQuantityValue(activity, unit);
-      if (!hasOverride && defaultValue === undefined) {
-        onQuantityDraftChange?.(draftKey, null);
+      if (rawValue === '') {
+        const defaultValue = getTrainingQuantityValue(activity, unit);
+        if (!hasOverride && defaultValue === undefined) {
+          setFeedback('idle');
+          return;
+        }
+        onClear(activity.id, unit);
+        setDraft(
+          defaultValue === undefined || isTrainingQuantityRange(defaultValue)
+            ? ''
+            : String(defaultValue),
+        );
+        setFeedback('updated');
+        return;
+      }
+
+      const value = Number(rawValue);
+      if (!isValidQuantityValue(unit, value)) {
+        setFeedback('invalid');
+        return false;
+      }
+
+      const effectiveValue = getEffectiveTrainingQuantity(entry, activity, unit);
+      if (typeof effectiveValue === 'number' && value === effectiveValue) {
+        setDraft(String(value));
         setFeedback('idle');
         return;
       }
-      onClear(activity.id, unit);
-      onQuantityDraftChange?.(draftKey, null);
-      setDraft(
-        defaultValue === undefined || isTrainingQuantityRange(defaultValue)
-          ? ''
-          : String(defaultValue),
-      );
-      setFeedback('updated');
-      return;
-    }
 
-    const value = Number(rawValue);
-    if (!isValidQuantityValue(unit, value)) {
-      setFeedback('invalid');
-      onQuantityDraftChange?.(draftKey, rawValue);
-      return;
-    }
-
-    const effectiveValue = getEffectiveTrainingQuantity(entry, activity, unit);
-    if (typeof effectiveValue === 'number' && value === effectiveValue) {
-      onQuantityDraftChange?.(draftKey, null);
+      onSet(activity.id, unit, value);
       setDraft(String(value));
-      setFeedback('idle');
-      return;
-    }
-
-    onSet(activity.id, unit, value);
-    onQuantityDraftChange?.(draftKey, null);
-    setDraft(String(value));
-    setFeedback('updated');
-  };
+      setFeedback('updated');
+    });
 
   return (
     <div className="quantity-editor">
@@ -1130,7 +1178,7 @@ function QuantityEditor({
           aria-describedby={
             feedbackMessage.length > 0 ? `${limitHintId} ${messageId}` : limitHintId
           }
-          aria-invalid={feedback === 'invalid'}
+          aria-invalid={feedback === 'invalid' || preservedDraft?.rejected === true}
           onChange={(event) => {
             const nextDraft = event.target.value;
             if (!hasAllowedQuantityDraftLength(nextDraft)) {
@@ -1139,18 +1187,12 @@ function QuantityEditor({
 
             setDraft(nextDraft);
             setFeedback('idle');
-            if (workspace.kind === 'account' && workspace.canEdit) {
-              if (nextDraft.length === 0) {
-                onQuantityDraftChange?.(draftKey, nextDraft);
-              } else {
+            if (workspace.kind === 'account') {
+              commitEditorChange(draftKey, nextDraft, () => {
                 const value = Number(nextDraft);
-                if (isValidQuantityValue(unit, value)) {
-                  onSet(activity.id, unit, value);
-                  onQuantityDraftChange?.(draftKey, null);
-                } else {
-                  onQuantityDraftChange?.(draftKey, nextDraft);
-                }
-              }
+                if (nextDraft.length === 0 || !isValidQuantityValue(unit, value)) return false;
+                onSet(activity.id, unit, value);
+              });
             }
           }}
           onKeyDown={(event) => {
@@ -1158,7 +1200,7 @@ function QuantityEditor({
               event.currentTarget.blur();
             }
           }}
-          onBlur={commit}
+          onBlur={(event) => commit(event.currentTarget.value)}
         />
         <span aria-hidden="true">{unitLabel}</span>
       </div>

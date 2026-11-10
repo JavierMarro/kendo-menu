@@ -2,6 +2,76 @@ import { expect, test } from '@playwright/test';
 
 const AUTH_ORIGIN = 'https://synthetic-auth.example.invalid';
 
+test('framed sign-in stops before initiating the SDK popup flow', async ({ page }) => {
+  let signInRequests = 0;
+  await page.route(`${AUTH_ORIGIN}/**`, async (route) => {
+    if (new URL(route.request().url()).pathname.endsWith('/sign-in/social')) signInRequests += 1;
+    await route.fulfill({ status: 401, json: { message: 'synthetic signed-out session' } });
+  });
+  await page.route('**/synthetic-auth-frame', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<!doctype html><iframe title="Embedded KendoMenu" src="/app/sign-in"></iframe>',
+    }),
+  );
+  await page.goto('/synthetic-auth-frame');
+
+  const embedded = page.frameLocator('iframe');
+  await embedded.getByRole('button', { name: 'Continue with Google' }).click();
+  await expect(embedded.getByRole('alert')).toContainText('Google sign-in could not be started');
+  expect(signInRequests).toBe(0);
+});
+
+test('an ordinary verifier never reaches token calls, including after same-document navigation', async ({
+  page,
+}) => {
+  const tokenUrls: string[] = [];
+  await page.route(`${AUTH_ORIGIN}/**`, async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/token')) tokenUrls.push(url.href);
+    await route.fulfill({ status: 401, json: { message: 'synthetic private provider error' } });
+  });
+
+  await page.goto(
+    '/app/guest/dashboard?campaign=summer%20camp&neon_auth_session_verifier=synthetic-ordinary#dashboard',
+  );
+  await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+  await expect.poll(() => tokenUrls.length).toBeGreaterThan(0);
+  const firstRequestCount = tokenUrls.length;
+  expect(
+    tokenUrls.every((value) => !new URL(value).searchParams.has('neon_auth_session_verifier')),
+  ).toBe(true);
+  expect(new URL(page.url()).searchParams.get('campaign')).toBe('summer camp');
+  expect(new URL(page.url()).hash).toBe('#dashboard');
+  expect(new URL(page.url()).searchParams.has('neon_auth_session_verifier')).toBe(false);
+
+  await page.evaluate(() => {
+    window.history.pushState(
+      window.history.state,
+      '',
+      '/app/guest/dashboard?campaign=summer%20camp#dashboard',
+    );
+    window.dispatchEvent(new Event('focus'));
+    window.history.pushState(
+      window.history.state,
+      '',
+      '/app/guest/dashboard?campaign=summer%20camp&neon_auth_session_verifier=synthetic-late#dashboard',
+    );
+  });
+  await expect.poll(() => tokenUrls.length).toBeGreaterThan(firstRequestCount);
+  expect(
+    tokenUrls.every((value) => !new URL(value).searchParams.has('neon_auth_session_verifier')),
+  ).toBe(true);
+
+  const requestCountAfterLateInjection = tokenUrls.length;
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect.poll(() => tokenUrls.length).toBeGreaterThan(requestCountAfterLateInjection);
+  expect(
+    tokenUrls.every((value) => !new URL(value).searchParams.has('neon_auth_session_verifier')),
+  ).toBe(true);
+  expect(new URL(page.url()).searchParams.has('neon_auth_session_verifier')).toBe(false);
+});
+
 test('an unmarked root verifier fails closed with a clean URL and no ordinary account requests', async ({
   page,
 }) => {
