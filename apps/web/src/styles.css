@@ -46,7 +46,6 @@
   --badge-high-intensity-text: #ffd5cb;
   --share-border: #ef6a48;
   --share-surface: #fac9ba;
-  --share-surface-hover: #ffdbcf;
   --focus: #f3c95e;
   --shadow: 0 6px 18px rgba(3, 10, 22, 0.22);
   --type-12: 0.75rem;
@@ -5193,14 +5192,9 @@ textarea[aria-invalid='true'] {
 }
 
 .share-menu-trigger {
-  --accent: var(--share-surface);
-  --accent-hover: var(--share-surface-hover);
+  --accent: #e3915b;
+  --accent-hover: #e8a174;
   margin-inline-start: auto;
-}
-
-.primary-button.share-menu-trigger,
-.primary-button.share-menu-trigger:hover:not(:disabled) {
-  border-color: var(--share-border);
 }
 
 .share-menu-content {

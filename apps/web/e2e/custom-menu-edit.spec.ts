@@ -169,9 +169,7 @@ for (const kind of ['guest', 'account'] as const) {
   });
 }
 
-test('guest detail Save reports rejected edits until they fit the dashboard limit', async ({
-  page,
-}) => {
+function dashboardNearStoreLimit(targetLength: number) {
   const sections = Array.from({ length: 3 }, (_, group) => ({
     id: `group-${group}`,
     name: `Group ${group}`,
@@ -211,15 +209,20 @@ test('guest detail Save reports rejected edits until they fit the dashboard limi
       ],
     },
   };
-  const targetLength = TRAINING_STORE_RAW_JSON_LIMIT - 8;
   let remaining = targetLength - JSON.stringify(envelope).length;
   for (const exercise of sections.flatMap((section) => section.exercises)) {
     const length = Math.min(remaining, TRAINING_DATA_LIMITS.noteCharacters);
     exercise.notes = 'x'.repeat(length);
     remaining -= length;
   }
-  const raw = JSON.stringify(envelope);
-  expect(raw.length).toBe(targetLength);
+  expect(JSON.stringify(envelope)).toHaveLength(targetLength);
+  return envelope;
+}
+
+test('guest detail Save reports rejected edits until they fit the dashboard limit', async ({
+  page,
+}) => {
+  const raw = JSON.stringify(dashboardNearStoreLimit(TRAINING_STORE_RAW_JSON_LIMIT - 8));
   const pageErrors: Error[] = [];
   page.on('pageerror', (error) => pageErrors.push(error));
   await page.goto('/app/guest/dashboard');
@@ -269,6 +272,61 @@ test('guest detail Save reports rejected edits until they fit the dashboard limi
   const reloaded = await openMenu(page, 'International dojo menu');
   await expect(reloaded.getByLabel('Practice notes')).toHaveValue('OK');
   await expect(reloaded.getByLabel('Minutes for Warm-up', { exact: true })).toHaveValue('10');
+  expect(pageErrors).toEqual([]);
+});
+
+test('account Save waits for rejected notes to be corrected even after closing details', async ({
+  page,
+}) => {
+  const harness = await SyntheticManagedHarness.install(page, { initiallySignedIn: true });
+  harness.setDashboard(dashboardNearStoreLimit(TRAINING_STORE_RAW_JSON_LIMIT - 350), '1');
+  const pageErrors: Error[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error));
+  await page.goto('/app/account/dashboard');
+  await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
+  const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+  if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
+
+  const dialog = await openMenu(page, 'International dojo menu');
+  const notes = dialog.getByLabel('Practice notes');
+  const save = dialog.getByRole('button', { name: 'Save your changes' });
+  const warmUp = dialog.getByRole('region', { name: 'Warm-up', exact: true });
+  const activityNotes = warmUp.getByLabel('Extra notes for Warm-up');
+  const rejectedNote = 'This note cannot fit in the remaining space. '.repeat(12);
+  const error = dialog.getByRole('alert').filter({ hasText: 'A change could not be saved.' });
+  const writes = () => harness.apiCalls.filter((call) => call.method === 'PUT');
+  await notes.fill('OK');
+  await expect(save).toBeEnabled();
+  await notes.fill(rejectedNote);
+  await warmUp.getByRole('button', { name: 'Any extra details?' }).click();
+  await activityNotes.fill(rejectedNote);
+  await expect(notes).toHaveAttribute('aria-invalid', 'true');
+  await expect(activityNotes).toHaveAttribute('aria-invalid', 'true');
+  await expect(error).toBeVisible();
+  await expect(save).toBeDisabled();
+  await expect(dialog.getByText('Changes saved to your account.', { exact: true })).toHaveCount(0);
+  expect(writes()).toHaveLength(0);
+
+  await dialog.getByRole('button', { name: /Close .* details/i }).click();
+  await expect(page.getByRole('button', { name: 'Save to account' })).toBeDisabled();
+  await openMenu(page, 'International dojo menu');
+  await expect(notes).toHaveValue(rejectedNote);
+  await expect(activityNotes).toHaveValue(rejectedNote);
+  await notes.fill('Fit');
+  await expect(save).toBeDisabled();
+  await activityNotes.fill('Breathe');
+  await expect(error).toHaveCount(0);
+  await save.click();
+  await expect(dialog.getByText('Changes saved to your account.', { exact: true })).toBeVisible();
+  expect(writes()).toHaveLength(1);
+  expect(writes()[0]?.body).toContain('"notes":"Fit"');
+  expect(writes()[0]?.body).toContain('"Breathe"');
+  expect(writes()[0]?.body).not.toContain(rejectedNote);
+
+  await page.reload();
+  await openMenu(page, 'International dojo menu');
+  await expect(notes).toHaveValue('Fit');
+  await expect(activityNotes).toHaveValue('Breathe');
   expect(pageErrors).toEqual([]);
 });
 

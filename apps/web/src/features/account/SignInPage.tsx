@@ -5,12 +5,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { BrandLockup } from '../../components/BrandLockup';
 import { useManagedAuth } from '../../lib/managed-auth-context';
 import { consumeShareReturnMarker } from '../../lib/share-return';
+import { AccountRecoveryButton } from './AccountRecoveryButton';
 
 const ALTERNATIVE_SIGN_IN_MESSAGE =
   'Option to sign in with a different email provider and your own password to be implemented soon';
 
 export function SignInPage(): ReactElement {
-  const { identity, startGoogleSignIn, verifyIdentity } = useManagedAuth();
+  const { identity, startGoogleSignIn } = useManagedAuth();
   const navigate = useNavigate();
   const [isStarting, setIsStarting] = useState(false);
   const [signInFailed, setSignInFailed] = useState(false);
@@ -75,14 +76,15 @@ export function SignInPage(): ReactElement {
             </p>
           ) : isUnavailable ? (
             <div className="auth-account-status" role="status">
-              <p>Account sign-in is temporarily unavailable. Guest use remains available.</p>
-              <button
-                className="primary-button auth-google-button"
-                type="button"
-                onClick={() => void verifyIdentity()}
-              >
-                Retry account check
-              </button>
+              <p>
+                {identity.signOut === 'failed'
+                  ? 'KendoMenu could not confirm sign-out.'
+                  : identity.signOut === 'pending'
+                    ? 'Waiting for sign-out confirmation.'
+                    : 'Account sign-in is temporarily unavailable.'}{' '}
+                Guest use remains available.
+              </p>
+              <AccountRecoveryButton className="primary-button auth-google-button" />
             </div>
           ) : (
             <>

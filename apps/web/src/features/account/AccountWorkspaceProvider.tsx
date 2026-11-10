@@ -19,6 +19,7 @@ import { WorkspaceShell } from '../../components/WorkspaceShell';
 import { useManagedAuth } from '../../lib/managed-auth-context';
 import { TrainingStoreProvider } from '../../lib/training-store-provider';
 import { createAccountDraftController } from '../../lib/account-draft';
+import { AccountRecoveryButton } from './AccountRecoveryButton';
 import { AccountSetupContext } from './account-setup-context';
 import { AccountSaveStatus, AccountUnsavedWarning } from './AccountUnsavedWarning';
 import type { WorkspaceContextValue } from '../../lib/workspace-context';
@@ -41,17 +42,19 @@ function LoadingStatus({ children }: { readonly children: ReactNode }) {
 
 export function AccountWorkspaceRoute() {
   const location = useLocation();
-  const { api, identity, verifyIdentity, setVerifiedAccount, signOutProvider } = useManagedAuth();
+  const { api, identity, verifyIdentity, setVerifiedAccount } = useManagedAuth();
   const [account, setAccount] = useState<ManagedAccountRecord | null>(null);
   const [initialization, setInitialization] = useState<ManagedAccountInitialization | undefined>();
   const [loadErrorIdentity, setLoadErrorIdentity] = useState<typeof identity | null>(null);
+  const [sawSignOut, setSawSignOut] = useState(false);
   const generation = useRef(0);
-  const navigate = useNavigate();
   const releaseCreationHandoff = useCallback(() => {
     setInitialization(undefined);
   }, []);
-  const navigateHome = useCallback(() => navigate('/app', { replace: true }), [navigate]);
 
+  if (!sawSignOut && identity.status === 'unavailable' && identity.signOut !== undefined) {
+    setSawSignOut(true);
+  }
   if (
     identity.status === 'verified' &&
     (account === null ||
@@ -108,8 +111,6 @@ export function AccountWorkspaceRoute() {
           key={routeAccount.accountId}
           account={routeAccount}
           initialization={routeInitialization}
-          navigateHome={navigateHome}
-          signOutProvider={signOutProvider}
           releaseCreationHandoff={releaseCreationHandoff}
         />
       );
@@ -121,6 +122,7 @@ export function AccountWorkspaceRoute() {
     );
   }
   if (identity.status === 'signed-out') {
+    if (sawSignOut) return <Navigate replace to="/app" />;
     const shareToken = location.pathname.startsWith('/app/account/shared/')
       ? location.pathname.slice('/app/account/shared/'.length)
       : null;
@@ -135,26 +137,25 @@ export function AccountWorkspaceRoute() {
           key={routeAccount.accountId}
           account={routeAccount}
           initialization={routeInitialization}
-          navigateHome={navigateHome}
-          signOutProvider={signOutProvider}
           releaseCreationHandoff={releaseCreationHandoff}
         />
       );
     }
     return (
-      <AccountWorkspaceFrame
-        userContent={<p>Account details are hidden until verification succeeds.</p>}
-      >
+      <AccountWorkspaceFrame userContent={<p>Account details are hidden.</p>}>
         <section className="account-route-state" role="status">
           <p className="eyebrow">Account connection</p>
           <h1>Your account could not be verified.</h1>
           <p>
-            Account content stays hidden until verification succeeds. Guest use remains available.
+            {identity.signOut === 'failed'
+              ? 'KendoMenu could not confirm sign-out. Your account stays hidden until sign-out succeeds.'
+              : identity.signOut === 'pending'
+                ? 'Waiting for sign-out confirmation.'
+                : 'Account content stays hidden until verification succeeds.'}{' '}
+            Guest use remains available.
           </p>
           <div className="empty-actions">
-            <button className="primary-button" type="button" onClick={() => void verifyIdentity()}>
-              Retry account check
-            </button>
+            <AccountRecoveryButton />
             <Link className="secondary-button" to="/app/guest/dashboard">
               Continue as a guest
             </Link>
@@ -185,8 +186,6 @@ export function AccountWorkspaceRoute() {
       key={identity.account.accountId}
       account={identity.account}
       initialization={routeInitialization}
-      navigateHome={navigateHome}
-      signOutProvider={signOutProvider}
       releaseCreationHandoff={releaseCreationHandoff}
     />
   );
@@ -209,17 +208,13 @@ function AccountWorkspaceFrame({
 function LoadedAccountWorkspace({
   account,
   initialization,
-  navigateHome,
-  signOutProvider,
   releaseCreationHandoff,
 }: {
   readonly account: ManagedAccountRecord;
   readonly initialization: ManagedAccountInitialization | undefined;
-  readonly navigateHome: () => void;
-  readonly signOutProvider: () => Promise<boolean>;
   readonly releaseCreationHandoff: () => void;
 }) {
-  const { api, identity, verifyIdentity, invalidateIdentity } = useManagedAuth();
+  const { api, verifyIdentity, invalidateIdentity } = useManagedAuth();
   const [initialAccount] = useState(account);
   const [initialHandoff] = useState(initialization);
   const [controller, setController] = useState<AccountDraftController | null>(null);
@@ -260,38 +255,21 @@ function LoadedAccountWorkspace({
       </AccountWorkspaceFrame>
     );
   }
-  return (
-    <LoadedAccountWorkspaceView
-      account={account}
-      controller={controller}
-      identity={identity}
-      verifyIdentity={verifyIdentity}
-      navigateHome={navigateHome}
-      signOutProvider={signOutProvider}
-    />
-  );
+  return <LoadedAccountWorkspaceView account={account} controller={controller} />;
 }
 
 function LoadedAccountWorkspaceView({
   account,
   controller,
-  identity,
-  verifyIdentity,
-  navigateHome,
-  signOutProvider,
 }: {
   readonly account: ManagedAccountRecord;
   readonly controller: AccountDraftController;
-  readonly identity: ReturnType<typeof useManagedAuth>['identity'];
-  readonly verifyIdentity: ReturnType<typeof useManagedAuth>['verifyIdentity'];
-  readonly navigateHome: () => void;
-  readonly signOutProvider: () => Promise<boolean>;
 }) {
+  const { identity, signOutProvider } = useManagedAuth();
   const subscribe = useCallback((notify: () => void) => controller.subscribe(notify), [controller]);
   const getSnapshot = useCallback(() => controller.getSnapshot(), [controller]);
   const snapshot: AccountDraftSnapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   const [discardPrompt, setDiscardPrompt] = useState(false);
-  const [signOutError, setSignOutError] = useState(false);
   const [builderDirty, setBuilderDirty] = useState(false);
   const [editorDraftDirty, setEditorDraftDirty] = useState(false);
   const [workspaceStoreGeneration, setWorkspaceStoreGeneration] = useState(0);
@@ -324,13 +302,10 @@ function LoadedAccountWorkspaceView({
     // Hide before paint on identity changes; only the same account can reveal its retained draft.
     if (identity.status === 'verified' && identity.account.accountId === account.accountId) {
       controller.revealForVerifiedAccount(identity.account);
-    } else if (identity.status === 'signed-out') {
-      controller.discard();
-      navigateHome();
     } else {
       controller.hideForIdentityUncertainty();
     }
-  }, [account.accountId, controller, identity, navigateHome]);
+  }, [account.accountId, controller, identity]);
 
   useEffect(() => {
     const updateOnline = () => controller.setOnline(navigator.onLine);
@@ -364,17 +339,13 @@ function LoadedAccountWorkspaceView({
     }
   }, [discardPrompt]);
 
-  const discardAndSignOut = async () => {
+  const discardAndSignOut = () => {
     controller.discard();
-    const confirmed = await signOutProvider();
     setDiscardPrompt(false);
-    if (!confirmed) {
-      setSignOutError(true);
-      return;
-    }
-    navigateHome();
+    void signOutProvider();
   };
 
+  const signOut = identity.status === 'unavailable' ? identity.signOut : undefined;
   const isVerifiedAccount =
     identity.status === 'verified' && identity.account.accountId === account.accountId;
   const isIdentityHidden =
@@ -388,7 +359,7 @@ function LoadedAccountWorkspaceView({
       current.saveState === 'uncertain'
     ) {
       const confirmed = window.confirm(
-        'Unsaved account changes, including any unfinished quantity field, exist only in this tab’s memory. Reloading will discard them. Continue?',
+        'Unsaved account changes, including any unfinished editor field, exist only in this tab’s memory. Reloading will discard them. Continue?',
       );
       if (!confirmed) return;
     }
@@ -492,16 +463,11 @@ function LoadedAccountWorkspaceView({
         type="button"
         onClick={() => {
           if (warnBeforeLeaving) setDiscardPrompt(true);
-          else void discardAndSignOut();
+          else discardAndSignOut();
         }}
       >
         Sign out
       </button>
-      {signOutError ? (
-        <span role="alert">
-          KendoMenu could not confirm sign-out. Retry after checking the connection.
-        </span>
-      ) : null}
     </div>
   );
 
@@ -575,7 +541,6 @@ function LoadedAccountWorkspaceView({
             canEdit: snapshot.canEdit,
             dirty: snapshot.dirty,
             saveState: snapshot.saveState,
-            save: () => controller.save(),
             retry: () => controller.retrySave(),
             reload: reloadAccount,
             download: downloadAccountDraft,
@@ -618,31 +583,13 @@ function LoadedAccountWorkspaceView({
                 <p className="eyebrow">Account verification</p>
                 <h1>Your account is hidden until it can be verified.</h1>
                 <p>
-                  {signOutError
-                    ? 'KendoMenu could not confirm sign-out. Your account remains hidden until you retry sign-out.'
-                    : 'Your current-tab draft is retained in memory. Verify the same account to reveal it.'}
+                  {signOut === 'failed'
+                    ? 'KendoMenu could not confirm sign-out. Your account stays hidden until sign-out succeeds.'
+                    : signOut === 'pending'
+                      ? 'Waiting for sign-out confirmation.'
+                      : 'Your current-tab draft is retained in memory. Verify the same account to reveal it.'}
                 </p>
-                {signOutError ? (
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={() =>
-                      void signOutProvider().then((signedOut) => {
-                        if (signedOut) navigateHome();
-                      })
-                    }
-                  >
-                    Retry sign-out
-                  </button>
-                ) : (
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={() => void verifyIdentity()}
-                  >
-                    Retry verification
-                  </button>
-                )}
+                <AccountRecoveryButton verificationLabel="Retry verification" />
               </section>
             ) : null}
             {!isIdentityHidden && snapshot.status === 'unavailable' ? (
@@ -670,7 +617,7 @@ function LoadedAccountWorkspaceView({
                 </button>
                 {editorDraftDirty ? (
                   <p>
-                    Complete or clear the unfinished quantity field before downloading the account
+                    Complete or clear the unfinished editor field before downloading the account
                     draft.
                   </p>
                 ) : null}
@@ -719,11 +666,7 @@ function LoadedAccountWorkspaceView({
                   >
                     Keep editing
                   </button>
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={() => void discardAndSignOut()}
-                  >
+                  <button className="primary-button" type="button" onClick={discardAndSignOut}>
                     Discard and sign out
                   </button>
                 </div>

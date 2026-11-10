@@ -10,6 +10,26 @@ export const AUTH_RETURN_TTL_MS = 15 * 60 * 1000;
 export const PROOF_CALLBACK_PATH = '/managed-auth-proof.html';
 export const APPLICATION_CALLBACK_PATH = '/app/auth/callback';
 export const AUTH_VERIFIER_PARAMETER = 'neon_auth_session_verifier';
+export const AUTH_POPUP_PARAMETER = 'neon_popup';
+export const AUTH_POPUP_CALLBACK_PARAMETER = 'neon_popup_callback';
+
+/** Remove unsupported SDK inputs without dropping ordinary query or fragment state. */
+export function sanitizeAuthUrl(options: { readonly preserveVerifier?: boolean } = {}): void {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  const hadUnsupportedPopupParameter =
+    url.searchParams.has(AUTH_POPUP_PARAMETER) ||
+    url.searchParams.has(AUTH_POPUP_CALLBACK_PARAMETER);
+  url.searchParams.delete(AUTH_POPUP_PARAMETER);
+  url.searchParams.delete(AUTH_POPUP_CALLBACK_PARAMETER);
+  const hadUntrustedVerifier =
+    options.preserveVerifier !== true && url.searchParams.has(AUTH_VERIFIER_PARAMETER);
+  if (options.preserveVerifier !== true) url.searchParams.delete(AUTH_VERIFIER_PARAMETER);
+
+  if (hadUnsupportedPopupParameter || hadUntrustedVerifier) {
+    window.history.replaceState(window.history.state, '', url.href);
+  }
+}
 
 export interface AuthReturnMarker {
   readonly version: 1;

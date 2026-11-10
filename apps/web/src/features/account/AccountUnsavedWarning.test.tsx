@@ -32,7 +32,7 @@ describe('account save status', () => {
   it.each([
     [{ isDirty: true }, 'Unsaved account changes'],
     [{ hasUncommittedBuilderDraft: true }, 'Unsaved account changes'],
-    [{ hasUncommittedEditorDraft: true }, 'Quantity field not saved'],
+    [{ hasUncommittedEditorDraft: true }, 'Editor field not saved'],
     [{ saveState: 'saving' }, 'Saving to account…'],
     [{ saveState: 'uncertain' }, 'Save status uncertain'],
     [{ saveState: 'conflict' }, 'Save needs attention'],

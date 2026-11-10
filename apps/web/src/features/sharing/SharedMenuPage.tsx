@@ -9,6 +9,7 @@ import {
 } from '@kendo-menu/domain/menu-sharing';
 import { TrainingActivityList } from '../../components/TrainingActivityList';
 import { TrainingSetTags } from '../../components/TrainingSetTags';
+import { AccountRecoveryButton } from '../account/AccountRecoveryButton';
 import { useManagedAuth } from '../../lib/managed-auth-context';
 import {
   formatTrainingQuantity,
@@ -107,7 +108,7 @@ function SharedMenuContent({
 function SharedMenuBody({ recipient = false }: { readonly recipient?: boolean }): ReactElement {
   const { token: routeToken } = useParams();
   const token = isShareToken(routeToken) ? routeToken : null;
-  const { api, identity, startGoogleSignIn, verifyIdentity } = useManagedAuth();
+  const { api, identity, startGoogleSignIn } = useManagedAuth();
   const workspace = useOptionalWorkspace();
   const recipientAccountId =
     recipient && identity.status === 'verified' ? identity.account.accountId : null;
@@ -314,13 +315,7 @@ function SharedMenuBody({ recipient = false }: { readonly recipient?: boolean })
             </Link>
           ) : null}
           {!recipient && identity.status === 'unavailable' ? (
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() => void verifyIdentity()}
-            >
-              Retry account check
-            </button>
+            <AccountRecoveryButton className="secondary-button" />
           ) : null}
         </div>
       </SharedMenuContent>

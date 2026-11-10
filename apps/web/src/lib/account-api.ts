@@ -309,10 +309,7 @@ function parseDashboardSnapshot(value: unknown): DashboardSnapshot | null {
     : Object.freeze({ version, state });
 }
 
-function parseDashboardRead(
-  value: unknown,
-  accountWorkspaceId: string,
-): DashboardReadResponse | null {
+function parseDashboardRead(value: unknown): DashboardReadResponse | null {
   if (
     !isStrictJsonObject(value) ||
     !hasExactKeys(value, [
@@ -324,7 +321,6 @@ function parseDashboardRead(
       'updatedAt',
     ]) ||
     value['transportVersion'] !== 1 ||
-    value['accountWorkspaceId'] !== accountWorkspaceId ||
     !isAccountWorkspaceId(value['accountWorkspaceId']) ||
     !isCatalogueVersion(value['catalogueVersion']) ||
     !isRevision(value['revision'])
@@ -337,7 +333,7 @@ function parseDashboardRead(
     return value['dashboard'] === null && value['updatedAt'] === null
       ? Object.freeze({
           transportVersion: 1,
-          accountWorkspaceId,
+          accountWorkspaceId: value['accountWorkspaceId'],
           catalogueVersion: value['catalogueVersion'],
           revision: '0',
           dashboard: null,
@@ -352,7 +348,7 @@ function parseDashboardRead(
     ? null
     : Object.freeze({
         transportVersion: 1,
-        accountWorkspaceId,
+        accountWorkspaceId: value['accountWorkspaceId'],
         catalogueVersion: value['catalogueVersion'],
         revision,
         dashboard,
@@ -1127,12 +1123,16 @@ export function createAccountApiClient(dependencies: AccountApiDependencies): Ac
         if (!isAccountWorkspaceId(accountId))
           throw new AccountApiError('request-invalid', 'The account identifier was invalid.');
         const response = await request(DASHBOARD_ENDPOINT, 'GET', requestSignal, token);
-        const dashboard = parseDashboardRead(
-          await readJsonBody(response, MAX_JSON_RESPONSE_BYTES),
-          accountId,
-        );
+        const dashboard = parseDashboardRead(await readJsonBody(response, MAX_JSON_RESPONSE_BYTES));
         if (dashboard === null)
           throw new AccountApiError('invalid-response', 'The dashboard response was invalid.');
+        if (dashboard.accountWorkspaceId !== accountId) {
+          throw new AccountApiError(
+            'invalid-response',
+            'The dashboard response belonged to a different account workspace.',
+            { code: 'ACCOUNT_WORKSPACE_MISMATCH' },
+          );
+        }
         return dashboard;
       }),
     putDashboard: (accountId, input, signal) => {
