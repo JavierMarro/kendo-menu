@@ -9,12 +9,15 @@ import {
   callbackDestination,
   clearAuthReturnMarker,
   resolveAuthReturn,
+  sanitizeAuthUrl,
 } from './lib/auth-return';
 
 import { clearShareReturnMarker } from './lib/share-return';
 
 const pathname = window.location.pathname;
 const resolution = resolveAuthReturn(pathname, window.location.search);
+// Keep callback verifiers only until their fixed callback entry owns the exchange.
+sanitizeAuthUrl({ preserveVerifier: resolution.kind !== 'ordinary' });
 
 if (pathname === APPLICATION_CALLBACK_PATH) {
   void import('./features/auth-callback/entry');

@@ -18,7 +18,6 @@ export interface PersistenceContextValue {
   readonly canEdit?: boolean;
   readonly dirty?: boolean;
   readonly saveState?: string;
-  readonly save?: () => Promise<void>;
   readonly retry?: () => Promise<void>;
   readonly reload?: () => Promise<void>;
   readonly download?: () => void;

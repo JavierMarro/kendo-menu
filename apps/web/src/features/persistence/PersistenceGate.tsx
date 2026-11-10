@@ -65,7 +65,7 @@ export function PersistenceGate({
   const [pendingWriterIds, setPendingWriterIds] = useState<ReadonlySet<object>>(() => new Set());
   const [runtimeUnavailable, setRuntimeUnavailable] = useState(false);
   const [backupError, setBackupError] = useState<string | null>(null);
-  const [resetError, setResetError] = useState<string | null>(null);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetPending, setResetPending] = useState(false);
   const resetPendingRef = useRef(false);
@@ -274,9 +274,8 @@ export function PersistenceGate({
 
   const retry = useCallback(() => {
     setBackupError(null);
-    setResetError(null);
+    setRecoveryError(null);
     setRuntimeUnavailable(false);
-    setSessionOnly(false);
     const nextInspection = inspectBrowserTrainingStorage(TRAINING_STORAGE_KEY);
     setInspection(nextInspection);
 
@@ -284,9 +283,18 @@ export function PersistenceGate({
       store !== null &&
       (nextInspection.status === 'empty' || nextInspection.status === 'ready')
     ) {
+      const baseline = storeBundle?.storage.getBrowserBaseline(TRAINING_STORAGE_KEY) ?? null;
+      if (inspectedGuestValue(nextInspection) !== baseline) {
+        setLocalRecoveryRequested(true);
+        setRecoveryError(
+          'The saved dashboard changed or could not be verified. Download the current backup before reloading, or continue without saving in this tab.',
+        );
+        return;
+      }
       setWriteFailed(false);
       try {
-        persistCurrentStateWith(createBrowserStorage(inspectedGuestValue(nextInspection)));
+        // The replacement writer rechecks this same baseline inside the lock before committing.
+        persistCurrentStateWith(createBrowserStorage(baseline));
       } catch {
         setWriteFailed(true);
       }
@@ -294,12 +302,13 @@ export function PersistenceGate({
       setRuntimeUnavailable(true);
     }
 
+    setSessionOnly(false);
     completeRecovery();
-  }, [completeRecovery, createBrowserStorage, persistCurrentStateWith, store]);
+  }, [completeRecovery, createBrowserStorage, persistCurrentStateWith, store, storeBundle]);
 
   const continueWithoutSaving = useCallback(() => {
     setBackupError(null);
-    setResetError(null);
+    setRecoveryError(null);
     setWriteFailed(false);
     setRuntimeUnavailable(false);
     setSessionOnly(true);
@@ -332,7 +341,7 @@ export function PersistenceGate({
       }
       setConfirmReset(false);
       setBackupError(null);
-      setResetError(null);
+      setRecoveryError(null);
       setWriteFailed(false);
       setSessionOnly(false);
       setRuntimeUnavailable(false);
@@ -343,7 +352,7 @@ export function PersistenceGate({
       const nextInspection = inspectBrowserTrainingStorage(TRAINING_STORAGE_KEY);
       setInspection(nextInspection);
       setRuntimeUnavailable(nextInspection.status === 'unavailable');
-      setResetError(
+      setRecoveryError(
         store === null
           ? 'KendoMenu could not confirm local data removal. Try again before leaving this page.'
           : 'KendoMenu could not confirm local data removal. Your current session remains available; try again before leaving this page.',
@@ -393,7 +402,7 @@ export function PersistenceGate({
       }
       confirmReset={confirmReset}
       backupError={backupError}
-      resetError={resetError}
+      recoveryError={recoveryError}
       resetPending={resetPending}
       writeFailed={writeFailed}
       currentBackupAvailable={store !== null}
@@ -499,7 +508,7 @@ interface PersistenceRecoveryProps {
   readonly inspection: PersistenceInspection;
   readonly confirmReset: boolean;
   readonly backupError: string | null;
-  readonly resetError: string | null;
+  readonly recoveryError: string | null;
   readonly resetPending: boolean;
   readonly writeFailed: boolean;
   readonly currentBackupAvailable: boolean;
@@ -555,7 +564,7 @@ function PersistenceRecovery({
   inspection,
   confirmReset,
   backupError,
-  resetError,
+  recoveryError,
   resetPending,
   writeFailed,
   currentBackupAvailable,
@@ -676,9 +685,9 @@ function PersistenceRecovery({
             {backupError}
           </p>
         ) : null}
-        {resetError !== null ? (
+        {recoveryError !== null ? (
           <p className="form-error" role="alert">
-            {resetError}
+            {recoveryError}
           </p>
         ) : null}
 

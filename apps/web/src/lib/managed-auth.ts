@@ -10,6 +10,7 @@ import {
   callbackDestination,
   clearAuthReturnMarker,
   resolveAuthReturn,
+  sanitizeAuthUrl,
   writeAuthReturnMarker,
 } from './auth-return';
 import type { AuthFlow } from './auth-return';
@@ -50,9 +51,26 @@ export function createManagedAuthClient(
     return undefined;
   }
 
+  const currentResolution =
+    typeof window === 'undefined' || window.location.pathname !== callbackDestination(flow)
+      ? undefined
+      : resolveAuthReturn(window.location.pathname, window.location.search);
+  sanitizeAuthUrl({
+    preserveVerifier: currentResolution?.kind === 'callback' && currentResolution.flow === flow,
+  });
+
   const auth = createAuthClient(url.href.replace(/\/$/, ''), {
     adapter: BetterAuthVanillaAdapter({
-      fetchOptions: { credentials: 'include' },
+      fetchOptions: {
+        credentials: 'include',
+        onRequest: (request) => {
+          const requestUrl = request.url instanceof URL ? request.url : new URL(request.url);
+          if (requestUrl.pathname.endsWith('/token')) {
+            requestUrl.searchParams.delete(AUTH_VERIFIER_PARAMETER);
+            request.url = requestUrl;
+          }
+        },
+      },
       sessionOptions: {
         refetchOnWindowFocus: false,
         refetchInterval: 0,
@@ -69,6 +87,8 @@ export function createManagedAuthClient(
   return {
     async signIn() {
       if (signInInProgress) return true;
+      // KendoMenu uses full-page redirects and does not support the SDK's iframe popup flow.
+      if (window.top !== window.self) return false;
       if (!writeAuthReturnMarker(flow)) return false;
       const attempt = ++signInAttempt;
       signInInProgress = true;
@@ -118,6 +138,8 @@ export function createManagedAuthClient(
 
     async getToken(signal) {
       if (signal.aborted) return { status: 'unavailable' };
+      // The pinned SDK copies this query into /token during its request hook.
+      sanitizeAuthUrl();
       try {
         const result = await auth.token({ fetchOptions: { signal } });
         if (signal.aborted) return { status: 'unavailable' };
@@ -139,11 +161,12 @@ export function createManagedAuthClient(
       if (signal.aborted) return { status: 'unavailable' };
       // Only this client's fixed callback path and a single verifier may enter session exchange.
       const resolution = resolveAuthReturn(window.location.pathname, window.location.search);
-      if (
-        resolution.kind !== 'callback' ||
-        resolution.flow !== flow ||
-        !new URLSearchParams(window.location.search).has(AUTH_VERIFIER_PARAMETER)
-      ) {
+      const isFixedCallback = window.location.pathname === callbackDestination(flow);
+      sanitizeAuthUrl({
+        preserveVerifier:
+          isFixedCallback && resolution.kind === 'callback' && resolution.flow === flow,
+      });
+      if (!isFixedCallback || resolution.kind !== 'callback' || resolution.flow !== flow) {
         return { status: 'unavailable' };
       }
       callbackBootstrap ??= auth

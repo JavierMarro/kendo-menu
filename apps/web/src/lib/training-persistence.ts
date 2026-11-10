@@ -55,6 +55,7 @@ export class BrowserStorageError extends Error {
 }
 
 export interface BrowserTrainingStorage extends StateStorage {
+  readonly getBrowserBaseline: (name: string) => string | null | undefined;
   readonly disable: () => void;
   readonly isEnabled: () => boolean;
   readonly isPending: () => boolean;
@@ -69,6 +70,7 @@ export interface TrainingStorageController extends BrowserTrainingStorage {
 type MaybePromise<T> = T | Promise<T>;
 
 interface LifecycleStorage extends StateStorage {
+  readonly getBrowserBaseline?: BrowserTrainingStorage['getBrowserBaseline'];
   readonly disable?: () => void;
   readonly isEnabled?: () => boolean;
   readonly isPending?: () => boolean;
@@ -459,6 +461,7 @@ export function createBrowserTrainingStorage(
         markWriteFailed(error, 'remove');
       }
     },
+    getBrowserBaseline: (name) => expectedValues.get(name),
     disable: () => {
       enabled = false;
       notifyPendingChange(false);
@@ -501,6 +504,7 @@ export function createMemoryTrainingStorage(): StateStorage {
  */
 export function createTrainingStorageController(storage: StateStorage): TrainingStorageController {
   let activeStorage = storage;
+  let lastBrowserStorage = asLifecycleStorage(storage);
 
   return {
     getItem: (name) => activeStorage.getItem(name),
@@ -508,8 +512,11 @@ export function createTrainingStorageController(storage: StateStorage): Training
     removeItem: (name) => activeStorage.removeItem(name),
     replace: (nextStorage) => {
       asLifecycleStorage(activeStorage).disable?.();
+      const nextLifecycle = asLifecycleStorage(nextStorage);
+      if (nextLifecycle.getBrowserBaseline !== undefined) lastBrowserStorage = nextLifecycle;
       activeStorage = nextStorage;
     },
+    getBrowserBaseline: (name) => lastBrowserStorage.getBrowserBaseline?.(name),
     disable: () => asLifecycleStorage(activeStorage).disable?.(),
     isEnabled: () => asLifecycleStorage(activeStorage).isEnabled?.() ?? true,
     isPending: () => asLifecycleStorage(activeStorage).isPending?.() ?? false,

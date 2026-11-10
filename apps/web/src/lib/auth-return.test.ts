@@ -8,12 +8,47 @@ import {
   clearAuthReturnMarker,
   readAuthReturnMarker,
   resolveAuthReturn,
+  sanitizeAuthUrl,
   writeAuthReturnMarker,
 } from './auth-return';
 
 afterEach(() => {
   sessionStorage.clear();
+  window.history.replaceState(null, '', '/');
   vi.restoreAllMocks();
+});
+
+it('strips unmanaged SDK parameters from an ordinary URL while preserving normal query and hash state', () => {
+  window.history.replaceState(
+    null,
+    '',
+    '/app/guest/dashboard?campaign=summer%20camp&neon_auth_session_verifier=untrusted&neon_popup=1&neon_popup_callback=%2Fauth%2Fcallback#dashboard',
+  );
+
+  sanitizeAuthUrl();
+
+  const url = new URL(window.location.href);
+  expect(url.pathname).toBe('/app/guest/dashboard');
+  expect(url.searchParams.get('campaign')).toBe('summer camp');
+  expect(url.searchParams.has('neon_auth_session_verifier')).toBe(false);
+  expect(url.searchParams.has('neon_popup')).toBe(false);
+  expect(url.searchParams.has('neon_popup_callback')).toBe(false);
+  expect(url.hash).toBe('#dashboard');
+});
+
+it('keeps an explicit callback verifier while removing unsupported popup parameters', () => {
+  window.history.replaceState(
+    null,
+    '',
+    '/app/auth/callback?campaign=summer&neon_auth_session_verifier=callback-token&neon_popup=1',
+  );
+
+  sanitizeAuthUrl({ preserveVerifier: true });
+
+  const url = new URL(window.location.href);
+  expect(url.searchParams.get('campaign')).toBe('summer');
+  expect(url.searchParams.get('neon_auth_session_verifier')).toBe('callback-token');
+  expect(url.searchParams.has('neon_popup')).toBe(false);
 });
 
 it('stores only the finite flow marker in per-tab session storage', () => {

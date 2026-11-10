@@ -93,7 +93,7 @@ test('offline download stays unavailable until an unfinished quantity is complet
   await expect(page.getByRole('heading', { name: 'Account service unavailable' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Download draft' })).toBeDisabled();
   await expect(
-    page.getByText(/complete or clear the unfinished quantity field before downloading/i),
+    page.getByText(/complete or clear the unfinished editor field before downloading/i),
   ).toBeVisible();
 
   await context.setOffline(false);

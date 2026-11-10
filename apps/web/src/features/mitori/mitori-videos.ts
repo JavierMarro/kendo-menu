@@ -245,6 +245,11 @@ export const MITORI_VIDEOS: Readonly<
   ],
   'ajkc-finals': [
     {
+      id: 'x4RV-sH1Upo',
+      title: '74th All Japan Kendo Championship',
+      author: 'All Japan Kendo Federation',
+    },
+    {
       id: 'qYfR983_KwU',
       title: '73rd All Japan Kendo Championship',
       author: 'All Japan Kendo Federation',
@@ -291,6 +296,11 @@ export const MITORI_VIDEOS: Readonly<
     },
   ],
   'ajkc-finals-womens': [
+    {
+      id: 'L8Ez0C4iH_E',
+      title: '65th All Japan Women’s Kendo Championship',
+      author: 'All Japan Kendo Federation',
+    },
     {
       id: 'xWwnza7khAE',
       title: '64th All Japan Women’s Kendo Championship',

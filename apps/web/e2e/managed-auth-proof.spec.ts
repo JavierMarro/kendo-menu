@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
+const AUTH_ORIGIN = 'https://synthetic-auth.example.invalid';
+
 test('callback-only bootstrap, cookie-backed token verification and sign-out preserve guest storage', async ({
   page,
 }) => {
@@ -228,4 +230,50 @@ test('failed explicit proof callback exchange is sanitized and isolated', async 
   expect(tokenRequests).toBe(0);
   expect(apiRequests).toBe(0);
   await expect(page.getByText('synthetic-private-provider-error')).toHaveCount(0);
+});
+
+test('does not forward a proof verifier to a cross-origin opener', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  if (baseURL === undefined) throw new Error('Expected the Playwright app base URL.');
+  const appOrigin = new URL(baseURL).origin;
+  const otherOriginUrl = new URL(appOrigin);
+  otherOriginUrl.port = otherOriginUrl.port === '4176' ? '4175' : '4176';
+  const otherOrigin = otherOriginUrl.origin;
+  const verifier = 'synthetic-private-verifier';
+  const targetUrl = `${appOrigin}/managed-auth-proof.html?neon_popup=1&neon_popup_callback=https%3A%2F%2Fevil.invalid%2Fcallback&neon_auth_session_verifier=${verifier}`;
+
+  await context.route(`${AUTH_ORIGIN}/**`, async (route) =>
+    route.fulfill({ status: 503, json: { message: 'synthetic private provider error' } }),
+  );
+  await context.route(`${otherOrigin}/audit-opener`, async (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: `<!doctype html><button type="button">Open synthetic callback</button><script>
+        document.body.dataset.authMessages = '[]';
+        window.addEventListener('message', (event) => {
+          const messages = JSON.parse(document.body.dataset.authMessages);
+          messages.push(event.data);
+          document.body.dataset.authMessages = JSON.stringify(messages);
+        });
+        document.querySelector('button').addEventListener('click', () => window.open(${JSON.stringify(targetUrl)}, '_blank'));
+      </script>`,
+    }),
+  );
+  await page.goto(`${otherOrigin}/audit-opener`);
+
+  const popupPromise = context.waitForEvent('page');
+  await page.getByRole('button', { name: 'Open synthetic callback' }).click();
+  const popup = await popupPromise;
+  expect(await popup.evaluate(() => window.opener !== null)).toBe(true);
+  await expect(popup.getByRole('status')).toContainText('could not establish a managed session');
+  await expect(page.locator('body')).toHaveAttribute('data-auth-messages', '[]');
+
+  const popupUrl = new URL(popup.url());
+  expect(popupUrl.searchParams.has('neon_popup')).toBe(false);
+  expect(popupUrl.searchParams.has('neon_popup_callback')).toBe(false);
+  expect(popupUrl.searchParams.get('neon_auth_session_verifier')).toBe(verifier);
+  await popup.close();
 });

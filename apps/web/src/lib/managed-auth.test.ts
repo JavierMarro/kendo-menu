@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const authMocks = vi.hoisted(() => ({ social: vi.fn() }));
+const authMocks = vi.hoisted(() => ({ social: vi.fn(), token: vi.fn() }));
 
 vi.mock('@neondatabase/auth', () => ({
-  createAuthClient: vi.fn(() => ({ signIn: { social: authMocks.social } })),
+  createAuthClient: vi.fn(() => ({ signIn: { social: authMocks.social }, token: authMocks.token })),
   isAuthError: vi.fn(() => false),
 }));
 
@@ -19,8 +19,39 @@ describe('managed Google sign-in initiation', () => {
   beforeEach(() => {
     vi.stubGlobal('navigation', new EventTarget());
     authMocks.social.mockReset().mockResolvedValue({ error: null });
+    authMocks.token.mockReset().mockResolvedValue({ error: null, data: { token: 'synthetic' } });
     window.history.replaceState(null, '', '/app');
     window.sessionStorage.clear();
+  });
+
+  it('removes a verifier reintroduced by same-document navigation before token retrieval', async () => {
+    let verifierAtSdkCall: string | null | undefined;
+    authMocks.token.mockImplementation(() => {
+      verifierAtSdkCall = new URL(window.location.href).searchParams.get(
+        'neon_auth_session_verifier',
+      );
+      return Promise.resolve({ error: null, data: { token: 'synthetic-token' } });
+    });
+    const client = createManagedAuthClient(
+      'https://synthetic-auth.example.invalid/neon/auth',
+      'application',
+      { replaceDocument: vi.fn() },
+    );
+    if (client === undefined) throw new Error('Expected a configured synthetic auth client.');
+
+    window.history.pushState(
+      window.history.state,
+      '',
+      '/app?campaign=summer&neon_auth_session_verifier=late-verifier#dashboard',
+    );
+    await expect(client.getToken(new AbortController().signal)).resolves.toEqual({
+      status: 'token',
+      token: 'synthetic-token',
+    });
+
+    expect(verifierAtSdkCall).toBeNull();
+    expect(new URL(window.location.href).searchParams.get('campaign')).toBe('summer');
+    expect(new URL(window.location.href).hash).toBe('#dashboard');
   });
 
   it('coalesces duplicate initiation attempts and permits a new attempt after BFCache return', async () => {

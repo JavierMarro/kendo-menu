@@ -80,6 +80,45 @@ describe('live-state recovery transitions', () => {
     expect(screen.queryByText('Unsaved')).not.toBeInTheDocument();
   });
 
+  it('retains the last browser baseline in session-only mode so retry cannot undo a peer reset', async () => {
+    const user = userEvent.setup();
+    const view = render(
+      <PersistenceGate>
+        <EditProbe />
+      </PersistenceGate>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Make edits' }));
+    expect(window.localStorage.getItem(persistence.TRAINING_STORAGE_KEY)).toContain(
+      'Latest in-memory notes',
+    );
+
+    const write = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('Quota exceeded', 'QuotaExceededError');
+    });
+    await user.click(screen.getByRole('button', { name: 'Make edits' }));
+    await user.click(screen.getByRole('button', { name: 'Open recovery options' }));
+    await user.click(screen.getByRole('button', { name: 'Continue without saving' }));
+    write.mockRestore();
+    window.localStorage.removeItem(persistence.TRAINING_STORAGE_KEY);
+    view.rerender(
+      <PersistenceGate recoveryRequested>
+        <EditProbe />
+      </PersistenceGate>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(screen.getByText(/The saved dashboard changed/)).toBeVisible();
+    expect(window.localStorage.getItem(persistence.TRAINING_STORAGE_KEY)).toBeNull();
+    const download = vi
+      .spyOn(persistence, 'downloadCurrentTrainingBackup')
+      .mockImplementation(() => undefined);
+    await user.click(screen.getByRole('button', { name: 'Download current backup' }));
+    expect(download).toHaveBeenCalledWith([
+      expect.objectContaining({ notes: 'Latest in-memory notes' }),
+      expect.objectContaining({ notes: 'Latest in-memory notes' }),
+    ]);
+  });
+
   it.each(['{corrupt', '{"version":999,"state":{}}'])(
     'keeps protected bytes and live edits when retry discovers %s',
     async (raw) => {
