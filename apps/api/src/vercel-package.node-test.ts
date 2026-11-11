@@ -106,18 +106,22 @@ await test('native Node loads the packaged Vercel adapter without workspace Type
           assert.equal(protectedResponse.status, 401);
           const proof = await handler.fetch(new Request('https://preview.example/api/dev/managed-identity'));
           assert.equal(proof.status, 404);
-          const sharePath = '/app/shared/' + 's'.repeat(43);
-          const shareUrl = 'https://preview.example' + sharePath;
+          const shareToken = 's'.repeat(43);
+          const sharePath = '/app/shared/' + shareToken;
           const shared = await handler.fetch(new Request('http://preview.example' + sharePath + '?tracking=discarded'));
           assert.equal(shared.status, 200);
           assert.ok(shared.headers.get('content-type')?.startsWith('text/html'));
           assert.equal(shared.headers.get('cache-control'), 'private, no-store');
           const html = await shared.text();
           assert.ok(html.includes('property="og:title" content="Check my custom menu out!"'));
-          assert.ok(html.includes('property="og:url" content="' + shareUrl + '"'));
+          assert.ok(!html.includes('property="og:url"') && !html.includes(shareToken));
           assert.ok(html.includes('name="robots" content="noindex, nofollow"'));
+          assert.ok(html.includes('name="referrer" content="no-referrer"'));
           assert.ok(html.includes('src="/assets/'));
           assert.ok(!html.includes('tracking=discarded') && !html.includes('__SHARED_MENU_URL__'));
+          const sharedHead = await handler.fetch(new Request('https://preview.example' + sharePath, { method: 'HEAD' }));
+          assert.equal(sharedHead.status, 200);
+          assert.equal(await sharedHead.text(), '');
           assert.equal(pools, 0);
         `,
       ],

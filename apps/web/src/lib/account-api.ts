@@ -1054,15 +1054,22 @@ export function createAccountApiClient(dependencies: AccountApiDependencies): Ac
         if (
           !isStrictJsonObject(value) ||
           !hasExactKeys(value, ['snapshot', 'isSender', 'accountWorkspaceId']) ||
-          value['accountWorkspaceId'] !== accountId ||
+          !isAccountWorkspaceId(value['accountWorkspaceId']) ||
           typeof value['isSender'] !== 'boolean'
         )
           throw new AccountApiError(
             'invalid-response',
             'The shared menu account response is invalid.',
           );
+        const snapshot = parseSharedResponse(value);
+        if (value['accountWorkspaceId'] !== accountId)
+          throw new AccountApiError(
+            'invalid-response',
+            'The shared menu response belonged to a different account workspace.',
+            { code: 'ACCOUNT_WORKSPACE_MISMATCH' },
+          );
         return {
-          snapshot: parseSharedResponse(value),
+          snapshot,
           isSender: value['isSender'],
           accountWorkspaceId: accountId,
         };

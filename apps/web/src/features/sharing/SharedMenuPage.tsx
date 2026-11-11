@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import type { TrainingActivity } from '@kendo-menu/domain';
@@ -10,6 +17,7 @@ import {
 import { TrainingActivityList } from '../../components/TrainingActivityList';
 import { TrainingSetTags } from '../../components/TrainingSetTags';
 import { AccountRecoveryButton } from '../account/AccountRecoveryButton';
+import { AccountApiError } from '../../lib/account-api';
 import { useManagedAuth } from '../../lib/managed-auth-context';
 import {
   formatTrainingQuantity,
@@ -31,7 +39,11 @@ type ShareLoadResult =
       readonly snapshot: SharedMenuV1;
       readonly isSender: boolean;
     }
-  | { readonly token: string; readonly accountId: string | null; readonly status: 'unavailable' };
+  | {
+      readonly token: string;
+      readonly accountId: string | null;
+      readonly status: 'not-found' | 'unavailable';
+    };
 
 function getPreviewActivities(snapshot: SharedMenuV1) {
   const extraDurations = new Map<string, DisplayTrainingQuantity>();
@@ -108,11 +120,12 @@ function SharedMenuContent({
 function SharedMenuBody({ recipient = false }: { readonly recipient?: boolean }): ReactElement {
   const { token: routeToken } = useParams();
   const token = isShareToken(routeToken) ? routeToken : null;
-  const { api, identity, startGoogleSignIn } = useManagedAuth();
+  const { api, identity, invalidateIdentity, startGoogleSignIn } = useManagedAuth();
   const workspace = useOptionalWorkspace();
   const recipientAccountId =
     recipient && identity.status === 'verified' ? identity.account.accountId : null;
   const [loadResult, setLoadResult] = useState<ShareLoadResult | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [adding, setAdding] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const signInGeneration = useRef(0);
@@ -134,7 +147,8 @@ function SharedMenuBody({ recipient = false }: { readonly recipient?: boolean })
     };
   }, [recipient]);
 
-  useEffect(() => {
+  // Retire an old read before a late denial can invalidate the new account or route.
+  useLayoutEffect(() => {
     if (token === null || (recipient && recipientAccountId === null)) return;
     const controller = new AbortController();
     let active = true;
@@ -173,20 +187,29 @@ function SharedMenuBody({ recipient = false }: { readonly recipient?: boolean })
             setLoadResult({ token, accountId: null, status: 'ready', snapshot, isSender: false });
           });
     });
-    void load.catch(() => {
-      if (active) {
-        setLoadResult({
-          token,
-          accountId: recipientAccountId,
-          status: 'unavailable',
-        });
+    void load.catch((error: unknown) => {
+      if (!active) return;
+      if (
+        recipient &&
+        error instanceof AccountApiError &&
+        (error.status === 401 || error.code === 'ACCOUNT_WORKSPACE_MISMATCH')
+      ) {
+        setLoadResult(null);
+        invalidateIdentity();
+        return;
       }
+      setLoadResult({
+        token,
+        accountId: recipientAccountId,
+        status:
+          error instanceof AccountApiError && error.status === 404 ? 'not-found' : 'unavailable',
+      });
     });
     return () => {
       active = false;
       controller.abort();
     };
-  }, [api, recipient, recipientAccountId, token]);
+  }, [api, invalidateIdentity, loadAttempt, recipient, recipientAccountId, token]);
 
   const currentResult =
     token !== null &&
@@ -263,11 +286,28 @@ function SharedMenuBody({ recipient = false }: { readonly recipient?: boolean })
       </div>
     );
   }
-  if (currentResult.status === 'unavailable' || snapshot === null) {
+  if (currentResult.status !== 'ready' || snapshot === null) {
+    const retryable = currentResult.status === 'unavailable';
     return (
       <div className="shared-menu-page">
         <h1>Shared menu unavailable</h1>
-        <p>This link may be invalid or the owner’s account may have been removed.</p>
+        <p role="alert">
+          {retryable
+            ? 'The shared menu could not be loaded. Please try again.'
+            : 'This link may be invalid or the owner’s account may have been removed.'}
+        </p>
+        {retryable ? (
+          <button
+            className="primary-button"
+            type="button"
+            onClick={() => {
+              setLoadResult(null);
+              setLoadAttempt((attempt) => attempt + 1);
+            }}
+          >
+            Retry loading menu
+          </button>
+        ) : null}
         <Link className="secondary-button" to="/app">
           Back to KendoMenu
         </Link>
