@@ -52,7 +52,8 @@ Use Node 24 explicitly if the shell defaults to another runtime. Run heavy suite
 
 ## Release boundary
 
-Changes remain unstaged and uncommitted. No deployment, remote database migration, environment,
-DNS or Vercel changes were made. Migration `0004_solid_zaladane.sql` is prepared and tested locally;
-its production application requires separate authorization. Production-preview browser regression
-and live Google/Neon/HTTPS sharing behavior are not claimed by these local synthetic tests.
+The implementation was merged to `main` by PR #52 at `de4f84f`. The verification table above
+records the original local acceptance. Subsequent local preview, packaging and guarded PostgreSQL
+checks also passed on the merged code. Follow the [sharing release check](runbooks/DEPLOYMENT.md#sharing-release-check)
+for owner verification of production migration `0004_solid_zaladane.sql`, hosted delivery and
+live Google/Neon/HTTPS behavior.

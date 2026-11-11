@@ -20,8 +20,8 @@ The checked-in settings are the source of truth for the build:
 
 The root lockfile is `pnpm-lock.yaml`; no alternate package manager or lockfile is declared. The root
 API function dispatches API requests and serves the share document ahead of the SPA fallback.
-The share document uses the bundled web shell to emit the actual share URL and a generic title
-without loading any menu data. `pnpm build:api` reuses the installed
+The bundled share document has a generic social title, description and image. Its metadata omits
+the token and the document loads without a menu lookup. `pnpm build:api` reuses the installed
 web Vite toolchain with `apps/web/vite.api.config.ts` to emit `apps/api/dist/index.js`, bundling the
 API, domain workspace code and curated JSON while leaving third-party server dependencies external.
 This server build does not load private env files; credentials remain runtime configuration. The API
@@ -352,7 +352,8 @@ by the deployed API and that its runtime role can access it.
 
 Then sign in with a test account, save a custom menu, create its sharing link, and open the link in
 a signed-out browser. Confirm the menu preview loads and omits any notes. Fetch the share URL as
-HTML and check that its Open Graph title says “Check my custom menu out!” before JavaScript runs.
+HTML. Before JavaScript runs, check for the Open Graph title “Check my custom menu out!” and verify
+that the token is absent from the metadata.
 
 ## Post-deploy smoke checklist
 

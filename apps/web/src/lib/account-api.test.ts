@@ -637,6 +637,7 @@ describe('sharing API boundary', () => {
     const foreign = client({ snapshot, isSender: false, accountWorkspaceId: OTHER });
     await expect(foreign.api.getSharedMenuForRecipient(ACCOUNT, shareToken)).rejects.toMatchObject({
       kind: 'invalid-response',
+      code: 'ACCOUNT_WORKSPACE_MISMATCH',
     });
     const created = client({ token: shareToken, sourceRevision: '3', accountWorkspaceId: ACCOUNT });
     await expect(created.api.createMenuShare(ACCOUNT, '3', 'entry')).resolves.toMatchObject({
@@ -645,6 +646,17 @@ describe('sharing API boundary', () => {
     const stale = client({ token: shareToken, sourceRevision: '4', accountWorkspaceId: ACCOUNT });
     await expect(stale.api.createMenuShare(ACCOUNT, '3', 'entry')).rejects.toMatchObject({
       kind: 'invalid-response',
+    });
+  });
+  it('treats a malformed recipient payload as invalid even when the workspace differs', async () => {
+    const { api } = client({
+      snapshot: { ...snapshot, notes: 'Unexpected field' },
+      isSender: false,
+      accountWorkspaceId: OTHER,
+    });
+    await expect(api.getSharedMenuForRecipient(ACCOUNT, shareToken)).rejects.toMatchObject({
+      kind: 'invalid-response',
+      message: 'The shared menu is invalid.',
     });
   });
   it('rejects malformed links and public content with private fields', async () => {

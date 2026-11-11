@@ -1,9 +1,9 @@
 # Custom-menu sharing implementation plan
 
-Prepared 8 November 2026. Status: **planned, not implemented**. Source inspection baseline:
-`8f0a895`; the working tree was clean before this document. This plan records the owner's
-approved sharing journey. It supersedes the existing exclusion of public sharing only for this
-bounded feature; existing authentication, guest isolation and explicit account-save rules remain.
+Prepared 8 November 2026 against `8f0a895`. This plan records the owner's approved sharing journey.
+It supersedes the earlier exclusion of public sharing for this feature. Existing authentication,
+guest isolation and explicit account-save rules remain. The feature was implemented and merged.
+See the [progress record](CUSTOM_MENU_SHARING_PROGRESS.md) for local verification and release status.
 
 ## 1. Approved behavior
 
@@ -102,15 +102,13 @@ and request-size limits, but no per-account hosted-snapshot count cap. The owner
 the initial personal/small-friends audience on 8 November 2026. Reuse unchanged snapshots; do not
 silently expire links. Revisit a count quota only if actual usage or storage growth warrants it.
 
-## 4. Proposed API and race behavior
+## 4. API and race behavior
 
-Endpoint names below are proposed, not existing APIs.
-
-| Endpoint                           | Contract                                                                                                                                                                                                                                 |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/shares`                 | Managed bearer authorization and existing write-origin checks before body acquisition. Bounded body: expected account, expected dashboard revision, source entry ID. Returns token/path and confirmed source revision only after commit. |
-| `GET /api/shares/:token`           | Public bounded note-free snapshot; no identity, owner ID, source entry ID or account initialization. Missing/deleted share yields a generic unavailable/not-found view.                                                                  |
-| `GET /api/shares/:token/recipient` | Verified account read returning validated import content and whether the caller is the sender. No dashboard write. Used inside account routes; only copies from another account receive Shared.                                          |
+| Endpoint                           | Contract                                                                                                                                                                                                                           |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/shares`                 | Managed bearer and write-origin checks before body acquisition. The bounded body carries the expected account, dashboard revision and source entry ID. Returns the token, workspace ID and confirmed source revision after commit. |
+| `GET /api/shares/:token`           | Public bounded note-free snapshot; no identity, owner ID, source entry ID or account initialization. Missing/deleted share yields a generic unavailable/not-found view.                                                            |
+| `GET /api/shares/:token/recipient` | Verified account read returning validated import content and whether the caller is the sender. No dashboard write. Used inside account routes; only copies from another account receive Shared.                                    |
 
 Create locks/verifies the account first, validates the stored dashboard and expected revision, then
 finds the requested custom entry and inserts/reuses its canonical projection. Reject other-owner,
