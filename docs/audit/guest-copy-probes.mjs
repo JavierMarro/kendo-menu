@@ -1,4 +1,5 @@
 // Pass 4 uses synthetic browser transport and the guarded local DB harness in separate modes.
+/* global Buffer, Headers, PageTransitionEvent, Request, Response, URL, console, localStorage, process, setTimeout, structuredClone, window */
 import assert from 'node:assert/strict';
 
 const date = '2026-10-07T10:00:00.000Z';

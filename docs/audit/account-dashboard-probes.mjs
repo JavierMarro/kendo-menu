@@ -1,4 +1,5 @@
 // Deterministic Pass 3 probes. Browser uses intercepted synthetic services. DB uses createTestDatabase.
+/* global AbortSignal, Buffer, Headers, ReadableStream, Request, Response, TextEncoder, URL, console, fetch, process, structuredClone */
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
