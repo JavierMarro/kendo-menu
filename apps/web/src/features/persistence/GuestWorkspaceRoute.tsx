@@ -3,24 +3,37 @@
  * Navigation waits for persistence confirmation; authentication never transfers or replaces guest data.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, matchRoutes, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { WorkspaceShell } from '../../components/WorkspaceShell';
 import { GuestApplicationRecovery } from '../errors/ApplicationRecovery';
 import { useOptionalTrainingStoreApi } from '../../lib/training-store-context';
-import { useOptionalWorkspace, type WorkspaceContextValue } from '../../lib/workspace-context';
+import {
+  useOptionalWorkspace,
+  workspaceBuilderPaths,
+  workspacePath,
+  type WorkspaceContextValue,
+} from '../../lib/workspace-context';
 import { WorkspaceContextProvider } from '../../lib/workspace-context-provider';
 import { useManagedAuth } from '../../lib/managed-auth-context';
 import { getPersistenceStatusLabel, usePersistenceStatus } from './persistence-context';
 
-function AccountDestination(pathname: string): string {
-  if (/^\/app\/guest\/mitori-room\/?$/u.test(pathname)) return '/app/account/mitori-room';
-  if (/^\/app\/guest\/drills\/[^/]+\/edit$/u.test(pathname)) return '/app/account/dashboard';
-  if (pathname.endsWith('/drills/new')) return '/app/account/drills/new';
-  const detail = pathname.match(/^\/app\/guest\/library\/([^/]+)$/u);
-  if (detail !== null) return `/app/account/library/${encodeURIComponent(detail[1] ?? '')}`;
-  if (pathname.endsWith('/library')) return '/app/account/library';
-  return '/app/account/dashboard';
+const guestAccountDestinations = [
+  { path: '/app/guest/mitori-room', accountPath: '/app/account/mitori-room' },
+  {
+    path: workspacePath('/app/guest', workspaceBuilderPaths.create),
+    accountPath: workspacePath('/app/account', workspaceBuilderPaths.create),
+  },
+  { path: '/app/guest/library', accountPath: '/app/account/library' },
+  { path: '/app/guest/library/:trainingSetId', accountPath: '/app/account/library' },
+];
+
+function accountDestination(pathname: string): string {
+  const match = matchRoutes(guestAccountDestinations, pathname)?.[0];
+  const trainingSetId = match?.params['trainingSetId'];
+  if (trainingSetId !== undefined)
+    return `/app/account/library/${encodeURIComponent(trainingSetId)}`;
+  return match?.route.accountPath ?? '/app/account/dashboard';
 }
 
 export function GuestWorkspaceRoute() {
@@ -86,7 +99,7 @@ function GuestWorkspaceContent() {
       if (confirmationGeneration.current !== requestGeneration) return;
       await navigate(
         {
-          pathname: AccountDestination(location.pathname),
+          pathname: accountDestination(location.pathname),
           search: location.search,
           hash: location.hash,
         },

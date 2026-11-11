@@ -5,11 +5,19 @@ import { ServiceWorkerUpdateNotice } from './ServiceWorkerUpdateNotice';
 
 export function ServiceWorkerUpdates() {
   const registration = useRef<ServiceWorkerRegistration | undefined>(undefined);
+  const reloadPending = useRef(false);
   const {
     needRefresh: [updateAvailable, setUpdateAvailable],
     updateServiceWorker,
   } = useRegisterSW({
     immediate: true,
+    onNeedRefresh: () => {
+      reloadPending.current = false;
+    },
+    onNeedReload: () => {
+      reloadPending.current = true;
+      window.location.reload();
+    },
     onRegisteredSW: (_serviceWorkerUrl, value) => {
       registration.current = value;
     },
@@ -27,7 +35,11 @@ export function ServiceWorkerUpdates() {
 
   return updateAvailable ? (
     <ServiceWorkerUpdateNotice
-      onUpdate={() => updateServiceWorker(true)}
+      onUpdate={async () => {
+        // A native leave prompt can cancel the reload after the worker takes control.
+        if (reloadPending.current) window.location.reload();
+        else await updateServiceWorker(true);
+      }}
       onLater={() => setUpdateAvailable(false)}
     />
   ) : null;

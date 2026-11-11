@@ -90,6 +90,7 @@ test.describe('accessibility and responsive layout', () => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/app/guest/library');
 
+    await expect(page.getByRole('heading', { name: 'Keiko library', exact: true })).toBeVisible();
     await expectNoBlockingAxeViolations(page);
 
     const card = page

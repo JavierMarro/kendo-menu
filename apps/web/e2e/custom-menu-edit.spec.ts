@@ -12,6 +12,7 @@ import {
   CUSTOM_EDIT_NAME,
   CUSTOM_EDIT_NOTES,
 } from './custom-menu-edit-fixture';
+import { workspaceLink } from './workspace-test-helpers';
 
 const STORAGE_KEY = 'kendo-menu';
 const GUEST_SOURCE = JSON.stringify(CUSTOM_EDIT_DASHBOARD);
@@ -48,6 +49,39 @@ async function enterWorkspace(
 }
 
 for (const kind of ['guest', 'account'] as const) {
+  for (const [form, path] of [
+    ['new', 'drills/new/'],
+    ['edit', `drills/${CUSTOM_EDIT_ENTRY_ID}/edit/`],
+  ] as const) {
+    test(`${kind} ${form} builder warns before leaving a trailing-slash URL`, async ({ page }) => {
+      await enterWorkspace(page, kind);
+      const builder = `/app/${kind}/${path}`;
+      await page.goto(builder);
+      const name = page.getByLabel('Session name');
+      await name.fill('Unsubmitted menu name');
+
+      const dashboard = workspaceLink(page, 'Dashboard');
+      const warning = page.waitForEvent('dialog', { timeout: 5_000 });
+      const leaving = dashboard.click();
+      const dialog = await warning;
+      expect(dialog.message()).toMatch(/unsaved|draft/i);
+      await dialog.dismiss();
+      await leaving;
+      await expect(page).toHaveURL(builder);
+      await expect(name).toHaveValue('Unsubmitted menu name');
+
+      page.once('dialog', (dialog) => dialog.accept());
+      await dashboard.click();
+      await expect(page).toHaveURL(`/app/${kind}/dashboard`);
+      await expect(
+        page.getByRole('heading', { name: 'Your dashboard', exact: true }),
+      ).toBeVisible();
+      await page.goBack();
+      await expect(page).toHaveURL(builder);
+      await expect(name).toHaveValue(form === 'edit' ? CUSTOM_EDIT_NAME : '');
+    });
+  }
+
   test(`${kind} edits a custom menu without losing current quantities or practice notes`, async ({
     page,
   }, testInfo) => {

@@ -12,7 +12,15 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { Link, Navigate, Outlet, useBlocker, useLocation, useNavigate } from 'react-router-dom';
+import {
+  Link,
+  matchRoutes,
+  Navigate,
+  Outlet,
+  useBlocker,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom';
 
 import { PersistenceContext } from '../persistence/persistence-context';
 import { WorkspaceShell } from '../../components/WorkspaceShell';
@@ -22,7 +30,7 @@ import { createAccountDraftController } from '../../lib/account-draft';
 import { AccountRecoveryButton } from './AccountRecoveryButton';
 import { AccountSetupContext } from './account-setup-context';
 import { AccountSaveStatus, AccountUnsavedWarning } from './AccountUnsavedWarning';
-import type { WorkspaceContextValue } from '../../lib/workspace-context';
+import { isWorkspaceBuilderPath, type WorkspaceContextValue } from '../../lib/workspace-context';
 import { WorkspaceContextProvider } from '../../lib/workspace-context-provider';
 import type { ManagedAccountInitialization, ManagedAccountRecord } from '../../lib/account-api';
 
@@ -689,11 +697,7 @@ function AccountNavigationGuard({
 }) {
   useBlocker(({ currentLocation, nextLocation }) => {
     if (!shouldWarn) return false;
-    if (
-      builderDirty &&
-      (currentLocation.pathname.endsWith('/drills/new') ||
-        /^\/app\/account\/drills\/[^/]+\/edit$/u.test(currentLocation.pathname))
-    ) {
+    if (builderDirty && isWorkspaceBuilderPath('/app/account', currentLocation.pathname)) {
       return !window.confirm(
         'Your custom-session draft exists only in memory and may be lost. Leave this page?',
       );
@@ -705,7 +709,7 @@ function AccountNavigationGuard({
       if (confirmed) onEditorDraftDiscard();
       return !confirmed;
     }
-    if (nextLocation.pathname.startsWith('/app/account/')) return false;
+    if (matchRoutes([{ path: '/app/account/*' }], nextLocation) !== null) return false;
     return !window.confirm(
       'Unsaved account changes exist only in this tab’s memory and may be lost. Leave the account?',
     );
