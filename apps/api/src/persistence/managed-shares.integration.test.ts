@@ -3,12 +3,16 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TRAINING_SETS, type DashboardQuantityOverrides } from '@kendo-menu/domain';
 
+import { createApp } from '../app.js';
+import { createAccount } from '../account/account.js';
+import { createAdoption } from '../adoption/adoption.js';
 import {
   createAccountAuthorization,
   type AccountAuthorizationProof,
 } from '../auth/account-authorization.js';
 import type { ManagedIdentity } from '../auth/managed-identity.js';
 import { createTestDatabase, type TestDatabase } from '../database/test-database.js';
+import { createDashboard } from '../dashboard/dashboard.js';
 import {
   createDashboardCatalogue,
   isAccountWorkspaceId,
@@ -16,6 +20,7 @@ import {
   validateDashboardWrite,
 } from '../dashboard/validation.js';
 import type { AccountWorkspaceId, Revision } from '../dashboard/contracts.js';
+import { createShares } from '../shares/shares.js';
 
 const ORIGIN = 'https://app.example.test';
 const TIME = new Date('2026-11-09T10:00:00.000Z');
@@ -181,6 +186,119 @@ afterEach(async () => {
 });
 
 describe('managed custom-menu shares', () => {
+  it('creates and reads a saved share through the mounted HTTP routes', async () => {
+    const owner = await user();
+    const recipient = await user();
+    const menu = customMenu();
+    expect((await save(owner, '0', menu)).status).toBe('written');
+
+    const persistence = getDatabase().persistence;
+    const identities = new Map([
+      [owner.identity.subject, owner.identity],
+      [recipient.identity.subject, recipient.identity],
+    ]);
+    const authorization = createAccountAuthorization({
+      verify: (token) => {
+        const identity = identities.get(token);
+        return Promise.resolve(
+          identity === undefined ? { status: 'invalid' } : { status: 'verified', identity },
+        );
+      },
+      lookup: persistence.managedAccounts,
+      getAppOrigin: () => ORIGIN,
+      now: () => Math.floor(now.getTime() / 1_000),
+    });
+    const app = createApp({
+      account: createAccount({ authorization, persistence: persistence.managedAccounts }),
+      adoption: createAdoption({ authorization, persistence: persistence.managedCopy, catalogue }),
+      dashboard: createDashboard({ authorization, persistence: persistence.dashboards, catalogue }),
+      shares: createShares({ authorization, persistence: persistence.shares }),
+    });
+    const send = async (request: Request) => {
+      const response = await app.handle(request);
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
+      return response;
+    };
+    const create = (origin: string, body: string) =>
+      new Request(`${ORIGIN}/api/shares`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${owner.identity.subject}`,
+          'content-type': 'application/json',
+          origin,
+        },
+        body,
+      });
+
+    const deniedCreate = create('https://other.example.test', '{');
+    const denied = await send(deniedCreate);
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toEqual({ error: 'FORBIDDEN' });
+    expect(deniedCreate.bodyUsed).toBe(false);
+
+    const response = await send(
+      create(
+        ORIGIN,
+        JSON.stringify({
+          expectedAccountWorkspaceId: owner.accountId,
+          expectedRevision: '1',
+          entryId: menu.entry.id,
+        }),
+      ),
+    );
+    expect(response.status).toBe(200);
+    const created: unknown = await response.json();
+    if (
+      typeof created !== 'object' ||
+      created === null ||
+      !('token' in created) ||
+      typeof created.token !== 'string'
+    )
+      throw new Error('TEST_SHARE_RESPONSE_INVALID');
+    expect(created.token).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+    expect(created).toEqual({
+      token: created.token,
+      sourceRevision: '1',
+      accountWorkspaceId: owner.accountId,
+    });
+
+    const shareUrl = `${ORIGIN}/api/shares/${created.token}`;
+    const publicRead = await send(new Request(shareUrl));
+    expect(publicRead.status).toBe(200);
+    const snapshot = {
+      version: 1,
+      name: 'Suburi practice',
+      customIntensity: 'high-intensity-drill',
+      sections: [
+        {
+          name: 'Warm up',
+          exercises: [
+            {
+              name: 'Suburi',
+              quantities: { repetitions: 10, duration: { unit: 'minutes', value: 3 } },
+            },
+          ],
+        },
+      ],
+    };
+    expect(await publicRead.json()).toEqual({ snapshot });
+
+    const deniedRecipient = await send(new Request(`${shareUrl}/recipient`));
+    expect(deniedRecipient.status).toBe(401);
+    expect(await deniedRecipient.json()).toEqual({ error: 'UNAUTHENTICATED' });
+    const recipientRead = await send(
+      new Request(`${shareUrl}/recipient`, {
+        headers: { authorization: `Bearer ${recipient.identity.subject}` },
+      }),
+    );
+    expect(recipientRead.status).toBe(200);
+    expect(await recipientRead.json()).toEqual({
+      snapshot,
+      isSender: false,
+      accountWorkspaceId: recipient.accountId,
+    });
+  });
+
   it('creates an opaque immutable snapshot, excludes notes, and reuses identical content', async () => {
     const owner = await user();
     const menu = customMenu({ 'exercise-id': { repetitions: 20, seconds: 15 } });

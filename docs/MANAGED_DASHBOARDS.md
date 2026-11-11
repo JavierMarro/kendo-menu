@@ -18,13 +18,13 @@ Retrieve tokens through Migration A's documented token-only lifecycle; keep cred
 creation response's copy opportunity in memory. Account initialization is independent of Google's
 callback URL or whether the cloud dashboard is empty.
 
-| Operation                      | Successful response / behavior                                                                                                                        |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/account`            | `{ accountId, email, created, copyOpportunityId? }`; the opportunity appears only in the winning new-account response.                                |
-| `GET /api/account`             | `{ accountId, email }`; inspect an existing mapping without creating it or reissuing an opportunity.                                                  |
-| `GET /api/dashboard`           | Existing transport-v1 account UUID, catalogue digest, revision and complete v10 snapshot; absent dashboard has revision `"0"` and null snapshot/time. |
-| `PUT /api/dashboard`           | Existing complete envelope, expected workspace/revision and UUIDv4 request ID; acknowledged only after commit.                                        |
-| `POST /api/dashboard/adoption` | Existing strict Yes/No envelope plus `copyOpportunityId`; Yes also requires revision `"0"`, current catalogue and a complete non-empty dashboard.     |
+| Operation                      | Successful response / behavior                                                                                                                           |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/account`            | `{ accountId, email, created, copyOpportunityId? }`; the opportunity appears only in the winning new-account response.                                   |
+| `GET /api/account`             | `{ accountId, email }`; inspect an existing mapping without creating it or reissuing an opportunity.                                                     |
+| `GET /api/dashboard`           | Transport-v1 account UUID, catalogue digest, revision and the stored v10 or v11 snapshot. An absent dashboard has revision `"0"` and null snapshot/time. |
+| `PUT /api/dashboard`           | Existing complete envelope, expected workspace/revision and UUIDv4 request ID; acknowledged only after commit.                                           |
+| `POST /api/dashboard/adoption` | Existing strict Yes/No envelope plus `copyOpportunityId`; Yes also requires revision `"0"`, current catalogue and a complete non-empty dashboard.        |
 
 `email` is nullable verified metadata. `accountId` is the internal UUID used as the dashboard
 `expectedAccountWorkspaceId` mismatch guard; the server derives ownership from verified managed
@@ -173,10 +173,10 @@ do not erase it or establish whole-branch release readiness.
 
 ## Sharing compatibility extension
 
-The sharing branch adds strict v11 dashboard snapshots containing optional `receivedViaShare: true`
+Sharing uses strict v11 dashboard snapshots containing optional `receivedViaShare: true`
 on custom entries. Reads retain the actual stored v10/v11 version and canonical representation;
 new clients save v11. A new v10 write against stored v11 returns
-`422 UNSUPPORTED_DASHBOARD_VERSION`. A matching retained request receipt is replayed first.
+`409 DASHBOARD_VERSION_UPGRADE_REQUIRED`. A matching retained request receipt is replayed first.
 There is no bulk row rewrite or revision bump on read. Guest-copy Yes accepts either strictly
 validated format and never rewrites the guest source. Current branch verification is recorded in
 [CUSTOM_MENU_SHARING_PROGRESS.md](CUSTOM_MENU_SHARING_PROGRESS.md).

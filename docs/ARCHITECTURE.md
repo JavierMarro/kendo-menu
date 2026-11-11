@@ -52,6 +52,7 @@ These are different relationships:
 ```text
 Code imports:  apps/web ──→ packages/store ──→ packages/domain
                    └─────────────────────────→ packages/domain
+               root api/ ──→ apps/api ───────→ packages/domain
 
 Curated data: default-drills.json ──→ domain validation/adaptation ──→ web library UI
                                                   └─→ store snapshots/persistence ──→ dashboard UI
@@ -114,14 +115,14 @@ partialized state, and a merge that accepts only validated current state. Sync a
 storage are supported by the corresponding store factories.
 
 [`packages/store/src/persistence.ts`](../packages/store/src/persistence.ts) treats persisted JSON as
-untrusted. The current persisted version is **10**. It parses an envelope, validates bounded state,
-migrates older versions in order, and serializes the same v11 representation used by storage writes.
+untrusted. It parses an envelope, validates bounded state, migrates older versions in order and
+serializes the current **v11** representation for storage writes.
 
 The 2026-09-02 hardening is part of this boundary:
 
-- Domain-shape limits for arrays, records, strings, activity count, and nesting depth are centralized
-  in `TRAINING_DATA_LIMITS`; persistence separately owns the 2 MiB raw serialized-JSON ceiling. Both
-  boundaries reject oversized input before unbounded work.
+- `TRAINING_DATA_LIMITS` defines the bounds for arrays, records, strings, activity count and nesting
+  depth. Local persistence caps serialized JSON at 2,097,152 UTF-16 code units. The account
+  dashboard write envelope has a separate cap of 2,097,152 UTF-8 bytes.
 - Public validators, parsers, classifiers, and storage inspection are exception-safe at hostile
   getter/proxy, malformed-input, and browser-availability boundaries; migration and action APIs
   reject invalid input explicitly rather than returning partial state.
@@ -220,8 +221,8 @@ independent dashboards and whole-dashboard atomic writes while retiring applicat
 copy recovery. The older auth/synchronization ADRs describe superseded decisions.
 
 Elysia application behavior lives in `apps/api`, with a standalone Node listener and a minimal
-root Vercel adapter. `createApp({ account, dashboard, adoption })` handles standard Requests without
-starting a listener. `createRuntimeServices()` composes managed authorization and all three
+root Vercel adapter. `createApp({ account, dashboard, adoption, shares })` handles standard Requests
+without starting a listener. `createRuntimeServices()` composes managed authorization and all four
 services around a single lazy PostgreSQL provider. Only root Vercel composition attaches the pool
 through its lifecycle helper. PostgreSQL clients and transactions remain behind persistence ports.
 Explicit migration commands live under `apps/api/src/database`, and reviewed SQL, snapshots and
@@ -278,9 +279,10 @@ hides content and fences late operations; only explicit same-account verificatio
 current tab's original retained draft. Sign-out, identity change and confirmed exit dispose it.
 No legacy account LocalStorage/IndexedDB cache is read, deleted or uploaded.
 
-Guest Web Locks/read-back and LocalStorage recovery remain. The only auth flow persistence is the
-finite credential-free callback marker; credentials, identities, drafts and copy opportunities stay
-out of JavaScript-readable persistence. D uses C's validated in-memory creation handoff for a
+Guest Web Locks/read-back and LocalStorage recovery remain. The per-tab callback marker stores the
+flow and expiry. A separate expiring per-tab marker stores the selected share token for return after
+sign-in. Authentication credentials, identities, drafts and copy opportunities stay out of
+JavaScript-readable persistence. D uses C's validated in-memory creation handoff for a
 separate guarded setup route. Eligibility also requires the matching verified account, B's eligible
 cloud dashboard and a complete valid non-empty guest snapshot within the full request byte limit.
 Yes rechecks the exact source under the guest lock; changes refresh the offer before dispatch.
