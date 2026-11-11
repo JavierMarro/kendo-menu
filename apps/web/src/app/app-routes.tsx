@@ -5,6 +5,7 @@
  */
 import type { RouteObject } from 'react-router-dom';
 
+import { workspaceBuilderPaths } from '../lib/workspace-context';
 import { RouteErrorRethrow } from '../features/errors/RouteErrorRethrow';
 import { CreateDrillPage, EditDrillPage } from '../features/custom-sets/CreateDrillPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
@@ -63,8 +64,8 @@ export const appRoutes: RouteObject[] = [
               { path: 'library', element: <LibraryPage /> },
               { path: 'library/:trainingSetId', element: <TrainingSetDetailPage /> },
               { path: 'mitori-room', element: <MitoriRoomPage /> },
-              { path: 'drills/new', element: <CreateDrillPage /> },
-              { path: 'drills/:entryId/edit', element: <EditDrillPage /> },
+              { path: workspaceBuilderPaths.create, element: <CreateDrillPage /> },
+              { path: workspaceBuilderPaths.edit, element: <EditDrillPage /> },
               { path: '*', element: <NotFoundPage /> },
             ],
           },
@@ -79,8 +80,8 @@ export const appRoutes: RouteObject[] = [
               { path: 'library', element: <LibraryPage /> },
               { path: 'library/:trainingSetId', element: <TrainingSetDetailPage /> },
               { path: 'mitori-room', element: <MitoriRoomPage /> },
-              { path: 'drills/new', element: <CreateDrillPage /> },
-              { path: 'drills/:entryId/edit', element: <EditDrillPage /> },
+              { path: workspaceBuilderPaths.create, element: <CreateDrillPage /> },
+              { path: workspaceBuilderPaths.edit, element: <EditDrillPage /> },
               { path: '*', element: <NotFoundPage /> },
             ],
           },

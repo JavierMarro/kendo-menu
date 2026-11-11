@@ -7,6 +7,7 @@ import type { CreatedMenuShare } from './account-api';
  * the account and guest providers.
  */
 import { createContext, useContext } from 'react';
+import { matchRoutes } from 'react-router-dom';
 
 export type WorkspaceKind = 'guest' | 'account';
 
@@ -48,4 +49,24 @@ export function workspacePath(
   page: 'dashboard' | 'library' | 'drills/new' | `drills/${string}/edit` | `library/${string}`,
 ): string {
   return `${basePath}/${page}`;
+}
+
+export const workspaceBuilderPaths = {
+  create: 'drills/new',
+  edit: 'drills/:entryId/edit',
+} as const;
+
+export function isWorkspaceBuilderPath(
+  basePath: WorkspaceContextValue['basePath'],
+  pathname: string,
+): boolean {
+  return (
+    matchRoutes(
+      [
+        { path: workspacePath(basePath, workspaceBuilderPaths.create) },
+        { path: workspacePath(basePath, workspaceBuilderPaths.edit) },
+      ],
+      pathname,
+    ) !== null
+  );
 }

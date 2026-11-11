@@ -12,7 +12,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { useBlocker } from 'react-router-dom';
+import { matchRoutes, useBlocker } from 'react-router-dom';
 
 import {
   classifyTrainingStorageValue,
@@ -36,6 +36,7 @@ import {
 import { createWorkspaceCoordinator } from '../../lib/workspace-coordination';
 import { TrainingStoreProvider } from '../../lib/training-store-provider';
 import { useDataRouterMode } from '../../lib/router-context';
+import { isWorkspaceBuilderPath } from '../../lib/workspace-context';
 
 type TrainingStoreHook = ReturnType<typeof createTrainingStore>;
 
@@ -484,12 +485,10 @@ function GuestNavigationGuard({
   readonly builderDirty: boolean;
 }) {
   useBlocker(({ currentLocation, nextLocation }) => {
-    const leavingGuest =
-      nextLocation.pathname !== '/app/guest' && !nextLocation.pathname.startsWith('/app/guest/');
+    const leavingGuest = matchRoutes([{ path: '/app/guest/*' }], nextLocation) === null;
     const leavingDirtyBuilder =
       builderDirty &&
-      (currentLocation.pathname === '/app/guest/drills/new' ||
-        /^\/app\/guest\/drills\/[^/]+\/edit$/u.test(currentLocation.pathname)) &&
+      isWorkspaceBuilderPath('/app/guest', currentLocation.pathname) &&
       nextLocation.pathname !== currentLocation.pathname;
     const confirmGuestData = shouldWarnForGuestData && leavingGuest;
     if (!confirmGuestData && !leavingDirtyBuilder) return false;

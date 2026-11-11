@@ -14,6 +14,7 @@ polish; inspect a shared route or shell only where it affects core state, access
 - [Pass 3: Account dashboard load, edit, save and replay](30-account-dashboard.md)
 - [Pass 4: One-time guest copy and decline](40-guest-copy.md)
 - [Pass 5: Saved-menu sharing and recipient import](50-sharing.md)
+- [Pass 6: Core routes, accessibility and browser/PWA behavior](60-browser.md)
 
 ## Baseline
 
@@ -67,7 +68,7 @@ path. A change under `docs/audit/` alone does not invalidate application evidenc
 | 3    | Account dashboard load, edit, save and replay       | Done    |
 | 4    | One-time guest copy and decline                     | Done    |
 | 5    | Share creation, public preview and recipient import | Done    |
-| 6    | Core routes, accessibility and PWA/browser behavior | Planned |
+| 6    | Core routes, accessibility and PWA/browser behavior | Done    |
 | 7    | Architecture, process, tests, CI and static hosting | Planned |
 | 8    | Interface review and consolidated remediation       | Planned |
 
@@ -162,17 +163,47 @@ release handoff (KM-05-004). On Node 24.21.0 and pnpm 11.22.0, `pnpm check:web`,
 A focused 63-test rerun passed after adding coverage for a late denial from a previous account.
 The Pass 5 report and probe document the pre-fix baseline.
 
+Pass 6 compared clean HEAD `cf2d14dc0c3e7be2ad722f88d00b32e49386e0c0` with the pinned baseline.
+It included the committed Pass 5 fixes and found no untracked implementation at intake. The
+[report](60-browser.md) traces route and workspace ownership, keyboard/focus and mobile behavior,
+clipboard and Web Share, cache boundaries, installation and worker activation. Chromium reproduced
+unsaved builder loss on accepted trailing-slash routes (KM-06-001, P2) and an unresponsive Update
+action after canceling the first reload (KM-06-002, P3). The first scoped preview run had 72 passes,
+three expected platform skips and one desktop axe failure (KM-06-003, P3). Four isolated repetitions
+and four additional account accessibility/responsive cases passed. All 61 scoped unit tests and
+seven separate production PWA tests passed. The [local probes](browser-probes.mjs) inspected real
+CacheStorage and used synthetic account and share data. Native install and share, other browser
+engines and hosted behavior remain unverified. Peer-tab **Later** semantics remain a product
+question. Landing, side pages, Mitori content, database and hosting/process work were excluded.
+
+The Pass 6 fixes use React Router matching for builder departure and guest-to-account entry
+(KM-06-001), allow a reload retry after worker activation and native cancellation (KM-06-002),
+and wait for the routed library heading before the first axe scan (KM-06-003). Independent review
+found no blocking issues. The standalone probe preserves pre-fix evidence. Regression coverage is in
+[builder navigation](../../apps/web/e2e/custom-menu-edit.spec.ts),
+[verified entry](../../apps/web/e2e/managed-account.spec.ts),
+[PWA lifecycle](../../apps/web/e2e/pwa.spec.ts), and
+[library accessibility](../../apps/web/e2e/accessibility.spec.ts).
+
+Remediation verification used Node 24.21.0 and pnpm 11.22.0. `pnpm check:web` passed (402 tests),
+along with scoped `pnpm test:e2e` (36) and `pnpm test:e2e:preview` (87 with three platform skips).
+The separate `pnpm test:e2e:pwa` suite passed all eight cases, including canceling the native
+reload warning, retaining the draft and retrying the reload. Three additional desktop and mobile
+preview repetitions of the library axe cases passed (18). The earlier contrast failure's cause
+remains unconfirmed. Native device and hosted behavior remain unverified.
+
 ## Exact next-pass prompt
 
-> Run only Pass 6 of the KendoMenu core audit in docs/audit/02-audit-plan.md. Start from
+> Run only Pass 7 of the KendoMenu core audit in docs/audit/02-audit-plan.md. Start from
 > docs/audit/README.md, check baseline drift against de4f84fcc356edcdd5b58a53bedd5030fb90830d,
-> and include relevant tracked and untracked changes. Audit core guest, account and sharing
-> navigation, accessibility and mobile operation, PWA offline caching, installation and service
-> worker updates. Check workspace entry and Back, keyboard and focus, status and error states,
-> dirty drafts and update/reload, and exclusion of account, auth and shared payloads from caches.
-> Inspect relevant clipboard, Web Share and other browser boundaries. Run scoped local checks
-> sequentially with Node 24 and pnpm 11.22.0, including a separate PWA suite and production-preview
-> cases where relevant. Record unavailable checks and what remains unproven. Write
-> docs/audit/60-browser.md with evidence and stable finding IDs and update the audit index with
+> and include relevant tracked and untracked changes. Audit architecture, ownership and dependency
+> direction across the core interfaces from Passes 1–6. Review repository standards, test quality
+> and discovery, CI triggers and required verification, runtime and frozen installs, dependency
+> updates, guarded PostgreSQL setup, and development, preview and PWA coverage. Verify packaged API
+> and static hosting configuration against current documentation and distinguish tracked settings
+> from owner-reported or externally verified release behavior. Run necessary checks sequentially
+> with Node 24 and pnpm 11.22.0. Use only the guarded local kendomenu_test harness for database
+> checks. Record exact outcomes, unavailable checks and what remains unproven. Write
+> docs/audit/70-process.md with evidence and stable finding IDs and update the audit index with
 > the next-pass instruction. Do not change app code, tests, dependencies, configuration or
-> migrations. Do not begin Pass 7.
+> migrations, or access live infrastructure. Do not begin Pass 8.

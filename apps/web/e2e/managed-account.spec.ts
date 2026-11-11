@@ -292,7 +292,13 @@ test('a verified visitor is redirected from guest routes to the matching account
     /\/app\/account\/library\?drill=international-dojo-2-hour-session#source-note$/,
   );
   await expect(page.getByRole('button', { name: 'Add to dashboard', exact: true })).toBeVisible();
-  await page.goto('/app/guest/drills/new');
+  await page.goto('/app/guest/library/');
+  await expect(page).toHaveURL('/app/account/library');
+  await expect(page.getByRole('heading', { name: 'Keiko library', exact: true })).toBeVisible();
+  await page.goto('/app/guest/library/international-dojo-2-hour-session/');
+  await expect(page).toHaveURL('/app/account/library?drill=international-dojo-2-hour-session');
+  await expect(page.getByRole('dialog', { name: 'International dojo menu' })).toBeVisible();
+  await page.goto('/app/guest/drills/new/');
   await expect(page).toHaveURL(/\/app\/account\/drills\/new$/);
   await expect(page.getByRole('heading', { name: 'Create a training session' })).toBeVisible();
   expectCredentialFreeAccountTransport(harness);

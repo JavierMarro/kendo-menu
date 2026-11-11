@@ -11,6 +11,7 @@ import {
 } from './custom-menu-edit-fixture';
 
 const STORAGE_KEY = 'kendo-menu';
+const WORKER_PATH = new URL('../dist/sw.js', import.meta.url);
 const OFFLINE_PATHS = ['/app', '/app/guest/dashboard', '/app/guest/library', '/privacy'] as const;
 const OFFLINE_STORAGE = {
   state: {
@@ -36,6 +37,18 @@ async function establishServiceWorkerControl(page: Page): Promise<void> {
   });
   await page.reload();
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+}
+
+async function withWorkerUpdate(page: Page, verify: () => Promise<void>): Promise<void> {
+  const originalWorker = await readFile(WORKER_PATH, 'utf8');
+  try {
+    // A byte change simulates a deployment using the real generated worker and update lifecycle.
+    await writeFile(WORKER_PATH, `${originalWorker}\n// PWA update lifecycle test\n`);
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await verify();
+  } finally {
+    await writeFile(WORKER_PATH, originalWorker);
+  }
 }
 
 test.describe('production PWA shell', () => {
@@ -90,14 +103,7 @@ test.describe('production PWA shell', () => {
       key: STORAGE_KEY,
       value: OFFLINE_STORAGE_RAW,
     });
-    const workerPath = new URL('../dist/sw.js', import.meta.url);
-    const originalWorker = await readFile(workerPath, 'utf8');
-    try {
-      // A byte change simulates a deployment using the real generated worker and update lifecycle.
-      await writeFile(workerPath, `${originalWorker}\n// PWA update lifecycle test\n`);
-      await page.evaluate(() => {
-        document.dispatchEvent(new Event('visibilitychange'));
-      });
+    await withWorkerUpdate(page, async () => {
       const prompt = page.getByRole('region', { name: 'Update available' });
       await expect(prompt).toBeVisible();
       await page.setViewportSize({ width: 320, height: 720 });
@@ -126,9 +132,45 @@ test.describe('production PWA shell', () => {
       expect(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)).toBe(
         OFFLINE_STORAGE_RAW,
       );
-    } finally {
-      await writeFile(workerPath, originalWorker);
-    }
+    });
+  });
+
+  test('retries an update reload after keeping an unsaved builder draft', async ({ page }) => {
+    await page.goto('/app/guest/drills/new');
+    await establishServiceWorkerControl(page);
+    const notice = page.getByRole('complementary', { name: 'Cookie notice' });
+    if (await notice.isVisible()) await notice.getByRole('button', { name: 'Got it' }).click();
+    const name = page.getByLabel('Session name');
+    await name.click();
+    await name.fill('Unsaved update draft');
+
+    await withWorkerUpdate(page, async () => {
+      const update = page
+        .getByRole('region', { name: 'Update available' })
+        .getByRole('button', { name: 'Update', exact: true });
+      await expect(update).toBeVisible();
+      const firstWarning = page.waitForEvent('dialog', { timeout: 5_000 });
+      const firstClick = update.click();
+      const keepDraft = await firstWarning;
+      expect(keepDraft.type()).toBe('beforeunload');
+      await keepDraft.dismiss();
+      await firstClick;
+      await expect(name).toHaveValue('Unsaved update draft');
+      await page.waitForFunction(
+        async () => (await navigator.serviceWorker.ready).waiting === null,
+      );
+
+      const secondWarning = page.waitForEvent('dialog', { timeout: 5_000 });
+      const secondClick = update.click();
+      const discardDraft = await secondWarning;
+      expect(discardDraft.type()).toBe('beforeunload');
+      const reloaded = page.waitForEvent('domcontentloaded');
+      await discardDraft.accept();
+      await secondClick;
+      await reloaded;
+      await expect(update).toBeHidden();
+      await expect(name).toHaveValue('');
+    });
   });
 
   test('serves the required manifest fields and PNG icon sizes', async ({ page, request }) => {
