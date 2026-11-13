@@ -48,6 +48,7 @@ export default tseslint.config(
         },
       ],
       '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-non-null-assertion': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
         {
@@ -65,7 +66,7 @@ export default tseslint.config(
           },
         },
       ],
-      'no-console': 'warn',
+      'no-console': 'error',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },

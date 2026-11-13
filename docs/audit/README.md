@@ -15,6 +15,7 @@ polish; inspect a shared route or shell only where it affects core state, access
 - [Pass 4: One-time guest copy and decline](40-guest-copy.md)
 - [Pass 5: Saved-menu sharing and recipient import](50-sharing.md)
 - [Pass 6: Core routes, accessibility and browser/PWA behavior](60-browser.md)
+- [Pass 7: Architecture, process, CI, dependencies and static hosting](70-process.md)
 
 ## Baseline
 
@@ -69,7 +70,7 @@ path. A change under `docs/audit/` alone does not invalidate application evidenc
 | 4    | One-time guest copy and decline                     | Done    |
 | 5    | Share creation, public preview and recipient import | Done    |
 | 6    | Core routes, accessibility and PWA/browser behavior | Done    |
-| 7    | Architecture, process, tests, CI and static hosting | Planned |
+| 7    | Architecture, process, tests, CI and static hosting | Done    |
 | 8    | Interface review and consolidated remediation       | Planned |
 
 Pass 0 inspected the source entry points, workspace owners, shared state and validation,
@@ -192,18 +193,47 @@ reload warning, retaining the draft and retrying the reload. Three additional de
 preview repetitions of the library axe cases passed (18). The earlier contrast failure's cause
 remains unconfirmed. Native device and hosted behavior remain unverified.
 
+Pass 7 compared clean HEAD `78b0459a50698abb3f40b0f9f16423208219ab0a` with the pinned baseline.
+Its contents matched cached `origin/main` at `c6d50d6`, the PR #56 merge. There were 51 changed
+paths outside `docs/audit/` and no non-ignored untracked paths at intake. The [report](70-process.md)
+maps core package and state ownership, CI and discovery, guarded SQL, lint policy, dependency
+resolution and packaged Vercel wiring. `pnpm check` passed 745 package and two packaged API cases.
+Migration metadata, 76 guarded PostgreSQL cases, the composed sharing probe, 20 scoped cases in
+each of development and preview, and eight production PWA cases passed. The missing-URL guard
+returned exit 1. An isolated offline frozen install stopped on absent registry metadata after
+accepting lockfile consistency. Earlier exact-head CI completed the online install and full gate.
+
+The confirmed gaps concern mounted share API coverage (KM-07-001, P2), lint enforcement
+(KM-07-002, P3), and architecture documentation (KM-07-003, P3). Tracked application dependency
+monitoring is an optional improvement (KM-07-004, P3). No live infrastructure or advisory
+lookup was used. Current hosting settings, production sharing migration/runtime role and live
+journeys remain owner verification. No application fixes were made.
+
+After Pass 7, the guarded integration suite gained a `createApp` test for share creation, public
+preview and authenticated recipient reads (KM-07-001). It checks exact note-free responses,
+no-store headers and denial before body parsing. TypeScript lint now rejects non-null assertions
+and console diagnostics (KM-07-002). The architecture guide describes guest v11, the two size
+units, all four API services and both per-tab markers (KM-07-003). The managed dashboard handoff
+also records v10/v11 reads and the 409 response for a new v10 write over v11 (KM-03-004).
+
+Independent review passed. On Node 24.21.0 and pnpm 11.22.0, `pnpm check` passed 745 package and
+two packaged cases, `pnpm db:check` passed, and the [guarded harness](70-process.md#local-verification-record)
+passed 77 tests. The stdin lint probe returned exit 1 with both intended errors. The changes affect
+tests, lint and documentation. The Pass 7 browser evidence still applies. KM-07-004 remains optional.
+
 ## Exact next-pass prompt
 
-> Run only Pass 7 of the KendoMenu core audit in docs/audit/02-audit-plan.md. Start from
+> Run only Pass 8 of the KendoMenu core audit in docs/audit/02-audit-plan.md. Start from
 > docs/audit/README.md, check baseline drift against de4f84fcc356edcdd5b58a53bedd5030fb90830d,
-> and include relevant tracked and untracked changes. Audit architecture, ownership and dependency
-> direction across the core interfaces from Passes 1–6. Review repository standards, test quality
-> and discovery, CI triggers and required verification, runtime and frozen installs, dependency
-> updates, guarded PostgreSQL setup, and development, preview and PWA coverage. Verify packaged API
-> and static hosting configuration against current documentation and distinguish tracked settings
-> from owner-reported or externally verified release behavior. Run necessary checks sequentially
-> with Node 24 and pnpm 11.22.0. Use only the guarded local kendomenu_test harness for database
-> checks. Record exact outcomes, unavailable checks and what remains unproven. Write
-> docs/audit/70-process.md with evidence and stable finding IDs and update the audit index with
-> the next-pass instruction. Do not change app code, tests, dependencies, configuration or
-> migrations, or access live infrastructure. Do not begin Pass 8.
+> and include relevant tracked and untracked changes. Recheck interfaces across Passes 1–7,
+> including guest write/recovery into sign-in and copy, account identity during Save and sharing,
+> recipient import into v11 Save and re-share, app updates across client versions, and hosting,
+> migration and public preview. Verify coverage of all significant core modules and endpoint
+> measurements. Reconcile findings against approved decisions, deduplicate by root cause, and
+> distinguish fixed findings, confirmed open findings, transition/release gates, optional changes,
+> and unresolved or externally unverified areas. Obtain independent review for material security or
+> data-integrity conclusions. Rerun only stale or disputed checks sequentially with Node 24 and
+> pnpm 11.22.0. Use only the guarded local kendomenu_test harness for database checks. Write
+> docs/audit/99-remediation-plan.md with evidence limits, priorities, ordered fixes, dependencies and
+> acceptance tests. Update the audit index with final coverage and limits. Do not implement fixes,
+> change app code, tests, dependencies, configuration or migrations, or access live infrastructure.
