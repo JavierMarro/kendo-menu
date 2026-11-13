@@ -31,7 +31,7 @@ export default {
     const url = new URL(request.url);
     if (
       (request.method === 'GET' || request.method === 'HEAD') &&
-      /^\/app\/shared\/[A-Za-z0-9_-]{43}\/?$/u.test(url.pathname)
+      /^\/(?:share|app\/shared)\/[A-Za-z0-9_-]{43}\/?$/u.test(url.pathname)
     ) {
       return sharedMenuDocument(request.method);
     }

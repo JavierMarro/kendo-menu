@@ -215,12 +215,13 @@ flow and the optional CLI commands.
    the immediately previous production deployment on Hobby and eligible previously production-
    aliased deployments on Pro or Enterprise. A Preview deployment that never served production is
    not an Instant Rollback target.
-4. Before selecting a target, compare the persistence versions written by the incident revision and
-   accepted by the candidate. This revision uses v10. A deployment predating v10 may not read a
-   browser that has already migrated. Verify compatibility from the candidate source/tests and a
-   representative non-sensitive fixture in an isolated profile; a clean-profile smoke test alone
-   does not prove existing-data compatibility. If compatibility is unknown or fails, choose a
-   compatible target or a forward fix rather than resetting user storage.
+4. Before selecting a target, compare the dashboard versions written by the incident revision with
+   the versions the candidate can read. The current guest writer and account Save use v11. A
+   pre-sharing deployment can reject both v11 LocalStorage and v11 account rows. Test the candidate
+   frontend and API with disposable existing v11 guest data and a v11 account dashboard containing
+   a received menu. Check a tab still running the old app against the current API separately. A
+   clean-profile smoke test cannot establish existing-data compatibility. If compatibility is
+   unknown or fails, preserve stored data and choose a compatible target or a forward fix.
 5. If the last known-good revision is unclear, stop and have the owner compare the candidate and
    bad deployment logs or use Vercel's documented `vercel inspect`, `vercel logs`, and `vercel bisect`
    workflow. Do not guess based only on a deployment name.
@@ -274,13 +275,14 @@ limitations; do not change hosting settings to make an old revision satisfy a ne
       surface matches the target revision, including noindex where implemented; record that the hosting rewrite may still return
       HTTP 200 for this client-side soft 404.
 - [ ] Fetch the hashed JavaScript and CSS referenced by the rolled-back HTML, the responsive image
-      sources (or the older background assets), `manifest.webmanifest`, `sw.js`, and `registerSW.js`.
+      sources (or the older background assets), `manifest.webmanifest` and `sw.js`. Check a separate
+      `registerSW.js` only for candidates that emit it.
       Check `robots.txt` and `sitemap.xml` when included in the target revision. Confirm successful
       responses and that the PWA assets belong to the selected deployment.
 - [ ] In a clean profile, add a built-in session, adjust one quantity, add a dashboard/activity
       note, reload, and confirm the values survive. In a profile with existing data, export a
-      backup before testing and confirm that the current v10 LocalStorage payload remains readable;
-      never clear a user's data to make a rollback pass.
+      backup before testing and confirm that the current v11 guest and account fixtures remain readable.
+      Preserve the received menu marker. Never clear a user's data to make a rollback pass.
 - [ ] Revisit an installed or previously visited PWA session. Confirm the prompt-based service
       worker can update through its normal acceptance prompt and the cached app shell opens after a
       prior visit. Confirm the running revision after activation; an old worker can temporarily
@@ -290,8 +292,8 @@ limitations; do not change hosting settings to make an old revision satisfy a ne
       environment-variable, domain, project, or production-branch setting was changed as a side
       effect of the rollback.
 
-Rollback affects deployed files only. It does not change a browser's origin-specific LocalStorage,
-including a v10 migration already performed by a user's browser.
+Rollback changes the serving deployment. Browser LocalStorage and PostgreSQL retain the versions
+already written by the newer application.
 
 ## Static paths, `.git/config`, and client soft 404s
 
@@ -354,6 +356,12 @@ Then sign in with a test account, save a custom menu, create its sharing link, a
 a signed-out browser. Confirm the menu preview loads and omits any notes. Fetch the share URL as
 HTML. Before JavaScript runs, check for the Open Graph title “Check my custom menu out!” and verify
 that the token is absent from the metadata.
+
+New links use `/share/:token` so a browser still controlled by a pre-sharing worker fetches the
+preview and share sign-in return from the server. With an existing browser profile, open a newly
+copied link, sign in, Add, and Save. Confirm guest data is unchanged. An older `/app/shared/:token`
+link may still show Page not found while the old worker controls that browser. Ask the sender to
+copy a new link, or save any open work, accept the site's **Update** prompt and reopen the old link.
 
 ## Post-deploy smoke checklist
 

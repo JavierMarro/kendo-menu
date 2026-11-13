@@ -60,7 +60,7 @@ describe('Share it action', () => {
     expect(screen.getByText(/This shares your last saved version/)).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Create sharing link' }));
     expect(await screen.findByRole('textbox', { name: 'Sharing link' })).toHaveValue(
-      `${window.location.origin}/app/shared/${'s'.repeat(43)}`,
+      `${window.location.origin}/share/${'s'.repeat(43)}`,
     );
     expect(screen.getByRole('textbox', { name: 'Sharing link' })).toHaveFocus();
     expect(createMenuShare).toHaveBeenCalledWith(entry.id, expect.any(AbortSignal));

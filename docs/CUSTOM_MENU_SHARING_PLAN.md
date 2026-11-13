@@ -134,8 +134,9 @@ copy already added remains saveable if its source link subsequently disappears.
 
 ## 5. Browser journey
 
-Use public `/app/shared/:token` for preview and account child `/app/account/shared/:token` for the
-same preview plus Add. Keep the account page under the existing provider so opening it from a dirty
+Generate public links at `/share/:token`, outside the offline navigation fallback. Keep existing
+`/app/shared/:token` links valid. Use `/app/account/shared/:token` for the same preview plus Add.
+Keep the account page under the existing provider so opening it from a dirty
 dashboard preserves the store. Both use a dedicated read-only renderer of the share DTO; do not
 mount guest persistence or expose note inputs. Reuse existing presentation components where they
 fit without making all training components understand sharing.
@@ -146,9 +147,10 @@ access control: the link remains readable and forwardable by anyone who has it.
 
 Use a short-lived, bounded per-tab continuation containing only a validated share token and expiry,
 separate from the existing callback-flow marker. Never store credentials, account identity, draft
-content or arbitrary URLs. Its only destination is the known account shared-menu route. Preserve
-the fixed callback exchange, then resolve the continuation after verified account initialization
-and any guest-copy setup. Update all setup completion/skip paths, not just the ordinary sign-in path.
+content or arbitrary URLs. Share sign-in uses the fixed `/share/auth/callback` exchange, followed
+by `/share/:token/add`, which enters the guarded account shared-menu route in-app. These document
+paths bypass the pre-sharing worker's `/app` navigation fallback. Resume the recipient route after
+verified account initialization and any guest-copy setup.
 Do not automatically import on return. Clear the continuation on consumption, cancellation, sign-out
 or expiry; missing/blocked storage falls back honestly to reopening the original link. It is navigation
 state, not a durable guest-copy recovery mechanism.

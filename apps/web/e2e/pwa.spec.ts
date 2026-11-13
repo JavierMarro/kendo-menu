@@ -70,16 +70,19 @@ test.describe('production PWA shell', () => {
         },
       }),
     );
-    await page.goto(`/app/shared/${token}`);
+    await page.goto('/app');
     await establishServiceWorkerControl(page);
+    const navigation = await page.goto(`/share/${token}`);
+    expect(navigation?.fromServiceWorker()).toBe(false);
     await expect(page.getByRole('heading', { name: 'Online shared keiko' })).toBeVisible();
     const cachedShare = await page.evaluate(async () => {
       for (const key of await caches.keys()) {
         const cache = await caches.open(key);
         if (
-          (await cache.keys()).some((request) =>
-            new URL(request.url).pathname.startsWith('/api/shares/'),
-          )
+          (await cache.keys()).some((request) => {
+            const path = new URL(request.url).pathname;
+            return path.startsWith('/api/shares/') || path.startsWith('/share/');
+          })
         )
           return true;
       }
@@ -88,9 +91,17 @@ test.describe('production PWA shell', () => {
     expect(cachedShare).toBe(false);
     await page.unroute(endpoint);
     await context.setOffline(true);
+    await expect(page.reload()).rejects.toThrow();
+    await context.setOffline(false);
+  });
+
+  test('legacy share links still show an unavailable state offline', async ({ page, context }) => {
+    const token = 's'.repeat(43);
+    await page.goto(`/app/shared/${token}`);
+    await establishServiceWorkerControl(page);
+    await context.setOffline(true);
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Shared menu unavailable' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Online shared keiko' })).toHaveCount(0);
     await context.setOffline(false);
   });
 

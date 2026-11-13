@@ -5,6 +5,7 @@
  */
 import {
   APPLICATION_CALLBACK_PATH,
+  SHARE_CALLBACK_PATH,
   AUTH_VERIFIER_PARAMETER,
   callbackDestination,
   clearAuthReturnMarker,
@@ -12,14 +13,14 @@ import {
   sanitizeAuthUrl,
 } from './lib/auth-return';
 
-import { clearShareReturnMarker } from './lib/share-return';
+import { clearShareReturnMarker, readShareReturnMarker } from './lib/share-return';
 
 const pathname = window.location.pathname;
 const resolution = resolveAuthReturn(pathname, window.location.search);
 // Keep callback verifiers only until their fixed callback entry owns the exchange.
 sanitizeAuthUrl({ preserveVerifier: resolution.kind !== 'ordinary' });
 
-if (pathname === APPLICATION_CALLBACK_PATH) {
+if (pathname === APPLICATION_CALLBACK_PATH || pathname === SHARE_CALLBACK_PATH) {
   void import('./features/auth-callback/entry');
 } else if (resolution.kind === 'cancelled') {
   const destination = callbackDestination(resolution.flow);
@@ -29,7 +30,10 @@ if (pathname === APPLICATION_CALLBACK_PATH) {
   window.location.replace(`${cleanUrl.pathname}`);
 } else if (resolution.kind === 'callback') {
   if (pathname === '/') {
-    const destination = new URL(callbackDestination(resolution.flow), window.location.origin);
+    const destination = new URL(
+      callbackDestination(resolution.flow, readShareReturnMarker() !== null),
+      window.location.origin,
+    );
     destination.searchParams.set(AUTH_VERIFIER_PARAMETER, resolution.verifier);
     window.location.replace(`${destination.pathname}${destination.search}`);
   } else if (resolution.flow === 'application') {

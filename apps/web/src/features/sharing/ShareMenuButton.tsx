@@ -1,8 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { DashboardEntry } from '@kendo-menu/domain';
+import { generatePath } from 'react-router-dom';
 
 import { DialogShell } from '../../components/DialogShell';
 import { AccountApiError } from '../../lib/account-api';
+import { PUBLIC_SHARE_ROUTE } from '../../lib/share-return';
 import { useWorkspace } from '../../lib/workspace-context';
 
 export function ShareMenuButton({ entry }: { readonly entry: DashboardEntry }) {
@@ -43,7 +45,10 @@ export function ShareMenuButton({ entry }: { readonly entry: DashboardEntry }) {
     try {
       const result = await workspace.createMenuShare(entry.id, controller.signal);
       if (!controller.signal.aborted) {
-        setLink(new URL(`/app/shared/${result.token}`, window.location.origin).href);
+        setLink(
+          new URL(generatePath(PUBLIC_SHARE_ROUTE, { token: result.token }), window.location.origin)
+            .href,
+        );
       }
     } catch (error) {
       if (controller.signal.aborted) return;

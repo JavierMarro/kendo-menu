@@ -59,6 +59,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,svg,jpg,jpeg,avif,webp}'],
         globIgnores: ['**/kendo-menu-social.jpg', '**/shared-menu.html'],
         navigateFallback: 'index.html',
+        // Public shares and their sign-in return use /share so even older /app workers let them through.
         navigateFallbackAllowlist: [/^\/(?:app(?:\/|$)|cookies(?:\/|$)|privacy(?:\/|$)|$)/],
         cleanupOutdatedCaches: true,
       },

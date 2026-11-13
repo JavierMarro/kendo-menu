@@ -8,6 +8,7 @@ import '../../styles.css';
 
 import {
   APPLICATION_CALLBACK_PATH,
+  SHARE_CALLBACK_PATH,
   clearAuthReturnMarker,
   resolveAuthReturn,
 } from '../../lib/auth-return';
@@ -22,13 +23,17 @@ function clearContinuation() {
 }
 
 const root = document.getElementById('root');
+const callbackPath =
+  window.location.pathname === SHARE_CALLBACK_PATH
+    ? SHARE_CALLBACK_PATH
+    : APPLICATION_CALLBACK_PATH;
 if (root !== null) {
   const reactRoot = createRoot(root);
   const resolution = resolveAuthReturn(window.location.pathname, window.location.search);
   if (resolution.kind !== 'callback' || resolution.flow !== 'application') {
     if (resolution.kind === 'invalid' || resolution.kind === 'cancelled') {
       clearContinuation();
-      window.history.replaceState(null, '', APPLICATION_CALLBACK_PATH);
+      window.history.replaceState(null, '', callbackPath);
     }
     reactRoot.render(<AuthCallbackFailure onHome={clearContinuation} retryAvailable={false} />);
   } else {
@@ -39,7 +44,7 @@ if (root !== null) {
         : undefined;
     if (client === undefined) {
       clearContinuation();
-      window.history.replaceState(null, '', APPLICATION_CALLBACK_PATH);
+      window.history.replaceState(null, '', callbackPath);
       reactRoot.render(<AuthCallbackFailure onHome={clearContinuation} retryAvailable={false} />);
     } else {
       const controller = new AbortController();
@@ -72,7 +77,7 @@ if (root !== null) {
           renderFailure();
         } else if (result.status === 'unavailable') {
           clearContinuation();
-          window.history.replaceState(null, '', APPLICATION_CALLBACK_PATH);
+          window.history.replaceState(null, '', callbackPath);
           renderFailure();
         }
       };

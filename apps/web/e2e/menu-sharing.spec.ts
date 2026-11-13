@@ -41,7 +41,7 @@ async function dismissNotice(page: Page) {
 
 async function installShareRoutes(page: Page) {
   // Mirror the hosting rewrite while keeping the real shared URL in the browser.
-  await page.route(`**/app/shared/${TOKEN}`, async (route) => {
+  await page.route(new RegExp(`/(?:share|app/shared)/${TOKEN}$`), async (route) => {
     const url = new URL('/shared-menu.html', route.request().url()).href;
     await route.fulfill({ response: await route.fetch({ url }) });
   });
@@ -66,7 +66,7 @@ for (const setup of ['existing', 'decline', 'copy'] as const) {
     await page.goto('/app');
     const guestBytes = JSON.stringify(CUSTOM_EDIT_DASHBOARD);
     await page.evaluate((value) => localStorage.setItem('kendo-menu', value), guestBytes);
-    await page.goto(`/app/shared/${TOKEN}`);
+    await page.goto(`/share/${TOKEN}`);
     await dismissNotice(page);
     await expect(page.getByRole('heading', { name: SHARED.name, exact: true })).toBeVisible();
     const preview = page.getByRole('article', { name: SHARED.name });
@@ -164,7 +164,7 @@ test('only account custom cards offer sharing and keyboard dismissal returns foc
   await expect(page.getByText(/This shares your last saved version/)).toBeVisible();
   await page.getByRole('button', { name: 'Create sharing link', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Sharing link' })).toHaveValue(
-    new RegExp(`/app/shared/${TOKEN}$`),
+    new RegExp(`/share/${TOKEN}$`),
   );
   await expect(page.getByRole('textbox', { name: 'Sharing link' })).toBeFocused();
   expect(creates).toEqual([
@@ -197,12 +197,39 @@ test('signed-in visitors can preview even when their dashboard is unavailable', 
   expect(harness.apiCalls.filter((call) => call.path === '/api/dashboard')).toHaveLength(0);
 });
 
-test('signed-out recipient routes return to the public preview', async ({ page }) => {
-  await SyntheticManagedHarness.install(page, { initiallySignedIn: false });
+for (const suffix of ['', '/']) {
+  test(`signed-out recipient routes return to the public preview (${suffix ? 'trailing slash' : 'canonical'})`, async ({
+    page,
+  }) => {
+    await SyntheticManagedHarness.install(page, { initiallySignedIn: false });
+    await installShareRoutes(page);
+    await page.goto(`/app/account/shared/${TOKEN}${suffix}`);
+    await expect(page).toHaveURL(`/share/${TOKEN}`);
+    await expect(page.getByRole('heading', { name: SHARED.name, exact: true })).toBeVisible();
+  });
+}
+
+test('a trailing-slash recipient route resumes after new-account setup', async ({ page }) => {
+  const harness = await SyntheticManagedHarness.install(page, {
+    initiallySignedIn: true,
+    initiallyUninitialized: true,
+  });
   await installShareRoutes(page);
-  await page.goto(`/app/account/shared/${TOKEN}`);
-  await expect(page).toHaveURL(`/app/shared/${TOKEN}`);
-  await expect(page.getByRole('heading', { name: SHARED.name, exact: true })).toBeVisible();
+  await page.goto('/app');
+  await page.evaluate(
+    (value) => localStorage.setItem('kendo-menu', value),
+    JSON.stringify(CUSTOM_EDIT_DASHBOARD),
+  );
+  await page.goto(`/app/account/shared/${TOKEN}/`);
+  await expect(
+    page.getByRole('heading', { name: 'Copy your guest menus to your account?' }),
+  ).toBeVisible();
+  await dismissNotice(page);
+  await page.getByRole('button', { name: 'No, thanks', exact: true }).click();
+  await page.getByRole('button', { name: 'Continue to account', exact: true }).click();
+  await expect(page).toHaveURL(`/app/account/shared/${TOKEN}`);
+  await expect(page.getByRole('button', { name: 'Add to my dashboard' })).toBeEnabled();
+  expect(harness.apiCalls.filter((call) => call.method === 'PUT')).toHaveLength(0);
 });
 
 for (const failure of ['unauthenticated', 'different workspace'] as const) {

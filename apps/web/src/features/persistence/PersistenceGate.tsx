@@ -758,8 +758,9 @@ function PersistenceRecovery({
           >
             <h2 id="reset-title">Reset local data?</h2>
             <p id="reset-description">
-              This permanently removes dashboard selections, quantity values, notes, and custom
-              training sessions from this browser. Built-in sessions will remain available.
+              This clears your saved dashboard, including quantities, notes, and custom menus. If an
+              Undo button is still visible, it can restore only the last menu you removed. Built-in
+              sessions will remain available.
             </p>
             <div className="dialog-actions">
               <button

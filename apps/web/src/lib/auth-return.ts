@@ -9,6 +9,7 @@ export const AUTH_RETURN_KEY = 'kendomenu:auth-return-v1';
 export const AUTH_RETURN_TTL_MS = 15 * 60 * 1000;
 export const PROOF_CALLBACK_PATH = '/managed-auth-proof.html';
 export const APPLICATION_CALLBACK_PATH = '/app/auth/callback';
+export const SHARE_CALLBACK_PATH = '/share/auth/callback';
 export const AUTH_VERIFIER_PARAMETER = 'neon_auth_session_verifier';
 export const AUTH_POPUP_PARAMETER = 'neon_popup';
 export const AUTH_POPUP_CALLBACK_PARAMETER = 'neon_popup_callback';
@@ -145,7 +146,7 @@ export function resolveAuthReturn(
   const explicitFlow: AuthFlow | null =
     pathname === PROOF_CALLBACK_PATH
       ? 'proof'
-      : pathname === APPLICATION_CALLBACK_PATH
+      : pathname === APPLICATION_CALLBACK_PATH || pathname === SHARE_CALLBACK_PATH
         ? 'application'
         : null;
 
@@ -199,6 +200,7 @@ export function resolveAuthReturn(
     : { kind: 'callback', flow: marker.flow, verifier };
 }
 
-export function callbackDestination(flow: AuthFlow): string {
-  return flow === 'proof' ? PROOF_CALLBACK_PATH : APPLICATION_CALLBACK_PATH;
+export function callbackDestination(flow: AuthFlow, sharing = false): string {
+  if (flow === 'proof') return PROOF_CALLBACK_PATH;
+  return sharing ? SHARE_CALLBACK_PATH : APPLICATION_CALLBACK_PATH;
 }
