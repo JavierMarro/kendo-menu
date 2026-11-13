@@ -6,6 +6,11 @@
 import type { RouteObject } from 'react-router-dom';
 
 import { workspaceBuilderPaths } from '../lib/workspace-context';
+import {
+  PUBLIC_SHARE_ROUTE,
+  RECIPIENT_SHARE_ROUTE,
+  SHARE_CONTINUATION_ROUTE,
+} from '../lib/share-return';
 import { RouteErrorRethrow } from '../features/errors/RouteErrorRethrow';
 import { CreateDrillPage, EditDrillPage } from '../features/custom-sets/CreateDrillPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
@@ -33,6 +38,7 @@ import {
   LandingRedirect,
   LegacyWorkspaceRedirect,
   WorkspaceIndex,
+  ShareContinuation,
 } from './app-route-components';
 
 export const appRoutes: RouteObject[] = [
@@ -76,7 +82,7 @@ export const appRoutes: RouteObject[] = [
               { index: true, element: <AccountWorkspaceIndex /> },
               { path: 'setup', element: <AccountSetupPage /> },
               { path: 'dashboard', element: <DashboardPage /> },
-              { path: 'shared/:token', element: <SharedMenuPage recipient /> },
+              { path: RECIPIENT_SHARE_ROUTE, element: <SharedMenuPage recipient /> },
               { path: 'library', element: <LibraryPage /> },
               { path: 'library/:trainingSetId', element: <TrainingSetDetailPage /> },
               { path: 'mitori-room', element: <MitoriRoomPage /> },
@@ -90,6 +96,12 @@ export const appRoutes: RouteObject[] = [
           { path: '*', element: <NotFoundPage /> },
         ],
       },
+      {
+        path: PUBLIC_SHARE_ROUTE,
+        element: <AppLayout />,
+        children: [{ index: true, element: <SharedMenuPage /> }],
+      },
+      { path: SHARE_CONTINUATION_ROUTE, element: <ShareContinuation /> },
       {
         path: '/privacy',
         element: <AppLayout />,

@@ -17,6 +17,10 @@
       "destination": "/api/[...path]"
     },
     {
+      "source": "/share/([A-Za-z0-9_-]{43})",
+      "destination": "/api/[...path]"
+    },
+    {
       "source": "/app/shared/([A-Za-z0-9_-]{43})",
       "destination": "/api/[...path]"
     },

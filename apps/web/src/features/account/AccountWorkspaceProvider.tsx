@@ -14,11 +14,13 @@ import {
 } from 'react';
 import {
   Link,
+  generatePath,
   matchRoutes,
   Navigate,
   Outlet,
   useBlocker,
   useLocation,
+  useMatch,
   useNavigate,
 } from 'react-router-dom';
 
@@ -34,7 +36,12 @@ import { isWorkspaceBuilderPath, type WorkspaceContextValue } from '../../lib/wo
 import { WorkspaceContextProvider } from '../../lib/workspace-context-provider';
 import type { ManagedAccountInitialization, ManagedAccountRecord } from '../../lib/account-api';
 
-import { isShareToken } from '../../lib/share-return';
+import {
+  isShareToken,
+  PUBLIC_SHARE_ROUTE,
+  RECIPIENT_SHARE_ROUTE,
+  shareReturnPath,
+} from '../../lib/share-return';
 
 type AccountDraftController = ReturnType<typeof createAccountDraftController>;
 type AccountDraftSnapshot = ReturnType<AccountDraftController['getSnapshot']>;
@@ -49,7 +56,7 @@ function LoadingStatus({ children }: { readonly children: ReactNode }) {
 }
 
 export function AccountWorkspaceRoute() {
-  const location = useLocation();
+  const shareToken = useMatch(RECIPIENT_SHARE_ROUTE)?.params.token;
   const { api, identity, verifyIdentity, setVerifiedAccount } = useManagedAuth();
   const [account, setAccount] = useState<ManagedAccountRecord | null>(null);
   const [initialization, setInitialization] = useState<ManagedAccountInitialization | undefined>();
@@ -131,10 +138,9 @@ export function AccountWorkspaceRoute() {
   }
   if (identity.status === 'signed-out') {
     if (sawSignOut) return <Navigate replace to="/app" />;
-    const shareToken = location.pathname.startsWith('/app/account/shared/')
-      ? location.pathname.slice('/app/account/shared/'.length)
-      : null;
-    if (isShareToken(shareToken)) return <Navigate replace to={`/app/shared/${shareToken}`} />;
+    if (isShareToken(shareToken)) {
+      return <Navigate replace to={generatePath(PUBLIC_SHARE_ROUTE, { token: shareToken })} />;
+    }
     if (account !== null) return <Navigate replace to="/app" />;
     return <Navigate replace to="/app/sign-in" />;
   }
@@ -479,6 +485,7 @@ function LoadedAccountWorkspaceView({
     </div>
   );
 
+  const setupShareToken = useMatch(RECIPIENT_SHARE_ROUTE)?.params.token;
   useEffect(() => {
     const leftSetup =
       previousPath.current === '/app/account/setup' && location.pathname !== '/app/account/setup';
@@ -493,12 +500,10 @@ function LoadedAccountWorkspaceView({
       return;
     }
     if (shouldOpenSetup) {
-      if (/^\/app\/account\/shared\/[A-Za-z0-9_-]{43}$/u.test(location.pathname)) {
-        setupReturnPath.current = location.pathname;
-      }
+      setupReturnPath.current = shareReturnPath(setupShareToken ?? '');
       void navigateToSetup();
     }
-  }, [controller, location.pathname, navigate, navigateToSetup, shouldOpenSetup]);
+  }, [controller, location.pathname, navigate, navigateToSetup, setupShareToken, shouldOpenSetup]);
 
   const setupValue = useMemo(
     () => ({

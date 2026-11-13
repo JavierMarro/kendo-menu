@@ -1,6 +1,9 @@
 /** Per-tab, short-lived continuation for the one shared menu the visitor chose to add. */
 export const SHARE_RETURN_KEY = 'kendomenu:share-return-v1';
 export const SHARE_RETURN_TTL_MS = 15 * 60 * 1000;
+export const PUBLIC_SHARE_ROUTE = '/share/:token';
+export const SHARE_CONTINUATION_ROUTE = '/share/:token/add';
+export const RECIPIENT_SHARE_ROUTE = '/app/account/shared/:token';
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/u;
 
 export interface ShareReturnMarker {

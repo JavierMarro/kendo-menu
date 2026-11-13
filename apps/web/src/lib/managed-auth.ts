@@ -4,6 +4,7 @@
  */
 import { createAuthClient, isAuthError } from '@neondatabase/auth';
 import { BetterAuthVanillaAdapter } from '@neondatabase/auth/vanilla';
+import { generatePath } from 'react-router-dom';
 
 import {
   AUTH_VERIFIER_PARAMETER,
@@ -11,10 +12,15 @@ import {
   clearAuthReturnMarker,
   resolveAuthReturn,
   sanitizeAuthUrl,
+  SHARE_CALLBACK_PATH,
   writeAuthReturnMarker,
 } from './auth-return';
 import type { AuthFlow } from './auth-return';
-import { clearShareReturnMarker, consumeShareReturnMarker } from './share-return';
+import {
+  clearShareReturnMarker,
+  readShareReturnMarker,
+  SHARE_CONTINUATION_ROUTE,
+} from './share-return';
 
 export type ManagedTokenResult =
   | { readonly status: 'token'; readonly token: string }
@@ -51,8 +57,11 @@ export function createManagedAuthClient(
     return undefined;
   }
 
+  const sharingCallback =
+    typeof window !== 'undefined' && window.location.pathname === SHARE_CALLBACK_PATH;
+  const fixedCallbackPath = callbackDestination(flow, sharingCallback);
   const currentResolution =
-    typeof window === 'undefined' || window.location.pathname !== callbackDestination(flow)
+    typeof window === 'undefined' || window.location.pathname !== fixedCallbackPath
       ? undefined
       : resolveAuthReturn(window.location.pathname, window.location.search);
   sanitizeAuthUrl({
@@ -123,7 +132,10 @@ export function createManagedAuthClient(
       try {
         const result = await auth.signIn.social({
           provider: 'google',
-          callbackURL: new URL(callbackDestination(flow), window.location.origin).href,
+          callbackURL: new URL(
+            callbackDestination(flow, readShareReturnMarker() !== null),
+            window.location.origin,
+          ).href,
         });
         if (result.error !== null) {
           failAttempt();
@@ -161,7 +173,7 @@ export function createManagedAuthClient(
       if (signal.aborted) return { status: 'unavailable' };
       // Only this client's fixed callback path and a single verifier may enter session exchange.
       const resolution = resolveAuthReturn(window.location.pathname, window.location.search);
-      const isFixedCallback = window.location.pathname === callbackDestination(flow);
+      const isFixedCallback = window.location.pathname === fixedCallbackPath;
       sanitizeAuthUrl({
         preserveVerifier:
           isFixedCallback && resolution.kind === 'callback' && resolution.flow === flow,
@@ -183,10 +195,15 @@ export function createManagedAuthClient(
       if (reloadRequested) return { status: 'reloading' };
       try {
         clearAuthReturnMarker();
+        const shareToken = flow === 'application' ? readShareReturnMarker()?.token : undefined;
+        if (flow === 'application') clearShareReturnMarker();
         const destination =
           flow === 'proof'
-            ? callbackDestination(flow)
-            : (consumeShareReturnMarker() ?? '/app/account/dashboard');
+            ? fixedCallbackPath
+            : shareToken === undefined
+              ? '/app/account/dashboard'
+              : // Load the current bundle outside the legacy worker's /app navigation fallback.
+                generatePath(SHARE_CONTINUATION_ROUTE, { token: shareToken });
         (navigation.replaceDocument ?? ((path: string) => window.location.replace(path)))(
           destination,
         );

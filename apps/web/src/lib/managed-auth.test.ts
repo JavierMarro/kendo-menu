@@ -103,6 +103,17 @@ describe('managed Google sign-in initiation', () => {
     expect(authMocks.social).toHaveBeenCalledTimes(2);
   });
 
+  it('requests the fixed share callback when a valid share continuation exists', async () => {
+    const client = createManagedAuthClient('https://synthetic-auth.example.invalid/neon/auth');
+    if (client === undefined) throw new Error('Expected a configured synthetic auth client.');
+    expect(writeShareReturnMarker('s'.repeat(43))).toBe(true);
+    await expect(client.signIn()).resolves.toBe(true);
+    expect(authMocks.social).toHaveBeenCalledWith({
+      provider: 'google',
+      callbackURL: new URL('/share/auth/callback', window.location.origin).href,
+    });
+  });
+
   it('releases an attempt after the browser reports canceled navigation', async () => {
     const client = createManagedAuthClient(
       'https://synthetic-auth.example.invalid/neon/auth',

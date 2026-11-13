@@ -38,7 +38,7 @@ deletion, migration or upload.
 | Dashboard loading fails               | No guessed menus or unvalidated store; explicit retry. A previously loaded draft survives a failed reload. Failed identity verification hides it.                                                                 |
 | Ordinary Save                         | Freeze one complete account/revision/catalogue/request-ID envelope; no background upload. A committed matching acknowledgement advances the revision and baseline for that snapshot only.                         |
 | Edits during Save                     | The submitted snapshot is immutable; later edits remain in the live draft and remain dirty after acknowledgement.                                                                                                 |
-| Ambiguous Save response               | Keep the original request unresolved; Retry the same Save resubmits the identical ID/envelope. Download or explicitly reload after a discard warning.                                                             |
+| Ambiguous Save response               | **Retry same save** resubmits the identical request. Download the draft when available. Refreshing the browser may discard the draft and pending request, with a best-effort leave warning.                       |
 | Revision conflict                     | Preserve draft and original revision; offer download and explicit reload. No automatic overwrite or merge; ordinary Save stays blocked until reload.                                                              |
 | Offline / storage service unavailable | Retain this tab's draft, show read-only content only while identity remains verified, and offer honest retry/download. Reconnection does not save or re-enable editing automatically.                             |
 | 401 / unresolved identity             | Hide content immediately, abort and fence late results. Explicit verification of the same account may reveal this tab's original draft and unresolved Save; no dashboard replacement occurs during that recovery. |
@@ -95,7 +95,8 @@ limited to `proof` or `application` and a 15-minute lifetime. It contains no ret
 identity, draft or opportunity. An absent, malformed, expired or mismatched root marker fails
 closed in isolated callback UI.
 
-Destinations are fixed: proof `/managed-auth-proof.html`, application `/app/auth/callback`.
+Destinations are fixed. The development proof uses `/managed-auth-proof.html`, normal application
+sign-in uses `/app/auth/callback`, and a pending share uses `/share/auth/callback`.
 Explicit callback paths select only their fixed flow; a present marker must match and validate.
 The proof remains loopback development-only and never initializes a KendoMenu account. Application
 bootstrap uses A's single fresh-document `getSession()` exchange, then full document replacement

@@ -11,6 +11,7 @@ import {
   Outlet,
   useLocation,
   useNavigationType,
+  useParams,
   type Location,
 } from 'react-router-dom';
 
@@ -25,6 +26,7 @@ import {
 import { updateRouteMetadata } from '../lib/route-metadata';
 import { scheduleGuestPageview } from '../lib/guest-pageview';
 import { useManagedAuth } from '../lib/managed-auth-context';
+import { shareReturnPath } from '../lib/share-return';
 
 const routeTitles: Readonly<Record<string, string>> = {
   '/app': 'Plan your keiko',
@@ -130,6 +132,11 @@ export function AppLayout() {
   const isWorkspaceRoute = /^\/app\/(guest|account)(?:\/|$)/u.test(location.pathname);
   if (isWorkspaceRoute || location.pathname === '/app/sign-in') return <Outlet />;
   return <AppShell />;
+}
+
+export function ShareContinuation() {
+  const { token } = useParams();
+  return <Navigate replace to={shareReturnPath(token ?? '') ?? '/app'} />;
 }
 
 class ScrollManager extends Component<ScrollManagerProps> {

@@ -126,6 +126,7 @@ function SharedMenuBody({ recipient = false }: { readonly recipient?: boolean })
     recipient && identity.status === 'verified' ? identity.account.accountId : null;
   const [loadResult, setLoadResult] = useState<ShareLoadResult | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const activeLoad = useRef<AbortController | null>(null);
   const [adding, setAdding] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const signInGeneration = useRef(0);
@@ -149,17 +150,21 @@ function SharedMenuBody({ recipient = false }: { readonly recipient?: boolean })
 
   // Retire an old read before a late denial can invalidate the new account or route.
   useLayoutEffect(() => {
+    return () => activeLoad.current?.abort();
+  }, [api, invalidateIdentity, loadAttempt, recipient, recipientAccountId, token]);
+
+  useEffect(() => {
     if (token === null || (recipient && recipientAccountId === null)) return;
     const controller = new AbortController();
-    let active = true;
-    // Avoid starting an SDK token request for StrictMode’s immediately discarded effect.
+    activeLoad.current = controller;
+    // Let StrictMode discard its first passive effect before starting the request.
     const load = Promise.resolve().then(() => {
-      if (!active) return;
+      if (controller.signal.aborted) return;
       return recipient && recipientAccountId !== null
         ? api
             .getSharedMenuForRecipient(recipientAccountId, token, controller.signal)
             .then((result) => {
-              if (!active) return;
+              if (controller.signal.aborted) return;
               const snapshot = parseSharedMenuV1(result.snapshot);
               if (snapshot === null || result.accountWorkspaceId !== recipientAccountId) {
                 setLoadResult({
@@ -178,7 +183,7 @@ function SharedMenuBody({ recipient = false }: { readonly recipient?: boolean })
               });
             })
         : api.getSharedMenu(token, controller.signal).then((result) => {
-            if (!active) return;
+            if (controller.signal.aborted) return;
             const snapshot = parseSharedMenuV1(result.snapshot);
             if (snapshot === null) {
               setLoadResult({ token, accountId: null, status: 'unavailable' });
@@ -188,7 +193,7 @@ function SharedMenuBody({ recipient = false }: { readonly recipient?: boolean })
           });
     });
     void load.catch((error: unknown) => {
-      if (!active) return;
+      if (controller.signal.aborted) return;
       if (
         recipient &&
         error instanceof AccountApiError &&
@@ -206,8 +211,8 @@ function SharedMenuBody({ recipient = false }: { readonly recipient?: boolean })
       });
     });
     return () => {
-      active = false;
       controller.abort();
+      if (activeLoad.current === controller) activeLoad.current = null;
     };
   }, [api, invalidateIdentity, loadAttempt, recipient, recipientAccountId, token]);
 

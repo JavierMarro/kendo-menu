@@ -57,3 +57,8 @@ records the original local acceptance. Subsequent local preview, packaging and g
 checks also passed on the merged code. Follow the [sharing release check](runbooks/DEPLOYMENT.md#sharing-release-check)
 for owner verification of production migration `0004_solid_zaladane.sql`, hosted delivery and
 live Google/Neon/HTTPS behavior.
+
+The owner reported using sharing successfully in production on 2026-11-13. They also reported
+returning visitors opening a shared link from WhatsApp and seeing the app's route-not-found page.
+A private window loaded the menu. This is owner-reported journey evidence. It leaves the affected
+browser's exact service-worker version and production configuration unverified.

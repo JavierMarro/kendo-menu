@@ -16,6 +16,7 @@ polish; inspect a shared route or shell only where it affects core state, access
 - [Pass 5: Saved-menu sharing and recipient import](50-sharing.md)
 - [Pass 6: Core routes, accessibility and browser/PWA behavior](60-browser.md)
 - [Pass 7: Architecture, process, CI, dependencies and static hosting](70-process.md)
+- [Pass 8: Cross-interface review and remediation plan](99-remediation-plan.md)
 
 ## Baseline
 
@@ -61,17 +62,17 @@ path. A change under `docs/audit/` alone does not invalidate application evidenc
 
 ## Pass status
 
-| Pass | Scope                                               | Status  |
-| ---- | --------------------------------------------------- | ------- |
-| 0    | Baseline, current flows, documentation and test map | Done    |
-| 1    | Guest menu state, LocalStorage and recovery         | Done    |
-| 2    | Managed sign-in, identity and authorization         | Done    |
-| 3    | Account dashboard load, edit, save and replay       | Done    |
-| 4    | One-time guest copy and decline                     | Done    |
-| 5    | Share creation, public preview and recipient import | Done    |
-| 6    | Core routes, accessibility and PWA/browser behavior | Done    |
-| 7    | Architecture, process, tests, CI and static hosting | Done    |
-| 8    | Interface review and consolidated remediation       | Planned |
+| Pass | Scope                                               | Status |
+| ---- | --------------------------------------------------- | ------ |
+| 0    | Baseline, current flows, documentation and test map | Done   |
+| 1    | Guest menu state, LocalStorage and recovery         | Done   |
+| 2    | Managed sign-in, identity and authorization         | Done   |
+| 3    | Account dashboard load, edit, save and replay       | Done   |
+| 4    | One-time guest copy and decline                     | Done   |
+| 5    | Share creation, public preview and recipient import | Done   |
+| 6    | Core routes, accessibility and PWA/browser behavior | Done   |
+| 7    | Architecture, process, tests, CI and static hosting | Done   |
+| 8    | Interface review and consolidated remediation       | Done   |
 
 Pass 0 inspected the source entry points, workspace owners, shared state and validation,
 server routes and storage adapters, relevant docs and test discovery wiring linked in the three
@@ -221,19 +222,62 @@ two packaged cases, `pnpm db:check` passed, and the [guarded harness](70-process
 passed 77 tests. The stdin lint probe returned exit 1 with both intended errors. The changes affect
 tests, lint and documentation. The Pass 7 browser evidence still applies. KM-07-004 remains optional.
 
-## Exact next-pass prompt
+The Pass 7 changes merged in [PR #57](https://github.com/JavierMarro/kendo-menu/pull/57) at
+`f5d68dd9b47a8961acdb8b1e88e6631a9e4024eb`. The release gate passed on retry after an Ubuntu
+package-mirror DNS failure prevented the first attempt from installing Chromium.
 
-> Run only Pass 8 of the KendoMenu core audit in docs/audit/02-audit-plan.md. Start from
-> docs/audit/README.md, check baseline drift against de4f84fcc356edcdd5b58a53bedd5030fb90830d,
-> and include relevant tracked and untracked changes. Recheck interfaces across Passes 1–7,
-> including guest write/recovery into sign-in and copy, account identity during Save and sharing,
-> recipient import into v11 Save and re-share, app updates across client versions, and hosting,
-> migration and public preview. Verify coverage of all significant core modules and endpoint
-> measurements. Reconcile findings against approved decisions, deduplicate by root cause, and
-> distinguish fixed findings, confirmed open findings, transition/release gates, optional changes,
-> and unresolved or externally unverified areas. Obtain independent review for material security or
-> data-integrity conclusions. Rerun only stale or disputed checks sequentially with Node 24 and
-> pnpm 11.22.0. Use only the guarded local kendomenu_test harness for database checks. Write
-> docs/audit/99-remediation-plan.md with evidence limits, priorities, ordered fixes, dependencies and
-> acceptance tests. Update the audit index with final coverage and limits. Do not implement fixes,
-> change app code, tests, dependencies, configuration or migrations, or access live infrastructure.
+## Final coverage and limits
+
+Pass 8 reviewed clean HEAD `e03a00fde682252bb672e53e87f943a47fbcfc58`, with the same contents
+as the PR #57 merge. Compared with the original baseline, 55 paths changed outside the audit
+directory and there were no untracked implementation files. Reconciled all significant core
+modules and endpoint measurements. Independent review covered guest handoff and copy, account
+identity fences, share import and v11 Save/replay, and old-client and server rollback behavior.
+Thirty scoped preview cases and two rebuilt package checks passed, along with the guarded
+sharing probe. Four local recipient cases confirmed the canonical versus trailing-slash outcome.
+
+The [remediation plan](99-remediation-plan.md) distinguishes the fixed findings from four open
+items. The rollback guide misidentifies the current persisted format (KM-08-001, P2). A recipient
+URL with a trailing slash loses its continuation (KM-08-002, P3). Reset wording and the ambiguous
+Save handoff remain P3 discrepancies (KM-01-002 and KM-03-002). There are no open P0 or P1 findings
+within the reviewed scope. Dependency cadence and the peer-tab **Later** policy remain separate.
+
+The audit is complete. The plan contains ordered remediation and acceptance checks. A mixed-build
+browser rehearsal, native platform checks, and hosted Google/Neon/Vercel behavior remain
+unverified. Owner release gates include migration 0004, role access, deployed routing and hosted
+share metadata. Landing, side pages and Mitori remain outside scope. Pass 8 made audit-only changes.
+
+## Post-audit remediation
+
+- KM-08-001 updates the rollback runbook for v11 guest and account fixtures and candidate-specific
+  worker assets. KM-08-002 uses React Router matching for signed-out and setup recipient returns.
+  KM-01-002 preserves per-menu Undo and explains its scope. KM-03-002 documents exact Save retry,
+  draft download and browser refresh behavior.
+- The owner reported successful production sharing and a route-not-found page for returning
+  visitors on a previously used browser profile. A private window loaded the menu. The local
+  [two-build probe](legacy-share-worker-probe.mjs) reproduced the screenshot using the real
+  pre-sharing worker and bundle from `8f0a895`, with synthetic auth and share data.
+- New links use `/share/:token` so old workers' `/app` fallback lets the browser fetch the current
+  preview. The share-specific `/share/auth/callback` and `/share/:token/add` document also load
+  from the network before in-app navigation to the guarded recipient route. Existing share tokens
+  and hosted legacy links remain valid. Previously sent links may still need a worker update or
+  a newly copied link. No guest storage clear or forced worker activation is required.
+- The two-build probe loaded a new link, completed synthetic sign-in, added the menu and sent one
+  explicit v11 Save with received provenance. It reopened the old link after accepting **Update**.
+  Guest LocalStorage bytes stayed identical throughout. To repeat the probe, build the pre-sharing
+  revision `8f0a89541bb1692cbf132bddded31aa57d4fc5c3` and the current tree with
+  `VITE_NEON_AUTH_URL=https://synthetic-auth.example.invalid/neon/auth`, then run the following with
+  the old build's `dist` directory. The probe switches the served builds on one loopback origin.
+
+  ```sh
+  node --import ./apps/api/node_modules/tsx/dist/loader.mjs docs/audit/legacy-share-worker-probe.mjs "$legacy_web_dist"
+  ```
+
+- The scoped development suite passed all 44 cases after moving the shared-menu read to a passive
+  effect. The exact public request counts stay covered. Layout cleanup still aborts a pending read
+  at route or account change so a stale denial cannot invalidate the current identity.
+- Node 24.21.0 and pnpm 11.22.0 passed `pnpm check` (746 package and two packaged cases), scoped
+  production preview (58 cases), and the separate PWA suite (9). Independent review found no
+  blocking issues. The owner's prior production use is recorded in the
+  [sharing handoff](../CUSTOM_MENU_SHARING_PROGRESS.md#release-boundary). The new route and
+  callback still need a hosted iPhone/WhatsApp and Google sign-in smoke check after release.

@@ -26,6 +26,7 @@ await test('Vercel rewrites API requests and share documents before the SPA fall
   assert.deepEqual(configuration.rewrites, [
     { source: '/api', destination: '/api/[...path]' },
     { source: '/api/(.*)', destination: '/api/[...path]' },
+    { source: '/share/([A-Za-z0-9_-]{43})', destination: '/api/[...path]' },
     { source: '/app/shared/([A-Za-z0-9_-]{43})', destination: '/api/[...path]' },
     { source: '/(.*)', destination: '/index.html' },
   ]);
@@ -107,7 +108,7 @@ await test('native Node loads the packaged Vercel adapter without workspace Type
           const proof = await handler.fetch(new Request('https://preview.example/api/dev/managed-identity'));
           assert.equal(proof.status, 404);
           const shareToken = 's'.repeat(43);
-          const sharePath = '/app/shared/' + shareToken;
+          const sharePath = '/share/' + shareToken;
           const shared = await handler.fetch(new Request('http://preview.example' + sharePath + '?tracking=discarded'));
           assert.equal(shared.status, 200);
           assert.ok(shared.headers.get('content-type')?.startsWith('text/html'));
@@ -122,6 +123,10 @@ await test('native Node loads the packaged Vercel adapter without workspace Type
           const sharedHead = await handler.fetch(new Request('https://preview.example' + sharePath, { method: 'HEAD' }));
           assert.equal(sharedHead.status, 200);
           assert.equal(await sharedHead.text(), '');
+          const legacy = await handler.fetch(new Request('https://preview.example/app/shared/' + shareToken));
+          assert.equal(legacy.status, 200);
+          assert.equal(legacy.headers.get('cache-control'), 'private, no-store');
+          assert.equal(await legacy.text(), html);
           assert.equal(pools, 0);
         `,
       ],
