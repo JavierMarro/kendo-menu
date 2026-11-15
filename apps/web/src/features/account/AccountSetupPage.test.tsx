@@ -88,7 +88,7 @@ describe('one-time account setup screen', () => {
     ).toBeVisible();
     expect(screen.getByText('2 menu entries are ready to copy.')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Copy menus' }));
-    expect(await screen.findByText('Your guest menus were copied to your account.')).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Kendo menus copied' })).toBeVisible();
     expect(value.submit).toHaveBeenCalledWith(YES_REQUEST);
     fireEvent.click(screen.getByRole('button', { name: 'Continue to account' }));
     expect(await screen.findByText('Account dashboard')).toBeVisible();

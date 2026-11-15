@@ -244,7 +244,7 @@ export function AccountSetupPage() {
     setPhase(outcome);
     setMessage(
       outcome === 'accepted'
-        ? 'Your guest menus were copied to your account.'
+        ? 'Your locally saved training menus are now in your online account. They’re still on this device, too.'
         : outcome === 'declined'
           ? 'You chose not to copy your guest menus.'
           : 'We could not confirm whether your choice completed. The one-time opportunity may be lost. Your guest menus remain on this device.',
@@ -294,7 +294,7 @@ export function AccountSetupPage() {
       >
         <h1>
           {phase === 'accepted'
-            ? 'Guest menus copied'
+            ? 'Kendo menus copied'
             : phase === 'declined'
               ? 'Choice confirmed'
               : phase === 'abandoned'
@@ -316,7 +316,7 @@ export function AccountSetupPage() {
     <section className="account-route-state">
       <h1>Copy your guest menus to your account?</h1>
       <p>
-        {entryCount} menu {entryCount === 1 ? 'entry' : 'entries'} are ready to copy.
+        {entryCount} menu {entryCount === 1 ? 'entry is' : 'entries are'} ready to copy.
       </p>
       <ul>
         <li>“Yes” creates an independent online copy.</li>

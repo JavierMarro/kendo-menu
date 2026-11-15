@@ -161,7 +161,7 @@ test('only account custom cards offer sharing and keyboard dismissal returns foc
     .getByRole('button', { name: 'Share it!' });
   await trigger.focus();
   await trigger.press('Enter');
-  await expect(page.getByText(/This shares your last saved version/)).toBeVisible();
+  await expect(page.getByText(/The link opens the last version you saved/)).toBeVisible();
   await page.getByRole('button', { name: 'Create sharing link', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Sharing link' })).toHaveValue(
     new RegExp(`/share/${TOKEN}$`),

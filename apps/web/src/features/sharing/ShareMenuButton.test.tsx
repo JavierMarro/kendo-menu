@@ -57,7 +57,7 @@ describe('Share it action', () => {
     const { createMenuShare, entry } = fixture();
     const trigger = screen.getByRole('button', { name: 'Share it!' });
     await user.click(trigger);
-    expect(screen.getByText(/This shares your last saved version/)).toBeVisible();
+    expect(screen.getByText(/The link opens the last version you saved/)).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Create sharing link' }));
     expect(await screen.findByRole('textbox', { name: 'Sharing link' })).toHaveValue(
       `${window.location.origin}/share/${'s'.repeat(43)}`,
