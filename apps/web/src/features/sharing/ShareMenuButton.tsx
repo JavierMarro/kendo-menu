@@ -93,16 +93,18 @@ export function ShareMenuButton({ entry }: { readonly entry: DashboardEntry }) {
         <DialogShell titleId={titleId} closeLabel="Close sharing" onClose={close}>
           <section className="share-menu-content">
             <h2 id={titleId}>Share your keiko menu</h2>
-            <p>Anyone with the link can view this menu. Your notes stay private.</p>
+            <p>Anyone with the link can see your menu. Your notes stay private.</p>
             {saved === null ? (
               <p>Save this menu to your account before sharing it.</p>
             ) : (
               <>
                 <p>
-                  This shares your last saved version. Save to account first to include your
-                  changes.
+                  The link opens the last version you saved. Choose Save to account first if you
+                  want to share your latest edits.
                 </p>
-                <p>The shared snapshot stays the same if you edit or remove this menu later.</p>
+                <p>
+                  The link keeps that copy available, even if you edit or delete the menu later.
+                </p>
                 {link.length === 0 ? (
                   <button
                     className="primary-button"

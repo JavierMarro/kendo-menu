@@ -830,6 +830,8 @@ test('same-account verification restarts a held initial dashboard load before re
   try {
     await page.goto('/app/account/dashboard');
     await firstDashboardSeen;
+    await expect(page.locator('.dashboard-skeleton')).toBeVisible();
+    await expect(workspaceLink(page, 'Library')).toBeEnabled();
 
     let resolveAccountSeen: (() => void) | undefined;
     const verificationSeen = new Promise<void>((resolve) => {
@@ -1179,7 +1181,10 @@ test('a hidden dirty account draft still warns before intentional navigation', a
   ).toBeVisible();
   releaseTokenWait?.();
   await unavailableTokenResponse;
-  await expect(page.getByText(/your current-tab draft is retained in memory/i)).toBeVisible();
+  await expect(
+    page.getByText('If your dashboard doesn’t reappear, choose Retry verification.'),
+  ).toBeVisible();
+  await expect(page.locator('.dashboard-skeleton')).toBeVisible();
 
   page.once('dialog', (dialog) => {
     expect(dialog.message()).toMatch(/unsaved account changes.*Leave the account/i);

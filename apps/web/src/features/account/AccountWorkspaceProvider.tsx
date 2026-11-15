@@ -46,11 +46,36 @@ import {
 type AccountDraftController = ReturnType<typeof createAccountDraftController>;
 type AccountDraftSnapshot = ReturnType<AccountDraftController['getSnapshot']>;
 
-function LoadingStatus({ children }: { readonly children: ReactNode }) {
+function DashboardSkeleton() {
   return (
-    <section className="account-route-state" aria-live="polite">
-      <p className="eyebrow">Your account</p>
-      <h1>{children}</h1>
+    <div className="dashboard-skeleton" aria-hidden="true">
+      <div className="page-header dashboard-page-header">
+        <div className="dashboard-skeleton-heading">
+          <span />
+          <span />
+          <span />
+        </div>
+        <span className="dashboard-skeleton-action" />
+      </div>
+      <div className="dashboard-list">
+        <div className="dashboard-skeleton-card">
+          <span />
+          <span />
+        </div>
+        <div className="dashboard-skeleton-card">
+          <span />
+          <span />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DashboardLoading({ children }: { readonly children: ReactNode }) {
+  return (
+    <section role="status">
+      <h1 className="sr-only">{children}</h1>
+      <DashboardSkeleton />
     </section>
   );
 }
@@ -132,7 +157,7 @@ export function AccountWorkspaceRoute() {
     }
     return (
       <AccountWorkspaceFrame userContent={<p>Checking your account access…</p>}>
-        <LoadingStatus>Checking your KendoMenu account…</LoadingStatus>
+        <DashboardLoading>Checking your KendoMenu account…</DashboardLoading>
       </AccountWorkspaceFrame>
     );
   }
@@ -265,7 +290,7 @@ function LoadedAccountWorkspace({
   if (controller === null) {
     return (
       <AccountWorkspaceFrame userContent={<p>Preparing your account dashboard…</p>}>
-        <LoadingStatus>Preparing your account dashboard…</LoadingStatus>
+        <DashboardLoading>Preparing your account dashboard…</DashboardLoading>
       </AccountWorkspaceFrame>
     );
   }
@@ -357,6 +382,12 @@ function LoadedAccountWorkspaceView({
     controller.discard();
     setDiscardPrompt(false);
     void signOutProvider();
+  };
+
+  const requestSignOut = (trigger: HTMLButtonElement) => {
+    signOutTriggerRef.current = trigger;
+    if (warnBeforeLeaving) setDiscardPrompt(true);
+    else discardAndSignOut();
   };
 
   const signOut = identity.status === 'unavailable' ? identity.signOut : undefined;
@@ -454,16 +485,15 @@ function LoadedAccountWorkspaceView({
   // Setup consumes only the controller's live creation handoff at an authoritative empty revision.
   const currentHandoff =
     isVerifiedAccount && snapshot.revision === '0' ? controller.getCreationHandoff() : null;
-  const shouldOpenSetup =
-    currentHandoff !== null &&
-    snapshot.status === 'ready' &&
-    location.pathname !== '/app/account/setup';
+  const isSetupRoute = location.pathname === '/app/account/setup';
+  const shouldOpenSetup = currentHandoff !== null && snapshot.status === 'ready' && !isSetupRoute;
+  const signedInLabel = account.email ? `Signed in as ${account.email}` : 'Signed in';
   const userContent = isIdentityHidden ? (
     <p>Account details are hidden until verification succeeds.</p>
   ) : (
     <div className="workspace-user-content account-session-controls" aria-label="Account session">
       <p className="workspace-user-eyebrow">Account</p>
-      <p>{account.email ? `Signed in as ${account.email}` : 'Signed in'}</p>
+      <p>{signedInLabel}</p>
       <AccountSaveStatus
         isAuthoritative={snapshot.status === 'ready' && snapshot.store !== null}
         isDirty={snapshot.dirty}
@@ -472,13 +502,9 @@ function LoadedAccountWorkspaceView({
         saveState={snapshot.saveState}
       />
       <button
-        ref={signOutTriggerRef}
         className="primary-button"
         type="button"
-        onClick={() => {
-          if (warnBeforeLeaving) setDiscardPrompt(true);
-          else discardAndSignOut();
-        }}
+        onClick={(event) => requestSignOut(event.currentTarget)}
       >
         Sign out
       </button>
@@ -540,7 +566,7 @@ function LoadedAccountWorkspaceView({
 
   return shouldOpenSetup ? (
     <AccountWorkspaceFrame userContent={<p>Preparing your account dashboard…</p>}>
-      <LoadingStatus>Preparing your account setup…</LoadingStatus>
+      <DashboardLoading>Preparing your account setup…</DashboardLoading>
     </AccountWorkspaceFrame>
   ) : (
     <WorkspaceContextProvider value={value}>
@@ -563,43 +589,41 @@ function LoadedAccountWorkspaceView({
         >
           <WorkspaceShell basePath="/app/account" userContent={userContent}>
             {navigationGuard}
-            {isLoadState ? (
-              <section
-                className="account-route-state"
-                role={snapshot.status === 'load-error' ? 'alert' : 'status'}
-              >
+            {!isIdentityHidden && snapshot.status === 'loading' ? (
+              isSetupRoute ? (
+                <section className="account-route-state" role="status">
+                  <h1>Loading your dashboard…</h1>
+                </section>
+              ) : (
+                <DashboardLoading>Loading your dashboard…</DashboardLoading>
+              )
+            ) : null}
+            {!isIdentityHidden && snapshot.status === 'load-error' ? (
+              <section className="account-route-state" role="alert">
                 <p className="eyebrow">Your account</p>
-                <h1>
-                  {snapshot.status === 'loading'
-                    ? 'Loading your dashboard…'
-                    : 'Your dashboard could not be loaded.'}
-                </h1>
-                {snapshot.status === 'load-error' ? (
-                  <>
-                    <p>{snapshot.error ?? 'Retry to load the current dashboard.'}</p>
-                    <button
-                      className="primary-button"
-                      type="button"
-                      onClick={() => void reloadAccount()}
-                    >
-                      Retry
-                    </button>
-                  </>
-                ) : null}
+                <h1>Your dashboard could not be loaded.</h1>
+                <p>{snapshot.error ?? 'Retry to load the current dashboard.'}</p>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => void reloadAccount()}
+                >
+                  Retry
+                </button>
               </section>
             ) : null}
             {isIdentityHidden ? (
-              <section className="account-route-state" role="status">
-                <p className="eyebrow">Account verification</p>
+              <section className="account-verification-state" role="status">
                 <h1>Your account is hidden until it can be verified.</h1>
                 <p>
                   {signOut === 'failed'
                     ? 'KendoMenu could not confirm sign-out. Your account stays hidden until sign-out succeeds.'
                     : signOut === 'pending'
                       ? 'Waiting for sign-out confirmation.'
-                      : 'Your current-tab draft is retained in memory. Verify the same account to reveal it.'}
+                      : 'If your dashboard doesn’t reappear, choose Retry verification.'}
                 </p>
                 <AccountRecoveryButton verificationLabel="Retry verification" />
+                {signOut === undefined ? <DashboardSkeleton /> : null}
               </section>
             ) : null}
             {!isIdentityHidden && snapshot.status === 'unavailable' ? (
@@ -642,7 +666,24 @@ function LoadedAccountWorkspaceView({
                 onDownload={downloadAccountDraft}
               />
             ) : null}
-            <div key={workspaceStoreGeneration} hidden={!isVisible} inert={!isVisible}>
+            <div
+              key={workspaceStoreGeneration}
+              className={isSetupRoute ? 'account-setup-panel' : undefined}
+              hidden={!isVisible}
+              inert={!isVisible}
+            >
+              {isSetupRoute && isVisible ? (
+                <div className="account-setup-session">
+                  <p>{signedInLabel}</p>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={(event) => requestSignOut(event.currentTarget)}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              ) : null}
               {workspaceStore === null ? null : (
                 <TrainingStoreProvider store={workspaceStore}>
                   <Outlet />
