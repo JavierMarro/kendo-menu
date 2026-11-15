@@ -61,16 +61,16 @@ if (root !== null) {
             retryAvailable={retryAvailable}
           />,
         );
-      reactRoot.render(
-        <main className="app-shell">
-          <section aria-labelledby="callback-title" className="panel">
-            <h1 id="callback-title">Completing sign-in</h1>
-            <p role="status">Verifying the managed sign-in response…</p>
-          </section>
-        </main>,
-      );
       // Only a failed callback exchange retains a retry; token and API checks start after replacement.
       const bootstrap = async () => {
+        reactRoot.render(
+          <main className="app-shell auth-callback-progress">
+            <img src="/assets/kendo-menu-logo-264.webp" alt="KendoMenu" width="132" height="66" />
+            <p className="auth-progress-message" role="status">
+              Signing you in…
+            </p>
+          </main>,
+        );
         const result = await client.bootstrapCallback(controller.signal);
         if (result.status === 'callback-failed') {
           retryAvailable = true;

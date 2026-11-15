@@ -80,6 +80,14 @@ function DashboardLoading({ children }: { readonly children: ReactNode }) {
   );
 }
 
+function SignOutProgress() {
+  return (
+    <p className="sign-out-progress auth-progress-message" role="status">
+      Signing out…
+    </p>
+  );
+}
+
 export function AccountWorkspaceRoute() {
   const shareToken = useMatch(RECIPIENT_SHARE_ROUTE)?.params.token;
   const { api, identity, verifyIdentity, setVerifiedAccount } = useManagedAuth();
@@ -180,6 +188,13 @@ export function AccountWorkspaceRoute() {
         />
       );
     }
+    if (identity.signOut === 'pending') {
+      return (
+        <WorkspaceShell basePath="/app/account" userContent={null} userOptionsDisabled>
+          <SignOutProgress />
+        </WorkspaceShell>
+      );
+    }
     return (
       <AccountWorkspaceFrame userContent={<p>Account details are hidden.</p>}>
         <section className="account-route-state" role="status">
@@ -188,9 +203,7 @@ export function AccountWorkspaceRoute() {
           <p>
             {identity.signOut === 'failed'
               ? 'KendoMenu could not confirm sign-out. Your account stays hidden until sign-out succeeds.'
-              : identity.signOut === 'pending'
-                ? 'Waiting for sign-out confirmation.'
-                : 'Account content stays hidden until verification succeeds.'}{' '}
+              : 'Account content stays hidden until verification succeeds.'}{' '}
             Guest use remains available.
           </p>
           <div className="empty-actions">
@@ -587,7 +600,11 @@ function LoadedAccountWorkspaceView({
             error: snapshot.error,
           }}
         >
-          <WorkspaceShell basePath="/app/account" userContent={userContent}>
+          <WorkspaceShell
+            basePath="/app/account"
+            userContent={userContent}
+            userOptionsDisabled={signOut === 'pending'}
+          >
             {navigationGuard}
             {!isIdentityHidden && snapshot.status === 'loading' ? (
               isSetupRoute ? (
@@ -612,15 +629,15 @@ function LoadedAccountWorkspaceView({
                 </button>
               </section>
             ) : null}
-            {isIdentityHidden ? (
+            {signOut === 'pending' ? (
+              <SignOutProgress />
+            ) : isIdentityHidden ? (
               <section className="account-verification-state" role="status">
                 <h1>Your account is hidden until it can be verified.</h1>
                 <p>
                   {signOut === 'failed'
                     ? 'KendoMenu could not confirm sign-out. Your account stays hidden until sign-out succeeds.'
-                    : signOut === 'pending'
-                      ? 'Waiting for sign-out confirmation.'
-                      : 'If your dashboard doesn’t reappear, choose Retry verification.'}
+                    : 'If your dashboard doesn’t reappear, choose Retry verification.'}
                 </p>
                 <AccountRecoveryButton verificationLabel="Retry verification" />
                 {signOut === undefined ? <DashboardSkeleton /> : null}

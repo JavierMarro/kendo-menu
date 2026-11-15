@@ -4511,6 +4511,35 @@ textarea[aria-invalid='true'] {
   margin-top: 0;
 }
 
+.auth-callback-progress,
+.workspace-main:has(> .sign-out-progress) {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.auth-callback-progress {
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+
+.auth-callback-progress img {
+  border-radius: var(--radius-sm);
+}
+
+.auth-progress-message {
+  margin: 0;
+  color: var(--muted-strong);
+  animation: auth-progress-reveal 1ms step-end 500ms both;
+}
+
+@keyframes auth-progress-reveal {
+  from {
+    opacity: 0;
+  }
+}
+
 .dashboard-skeleton {
   margin-block: var(--space-6);
 }

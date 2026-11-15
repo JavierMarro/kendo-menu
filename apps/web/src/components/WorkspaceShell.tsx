@@ -11,6 +11,7 @@ interface WorkspaceShellProps {
   readonly children: ReactNode;
   readonly contentElement?: 'div' | 'main';
   readonly userContent: ReactNode;
+  readonly userOptionsDisabled?: boolean;
 }
 
 function WorkspaceIcon({ name }: { readonly name: 'dashboard' | 'library' | 'mitori' | 'user' }) {
@@ -55,12 +56,15 @@ export function WorkspaceShell({
   children,
   contentElement = 'main',
   userContent,
+  userOptionsDisabled = false,
 }: WorkspaceShellProps) {
   const location = useLocation();
   const [lastLocationKey, setLastLocationKey] = useState(location.key);
   const [isUserOpen, setIsUserOpen] = useState(false);
   if (lastLocationKey !== location.key) {
     setLastLocationKey(location.key);
+    setIsUserOpen(false);
+  } else if (userOptionsDisabled && isUserOpen) {
     setIsUserOpen(false);
   }
   const menuId = useId();
@@ -146,6 +150,7 @@ export function WorkspaceShell({
               ref={userButtonRef}
               className="workspace-navigation-link workspace-user-toggle"
               type="button"
+              disabled={userOptionsDisabled}
               aria-expanded={isUserOpen}
               aria-controls={menuId}
               onClick={() => setIsUserOpen((open) => !open)}
