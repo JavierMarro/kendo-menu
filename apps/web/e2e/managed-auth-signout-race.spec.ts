@@ -85,9 +85,13 @@ test('confirmed sign-out fences focus verification, notifies a peer, and keeps g
     page.getByRole('alertdialog', { name: /Are you sure you want to sign out/i }),
   ).toHaveCount(0);
   await signOutSeen;
-  await expect(
-    page.getByRole('heading', { name: /hidden until it can be verified/i }),
-  ).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Signing out…' })).toHaveCSS(
+    'opacity',
+    '1',
+  );
+  await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'User options' })).toBeHidden();
+  await expect(page.getByRole('navigation', { name: 'Workspace navigation' })).toBeVisible();
 
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect.poll(() => identityCheckStarts(page)).toBe(0);
@@ -153,7 +157,8 @@ test('failed sign-out stays fenced and can be retried after leaving and reopenin
     page.getByRole('alertdialog', { name: /Are you sure you want to sign out/i }),
   ).toHaveCount(0);
   await failureSeen;
-  await expect(page.getByRole('button', { name: 'Signing out…' })).toBeDisabled();
+  await expect(page.getByRole('status').filter({ hasText: 'Signing out…' })).toBeAttached();
+  await expect(page.getByRole('button', { name: 'User', exact: true })).toBeDisabled();
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect.poll(() => identityCheckStarts(page)).toBe(0);
   releaseFailure?.();

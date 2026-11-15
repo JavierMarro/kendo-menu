@@ -236,7 +236,28 @@ test('Continue with Google completes the application callback before loading an 
   page,
 }) => {
   const harness = await SyntheticManagedHarness.install(page);
-  await harness.authenticateFromLanding(page);
+  let releaseCallback: (() => void) | undefined;
+  const callbackRelease = new Promise<void>((resolve) => {
+    releaseCallback = resolve;
+  });
+  await page.route(`${SYNTHETIC_AUTH_URL}/**/get-session*`, async (route) => {
+    await callbackRelease;
+    await route.fallback();
+  });
+  try {
+    await page.goto('/app');
+    await page.getByRole('link', { name: 'Sign up here', exact: true }).click();
+    await page.getByRole('button', { name: 'Continue with Google', exact: true }).click();
+    await expect(page.getByRole('img', { name: 'KendoMenu', exact: true })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Signing you in…' })).toHaveCSS(
+      'opacity',
+      '1',
+    );
+    expect(harness.apiCalls).toEqual([]);
+  } finally {
+    releaseCallback?.();
+  }
+  await expect(page).toHaveURL(/\/app\/account\/dashboard$/);
   await expect(page.getByRole('heading', { name: 'Your dashboard', exact: true })).toBeVisible();
   const userOptions = await openUserOptions(page);
   await expect(userOptions).toContainText('Signed in as practitioner@example.test');
