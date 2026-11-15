@@ -4535,6 +4535,18 @@ textarea[aria-invalid='true'] {
   background: var(--surface-raised);
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .dashboard-skeleton span {
+    animation: dashboard-skeleton-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes dashboard-skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
 .dashboard-skeleton-heading span:first-child {
   max-width: 6rem;
   height: var(--space-3);
